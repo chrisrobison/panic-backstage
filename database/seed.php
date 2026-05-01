@@ -67,24 +67,37 @@ foreach ($templates as [$name, $type, $title, $copy, $price, $age, $tasks, $sche
 
 $addDays = fn (int $days) => (new DateTimeImmutable("+$days days"))->format('Y-m-d');
 $events = [
-    ['Punk Rock Karaoke', 'punk-rock-karaoke', 'karaoke', 'published', $addDays(1), '20:00', '21:00', 0, 1],
-    ['Local Band Showcase', 'local-band-showcase', 'live_music', 'confirmed', $addDays(3), '19:00', '20:00', 12, 0],
-    ['Open Mic Night', 'open-mic-night', 'open_mic', 'needs_assets', $addDays(5), '19:00', '20:00', 0, 0],
-    ['Promoter Night', 'promoter-night', 'promoter_night', 'ready_to_announce', $addDays(8), '21:00', '21:30', 15, 0],
-    ['Empty/Hold Night', 'empty-hold-night', 'special_event', 'hold', $addDays(10), null, null, 0, 0],
+    ['Punk Rock Karaoke', 'punk-rock-karaoke', 'karaoke', 'published', $addDays(1), '20:00', '21:00', 0, 1, 'Tonight is ready: host confirmed, door staff assigned, and the signup sheet is printed.'],
+    ['Local Band Showcase', 'local-band-showcase', 'live_music', 'confirmed', $addDays(3), '19:00', '20:00', 12, 0, 'Main demo event. Resolve the flyer approval item, publish the page, and review the run sheet.'],
+    ['Open Mic Night', 'open-mic-night', 'open_mic', 'needs_assets', $addDays(5), '19:00', '20:00', 0, 0, 'Recurring community night awaiting this week\'s social square.'],
+    ['Promoter Night', 'promoter-night', 'promoter_night', 'ready_to_announce', $addDays(8), '21:00', '21:30', 15, 0, 'Announcement copy is approved and this show is ready to publish.'],
+    ['Legacy Benefit Night', 'legacy-benefit-night', 'special_event', 'completed', $addDays(-2), '18:30', '19:30', 25, 1, 'Completed benefit show with settlement entered for the demo.'],
+    ['Empty/Hold Night', 'empty-hold-night', 'special_event', 'hold', $addDays(10), null, null, 0, 0, 'Open hold for a future booking conversation.'],
 ];
 
 $eventStmt = $pdo->prepare("INSERT INTO events (venue_id, title, slug, event_type, status, description_public, description_internal, date, doors_time, show_time, age_restriction, ticket_price, public_visibility, owner_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '21+', ?, ?, ?)");
 $eventIds = [];
 foreach ($events as $event) {
-    $eventStmt->execute([$venueId, $event[0], $event[1], $event[2], $event[3], "{$event[0]} at Mabuhay Gardens.", 'Seeded MVP event.', $event[4], $event[5], $event[6], $event[7], $event[8], $adminId]);
+    $eventStmt->execute([$venueId, $event[0], $event[1], $event[2], $event[3], "{$event[0]} at Mabuhay Gardens.", $event[9], $event[4], $event[5], $event[6], $event[7], $event[8], $adminId]);
     $eventIds[] = (int) $pdo->lastInsertId();
 }
 
-$pdo->exec("INSERT INTO bands (name, contact_email, instagram_url, bio) VALUES ('The Broadway Static', 'static@example.com', 'https://instagram.com/broadwaystatic', 'Loud local punk.'), ('North Beach Feedback', 'feedback@example.com', NULL, 'Garage rock from San Francisco.')");
-$pdo->prepare('INSERT INTO event_lineup (event_id, band_id, billing_order, display_name, set_time, set_length_minutes, payout_terms, status) VALUES (?, 1, 1, "The Broadway Static", "20:30", 40, "Door split", "confirmed"), (?, 2, 2, "North Beach Feedback", "21:30", 45, "Door split", "tentative")')->execute([$eventIds[1], $eventIds[1]]);
-$pdo->prepare('INSERT INTO event_tasks (event_id, title, status, priority, due_date) VALUES (?, "Approve flyer", "todo", "high", ?), (?, "Configure ticket link", "todo", "high", ?), (?, "Confirm host", "done", "normal", ?)')->execute([$eventIds[1], $addDays(1), $eventIds[1], $addDays(2), $eventIds[2], $addDays(3)]);
-$pdo->prepare('INSERT INTO event_blockers (event_id, title, description, owner_user_id, status, due_date) VALUES (?, "Waiting on flyer approval", "Need final approval before announcing.", ?, "open", ?)')->execute([$eventIds[1], $adminId, $addDays(1)]);
-$pdo->prepare('INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (?, "Load-in", "load_in", "17:00"), (?, "Doors", "doors", "19:00"), (?, "Opener set", "set", "20:30")')->execute([$eventIds[1], $eventIds[1], $eventIds[1]]);
+$pdo->exec("INSERT INTO bands (name, contact_email, instagram_url, bio) VALUES ('The Broadway Static', 'static@example.com', 'https://instagram.com/broadwaystatic', 'Loud local punk.'), ('North Beach Feedback', 'feedback@example.com', NULL, 'Garage rock from San Francisco.'), ('Mission District Echo', 'echo@example.com', NULL, 'Sharp hooks and louder amps.')");
+$pdo->prepare('INSERT INTO event_lineup (event_id, band_id, billing_order, display_name, set_time, set_length_minutes, payout_terms, status) VALUES (?, 1, 1, "The Broadway Static", "20:30", 40, "Door split", "confirmed"), (?, 2, 2, "North Beach Feedback", "21:30", 45, "Door split", "confirmed"), (?, 3, 3, "Mission District Echo", "22:30", 45, "Door split", "tentative")')->execute([$eventIds[1], $eventIds[1], $eventIds[1]]);
+$pdo->prepare('INSERT INTO event_lineup (event_id, billing_order, display_name, set_time, set_length_minutes, payout_terms, status) VALUES (?, 1, "Mabuhay Karaoke Host", "21:00", 150, "Flat host fee", "confirmed")')->execute([$eventIds[0]]);
+$pdo->prepare('INSERT INTO event_tasks (event_id, title, status, priority, due_date) VALUES (?, "Approve final flyer", "todo", "high", ?), (?, "Configure ticket link", "todo", "high", ?), (?, "Confirm backline", "in_progress", "normal", ?), (?, "Confirm host", "done", "normal", ?), (?, "Post announcement", "todo", "high", ?)')->execute([$eventIds[1], $addDays(1), $eventIds[1], $addDays(2), $eventIds[1], $addDays(2), $eventIds[2], $addDays(3), $eventIds[3], $addDays(1)]);
+$pdo->prepare('INSERT INTO event_blockers (event_id, title, description, owner_user_id, status, due_date) VALUES (?, "Waiting on flyer approval", "Need final artwork approval before announcing.", ?, "open", ?), (?, "Waiting on ticket link", "Promoter needs to send the live ticketing URL.", ?, "waiting", ?)')->execute([$eventIds[1], $adminId, $addDays(1), $eventIds[1], $adminId, $addDays(2)]);
+$pdo->prepare('INSERT INTO event_schedule_items (event_id, title, item_type, start_time, end_time) VALUES (?, "Load-in", "load_in", "17:00", "17:45"), (?, "Soundcheck", "soundcheck", "18:00", "19:00"), (?, "Doors", "doors", "19:00", NULL), (?, "Opener set", "set", "20:30", "21:10"), (?, "Headliner set", "set", "22:30", "23:15"), (?, "Curfew", "curfew", "23:30", NULL)')->execute([$eventIds[1], $eventIds[1], $eventIds[1], $eventIds[1], $eventIds[1], $eventIds[1]]);
+$pdo->prepare('INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (?, "Staff call", "staff_call", "18:30"), (?, "Doors", "doors", "20:00"), (?, "Karaoke starts", "set", "21:00")')->execute([$eventIds[0], $eventIds[0], $eventIds[0]]);
+
+$assetDir = $root . '/storage/uploads/events/' . $eventIds[1];
+if (!is_dir($assetDir)) {
+    mkdir($assetDir, 0775, true);
+}
+$flyerName = 'demo-local-band-showcase.svg';
+file_put_contents($assetDir . '/' . $flyerName, '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200"><rect width="900" height="1200" fill="#101318"/><rect x="54" y="54" width="792" height="1092" fill="none" stroke="#ef4338" stroke-width="18"/><text x="88" y="210" fill="#fff" font-family="Arial,sans-serif" font-size="78" font-weight="800">LOCAL BAND</text><text x="88" y="300" fill="#fff" font-family="Arial,sans-serif" font-size="78" font-weight="800">SHOWCASE</text><text x="88" y="430" fill="#ef4338" font-family="Arial,sans-serif" font-size="44" font-weight="700">Mabuhay Gardens</text><text x="88" y="540" fill="#fff" font-family="Arial,sans-serif" font-size="40">The Broadway Static</text><text x="88" y="610" fill="#fff" font-family="Arial,sans-serif" font-size="40">North Beach Feedback</text><text x="88" y="680" fill="#fff" font-family="Arial,sans-serif" font-size="40">Mission District Echo</text><text x="88" y="1010" fill="#fff" font-family="Arial,sans-serif" font-size="38">Doors 7 PM / Show 8 PM / 21+</text></svg>');
+$pdo->prepare('INSERT INTO event_assets (event_id, asset_type, title, filename, original_filename, file_path, uploaded_by_user_id, approval_status, notes) VALUES (?, "flyer", "Local Band Showcase flyer", ?, ?, ?, ?, "needs_review", "Demo flyer ready for approval.")')->execute([$eventIds[1], $flyerName, $flyerName, 'uploads/events/' . $eventIds[1] . '/' . $flyerName, $adminId]);
+$pdo->prepare('INSERT INTO event_settlements (event_id, gross_ticket_sales, tickets_sold, bar_sales, expenses, band_payouts, promoter_payout, venue_net, notes, settled_by_user_id) VALUES (?, 2750, 110, 1840, 420, 1300, 250, 2620, "Benefit night settled after merch and door count reconciliation.", ?)')->execute([$eventIds[4], $adminId]);
+$pdo->prepare('INSERT INTO event_activity_log (event_id, user_id, action, details_json) VALUES (?, ?, "demo data seeded", ?), (?, ?, "settlement saved", ?)')->execute([$eventIds[1], $adminId, json_encode(['story' => 'Resolve open items, approve flyer, publish page']), $eventIds[4], $adminId, json_encode(['tickets_sold' => 110])]);
 
 echo "Seed complete. Login: admin@mabuhay.local / changeme\n";

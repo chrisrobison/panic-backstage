@@ -30,6 +30,14 @@ final class Assets extends BaseEndpoint
         if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             return Response::json(['error' => 'Upload failed'], 422);
         }
+        if (($file['size'] ?? 0) > 10 * 1024 * 1024) {
+            return Response::json(['error' => 'Uploads must be 10MB or smaller'], 422);
+        }
+        $mime = mime_content_type($file['tmp_name']) ?: '';
+        $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+        if (!in_array($mime, $allowed, true)) {
+            return Response::json(['error' => 'Only images and PDFs can be uploaded'], 422);
+        }
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         $base = slugify(pathinfo($file['name'], PATHINFO_FILENAME));
         $filename = time() . '-' . bin2hex(random_bytes(4)) . '-' . $base . ($ext ? ".$ext" : '');

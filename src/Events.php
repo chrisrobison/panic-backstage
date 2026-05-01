@@ -47,7 +47,12 @@ final class Events extends BaseEndpoint
             $where[] = 'e.date <= ?';
             $params[] = $request->query('end_date');
         }
-        $sql = 'SELECT e.*, u.name owner_name FROM events e LEFT JOIN users u ON u.id = e.owner_user_id';
+        $sql = "SELECT e.*, u.name owner_name,
+                  (SELECT title FROM event_blockers b WHERE b.event_id = e.id AND b.status IN ('open','waiting') ORDER BY due_date, id LIMIT 1) primary_blocker,
+                  (SELECT COUNT(*) FROM event_tasks t WHERE t.event_id = e.id AND t.status NOT IN ('done','canceled')) incomplete_tasks,
+                  (SELECT COUNT(*) FROM event_blockers b WHERE b.event_id = e.id AND b.status IN ('open','waiting')) open_items,
+                  (SELECT COUNT(*) FROM event_assets a WHERE a.event_id = e.id AND a.asset_type = 'flyer' AND a.approval_status = 'approved') approved_flyers
+                FROM events e LEFT JOIN users u ON u.id = e.owner_user_id";
         if ($where) {
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
@@ -58,6 +63,10 @@ final class Events extends BaseEndpoint
             'venues' => $this->db->all('SELECT * FROM venues ORDER BY name'),
             'statuses' => self::STATUSES,
             'types' => self::TYPES,
+            'range' => [
+                'start_date' => $request->query('start_date'),
+                'end_date' => $request->query('end_date'),
+            ],
         ]);
     }
 
@@ -88,6 +97,11 @@ final class Events extends BaseEndpoint
             'users' => $this->db->all('SELECT id, name, email, role FROM users ORDER BY name'),
             'venues' => $this->db->all('SELECT * FROM venues ORDER BY name'),
             'nextAction' => $this->nextAction($event, $blockers, $assets, $settlement),
+            'readiness' => $this->readiness($event, $lineup, $blockers, $assets, $settlement),
+            'links' => [
+                'public_page' => 'event.html?slug=' . rawurlencode((string) $event['slug']),
+                'invite_base' => 'invite.html?token=',
+            ],
         ]);
     }
 
@@ -198,6 +212,20 @@ final class Events extends BaseEndpoint
             $event['status'] === 'completed' && !$settlement => 'Complete settlement',
             default => 'Review event details',
         };
+    }
+
+    private function readiness(array $event, array $lineup, array $blockers, array $assets, ?array $settlement): array
+    {
+        $openBlockers = array_filter($blockers, fn ($b) => in_array($b['status'], ['open', 'waiting'], true));
+        $hasApprovedFlyer = array_filter($assets, fn ($a) => $a['asset_type'] === 'flyer' && $a['approval_status'] === 'approved');
+        return [
+            ['label' => 'Lineup', 'state' => $lineup ? 'Ready' : 'Missing', 'ok' => (bool) $lineup],
+            ['label' => 'Run sheet', 'state' => 'Use schedule tab', 'ok' => true],
+            ['label' => 'Open items', 'state' => $openBlockers ? count($openBlockers) . ' open' : 'Clear', 'ok' => !$openBlockers],
+            ['label' => 'Flyer', 'state' => $hasApprovedFlyer ? 'Approved' : 'Needs approval', 'ok' => (bool) $hasApprovedFlyer],
+            ['label' => 'Public page', 'state' => (int) $event['public_visibility'] ? 'Live' : 'Hidden', 'ok' => (bool) (int) $event['public_visibility']],
+            ['label' => 'Settlement', 'state' => $settlement ? 'Saved' : 'Not started', 'ok' => $event['status'] !== 'completed' || (bool) $settlement],
+        ];
     }
 
     private function jsonList(?string $json): array

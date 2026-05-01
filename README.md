@@ -9,11 +9,12 @@ The app is intentionally boring to run:
 - no npm, bundler, or frontend build step
 - MySQL with native PDO prepared statements
 - native PHP sessions, password hashing, CSRF tokens, and file uploads
-- static HTML/CSS/vanilla JS pages that call JSON endpoints under `/api`
+- static HTML/CSS/native Web Components that call JSON endpoints under `/api`
+- LARC/PAN loaded from a pinned CDN module for component coordination
 
 ## Current Architecture
 
-Panic Backstage is API-first. PHP endpoint classes return JSON only; HTML pages are static and use `fetch()` to load and mutate data.
+Panic Backstage is API-first. PHP endpoint classes return JSON only; HTML pages are static and use browser-native Web Components, `fetch()`, and LARC/PAN topic events to load and mutate data.
 
 The custom kernel in `src/Kernel.php` resolves constrained API paths to endpoint classes:
 
@@ -50,7 +51,7 @@ public/
   .htaccess               Apache rewrite for /api
   api/index.php           API entrypoint
   assets/app.css          Venue-ops UI styling
-  assets/app.js           Vanilla JS client
+  assets/app.js           Web Components client
   uploads -> ../storage/uploads
 
 src/
@@ -93,6 +94,12 @@ schema.sql                Root copy of database schema
 - PHP PDO MySQL extension
 
 No Composer or Node install is required.
+
+The frontend uses this pinned LARC module directly in the browser:
+
+```html
+<script type="module" src="https://cdn.jsdelivr.net/npm/@larcjs/core@3.0.1/pan.mjs"></script>
+```
 
 ## Local Setup
 
@@ -160,6 +167,47 @@ APP_BASE_PATH=/backstage php -S localhost:8000 -t public public/router.php
 
 Then open `http://localhost:8000/backstage/`. Static assets, API calls, invite links, and uploaded media are resolved relative to the app base path instead of the server document root.
 
+## Venue Demo Walkthrough
+
+The seeded Mabuhay Gardens demo is designed for a venue operations walkthrough.
+
+Reset and launch locally:
+
+```bash
+php database/seed.php
+php -S localhost:8000 -t public public/router.php
+```
+
+Login:
+
+```text
+email: admin@mabuhay.local
+password: changeme
+```
+
+Suggested flow:
+
+1. Open the dashboard and call out the next show, open items, empty holds, flyer needs, and settlement signals.
+2. Open `Local Band Showcase`, resolve the open flyer/ticketing items, approve the seeded flyer, and review the run sheet.
+3. Use the public page button after publishing the event to show the guest-facing event page.
+4. Open Templates, create a new show from `Three-Band Local Show`, then show how tasks and schedule items come preloaded.
+5. Open `Legacy Benefit Night` and show the completed settlement fields.
+6. Open Calendar and Pipeline to show the same events by date and operational status.
+
+Example public event URL after seeding:
+
+```text
+http://localhost:8000/event.html?slug=local-band-showcase
+```
+
+Endpoint smoke test against a running local or staging server:
+
+```bash
+php scripts/endpoint-smoke.php http://localhost:8000
+```
+
+The smoke script logs in, loads dashboard data, creates an event from a template, updates an open item, saves settlement data, publishes the event, and verifies the public event API.
+
 ## Deployment Notes
 
 Use `public/` as the web root.
@@ -170,6 +218,14 @@ For Nginx/PHP-FPM, route `/api/*` to `public/api/index.php` and serve static fil
 
 Keep `.env` outside version control. It is ignored by `.gitignore`.
 
+Staging checklist:
+
+- PHP 8.2+, PDO MySQL, and fileinfo enabled.
+- `.env` uses staging database credentials and `APP_BASE_PATH` when mounted below `/`.
+- `storage/uploads/events` is writable by the PHP process.
+- The server can reach `https://cdn.jsdelivr.net/npm/@larcjs/core@3.0.1/pan.mjs`, or LARC should be vendored in a future offline-demo pass.
+- Run `php database/seed.php` only when resetting demo data is acceptable.
+
 ## Core Workflow
 
 - `/` shows the staff dashboard after login.
@@ -177,6 +233,7 @@ Keep `.env` outside version control. It is ignored by `.gitignore`.
 - Each event workspace manages overview, lineup, tasks, open items, run sheet, assets, settlement, and activity.
 - Public event pages are loaded by `public/event.html?slug=event-slug`.
 - Public event API responses only include events with `public_visibility` enabled.
+- Web Components publish PAN-compatible topics such as `app.route.changed`, `events.loaded`, `event.saved`, `event.assetUploaded`, `event.openItemResolved`, `event.publicationChanged`, `toast.show`, and `api.error`.
 
 ## Verification
 
@@ -187,6 +244,7 @@ find src public database -name '*.php' -print -exec php -l {} \;
 node --check public/assets/app.js
 php database/seed.php
 php -S localhost:8000 -t public public/router.php
+php scripts/endpoint-smoke.php http://localhost:8000
 ```
 
 `node --check` is optional and only validates the plain JavaScript file. The app does not require Node to run.
@@ -197,4 +255,4 @@ php -S localhost:8000 -t public public/router.php
 - Permissions are basic and should be tightened before exposing to untrusted users.
 - Invite links are placeholders and do not send email.
 - Uploads use local disk storage under `storage/uploads/events/:eventId`.
-- The frontend is intentionally simple vanilla JS, optimized for hackability over framework features.
+- The frontend is intentionally browser-native Web Components, optimized for hackability over framework features.

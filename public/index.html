@@ -4,53 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Panic Backstage</title>
-  <link rel="stylesheet" href="./assets/app.css?v=2">
+  <link rel="stylesheet" href="./assets/app.css?v=3">
 </head>
-<body class="app-shell">
-  <aside class="sidebar">
-    <a class="brand" href="#dashboard" aria-label="Panic Backstage home">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <span>Panic Backstage</span>
-    </a>
-    <nav class="side-nav" aria-label="Main navigation">
-      <a data-nav="dashboard" href="#dashboard"><span class="icon gauge"></span>Dashboard</a>
-      <a data-nav="calendar" href="#calendar"><span class="icon calendar"></span>Calendar</a>
-      <a data-nav="pipeline" href="#pipeline"><span class="icon pipeline"></span>Pipeline</a>
-      <a data-nav="events" href="#events"><span class="icon ticket"></span>Events</a>
-      <a data-nav="templates" href="#templates"><span class="icon doc"></span>Templates</a>
-      <a href="#events"><span class="icon people"></span>Contacts</a>
-      <a href="#dashboard"><span class="icon bars"></span>Reports</a>
-      <a href="#dashboard"><span class="icon gear"></span>Settings</a>
-    </nav>
-    <div class="side-card"><span class="bolt"></span><strong>Good shows.<br><span>No surprises.</span></strong></div>
-    <button class="venue-switch"><span class="icon building"></span>The Blackroom<span class="chev"></span></button>
-    <p class="copyright">&copy; 2024 Panic Backstage, LLC</p>
-  </aside>
-
-  <header class="topbar">
-    <a class="mobile-brand" href="#dashboard"><span class="brand-mark"></span><span>Panic Backstage</span></a>
-    <label class="search"><span class="icon search-icon"></span><input placeholder="Search events, venues, contacts..." aria-label="Search"></label>
-    <button class="bell" aria-label="Notifications"><span>7</span></button>
-    <button class="avatar" aria-label="Account">MG</button>
-    <button id="logout" class="logout">Logout</button>
-  </header>
-
-  <main id="app" class="workspace"></main>
-
-  <footer class="app-footer">
-    <span></span>
-    <strong><span class="bolt small-bolt"></span>Built for venues. Run by humans.</strong>
-    <span>Need help? <a href="mailto:support@example.com">Contact Support</a></span>
-  </footer>
-
-  <nav class="mobile-tabs" aria-label="Mobile navigation">
-    <a data-nav="dashboard" href="#dashboard"><span class="icon pie"></span>Dashboard</a>
-    <a data-nav="calendar" href="#calendar"><span class="icon calendar"></span>Calendar</a>
-    <a data-nav="tonight" href="#tonight"><span class="icon mic"></span>Tonight</a>
-    <a data-nav="events" href="#events"><span class="icon ticket"></span>Events</a>
-    <a data-nav="more" href="#templates"><span class="icon dots"></span>More</a>
-  </nav>
-
-  <script src="./assets/app.js?v=2"></script>
+<body>
+  <pb-app-shell></pb-app-shell>
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@larcjs/core@3.0.1/pan.mjs"></script>
+  <script type="module" src="./assets/app.js?v=3"></script>
 </body>
 </html>
