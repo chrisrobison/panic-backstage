@@ -3,7 +3,17 @@ declare(strict_types=1);
 
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $strippedBasePath = false;
-$basePath = rtrim((string) getenv('APP_BASE_PATH'), '/');
+$basePath = rtrim((string) (getenv('APP_BASE_PATH') ?: env_value('APP_BASE_PATH')), '/');
+if ($basePath === '') {
+    $parts = array_values(array_filter(explode('/', trim($path, '/')), 'strlen'));
+    $candidatePath = count($parts) > 1 ? '/' . implode('/', array_slice($parts, 1)) : '/';
+    if (($parts[0] ?? '') !== '' && ($candidatePath === '/' || str_starts_with($candidatePath, '/api/') || is_file(__DIR__ . $candidatePath))) {
+        $basePath = '/' . $parts[0];
+    }
+}
+if ($basePath !== '') {
+    $_SERVER['APP_BASE_PATH'] = $basePath;
+}
 if ($basePath !== '' && $basePath !== '/' && $path === $basePath) {
     header('Location: ' . $basePath . '/');
     return true;
@@ -43,4 +53,23 @@ function content_type(string $file): string
         'webp' => 'image/webp',
         default => mime_content_type($file) ?: 'application/octet-stream',
     };
+}
+
+function env_value(string $key): string
+{
+    $file = dirname(__DIR__) . '/.env';
+    if (!is_file($file)) {
+        return '';
+    }
+    foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+        $line = trim($line);
+        if ($line === '' || str_starts_with($line, '#') || !str_contains($line, '=')) {
+            continue;
+        }
+        [$name, $value] = array_map('trim', explode('=', $line, 2));
+        if ($name === $key) {
+            return trim($value, "\"'");
+        }
+    }
+    return '';
 }
