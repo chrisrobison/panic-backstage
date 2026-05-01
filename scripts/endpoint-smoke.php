@@ -92,6 +92,12 @@ try {
     ]);
     ok('open item update');
 
+    request('POST', "/api/events/$eventId/invites", [
+        'email' => 'smoke-promoter@example.com',
+        'role' => 'promoter',
+    ]);
+    ok('invite link creation');
+
     request('POST', "/api/events/$eventId/settlement", [
         'gross_ticket_sales' => 100,
         'tickets_sold' => 10,

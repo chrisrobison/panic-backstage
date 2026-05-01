@@ -69,7 +69,16 @@ final class Assets extends BaseEndpoint
 
     private function delete(int $eventId, int $assetId): Response
     {
+        $asset = $this->db->one('SELECT file_path FROM event_assets WHERE id=? AND event_id=?', [$assetId, $eventId]);
         $this->db->run('DELETE FROM event_assets WHERE id=? AND event_id=?', [$assetId, $eventId]);
+        if ($asset && !empty($asset['file_path'])) {
+            $file = realpath($this->root . '/public/' . $asset['file_path']);
+            $uploads = realpath($this->root . '/storage/uploads');
+            if ($file && $uploads && str_starts_with($file, $uploads) && is_file($file)) {
+                unlink($file);
+            }
+        }
+        log_activity($this->db, $eventId, $this->userId(), 'asset deleted', ['asset_id' => $assetId]);
         return Response::noContent();
     }
 }

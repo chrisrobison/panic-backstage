@@ -21,9 +21,18 @@ final class Invites extends BaseEndpoint
 
     private function create(Request $request, int $eventId): Response
     {
+        $email = trim((string) $request->body('email', ''));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return Response::json(['error' => 'Valid email is required'], 422);
+        }
+        $role = (string) $request->body('role', 'viewer');
+        $roles = ['venue_admin','event_owner','promoter','band','artist','designer','staff','viewer'];
+        if (!in_array($role, $roles, true)) {
+            return Response::json(['error' => 'Invalid invite role'], 422);
+        }
         $token = bin2hex(random_bytes(24));
         $this->db->insert('INSERT INTO event_invites (event_id, email, role, token, expires_at) VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 14 DAY))', [
-            $eventId, $request->body('email'), $request->body('role', 'viewer'), $token
+            $eventId, $email, $role, $token
         ]);
         return $this->ok(['token' => $token, 'url' => 'invite.html?token=' . $token]);
     }

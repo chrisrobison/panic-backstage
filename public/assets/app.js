@@ -105,6 +105,14 @@ function select(name, values, selected) {
   return `<select name="${esc(name)}">${values.map((value) => option(value, selected)).join('')}</select>`;
 }
 
+function userSelect(users = [], selected = '') {
+  return `<select name="assigned_user_id"><option value="">Unassigned</option>${users.map((user) => `<option value="${esc(user.id)}" ${String(user.id) === String(selected || '') ? 'selected' : ''}>${esc(user.name)}</option>`).join('')}</select>`;
+}
+
+function ownerSelect(users = [], selected = '') {
+  return `<select name="owner_user_id"><option value="">Unassigned</option>${users.map((user) => `<option value="${esc(user.id)}" ${String(user.id) === String(selected || '') ? 'selected' : ''}>${esc(user.name)}</option>`).join('')}</select>`;
+}
+
 function emptyState(message) {
   return `<div class="empty-state">${esc(message)}</div>`;
 }
@@ -388,9 +396,16 @@ class PipelineBoard extends PanicElement {
       <div class="page-head"><div><h1>Pipeline</h1><p class="subtle">Move events from holds to settlement.</p></div></div>
       <section class="pipeline-board">${statuses.slice(0, 10).map((status) => {
         const items = events.filter((event) => event.status === status);
-        return `<article class="pipe-col"><h3>${esc(titleCase(status))} <span class="pipe-count">${items.length}</span></h3>${items.map((event) => `<a class="pipe-card" href="#event-${esc(event.id)}"><strong>${esc(event.title)}</strong><span>${esc(shortDate(eventDate(event)))}</span><small>${esc(event.owner_name || 'Unassigned')}</small><small>${esc(event.open_items || 0)} open items / ${esc(event.incomplete_tasks || 0)} tasks</small></a>`).join('') || '<small>No events</small>'}</article>`;
+        return `<article class="pipe-col"><h3>${esc(titleCase(status))} <span class="pipe-count">${items.length}</span></h3>${items.map((event) => `<article class="pipe-card"><strong>${esc(event.title)}</strong><span>${esc(shortDate(eventDate(event)))}</span><small>${esc(event.owner_name || 'Unassigned')}</small><small>${esc(event.open_items || 0)} open items / ${esc(event.incomplete_tasks || 0)} tasks</small><form data-event="${esc(event.id)}" class="inline-status">${select('status', statuses, event.status)}<button class="small">Move</button><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></form></article>`).join('') || '<small>No events</small>'}</article>`;
       }).join('')}</section>
     </section>`;
+    $$('form[data-event]', this).forEach((form) => form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await api(`/events/${form.dataset.event}`, { method: 'PATCH', body: JSON.stringify({ status: formData(form).status }) });
+      publish('event.saved', { id: form.dataset.event });
+      publish('toast.show', { message: 'Event status updated.' });
+      this.connect();
+    }));
   }
 }
 
@@ -474,7 +489,7 @@ class EventWorkspace extends PanicElement {
         <button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>
       </div>
     </section>
-    <nav class="workspace-tabs tabs">${['overview','lineup','schedule','tasks','open-items','assets','settlement','activity'].map((tab, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${tab}">${esc(titleCase(tab))}</a>`).join('')}</nav>
+    <nav class="workspace-tabs tabs">${['overview','details','tasks','lineup','schedule','open-items','assets','invites','settlement','activity'].map((tab, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${tab}">${esc(titleCase(tab))}</a>`).join('')}</nav>
     <article class="event-summary">
       <div class="flyer">${esc(event.title)}</div>
       <div class="facts-grid">
@@ -492,16 +507,22 @@ class EventWorkspace extends PanicElement {
       <article class="panel"><div class="section-head padded"><h2>Readiness</h2></div><div class="health-row">${data.readiness.map((item) => `<div class="health-item">${item.ok ? '<span class="check">OK</span>' : '<span class="warn-mark">!</span>'}<span><strong>${esc(item.label)}</strong><br>${esc(item.state)}</span></div>`).join('')}</div></article>
       <article class="panel"><div class="section-head padded"><h2>Internal Notes</h2></div><div class="notes">${esc(event.description_internal || 'No internal notes yet.')}</div></article>
     </section>
+    <pb-event-details-form id="details"></pb-event-details-form>
+    <pb-task-list id="tasks"></pb-task-list>
     <pb-lineup-editor id="lineup"></pb-lineup-editor>
     <pb-run-sheet id="schedule"></pb-run-sheet>
     <pb-open-items id="open-items"></pb-open-items>
     <pb-asset-manager id="assets"></pb-asset-manager>
+    <pb-invite-manager id="invites"></pb-invite-manager>
     <pb-settlement-form id="settlement"></pb-settlement-form>
     <section id="activity" class="panel"><div class="section-head padded"><h2>Activity</h2></div><ul class="timeline">${data.activity.map((entry) => `<li><strong>${esc(entry.action)}</strong> by ${esc(entry.user_name || 'system')} <span class="muted">${esc(entry.created_at)}</span></li>`).join('')}</ul></section>`;
+    $('pb-event-details-form', this).data = data;
+    $('pb-task-list', this).data = data;
     $('pb-lineup-editor', this).data = data;
     $('pb-run-sheet', this).data = data;
     $('pb-open-items', this).data = data;
     $('pb-asset-manager', this).data = data;
+    $('pb-invite-manager', this).data = data;
     $('pb-settlement-form', this).data = data;
     $('[data-publish]', this).addEventListener('click', () => this.togglePublic());
     $('[data-next-action]', this).addEventListener('click', () => this.load());
@@ -517,6 +538,67 @@ class EventWorkspace extends PanicElement {
     await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
     publish('event.publicationChanged', { id: event.id, public_visibility: body.public_visibility });
     publish('toast.show', { message: body.public_visibility ? 'Public page is live.' : 'Public page hidden.' });
+  }
+}
+
+class EventDetailsForm extends HTMLElement {
+  set data(data) {
+    this.eventData = data;
+    const event = data.event;
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Event Details</h2></div><form class="grid-form padded">
+      <label>Title <input name="title" required value="${esc(event.title)}"></label>
+      <label>Date <input type="date" name="date" required value="${esc(event.date)}"></label>
+      <label>Venue <select name="venue_id">${data.venues.map((venue) => option(venue.id, event.venue_id, venue.name)).join('')}</select></label>
+      <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type)}</label>
+      <label>Status ${select('status', statuses, event.status)}</label>
+      <label>Owner ${ownerSelect(data.users, event.owner_user_id)}</label>
+      <label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"></label>
+      <label>Show <input type="time" name="show_time" value="${esc(event.show_time || '')}"></label>
+      <label>End <input type="time" name="end_time" value="${esc(event.end_time || '')}"></label>
+      <label>Age <input name="age_restriction" value="${esc(event.age_restriction || '')}"></label>
+      <label>Ticket price <input type="number" step="0.01" name="ticket_price" value="${esc(event.ticket_price || 0)}"></label>
+      <label>Capacity <input type="number" name="capacity" value="${esc(event.capacity || '')}"></label>
+      <label class="wide">Ticket URL <input type="url" name="ticket_url" value="${esc(event.ticket_url || '')}"></label>
+      <label class="wide">Public description <textarea name="description_public">${esc(event.description_public || '')}</textarea></label>
+      <label class="wide">Internal notes <textarea name="description_internal">${esc(event.description_internal || '')}</textarea></label>
+      <label class="check-label"><input type="checkbox" name="public_visibility" value="1" ${Number(event.public_visibility) ? 'checked' : ''}> Public page visible</label>
+      <button>Save details</button>
+    </form></section>`;
+    $('form', this).addEventListener('submit', async (submitEvent) => {
+      submitEvent.preventDefault();
+      const body = formData(submitEvent.target);
+      body.public_visibility = submitEvent.target.public_visibility.checked ? 1 : 0;
+      await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      publish('event.saved', { id: event.id });
+      publish('toast.show', { message: 'Event details saved.' });
+    });
+  }
+}
+
+class TaskList extends HTMLElement {
+  set data(data) {
+    this.eventData = data;
+    const tasks = data.tasks || [];
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Tasks</h2></div>${tasks.map((task) => `<form data-api="/events/${data.event.id}/tasks/${task.id}" data-method="PATCH" class="row-form"><label>Task<input name="title" value="${esc(task.title)}"></label><label>Status${select('status', ['todo','in_progress','blocked','done','canceled'], task.status)}</label><label>Assigned${userSelect(data.users, task.assigned_user_id)}</label><label>Due<input type="date" name="due_date" value="${esc(task.due_date || '')}"></label><label>Priority${select('priority', ['low','normal','high','urgent'], task.priority)}</label><label>Details<input name="description" value="${esc(task.description || '')}"></label><button>Save</button><button type="button" class="secondary" data-complete="${esc(task.id)}">Done</button></form>`).join('') || emptyState('No tasks for this event.')}
+    <form data-api="/events/${data.event.id}/tasks" data-method="POST" class="row-form"><label>Task<input name="title" required placeholder="Confirm door count"></label><label>Assigned${userSelect(data.users)}</label><label>Due<input type="date" name="due_date"></label><label>Priority${select('priority', ['low','normal','high','urgent'], 'normal')}</label><input type="hidden" name="status" value="todo"><input name="description" placeholder="Details"><button>Add task</button></form></section>`;
+    this.bind();
+  }
+
+  bind() {
+    $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
+      publish('event.saved', { id: this.eventData.event.id });
+      publish('toast.show', { message: 'Task saved.' });
+    }));
+    $$('[data-complete]', this).forEach((button) => button.addEventListener('click', async () => {
+      const form = button.closest('form');
+      const body = formData(form);
+      body.status = 'done';
+      await api(form.dataset.api, { method: 'PATCH', body: JSON.stringify(body) });
+      publish('event.saved', { id: this.eventData.event.id });
+      publish('toast.show', { message: 'Task completed.' });
+    }));
   }
 }
 
@@ -589,7 +671,7 @@ class AssetManager extends HTMLElement {
   set data(data) {
     this.eventData = data;
     const assets = data.assets || [];
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets</h2></div><div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img src="${esc(assetUrl(asset.file_path))}" alt="">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(titleCase(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div><button class="small" data-approve="${esc(asset.id)}">Approve</button> <button class="small secondary" data-reject="${esc(asset.id)}">Reject</button></div></article>`).join('') || emptyState('No assets uploaded yet.')}</div>
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets</h2></div><div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img src="${esc(assetUrl(asset.file_path))}" alt="">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(titleCase(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div class="inline-actions"><a class="button small secondary" href="${esc(assetUrl(asset.file_path))}" download>Download</a><button class="small" data-approve="${esc(asset.id)}">Approve</button><button class="small secondary" data-reject="${esc(asset.id)}">Reject</button><button class="small danger" data-delete="${esc(asset.id)}">Delete</button></div></article>`).join('') || emptyState('No assets uploaded yet.')}</div>
     <form id="asset-form" class="row-form"><input name="title" placeholder="Asset title">${select('asset_type', ['flyer','poster','band_photo','logo','social_square','social_story','press_photo','other'], 'flyer')}<input type="file" name="asset" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.pdf" required><input name="notes" placeholder="Notes"><button>Upload asset</button></form></section>`;
     this.bind();
   }
@@ -607,6 +689,39 @@ class AssetManager extends HTMLElement {
       publish('event.assetUploaded', { id: this.eventData.event.id });
       publish('toast.show', { message: `Asset ${status}.` });
     }));
+    $$('[data-delete]', this).forEach((button) => button.addEventListener('click', async () => {
+      await api(`/events/${this.eventData.event.id}/assets/${button.dataset.delete}`, { method: 'DELETE' });
+      publish('event.assetUploaded', { id: this.eventData.event.id });
+      publish('toast.show', { message: 'Asset deleted.' });
+    }));
+  }
+}
+
+class InviteManager extends HTMLElement {
+  set data(data) {
+    this.eventData = data;
+    const roles = ['event_owner','promoter','band','artist','designer','staff','viewer'];
+    const invites = data.invites || [];
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Invites</h2></div><div class="invite-list">${invites.length ? invites.map((invite) => {
+      const url = appUrl(`invite.html?token=${invite.token}`);
+      return `<article class="invite-row"><span><strong>${esc(invite.email)}</strong><br><small>${esc(titleCase(invite.role))} - ${invite.used_at ? 'Accepted' : `Expires ${esc(invite.expires_at)}`}</small></span><input readonly value="${esc(url)}"><button class="secondary small" data-copy="${esc(url)}">Copy link</button></article>`;
+    }).join('') : emptyState('No invites have been created for this event.')}</div>
+    <form class="row-form"><label>Email<input type="email" name="email" required placeholder="promoter@example.com"></label><label>Role${select('role', roles, 'viewer')}</label><button>Create invite link</button></form></section>`;
+    $('form', this).addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const result = await api(`/events/${this.eventData.event.id}/invites`, { method: 'POST', body: JSON.stringify(formData(event.target)) });
+      publish('event.saved', { id: this.eventData.event.id });
+      publish('toast.show', { message: `Invite created: ${appUrl(result.url)}` });
+    });
+    $$('[data-copy]', this).forEach((button) => button.addEventListener('click', async () => {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(button.dataset.copy);
+      } else {
+        button.previousElementSibling?.select();
+        document.execCommand('copy');
+      }
+      publish('toast.show', { message: 'Invite link copied.' });
+    }));
   }
 }
 
@@ -615,8 +730,16 @@ class SettlementForm extends HTMLElement {
     this.eventData = data;
     const settlement = data.settlement || {};
     const fields = ['gross_ticket_sales','tickets_sold','bar_sales','expenses','band_payouts','promoter_payout','venue_net'];
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Settlement</h2></div><form class="row-form">${fields.map((field) => `<label>${esc(titleCase(field))}<input name="${esc(field)}" type="number" step="0.01" value="${esc(settlement[field] || 0)}"></label>`).join('')}<label class="wide">Notes <textarea name="notes">${esc(settlement.notes || '')}</textarea></label><button>Save settlement</button></form></section>`;
-    $('form', this).addEventListener('submit', async (event) => {
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Settlement</h2><button class="secondary small" type="button" data-calc>Calculate venue net</button></div><form class="row-form">${fields.map((field) => `<label>${esc(titleCase(field))}<input name="${esc(field)}" type="number" step="0.01" value="${esc(settlement[field] || 0)}"></label>`).join('')}<label class="wide">Notes <textarea name="notes">${esc(settlement.notes || '')}</textarea></label><button>Save settlement</button></form></section>`;
+    const form = $('form', this);
+    const calculate = () => {
+      const values = formData(form);
+      const venueNet = Number(values.gross_ticket_sales || 0) + Number(values.bar_sales || 0) - Number(values.expenses || 0) - Number(values.band_payouts || 0) - Number(values.promoter_payout || 0);
+      form.elements.venue_net.value = venueNet.toFixed(2);
+    };
+    $('[data-calc]', this).addEventListener('click', calculate);
+    ['gross_ticket_sales','bar_sales','expenses','band_payouts','promoter_payout'].forEach((name) => form.elements[name].addEventListener('input', calculate));
+    form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(`/events/${this.eventData.event.id}/settlement`, { method: 'POST', body: JSON.stringify(formData(event.target)) });
       publish('event.saved', { id: this.eventData.event.id });
@@ -667,10 +790,13 @@ customElements.define('pb-pipeline-board', PipelineBoard);
 customElements.define('pb-events-list', EventsList);
 customElements.define('pb-template-picker', TemplatePicker);
 customElements.define('pb-event-workspace', EventWorkspace);
+customElements.define('pb-event-details-form', EventDetailsForm);
+customElements.define('pb-task-list', TaskList);
 customElements.define('pb-lineup-editor', LineupEditor);
 customElements.define('pb-run-sheet', RunSheet);
 customElements.define('pb-open-items', OpenItems);
 customElements.define('pb-asset-manager', AssetManager);
+customElements.define('pb-invite-manager', InviteManager);
 customElements.define('pb-settlement-form', SettlementForm);
 customElements.define('pb-public-event-page', PublicEventPage);
 customElements.define('pb-invite-acceptance', InviteAcceptance);

@@ -188,11 +188,12 @@ password: changeme
 Suggested flow:
 
 1. Open the dashboard and call out the next show, open items, empty holds, flyer needs, and settlement signals.
-2. Open `Local Band Showcase`, resolve the open flyer/ticketing items, approve the seeded flyer, and review the run sheet.
-3. Use the public page button after publishing the event to show the guest-facing event page.
-4. Open Templates, create a new show from `Three-Band Local Show`, then show how tasks and schedule items come preloaded.
-5. Open `Legacy Benefit Night` and show the completed settlement fields.
-6. Open Calendar and Pipeline to show the same events by date and operational status.
+2. Open `Local Band Showcase`, edit event details, assign tasks, resolve the open flyer/ticketing items, approve the seeded flyer, and review the run sheet.
+3. Create an invite link from the event workspace and copy it for a collaborator.
+4. Use the public page button after publishing the event to show the guest-facing event page.
+5. Open Templates, create a new show from `Three-Band Local Show`, then show how tasks and schedule items come preloaded.
+6. Open `Legacy Benefit Night`, calculate venue net, and show the completed settlement fields.
+7. Open Calendar and Pipeline to show the same events by date and update operational status.
 
 Example public event URL after seeding:
 
@@ -206,7 +207,7 @@ Endpoint smoke test against a running local or staging server:
 php scripts/endpoint-smoke.php http://localhost:8000
 ```
 
-The smoke script logs in, loads dashboard data, creates an event from a template, updates an open item, saves settlement data, publishes the event, and verifies the public event API.
+The smoke script logs in, loads dashboard data, creates an event from a template, updates an open item, creates an invite link, saves settlement data, publishes the event, and verifies the public event API.
 
 ## Deployment Notes
 
