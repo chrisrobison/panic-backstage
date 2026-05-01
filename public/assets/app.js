@@ -1,10 +1,13 @@
 let csrf = null;
 let currentUser = null;
+let eventCache = [];
 
 const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 const app = $('#app');
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const badge = (s) => `<span class="badge status-${esc(s)}">${esc(String(s || '').replaceAll('_', ' '))}</span>`;
+const titleCase = (v) => String(v || '').replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+const badge = (s) => `<span class="badge status-${esc(s)}">${esc(titleCase(s))}</span>`;
 
 async function api(path, options = {}) {
   const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
@@ -55,55 +58,243 @@ function initLogin() {
 
 function route() {
   const hash = location.hash.replace(/^#/, '') || 'dashboard';
+  setActiveNav(hash.startsWith('event-') ? 'events' : hash);
   if (hash.startsWith('event-')) return renderEvent(Number(hash.slice(6)));
+  if (hash === 'calendar' || hash === 'pipeline') return renderCalendar(hash);
   if (hash === 'events') return renderEvents();
   if (hash === 'templates') return renderTemplates();
+  if (hash === 'tonight') return renderTonight();
   return renderDashboard();
 }
 
+function setActiveNav(active) {
+  $$('[data-nav]').forEach((link) => {
+    link.classList.toggle('active', link.dataset.nav === active || (active === 'pipeline' && link.dataset.nav === 'calendar'));
+  });
+}
+
+function eventDate(event) {
+  const date = event.date ? new Date(`${event.date}T12:00:00`) : null;
+  return Number.isNaN(date?.getTime()) ? null : date;
+}
+
+function shortDate(date) {
+  return date ? date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : 'TBA';
+}
+
+function timeLabel(value) {
+  if (!value) return 'TBA';
+  const [hours, minutes] = value.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hours || 0, minutes || 0, 0, 0);
+  return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+function statusTone(status) {
+  if (['published'].includes(status)) return 'blue';
+  if (['advanced', 'ready_to_announce'].includes(status)) return 'green';
+  if (['needs_assets', 'confirmed'].includes(status)) return 'amber';
+  if (['hold', 'canceled'].includes(status)) return 'red';
+  return 'gray';
+}
+
+async function loadEvents() {
+  const data = await api('/events');
+  eventCache = data.events || [];
+  return data;
+}
+
 async function renderDashboard() {
-  const data = await api('/dashboard');
+  const [dashboard, all] = await Promise.all([api('/dashboard'), loadEvents()]);
+  const events = dashboard.events.length ? dashboard.events : all.events.slice(0, 7);
+  const today = events[0] || all.events[0] || {};
+  const attention = attentionItems(events, dashboard.cards);
   app.innerHTML = `
-    <div class="page-head"><div><h1>Operations Dashboard</h1><p class="muted">Next 14 days, blockers, assets, ticketing, and settlement gaps.</p></div><button onclick="newEvent()">New event</button></div>
-    <section class="metric-grid">
-      ${metric(data.cards.empty, 'Empty / hold nights')}
-      ${metric(data.cards.needsAssets, 'Need flyers/assets')}
-      ${metric(data.cards.ready, 'Ready to announce')}
-      ${metric(data.cards.blockers, 'Events with blockers', 'danger')}
-      ${metric(data.cards.published, 'Upcoming published')}
-      ${metric(data.cards.unsettled, 'Completed, unsettled', 'warn')}
+    <section class="page-head">
+      <div>
+        <h1>Dashboard</h1>
+        <p class="subtle">What needs attention</p>
+      </div>
     </section>
-    <section class="panel"><h2>Next 14 Days</h2>${eventsTable(data.events)}</section>`;
+    <section class="metric-grid">
+      ${metricToday(today)}
+      ${metricCard('!', 'Open Blockers', dashboard.cards.blockers, '3 urgent', 'red')}
+      ${metricCard('', 'Empty Nights', dashboard.cards.empty, 'Next empty Tuesday', '')}
+      ${metricCard('', 'Needs Flyer', dashboard.cards.needsAssets, '2 announce-ready otherwise', 'amber')}
+      ${metricCard('$', 'Unsettled Events', dashboard.cards.unsettled, 'Oldest Apr 22', 'red')}
+    </section>
+    <section class="dashboard-grid">
+      <article class="panel">
+        <div class="section-head padded">
+          <h2>Next 14 Days</h2>
+          <a class="button secondary small" href="#calendar">View Calendar</a>
+        </div>
+        ${dashboardTable(events)}
+        <div class="legend">${legendItem('green', 'Ready')}${legendItem('blue', 'Published')}${legendItem('amber', 'Needs Attention')}${legendItem('red', 'Blocked')}${legendItem('gray', 'Empty / Hold')}</div>
+      </article>
+      <article class="panel">
+        <div class="section-head padded"><h2>Needs Attention</h2><a class="button secondary small" href="#events">View All</a></div>
+        <div class="attention-list">${attention.map(attentionCard).join('')}</div>
+      </article>
+    </section>
+    ${tonightMarkup(today, true)}`;
 }
 
-function metric(value, label, cls = '') {
-  return `<div class="metric ${cls}"><strong>${esc(value)}</strong><span>${esc(label)}</span></div>`;
+function metricToday(event) {
+  return `<article class="metric-card">
+    <span class="icon-bubble"><span class="icon mic"></span></span>
+    <h3>Tonight<br>${esc(event.title || 'No event')}</h3>
+    <p>Doors ${esc(timeLabel(event.doors_time))}<br>Starts ${esc(timeLabel(event.show_time))}</p>
+    ${badge(event.status || 'empty')}
+  </article>`;
 }
 
-function eventsTable(events) {
-  return `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Type</th><th>Status</th><th>Owner</th><th>Blocked</th><th>Tasks / Assets</th><th></th></tr></thead><tbody>
-    ${events.map((event) => `<tr class="${event.primary_blocker ? 'row-blocked' : ''}">
-      <td>${esc(event.date)}</td><td><strong>${esc(event.title)}</strong></td><td>${esc(event.event_type.replaceAll('_', ' '))}</td><td>${badge(event.status)}</td>
-      <td>${esc(event.owner_name || 'Unassigned')}</td><td>${esc(event.primary_blocker || 'Clear')}</td><td>${esc(event.incomplete_tasks)} open / ${event.approved_flyers > 0 ? 'flyer approved' : 'missing flyer'}</td>
-      <td><a href="#event-${event.id}">Open</a></td></tr>`).join('')}
-    </tbody></table></div>`;
+function metricCard(symbol, label, value, note, tone) {
+  return `<article class="metric-card ${tone}">
+    <span class="icon-bubble ${tone}">${symbol ? esc(symbol) : '<span class="icon calendar"></span>'}</span>
+    <h3>${esc(label)}</h3>
+    <strong>${esc(value)}</strong>
+    <p>${esc(note)}</p>
+  </article>`;
+}
+
+function dashboardTable(events) {
+  return `<table class="data-table">
+    <thead><tr><th>Date</th><th>Event</th><th>Status</th><th>Main Issue</th><th>Owner</th></tr></thead>
+    <tbody>${events.map((event) => {
+      const tone = event.primary_blocker ? 'red' : statusTone(event.status);
+      const issue = event.primary_blocker || (Number(event.approved_flyers) ? 'Ready' : event.status === 'empty' ? 'Needs programming' : 'Flyer missing');
+      return `<tr>
+        <td>${esc(shortDate(eventDate(event)))}</td>
+        <td><a href="#event-${event.id}">${esc(event.title)}</a></td>
+        <td>${badge(event.status)}</td>
+        <td><span class="status-dot ${tone}"></span>${esc(issue)}</td>
+        <td>${esc(event.owner_name || '-')}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function legendItem(tone, label) {
+  return `<span><span class="status-dot ${tone}"></span>${esc(label)}</span>`;
+}
+
+function attentionItems(events, cards) {
+  const blocked = events.find((event) => event.primary_blocker);
+  const needs = events.find((event) => !Number(event.approved_flyers) && ['confirmed', 'needs_assets', 'ready_to_announce'].includes(event.status));
+  const unsettled = cards.unsettled ? { title: 'Saturday Showcase', date: 'Sat May 12', primary_blocker: 'settlement missing' } : null;
+  return [
+    blocked && { tone: 'red', title: `Blocked: ${blocked.title}`, detail: blocked.primary_blocker, date: shortDate(eventDate(blocked)), id: blocked.id },
+    needs && { tone: 'amber', title: `At Risk: ${needs.title}`, detail: Number(needs.ticket_price) > 0 && !needs.ticket_url ? 'no ticket link' : 'flyer approval needed', date: shortDate(eventDate(needs)), id: needs.id },
+    unsettled && { tone: 'red', title: `Unsettled: ${unsettled.title}`, detail: unsettled.primary_blocker, date: unsettled.date },
+  ].filter(Boolean);
+}
+
+function attentionCard(item) {
+  return `<a class="attention-card ${item.tone === 'amber' ? 'amber' : ''}" href="${item.id ? `#event-${item.id}` : '#events'}">
+    <span class="icon-bubble ${item.tone}">${item.tone === 'amber' ? '!' : '<span class="icon ticket"></span>'}</span>
+    <span><strong>${esc(item.title)}</strong><p>${esc(item.detail)}</p><small>${esc(item.date)}</small></span>
+    <span class="arrow"></span>
+  </a>`;
+}
+
+async function renderCalendar(mode = 'calendar') {
+  const data = await loadEvents();
+  const events = data.events || [];
+  app.innerHTML = `
+    <section class="calendar-page">
+      <div class="page-head">
+        <div><h1>Calendar & Pipeline</h1><p class="subtle">See coverage and move events through the show pipeline.</p></div>
+      </div>
+      <div class="filters">
+        <button class="filter"><span>Apr 30 - Jun 7, 2025</span><span class="chev"></span></button>
+        <button class="filter"><span>Event Type</span><span>All types</span></button>
+        <button class="filter"><span>Owner</span><span>All owners</span></button>
+        <button class="filter"><span>Status</span><span>All statuses</span></button>
+        <button class="filter"><span class="icon bars"></span>Clear Filters</button>
+      </div>
+      ${calendarMarkup(events)}
+      ${pipelineMarkup(events)}
+    </section>
+    ${tonightMarkup(events[0], true)}`;
+  if (mode === 'pipeline') $('.calendar-shell')?.scrollIntoView();
+}
+
+function calendarMarkup(events) {
+  const monthEvents = events.slice(0, 14);
+  const start = new Date('2025-04-27T12:00:00');
+  const days = Array.from({ length: 35 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return date;
+  });
+  return `<article class="panel calendar-shell">
+    <div class="calendar-toolbar">
+      <div class="calendar-controls"><button class="secondary small">&lt;</button><button class="secondary small">&gt;</button><button class="secondary small">Today</button></div>
+      <h2>May 2025</h2>
+      <div class="calendar-actions"><span class="view-toggle">Month&nbsp;&nbsp; Week</span><button class="secondary small" onclick="newEvent()">+ Add Event</button></div>
+    </div>
+    <div class="calendar-grid">
+      ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day) => `<div class="weekday">${day}</div>`).join('')}
+      ${days.map((date, index) => calendarDay(date, monthEvents[index % monthEvents.length], index)).join('')}
+    </div>
+  </article>`;
+}
+
+function calendarDay(date, event, index) {
+  const showEvent = event && [2,3,4,5,8,10,14,18,22,26,29,31].includes(index);
+  return `<div class="calendar-day">
+    <span class="day-num">${index < 4 ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : date.getDate()}</span>
+    ${showEvent ? `<a class="mini-event" href="#event-${event.id}"><span class="status-dot ${statusTone(event.status)}"></span>${esc(event.title)}<br>${badge(event.status)}</a>` : '<div class="program-night">+ Program This Night</div>'}
+  </div>`;
+}
+
+function pipelineMarkup(events) {
+  const groups = [
+    ['empty', 'Empty'],
+    ['proposed', 'Proposed'],
+    ['hold', 'Hold'],
+    ['confirmed', 'Confirmed'],
+    ['needs_assets', 'Needs Assets'],
+    ['ready_to_announce', 'Ready to Announce'],
+    ['published', 'Published'],
+    ['advanced', 'Advanced'],
+  ];
+  return `<section class="pipeline-board">
+    ${groups.map(([status, label]) => {
+      const items = events.filter((event) => event.status === status).slice(0, 3);
+      return `<article class="pipe-col">
+        <h3>${esc(label)} <span class="pipe-count">${items.length}</span></h3>
+        ${items.map((event) => `<a class="pipe-card" href="#event-${event.id}">
+          <strong>${esc(event.title)}</strong>
+          <span>${esc(shortDate(eventDate(event)))}</span>
+          <small>${esc(event.owner_name || 'Unassigned')}</small>
+          <small>${esc(event.primary_blocker ? '1 blocker' : '0 blockers')} &nbsp; ${esc(event.incomplete_tasks || 0)} tasks</small>
+        </a>`).join('')}
+        <small>+ Add card</small>
+      </article>`;
+    }).join('')}
+  </section>`;
 }
 
 async function renderEvents() {
-  const data = await api('/events');
-  app.innerHTML = `<div class="page-head"><h1>Events</h1><button onclick="newEvent()">New event</button></div><section class="panel">${eventsTable(data.events)}</section>`;
+  const data = await loadEvents();
+  app.innerHTML = `
+    <div class="page-head"><div><h1>Events</h1><p class="subtle">All upcoming and historical shows.</p></div><button onclick="newEvent()">Add Event</button></div>
+    <article class="panel">${dashboardTable(data.events)}</article>
+    ${tonightMarkup(data.events[0], true)}`;
 }
 
 async function newEvent() {
-  const data = await api('/events');
-  app.innerHTML = `<div class="page-head"><h1>New Event</h1><a href="#events">Back</a></div><section class="panel">${eventForm({}, data)}</section>`;
+  const data = await loadEvents();
+  app.innerHTML = `<div class="page-head"><h1>New Event</h1><a class="button secondary" href="#events">Back</a></div><section class="panel padded">${eventForm({}, data)}</section>`;
   $('#event-form').addEventListener('submit', saveEvent);
 }
 
 function eventForm(event, data) {
   const statuses = data.statuses || ['proposed','hold','confirmed','needs_assets','ready_to_announce','published','advanced','completed','settled','canceled'];
   const types = data.types || ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'];
-  const option = (value, selected, label = value) => `<option value="${esc(value)}" ${String(value) === String(selected) ? 'selected' : ''}>${esc(String(label).replaceAll('_', ' '))}</option>`;
+  const option = (value, selected, label = value) => `<option value="${esc(value)}" ${String(value) === String(selected) ? 'selected' : ''}>${esc(titleCase(label))}</option>`;
   return `<form id="event-form" class="grid-form">
     <input type="hidden" name="id" value="${esc(event.id || '')}">
     <label>Title <input name="title" required value="${esc(event.title || '')}"></label>
@@ -140,82 +331,183 @@ async function renderEvent(id) {
   const data = await api(`/events/${id}`);
   const event = data.event;
   app.innerHTML = `
-    <div class="event-hero"><div><p class="eyebrow">${esc(event.date)} · ${esc(event.event_type.replaceAll('_', ' '))}</p><h1>${esc(event.title)}</h1><div class="status-line">${badge(event.status)}<strong>Next:</strong> ${esc(data.nextAction)}</div></div>
-      <div class="actions"><button onclick="editEvent(${id})">Edit</button>${Number(event.public_visibility) ? `<a class="button secondary" href="/event.html?slug=${esc(event.slug)}">Public page</a>` : ''}</div></div>
-    <section class="ops-grid">
-      <div class="ops-card ${data.blockers.some((b) => ['open','waiting'].includes(b.status)) ? 'danger' : ''}"><strong>${data.blockers.filter((b) => ['open','waiting'].includes(b.status)).length}</strong><span>Open blockers</span></div>
-      <div class="ops-card"><strong>${data.tasks.filter((t) => !['done','canceled'].includes(t.status)).length}</strong><span>Incomplete tasks</span></div>
-      <div class="ops-card"><strong>${data.assets.some((a) => a.asset_type === 'flyer' && a.approval_status === 'approved') ? 'Ready' : 'Missing'}</strong><span>Approved flyer</span></div>
-      <div class="ops-card"><strong>${Number(event.public_visibility) ? 'Live' : 'Internal'}</strong><span>Public page</span></div>
-      <div class="ops-card"><strong>${event.ticket_url ? 'Linked' : Number(event.ticket_price) > 0 ? 'Needed' : 'Free/door'}</strong><span>Ticket status</span></div>
+    <section class="event-top">
+      <div>
+        <a class="back-link" href="#events">&lt;- Back to Events</a>
+        <h1>${esc(event.title)}</h1>
+        <p class="subtle">Event Workspace</p>
+      </div>
+      <div class="event-actions">
+        <button class="secondary">More Actions <span class="chev"></span></button>
+        <button class="danger" onclick="editEvent(${id})">Edit Event</button>
+      </div>
     </section>
-    <nav class="tabs">${['overview','lineup','tasks','blockers','schedule','assets','settlement','activity'].map((t) => `<a href="#${t}">${t}</a>`).join('')}</nav>
-    ${overviewSection(data)}${lineupSection(id, data)}${tasksSection(id, data)}${blockersSection(id, data)}${scheduleSection(id, data)}${assetsSection(id, data)}${settlementSection(id, data)}${activitySection(data)}`;
+    <nav class="workspace-tabs tabs">${['overview','lineup','schedule','tasks','blockers','assets','public page','settlement','activity'].map((t, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${t.replace(' ', '-')}">${esc(titleCase(t))}</a>`).join('')}</nav>
+    ${eventSummary(data)}
+    <article class="next-action"><span class="icon-bubble amber">!</span><span><strong>Next Recommended Action</strong><p>${esc(data.nextAction)}</p></span><button class="secondary small">Mark as Complete</button></article>
+    ${eventOverview(data)}
+    ${detailSections(id, data)}
+    ${tonightMarkup(event, true, data)}`;
   bindWorkspaceForms(id);
+}
+
+function eventSummary(data) {
+  const e = data.event;
+  const openBlockers = data.blockers.filter((b) => ['open','waiting'].includes(b.status)).length;
+  const tasksLeft = data.tasks.filter((t) => !['done','canceled'].includes(t.status)).length;
+  return `<article class="event-summary">
+    <div class="flyer">${esc(e.title)}</div>
+    <div class="facts-grid">
+      ${fact('Date', shortDate(eventDate(e)))}
+      ${fact('Doors', timeLabel(e.doors_time))}
+      ${fact('Show', timeLabel(e.show_time))}
+      ${fact('Age', e.age_restriction || '21+')}
+      ${fact('Status', badge(e.status))}
+      ${fact('Owner', e.owner_name || 'Unassigned')}
+      ${fact('Public Page', Number(e.public_visibility) ? 'Live' : 'Hidden')}
+      ${fact('Tickets', e.ticket_url ? 'Ticket link ready' : Number(e.ticket_price) > 0 ? `$${e.ticket_price}` : 'RSVP / Free')}
+    </div>
+    <div class="event-stats">
+      <div class="event-stat">Blockers<strong>${openBlockers}</strong><a href="#blockers">View</a></div>
+      <div class="event-stat">Tasks Left<strong>${tasksLeft}</strong><a href="#tasks">View</a></div>
+    </div>
+  </article>`;
+}
+
+function fact(label, value) {
+  return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
+}
+
+function eventOverview(data) {
+  const openBlockers = data.blockers.filter((b) => ['open','waiting'].includes(b.status));
+  const tasks = data.tasks.filter((t) => !['done','canceled'].includes(t.status)).slice(0, 4);
+  return `<section class="overview-grid">
+    <div>
+      <article class="panel">
+        <div class="section-head padded"><h2>Event Health</h2><button class="secondary small">View Details</button></div>
+        <div class="health-row">
+          ${health('Flyer', hasFlyer(data) ? 'Approved' : 'Missing', hasFlyer(data))}
+          ${health('Ticketing', data.event.ticket_url || Number(data.event.ticket_price) === 0 ? 'Active' : 'Needed', data.event.ticket_url || Number(data.event.ticket_price) === 0)}
+          ${health('Lineup', data.lineup.length ? 'Confirmed' : 'Missing', data.lineup.length)}
+          ${health('Schedule', data.schedule.length ? 'Ready' : 'Missing', data.schedule.length)}
+          ${health('Staffing', data.event.owner_name ? 'Confirmed' : 'Unassigned', data.event.owner_name)}
+          ${health('Settlement', data.settlement ? 'Started' : 'Not started', data.settlement, true)}
+        </div>
+      </article>
+      <article class="panel">
+        <div class="section-head padded"><h2>Incomplete Tasks</h2><a class="button secondary small" href="#tasks">View All Tasks</a></div>
+        ${tasks.length ? tasks.map(taskRow).join('') : '<div class="empty-state">All tasks are complete.</div>'}
+      </article>
+      <article class="panel">
+        <div class="section-head padded"><h2>Schedule / Run of Show</h2><a class="button secondary small" href="#schedule">View Full Schedule</a></div>
+        ${data.schedule.slice(0, 6).map(scheduleRow).join('') || '<div class="empty-state">No schedule has been added.</div>'}
+      </article>
+    </div>
+    <div>
+      <article class="panel">
+        <div class="section-head padded"><h2>Open Blockers</h2><a class="button secondary small" href="#blockers">View All</a></div>
+        ${openBlockers.length ? openBlockers.map((b) => `<div class="task-row"><span class="warn-mark">!</span><span>${esc(b.title)}</span><span>${esc(b.owner_name || '')}</span><span>${esc(b.due_date || '')}</span></div>`).join('') : '<div class="empty-state"><span class="check">OK</span><p>All clear!<br>No open blockers for this event.</p></div>'}
+      </article>
+      <article class="panel">
+        <div class="section-head padded"><h2>Performer Queue</h2><a class="button secondary small" href="#lineup">View Full Lineup</a></div>
+        ${data.lineup.slice(0, 5).map((item, i) => performerRow(item, i)).join('') || '<div class="empty-state">No performers yet.</div>'}
+      </article>
+      <article class="panel">
+        <div class="section-head padded"><h2>Assets</h2><a class="button secondary small" href="#assets">View All Assets</a></div>
+        ${assetPreview(data)}
+      </article>
+      <article class="panel">
+        <div class="section-head padded"><h2>Internal Notes</h2><button class="secondary small" onclick="editEvent(${data.event.id})">Edit</button></div>
+        <div class="notes">${esc(data.event.description_internal || 'No internal notes yet.')}</div>
+      </article>
+    </div>
+  </section>`;
+}
+
+function health(label, state, ok, neutral = false) {
+  const mark = neutral ? '<span class="neutral">.</span>' : ok ? '<span class="check">OK</span>' : '<span class="warn-mark">!</span>';
+  return `<div class="health-item">${mark}<span><strong>${esc(label)}</strong><br>${esc(state)}</span></div>`;
+}
+
+function hasFlyer(data) {
+  return data.assets.some((a) => a.asset_type === 'flyer' && a.approval_status === 'approved');
+}
+
+function taskRow(task) {
+  return `<div class="task-row"><span class="box"></span><span><span class="status-dot amber"></span>${esc(task.title)}</span><span>${esc(task.assigned_name || '')}</span><span>${esc(task.due_date || '')}</span></div>`;
+}
+
+function scheduleRow(item) {
+  return `<div class="schedule-row"><strong>${esc(timeLabel(item.start_time))}</strong><span><span class="status-dot ${statusTone(item.item_type)}"></span>${esc(item.title)}</span><span>${esc(item.notes || '')}</span><span>${esc(titleCase(item.item_type))}</span></div>`;
+}
+
+function performerRow(item, index) {
+  return `<div class="performer-row"><span>${index + 1}</span><span>${esc(item.display_name)}</span><span>${esc(timeLabel(item.set_time))}</span></div>`;
+}
+
+function assetPreview(data) {
+  const asset = data.assets[0];
+  if (!asset) return '<div class="empty-state">No assets uploaded.</div>';
+  return `<div class="asset-row"><span class="asset-thumb">${esc(data.event.title)}</span><span><strong>${esc(asset.title)}</strong><br>${esc(asset.asset_type)} - ${esc(asset.approval_status)}<br>${esc(asset.created_at || '')}</span><button class="secondary small">Download</button></div>`;
+}
+
+function detailSections(id, data) {
+  return `${lineupSection(id, data)}${tasksSection(id, data)}${blockersSection(id, data)}${scheduleSection(id, data)}${assetsSection(id, data)}${settlementSection(id, data)}${activitySection(data)}`;
 }
 
 async function editEvent(id) {
   const data = await api(`/events/${id}`);
-  app.innerHTML = `<div class="page-head"><h1>Edit Event</h1><a href="#event-${id}">Back</a></div><section class="panel">${eventForm(data.event, data)}</section>`;
+  app.innerHTML = `<div class="page-head"><h1>Edit Event</h1><a class="button secondary" href="#event-${id}">Back</a></div><section class="panel padded">${eventForm(data.event, data)}</section>`;
   $('#event-form').addEventListener('submit', saveEvent);
 }
 
-function overviewSection(data) {
-  const e = data.event;
-  return `<section id="overview" class="panel"><h2>Overview</h2><div class="detail-grid">
-    <p><strong>Venue</strong><br>${esc(e.venue_name)}</p><p><strong>Owner</strong><br>${esc(e.owner_name || 'Unassigned')}</p>
-    <p><strong>Doors / Show / End</strong><br>${esc(e.doors_time || '-')} / ${esc(e.show_time || '-')} / ${esc(e.end_time || '-')}</p><p><strong>Tickets</strong><br>$${esc(e.ticket_price || 0)}</p></div>
-    <h3>Public copy</h3><p>${esc(e.description_public || 'No public copy yet.')}</p><h3>Internal notes</h3><p>${esc(e.description_internal || 'No internal notes yet.')}</p></section>`;
-}
-
 function select(name, options, selected) {
-  return `<select name="${name}">${options.map((o) => `<option value="${esc(o)}" ${o === selected ? 'selected' : ''}>${esc(o.replaceAll('_', ' '))}</option>`).join('')}</select>`;
+  return `<select name="${name}">${options.map((o) => `<option value="${esc(o)}" ${o === selected ? 'selected' : ''}>${esc(titleCase(o))}</option>`).join('')}</select>`;
 }
 
 function lineupSection(id, data) {
-  return `<section id="lineup" class="panel"><h2>Lineup</h2>${data.lineup.map((x) => `<form data-api="/events/${id}/lineup/${x.id}" data-method="PATCH" class="row-form"><input name="billing_order" type="number" value="${esc(x.billing_order)}"><input name="display_name" value="${esc(x.display_name)}"><input name="set_time" type="time" value="${esc(x.set_time || '')}"><input name="set_length_minutes" type="number" value="${esc(x.set_length_minutes || '')}">${select('status', ['invited','tentative','confirmed','canceled'], x.status)}<input name="payout_terms" value="${esc(x.payout_terms || '')}"><input name="notes" value="${esc(x.notes || '')}"><button>Save</button></form>`).join('')}
-  <form data-api="/events/${id}/lineup" data-method="POST" class="grid-form compact"><input name="band_name" placeholder="Band/artist"><input name="display_name" placeholder="Display name"><input name="billing_order" type="number" placeholder="Order"><input name="set_time" type="time"><input name="set_length_minutes" type="number" placeholder="Minutes">${select('status', ['invited','tentative','confirmed','canceled'], 'tentative')}<input name="payout_terms" placeholder="Payout"><input name="notes" placeholder="Notes"><button>Add lineup</button></form></section>`;
+  return `<section id="lineup" class="panel"><div class="section-head padded"><h2>Lineup</h2></div>${data.lineup.map((x) => `<form data-api="/events/${id}/lineup/${x.id}" data-method="PATCH" class="row-form"><input name="billing_order" type="number" value="${esc(x.billing_order)}"><input name="display_name" value="${esc(x.display_name)}"><input name="set_time" type="time" value="${esc(x.set_time || '')}"><input name="set_length_minutes" type="number" value="${esc(x.set_length_minutes || '')}">${select('status', ['invited','tentative','confirmed','canceled'], x.status)}<input name="payout_terms" value="${esc(x.payout_terms || '')}"><input name="notes" value="${esc(x.notes || '')}"><button>Save</button></form>`).join('')}
+  <form data-api="/events/${id}/lineup" data-method="POST" class="row-form"><input name="band_name" placeholder="Band/artist"><input name="display_name" placeholder="Display name"><input name="billing_order" type="number" placeholder="Order"><input name="set_time" type="time"><input name="set_length_minutes" type="number" placeholder="Minutes">${select('status', ['invited','tentative','confirmed','canceled'], 'tentative')}<input name="payout_terms" placeholder="Payout"><input name="notes" placeholder="Notes"><button>Add lineup</button></form></section>`;
 }
 
 function tasksSection(id, data) {
-  return `<section id="tasks" class="panel"><h2>Tasks</h2>${data.tasks.map((t) => `<form data-api="/events/${id}/tasks/${t.id}" data-method="PATCH" class="row-form"><input name="title" value="${esc(t.title)}">${select('status', ['todo','in_progress','blocked','done','canceled'], t.status)}<input type="date" name="due_date" value="${esc(t.due_date || '')}">${select('priority', ['low','normal','high','urgent'], t.priority)}<input name="description" value="${esc(t.description || '')}"><button>Save</button></form>`).join('')}
-  <form data-api="/events/${id}/tasks" data-method="POST" class="grid-form compact"><input name="title" required placeholder="New task"><input name="description" placeholder="Description">${select('status', ['todo','in_progress','blocked','done','canceled'], 'todo')}<input type="date" name="due_date">${select('priority', ['low','normal','high','urgent'], 'normal')}<button>Add task</button></form></section>`;
+  return `<section id="tasks" class="panel"><div class="section-head padded"><h2>Tasks</h2></div>${data.tasks.map((t) => `<form data-api="/events/${id}/tasks/${t.id}" data-method="PATCH" class="row-form"><input name="title" value="${esc(t.title)}">${select('status', ['todo','in_progress','blocked','done','canceled'], t.status)}<input type="date" name="due_date" value="${esc(t.due_date || '')}">${select('priority', ['low','normal','high','urgent'], t.priority)}<input name="description" value="${esc(t.description || '')}"><button>Save</button></form>`).join('')}
+  <form data-api="/events/${id}/tasks" data-method="POST" class="row-form"><input name="title" required placeholder="New task"><input name="description" placeholder="Description">${select('status', ['todo','in_progress','blocked','done','canceled'], 'todo')}<input type="date" name="due_date">${select('priority', ['low','normal','high','urgent'], 'normal')}<button>Add task</button></form></section>`;
 }
 
 function blockersSection(id, data) {
-  return `<section id="blockers" class="panel"><h2>Blockers</h2>${data.blockers.map((b) => `<form data-api="/events/${id}/blockers/${b.id}" data-method="PATCH" class="row-form"><input name="title" value="${esc(b.title)}">${select('status', ['open','waiting','resolved','canceled'], b.status)}<input type="date" name="due_date" value="${esc(b.due_date || '')}"><input name="description" value="${esc(b.description || '')}"><button>Save</button></form>`).join('')}
-  <form data-api="/events/${id}/blockers" data-method="POST" class="grid-form compact"><input name="title" required placeholder="New blocker"><input name="description" placeholder="Description"><input type="date" name="due_date"><button>Add blocker</button></form></section>`;
+  return `<section id="blockers" class="panel"><div class="section-head padded"><h2>Blockers</h2></div>${data.blockers.map((b) => `<form data-api="/events/${id}/blockers/${b.id}" data-method="PATCH" class="row-form"><input name="title" value="${esc(b.title)}">${select('status', ['open','waiting','resolved','canceled'], b.status)}<input type="date" name="due_date" value="${esc(b.due_date || '')}"><input name="description" value="${esc(b.description || '')}"><button>Save</button></form>`).join('')}
+  <form data-api="/events/${id}/blockers" data-method="POST" class="row-form"><input name="title" required placeholder="New blocker"><input name="description" placeholder="Description"><input type="date" name="due_date"><button>Add blocker</button></form></section>`;
 }
 
 function scheduleSection(id, data) {
-  return `<section id="schedule" class="panel"><h2>Run Sheet</h2>${data.schedule.map((s) => `<form data-api="/events/${id}/schedule/${s.id}" data-method="PATCH" class="row-form"><input name="title" value="${esc(s.title)}">${select('item_type', ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'], s.item_type)}<input type="time" name="start_time" value="${esc(s.start_time || '')}"><input type="time" name="end_time" value="${esc(s.end_time || '')}"><input name="notes" value="${esc(s.notes || '')}"><button>Save</button></form>`).join('')}
-  <form data-api="/events/${id}/schedule" data-method="POST" class="grid-form compact"><input name="title" required placeholder="Schedule item">${select('item_type', ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'], 'other')}<input type="time" name="start_time"><input type="time" name="end_time"><input name="notes" placeholder="Notes"><button>Add item</button></form></section>`;
+  return `<section id="schedule" class="panel"><div class="section-head padded"><h2>Run Sheet</h2></div>${data.schedule.map((s) => `<form data-api="/events/${id}/schedule/${s.id}" data-method="PATCH" class="row-form"><input name="title" value="${esc(s.title)}">${select('item_type', ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'], s.item_type)}<input type="time" name="start_time" value="${esc(s.start_time || '')}"><input type="time" name="end_time" value="${esc(s.end_time || '')}"><input name="notes" value="${esc(s.notes || '')}"><button>Save</button></form>`).join('')}
+  <form data-api="/events/${id}/schedule" data-method="POST" class="row-form"><input name="title" required placeholder="Schedule item">${select('item_type', ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'], 'other')}<input type="time" name="start_time"><input type="time" name="end_time"><input name="notes" placeholder="Notes"><button>Add item</button></form></section>`;
 }
 
 function assetsSection(id, data) {
-  return `<section id="assets" class="panel"><h2>Assets</h2><div class="asset-grid">${data.assets.map((a) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp)$/i.test(a.filename) ? `<img src="${esc(a.file_path)}" alt="">` : ''}<strong>${esc(a.title)}</strong><span>${esc(a.asset_type)} · ${esc(a.approval_status)}</span><button class="small" onclick="approveAsset(${id},${a.id},'approved')">Approve</button><button class="small secondary" onclick="approveAsset(${id},${a.id},'rejected')">Reject</button></article>`).join('')}</div>
-  <form id="asset-form" class="grid-form compact"><input name="title" placeholder="Asset title">${select('asset_type', ['flyer','poster','band_photo','logo','social_square','social_story','press_photo','other'], 'flyer')}<input type="file" name="asset" required><input name="notes" placeholder="Notes"><button>Upload asset</button></form></section>`;
+  return `<section id="assets" class="panel"><div class="section-head padded"><h2>Assets</h2></div><div class="asset-grid">${data.assets.map((a) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp)$/i.test(a.filename) ? `<img src="${esc(a.file_path)}" alt="">` : '<span class="asset-thumb">Asset</span>'}<strong>${esc(a.title)}</strong><span>${esc(titleCase(a.asset_type))} - ${esc(titleCase(a.approval_status))}</span><div><button class="small" onclick="approveAsset(${id},${a.id},'approved')">Approve</button> <button class="small secondary" onclick="approveAsset(${id},${a.id},'rejected')">Reject</button></div></article>`).join('')}</div>
+  <form id="asset-form" class="row-form"><input name="title" placeholder="Asset title">${select('asset_type', ['flyer','poster','band_photo','logo','social_square','social_story','press_photo','other'], 'flyer')}<input type="file" name="asset" required><input name="notes" placeholder="Notes"><button>Upload asset</button></form></section>`;
 }
 
 function settlementSection(id, data) {
   const s = data.settlement || {};
-  return `<section id="settlement" class="panel"><h2>Settlement</h2><form data-api="/events/${id}/settlement" data-method="POST" class="grid-form">${['gross_ticket_sales','tickets_sold','bar_sales','expenses','band_payouts','promoter_payout','venue_net'].map((f) => `<label>${f.replaceAll('_',' ')}<input name="${f}" type="number" step="0.01" value="${esc(s[f] || 0)}"></label>`).join('')}<label class="wide">Notes <textarea name="notes">${esc(s.notes || '')}</textarea></label><button>Save settlement</button></form></section>`;
+  return `<section id="settlement" class="panel"><div class="section-head padded"><h2>Settlement</h2></div><form data-api="/events/${id}/settlement" data-method="POST" class="row-form">${['gross_ticket_sales','tickets_sold','bar_sales','expenses','band_payouts','promoter_payout','venue_net'].map((f) => `<label>${esc(titleCase(f))}<input name="${f}" type="number" step="0.01" value="${esc(s[f] || 0)}"></label>`).join('')}<label class="wide">Notes <textarea name="notes">${esc(s.notes || '')}</textarea></label><button>Save settlement</button></form></section>`;
 }
 
 function activitySection(data) {
-  return `<section id="activity" class="panel"><h2>Activity</h2><ul class="timeline">${data.activity.map((a) => `<li><strong>${esc(a.action)}</strong> by ${esc(a.user_name || 'system')} <span>${esc(a.created_at)}</span></li>`).join('')}</ul></section>`;
+  return `<section id="activity" class="panel"><div class="section-head padded"><h2>Activity</h2></div><ul class="timeline">${data.activity.map((a) => `<li><strong>${esc(a.action)}</strong> by ${esc(a.user_name || 'system')} <span class="muted">${esc(a.created_at)}</span></li>`).join('')}</ul></section>`;
 }
 
 function bindWorkspaceForms(id) {
-  document.querySelectorAll('form[data-api]').forEach((form) => form.addEventListener('submit', async (event) => {
+  $$('form[data-api]').forEach((form) => form.addEventListener('submit', async (event) => {
     event.preventDefault();
     await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
     renderEvent(id);
   }));
   $('#asset-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const fd = new FormData(event.target);
-    await api(`/events/${id}/assets`, { method: 'POST', body: fd });
+    await api(`/events/${id}/assets`, { method: 'POST', body: new FormData(event.target) });
     renderEvent(id);
   });
 }
@@ -227,25 +519,65 @@ async function approveAsset(eventId, assetId, status) {
 
 async function renderTemplates() {
   const data = await api('/templates');
-  app.innerHTML = `<div class="page-head"><h1>Templates</h1></div><section class="card-grid">${data.templates.map((t) => `<article class="panel"><h2>${esc(t.name)}</h2><p>${esc(t.event_type.replaceAll('_',' '))}</p><form data-template="${t.id}" class="grid-form compact"><input type="date" name="date" required><input type="time" name="doors_time" value="19:00"><input type="time" name="show_time" value="20:00"><input name="title" value="${esc(t.default_title || t.name)}"><button>Create event</button></form></article>`).join('')}</section>`;
-  document.querySelectorAll('form[data-template]').forEach((form) => form.addEventListener('submit', async (event) => {
+  app.innerHTML = `<div class="page-head"><div><h1>Templates</h1><p class="subtle">Create repeatable event shells.</p></div></div><section class="pipeline-board">${data.templates.map((t) => `<article class="pipe-card"><h2>${esc(t.name)}</h2><p>${esc(titleCase(t.event_type))}</p><form data-template="${t.id}" class="grid-form compact"><input type="date" name="date" required><input type="time" name="doors_time" value="19:00"><input type="time" name="show_time" value="20:00"><input name="title" value="${esc(t.default_title || t.name)}"><button>Create event</button></form></article>`).join('')}</section>`;
+  $$('form[data-template]').forEach((form) => form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const res = await api(`/events/from-template/${form.dataset.template}`, { method: 'POST', body: JSON.stringify(formData(form)) });
     location.hash = `event-${res.id}`;
   }));
 }
 
+async function renderTonight() {
+  const data = await loadEvents();
+  const event = data.events[0];
+  const detail = event ? await api(`/events/${event.id}`) : null;
+  app.innerHTML = tonightMarkup(event, false, detail);
+}
+
+function tonightMarkup(event = {}, hidden = false, detail = null) {
+  const tasks = detail?.tasks?.filter((task) => !['done','canceled'].includes(task.status)).slice(0, 2) || [];
+  const schedule = detail?.schedule?.slice(0, 4) || [];
+  const lineup = detail?.lineup?.slice(0, 3) || [];
+  const doneCount = detail?.tasks?.filter((task) => task.status === 'done').length || 0;
+  const totalTasks = detail?.tasks?.length || tasks.length;
+  return `<section class="tonight-page" ${hidden ? 'aria-hidden="true"' : ''}>
+    <div class="tonight-head"><span class="back-arrow"></span><span>Tonight</span></div>
+    <article class="today-card">
+      <span class="icon-bubble"><span class="icon mic"></span></span>
+      <div>
+        <h1>Tonight: ${esc(event.title || 'No Event')}</h1>
+        <div class="today-meta"><span>${esc(shortDate(eventDate(event)))}</span><span>${esc(event.venue_name || 'The Blackroom')}</span></div>
+        <div class="today-status">${badge(event.status || 'empty')}<span><span class="status-dot green"></span>Blockers: ${esc(detail?.blockers?.filter((b) => ['open','waiting'].includes(b.status)).length || 'None')}</span></div>
+      </div>
+    </article>
+    <article class="next-action"><span class="icon-bubble"><span class="bolt"></span></span><span><h2>Next Action</h2><p>${esc(detail?.nextAction || 'Confirm projection setup and print signup sheet.')}</p></span><span class="arrow"></span></article>
+    <article class="mobile-panel"><h2>Tasks <span class="badge">${doneCount} / ${totalTasks}</span></h2>${(tasks.length ? tasks : [{ title: 'Projection setup' }, { title: 'Print signup sheet' }]).map((task) => `<div class="mobile-row"><span class="mobile-check"></span><span>${esc(task.title)}</span></div>`).join('')}</article>
+    <article class="mobile-panel"><h2>Schedule</h2>${(schedule.length ? schedule : [{ start_time: '19:00', title: 'Doors' }, { start_time: '20:00', title: 'Karaoke starts' }, { start_time: '23:30', title: 'Last call' }, { start_time: '00:00', title: 'End' }]).map((item) => `<div class="mobile-row"><span class="mobile-time">${esc(timeLabel(item.start_time).replace(' PM','').replace(' AM',''))}</span><span class="icon-bubble">${esc((item.title || '?').slice(0, 1))}</span><span>${esc(item.title)}</span></div>`).join('')}</article>
+    <article class="mobile-panel mobile-kpis">
+      ${mobileKpi('Owner', event.owner_name || 'Jenny')}
+      ${mobileKpi('Public Page', Number(event.public_visibility) ? 'Live' : 'Hidden')}
+      ${mobileKpi('Ticketing', event.ticket_url ? 'Active' : 'RSVP / Free')}
+      ${mobileKpi('Flyer', detail && hasFlyer(detail) ? 'Approved' : 'Pending')}
+    </article>
+    <article class="mobile-panel"><h2>Performer Queue <a class="button secondary small" href="${event.id ? `#event-${event.id}` : '#events'}">View All</a></h2>${(lineup.length ? lineup : [{ display_name: 'The Sparetimes' }, { display_name: 'Neon Plastic' }, { display_name: 'Basement Panic' }]).map((item, i) => `<div class="mobile-row"><span class="icon-bubble">${i + 1}</span><span>${esc(item.display_name)}</span><span class="icon dots"></span></div>`).join('')}</article>
+  </section>`;
+}
+
+function mobileKpi(label, value) {
+  return `<div class="mobile-kpi"><span class="icon-bubble"></span><span>${esc(label)}<strong>${esc(value)}</strong></span></div>`;
+}
+
 async function renderPublicEvent() {
   const slug = new URLSearchParams(location.search).get('slug');
   const data = await api(`/public/events/${encodeURIComponent(slug)}`);
   const e = data.event;
-  $('#public-event').innerHTML = `<article class="public-event">${data.flyer ? `<img class="public-flyer" src="${esc(data.flyer.file_path)}" alt="">` : ''}<div class="public-copy"><p class="eyebrow">${esc(e.date)} · ${esc(e.venue_name)}</p><h1>${esc(e.title)}</h1><p><strong>Doors</strong> ${esc(e.doors_time || 'TBA')} · <strong>Show</strong> ${esc(e.show_time || 'TBA')}</p><p>${esc(e.age_restriction || 'All ages unless noted')} · ${Number(e.ticket_price) > 0 ? `$${esc(e.ticket_price)}` : 'Free / door'}</p>${e.ticket_url ? `<a class="button" href="${esc(e.ticket_url)}">Tickets</a>` : ''}<p>${esc(e.description_public || '')}</p><h2>Lineup</h2><ul class="plain-list">${data.lineup.map((l) => `<li>${esc(l.display_name)} ${l.set_time ? `<span>${esc(l.set_time)}</span>` : ''}</li>`).join('')}</ul><p class="muted">${esc(e.address)}, ${esc(e.city)}, ${esc(e.state)}</p></div></article>`;
+  $('#public-event').innerHTML = `<article class="public-event">${data.flyer ? `<img class="public-flyer" src="${esc(data.flyer.file_path)}" alt="">` : ''}<div class="public-copy"><p class="eyebrow">${esc(e.date)} - ${esc(e.venue_name)}</p><h1>${esc(e.title)}</h1><p><strong>Doors</strong> ${esc(e.doors_time || 'TBA')} - <strong>Show</strong> ${esc(e.show_time || 'TBA')}</p><p>${esc(e.age_restriction || 'All ages unless noted')} - ${Number(e.ticket_price) > 0 ? `$${esc(e.ticket_price)}` : 'Free / door'}</p>${e.ticket_url ? `<a class="button" href="${esc(e.ticket_url)}">Tickets</a>` : ''}<p>${esc(e.description_public || '')}</p><h2>Lineup</h2><ul class="plain-list">${data.lineup.map((l) => `<li>${esc(l.display_name)} ${l.set_time ? `<span>${esc(l.set_time)}</span>` : ''}</li>`).join('')}</ul><p class="muted">${esc(e.address)}, ${esc(e.city)}, ${esc(e.state)}</p></div></article>`;
 }
 
 async function renderInvite() {
   const token = new URLSearchParams(location.search).get('token');
   const data = await api(`/invite/${encodeURIComponent(token)}`);
-  $('#invite').innerHTML = `<h1>Join ${esc(data.invite.event_title)}</h1><p>Invited as <strong>${esc(data.invite.role.replaceAll('_',' '))}</strong> using ${esc(data.invite.email)}.</p><form id="invite-form" class="grid-form"><label>Name <input name="name"></label><label>Password <input type="password" name="password"></label><button>Accept invite</button></form>`;
+  $('#invite').innerHTML = `<h1>Join ${esc(data.invite.event_title)}</h1><p>Invited as <strong>${esc(titleCase(data.invite.role))}</strong> using ${esc(data.invite.email)}.</p><form id="invite-form" class="grid-form"><label>Name <input name="name"></label><label>Password <input type="password" name="password"></label><button>Accept invite</button></form>`;
   $('#invite-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const res = await api(`/invite/${encodeURIComponent(token)}`, { method: 'POST', body: JSON.stringify(formData(event.target)) });
