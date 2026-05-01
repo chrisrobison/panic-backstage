@@ -1,6 +1,6 @@
 # Panic Backstage
 
-Panic Backstage is an internal venue-operations tool for moving live events from idea to confirmed, announced, ticketed, staffed, performed, and settled.
+Panic Backstage helps venues track every show from hold to settlement, including lineup, schedule, artwork, ticketing, open items, and event readiness.
 
 The app is intentionally boring to run:
 
@@ -166,7 +166,7 @@ Keep `.env` outside version control. It is ignored by `.gitignore`.
 
 - `/` shows the staff dashboard after login.
 - Staff can create events from scratch or from templates.
-- Each event workspace manages overview, lineup, tasks, blockers, run sheet, assets, settlement, and activity.
+- Each event workspace manages overview, lineup, tasks, open items, run sheet, assets, settlement, and activity.
 - Public event pages are loaded by `public/event.html?slug=event-slug`.
 - Public event API responses only include events with `public_visibility` enabled.
 

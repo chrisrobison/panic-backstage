@@ -185,7 +185,7 @@ final class Events extends BaseEndpoint
     private function nextAction(array $event, array $blockers, array $assets, ?array $settlement): string
     {
         foreach ($blockers as $blocker) {
-            if (in_array($blocker['status'], ['open', 'waiting'], true)) return 'Resolve open blockers';
+            if (in_array($blocker['status'], ['open', 'waiting'], true)) return 'Complete open items';
         }
         $hasFlyer = array_filter($assets, fn ($a) => $a['asset_type'] === 'flyer' && $a['approval_status'] === 'approved');
         return match (true) {

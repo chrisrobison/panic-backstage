@@ -82,6 +82,7 @@ final class Kernel
             return match ($child) {
                 'tasks' => [Events\Tasks::class, ['eventId' => $eventId, 'taskId' => $childId]],
                 'blockers' => [Events\Blockers::class, ['eventId' => $eventId, 'blockerId' => $childId]],
+                'open-items' => [Events\Blockers::class, ['eventId' => $eventId, 'blockerId' => $childId]],
                 'lineup' => [Events\Lineup::class, ['eventId' => $eventId, 'lineupId' => $childId]],
                 'schedule' => [Events\Schedule::class, ['eventId' => $eventId, 'scheduleId' => $childId]],
                 'assets' => [Events\Assets::class, ['eventId' => $eventId, 'assetId' => $childId]],

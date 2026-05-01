@@ -7,7 +7,29 @@ const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selec
 const app = $('#app');
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const titleCase = (v) => String(v || '').replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
-const badge = (s) => `<span class="badge status-${esc(s)}">${esc(titleCase(s))}</span>`;
+const terminology = {
+  openItemSingular: 'Open Item',
+  openItemPlural: 'Open Items',
+  needsAttention: 'Needs Attention',
+  atRisk: 'At Risk',
+  waitingOn: 'Waiting On',
+  pointPerson: 'Point Person',
+  markComplete: 'Mark Complete',
+  requestHelp: 'Request Help',
+  allClear: 'All clear!',
+  noOutstandingItems: 'No outstanding items for this event.',
+};
+const displayLabel = (value) => ({
+  blocked: terminology.atRisk,
+  blockers: terminology.openItemPlural,
+  blocker: terminology.openItemSingular,
+})[String(value || '').toLowerCase()] || titleCase(value);
+const badge = (s) => `<span class="badge status-${esc(s)}">${esc(displayLabel(s))}</span>`;
+const waitingOnText = (value) => {
+  const text = String(value || '').trim();
+  if (!text) return `${terminology.waitingOn} details`;
+  return /^waiting on\b/i.test(text) ? text.replace(/^waiting on\b/i, 'Waiting on') : `Waiting on ${text}`;
+};
 
 async function api(path, options = {}) {
   const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
@@ -118,7 +140,7 @@ async function renderDashboard() {
     </section>
     <section class="metric-grid">
       ${metricToday(today)}
-      ${metricCard('!', 'Open Blockers', dashboard.cards.blockers, '3 urgent', 'red')}
+      ${metricCard('!', terminology.needsAttention, dashboard.cards.blockers, `${dashboard.cards.urgentItems || 0} urgent`, 'red')}
       ${metricCard('', 'Empty Nights', dashboard.cards.empty, 'Next empty Tuesday', '')}
       ${metricCard('', 'Needs Flyer', dashboard.cards.needsAssets, '2 announce-ready otherwise', 'amber')}
       ${metricCard('$', 'Unsettled Events', dashboard.cards.unsettled, 'Oldest Apr 22', 'red')}
@@ -130,7 +152,7 @@ async function renderDashboard() {
           <a class="button secondary small" href="#calendar">View Calendar</a>
         </div>
         ${dashboardTable(events)}
-        <div class="legend">${legendItem('green', 'Ready')}${legendItem('blue', 'Published')}${legendItem('amber', 'Needs Attention')}${legendItem('red', 'Blocked')}${legendItem('gray', 'Empty / Hold')}</div>
+        <div class="legend">${legendItem('green', 'Ready')}${legendItem('blue', 'Published')}${legendItem('amber', terminology.needsAttention)}${legendItem('red', terminology.atRisk)}${legendItem('gray', 'Empty / Hold')}</div>
       </article>
       <article class="panel">
         <div class="section-head padded"><h2>Needs Attention</h2><a class="button secondary small" href="#events">View All</a></div>
@@ -180,13 +202,13 @@ function legendItem(tone, label) {
 }
 
 function attentionItems(events, cards) {
-  const blocked = events.find((event) => event.primary_blocker);
+  const atRisk = events.find((event) => event.primary_blocker);
   const needs = events.find((event) => !Number(event.approved_flyers) && ['confirmed', 'needs_assets', 'ready_to_announce'].includes(event.status));
   const unsettled = cards.unsettled ? { title: 'Saturday Showcase', date: 'Sat May 12', primary_blocker: 'settlement missing' } : null;
   return [
-    blocked && { tone: 'red', title: `Blocked: ${blocked.title}`, detail: blocked.primary_blocker, date: shortDate(eventDate(blocked)), id: blocked.id },
-    needs && { tone: 'amber', title: `At Risk: ${needs.title}`, detail: Number(needs.ticket_price) > 0 && !needs.ticket_url ? 'no ticket link' : 'flyer approval needed', date: shortDate(eventDate(needs)), id: needs.id },
-    unsettled && { tone: 'red', title: `Unsettled: ${unsettled.title}`, detail: unsettled.primary_blocker, date: unsettled.date },
+    atRisk && { tone: 'red', title: `${terminology.atRisk}: ${atRisk.title}`, detail: waitingOnText(atRisk.primary_blocker), date: shortDate(eventDate(atRisk)), id: atRisk.id },
+    needs && { tone: 'amber', title: `${terminology.atRisk}: ${needs.title}`, detail: waitingOnText(Number(needs.ticket_price) > 0 && !needs.ticket_url ? 'ticket link' : 'flyer approval'), date: shortDate(eventDate(needs)), id: needs.id },
+    unsettled && { tone: 'red', title: `${terminology.atRisk}: ${unsettled.title}`, detail: waitingOnText('settlement'), date: unsettled.date },
   ].filter(Boolean);
 }
 
@@ -269,7 +291,7 @@ function pipelineMarkup(events) {
           <strong>${esc(event.title)}</strong>
           <span>${esc(shortDate(eventDate(event)))}</span>
           <small>${esc(event.owner_name || 'Unassigned')}</small>
-          <small>${esc(event.primary_blocker ? '1 blocker' : '0 blockers')} &nbsp; ${esc(event.incomplete_tasks || 0)} tasks</small>
+          <small>${esc(event.primary_blocker ? '1 open item' : '0 open items')} &nbsp; ${esc(event.incomplete_tasks || 0)} tasks</small>
         </a>`).join('')}
         <small>+ Add card</small>
       </article>`;
@@ -342,7 +364,7 @@ async function renderEvent(id) {
         <button class="danger" onclick="editEvent(${id})">Edit Event</button>
       </div>
     </section>
-    <nav class="workspace-tabs tabs">${['overview','lineup','schedule','tasks','blockers','assets','public page','settlement','activity'].map((t, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${t.replace(' ', '-')}">${esc(titleCase(t))}</a>`).join('')}</nav>
+    <nav class="workspace-tabs tabs">${workspaceTabs().map((tab, index) => `<a class="${index === 0 ? 'active' : ''}" href="${esc(tab.href)}">${esc(tab.label)}</a>`).join('')}</nav>
     ${eventSummary(data)}
     <article class="next-action"><span class="icon-bubble amber">!</span><span><strong>Next Recommended Action</strong><p>${esc(data.nextAction)}</p></span><button class="secondary small">Mark as Complete</button></article>
     ${eventOverview(data)}
@@ -368,7 +390,7 @@ function eventSummary(data) {
       ${fact('Tickets', e.ticket_url ? 'Ticket link ready' : Number(e.ticket_price) > 0 ? `$${e.ticket_price}` : 'RSVP / Free')}
     </div>
     <div class="event-stats">
-      <div class="event-stat">Blockers<strong>${openBlockers}</strong><a href="#blockers">View</a></div>
+      <div class="event-stat">${terminology.openItemPlural}<strong>${openBlockers}</strong><a href="#blockers">View</a></div>
       <div class="event-stat">Tasks Left<strong>${tasksLeft}</strong><a href="#tasks">View</a></div>
     </div>
   </article>`;
@@ -405,8 +427,8 @@ function eventOverview(data) {
     </div>
     <div>
       <article class="panel">
-        <div class="section-head padded"><h2>Open Blockers</h2><a class="button secondary small" href="#blockers">View All</a></div>
-        ${openBlockers.length ? openBlockers.map((b) => `<div class="task-row"><span class="warn-mark">!</span><span>${esc(b.title)}</span><span>${esc(b.owner_name || '')}</span><span>${esc(b.due_date || '')}</span></div>`).join('') : '<div class="empty-state"><span class="check">OK</span><p>All clear!<br>No open blockers for this event.</p></div>'}
+        <div class="section-head padded"><h2>${terminology.openItemPlural}</h2><a class="button secondary small" href="#blockers">View All</a></div>
+        ${openBlockers.length ? openBlockers.map((b) => openItemRow(b)).join('') : `<div class="empty-state"><span class="check">OK</span><p>${terminology.allClear}<br>${terminology.noOutstandingItems}</p></div>`}
       </article>
       <article class="panel">
         <div class="section-head padded"><h2>Performer Queue</h2><a class="button secondary small" href="#lineup">View Full Lineup</a></div>
@@ -455,14 +477,36 @@ function detailSections(id, data) {
   return `${lineupSection(id, data)}${tasksSection(id, data)}${blockersSection(id, data)}${scheduleSection(id, data)}${assetsSection(id, data)}${settlementSection(id, data)}${activitySection(data)}`;
 }
 
+function workspaceTabs() {
+  return [
+    ['#overview', 'Overview'],
+    ['#lineup', 'Lineup'],
+    ['#schedule', 'Schedule'],
+    ['#tasks', 'Tasks'],
+    ['#blockers', terminology.openItemPlural],
+    ['#assets', 'Assets'],
+    ['#public-page', 'Public Page'],
+    ['#settlement', 'Settlement'],
+    ['#activity', 'Activity'],
+  ].map(([href, label]) => ({ href, label }));
+}
+
 async function editEvent(id) {
   const data = await api(`/events/${id}`);
   app.innerHTML = `<div class="page-head"><h1>Edit Event</h1><a class="button secondary" href="#event-${id}">Back</a></div><section class="panel padded">${eventForm(data.event, data)}</section>`;
   $('#event-form').addEventListener('submit', saveEvent);
 }
 
-function select(name, options, selected) {
-  return `<select name="${name}">${options.map((o) => `<option value="${esc(o)}" ${o === selected ? 'selected' : ''}>${esc(titleCase(o))}</option>`).join('')}</select>`;
+function select(name, options, selected, labels = {}) {
+  return `<select name="${name}">${options.map((o) => `<option value="${esc(o)}" ${o === selected ? 'selected' : ''}>${esc(labels[o] || displayLabel(o))}</option>`).join('')}</select>`;
+}
+
+function userSelect(users, selected) {
+  return `<select name="owner_user_id"><option value="">Unassigned</option>${users.map((u) => `<option value="${esc(u.id)}" ${String(u.id) === String(selected || '') ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`;
+}
+
+function openItemRow(item) {
+  return `<div class="task-row"><span class="warn-mark">!</span><span>${esc(item.title)}</span><span>${esc(item.owner_name || '')}</span><span>${esc(item.due_date || '')}</span></div>`;
 }
 
 function lineupSection(id, data) {
@@ -476,8 +520,8 @@ function tasksSection(id, data) {
 }
 
 function blockersSection(id, data) {
-  return `<section id="blockers" class="panel"><div class="section-head padded"><h2>Blockers</h2></div>${data.blockers.map((b) => `<form data-api="/events/${id}/blockers/${b.id}" data-method="PATCH" class="row-form"><input name="title" value="${esc(b.title)}">${select('status', ['open','waiting','resolved','canceled'], b.status)}<input type="date" name="due_date" value="${esc(b.due_date || '')}"><input name="description" value="${esc(b.description || '')}"><button>Save</button></form>`).join('')}
-  <form data-api="/events/${id}/blockers" data-method="POST" class="row-form"><input name="title" required placeholder="New blocker"><input name="description" placeholder="Description"><input type="date" name="due_date"><button>Add blocker</button></form></section>`;
+  return `<section id="blockers" class="panel"><div class="section-head padded"><h2>${terminology.openItemPlural}</h2></div>${data.blockers.map((b) => `<form data-api="/events/${id}/open-items/${b.id}" data-method="PATCH" class="row-form"><label>Item Title<input name="title" value="${esc(b.title)}"></label><label>Status${select('status', ['open','waiting','resolved','canceled'], b.status, { waiting: terminology.waitingOn, resolved: 'Complete' })}</label><label>Due Date<input type="date" name="due_date" value="${esc(b.due_date || '')}"></label><label>Details<input name="description" value="${esc(b.description || '')}"></label><label>${terminology.pointPerson}${userSelect(data.users, b.owner_user_id)}</label><button>Save</button><button type="button" class="secondary" onclick="requestHelp(${id},${b.id})">${terminology.requestHelp}</button><button type="button" class="secondary" onclick="completeOpenItem(${id},${b.id})">${terminology.markComplete}</button></form>`).join('') || `<div class="empty-state"><span class="check">OK</span><p>${terminology.allClear}<br>${terminology.noOutstandingItems}</p></div>`}
+  <form data-api="/events/${id}/open-items" data-method="POST" class="row-form"><label>Item Title<input name="title" required placeholder="Waiting on flyer approval"></label><label>Details<input name="description" placeholder="Details"></label><label>${terminology.pointPerson}${userSelect(data.users)}</label><input type="date" name="due_date"><button>Add ${terminology.openItemSingular}</button></form></section>`;
 }
 
 function scheduleSection(id, data) {
@@ -496,7 +540,7 @@ function settlementSection(id, data) {
 }
 
 function activitySection(data) {
-  return `<section id="activity" class="panel"><div class="section-head padded"><h2>Activity</h2></div><ul class="timeline">${data.activity.map((a) => `<li><strong>${esc(a.action)}</strong> by ${esc(a.user_name || 'system')} <span class="muted">${esc(a.created_at)}</span></li>`).join('')}</ul></section>`;
+  return `<section id="activity" class="panel"><div class="section-head padded"><h2>Activity</h2></div><ul class="timeline">${data.activity.map((a) => `<li><strong>${esc(activityLabel(a.action))}</strong> by ${esc(a.user_name || 'system')} <span class="muted">${esc(a.created_at)}</span></li>`).join('')}</ul></section>`;
 }
 
 function bindWorkspaceForms(id) {
@@ -515,6 +559,29 @@ function bindWorkspaceForms(id) {
 async function approveAsset(eventId, assetId, status) {
   await api(`/events/${eventId}/assets/${assetId}`, { method: 'PATCH', body: JSON.stringify({ approval_status: status }) });
   renderEvent(eventId);
+}
+
+async function completeOpenItem(eventId, itemId) {
+  await updateOpenItemStatus(eventId, itemId, 'resolved');
+}
+
+async function requestHelp(eventId, itemId) {
+  await updateOpenItemStatus(eventId, itemId, 'waiting');
+}
+
+async function updateOpenItemStatus(eventId, itemId, status) {
+  const form = $(`form[data-api="/events/${eventId}/open-items/${itemId}"]`);
+  const body = formData(form);
+  body.status = status;
+  await api(`/events/${eventId}/open-items/${itemId}`, { method: 'PATCH', body: JSON.stringify(body) });
+  renderEvent(eventId);
+}
+
+function activityLabel(action) {
+  return ({
+    'blocker created': 'open item created',
+    'blocker resolved': 'open item completed',
+  })[action] || action;
 }
 
 async function renderTemplates() {
@@ -547,7 +614,7 @@ function tonightMarkup(event = {}, hidden = false, detail = null) {
       <div>
         <h1>Tonight: ${esc(event.title || 'No Event')}</h1>
         <div class="today-meta"><span>${esc(shortDate(eventDate(event)))}</span><span>${esc(event.venue_name || 'The Blackroom')}</span></div>
-        <div class="today-status">${badge(event.status || 'empty')}<span><span class="status-dot green"></span>Blockers: ${esc(detail?.blockers?.filter((b) => ['open','waiting'].includes(b.status)).length || 'None')}</span></div>
+        <div class="today-status">${badge(event.status || 'empty')}<span><span class="status-dot green"></span>${terminology.openItemPlural}: ${esc(detail?.blockers?.filter((b) => ['open','waiting'].includes(b.status)).length || 'None')}</span></div>
       </div>
     </article>
     <article class="next-action"><span class="icon-bubble"><span class="bolt"></span></span><span><h2>Next Action</h2><p>${esc(detail?.nextAction || 'Confirm projection setup and print signup sheet.')}</p></span><span class="arrow"></span></article>

@@ -21,7 +21,8 @@ final class Dashboard extends BaseEndpoint
             'empty' => $this->count("SELECT COUNT(*) c FROM events WHERE date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 14 DAY) AND status IN ('empty','hold')"),
             'needsAssets' => $this->count("SELECT COUNT(*) c FROM events WHERE status IN ('confirmed','needs_assets') AND id NOT IN (SELECT event_id FROM event_assets WHERE asset_type='flyer' AND approval_status='approved')"),
             'ready' => $this->count("SELECT COUNT(*) c FROM events WHERE status = 'ready_to_announce'"),
-            'blockers' => $this->count("SELECT COUNT(DISTINCT event_id) c FROM event_blockers WHERE status IN ('open','waiting')"),
+            'blockers' => $this->count("SELECT COUNT(*) c FROM event_blockers WHERE status IN ('open','waiting')"),
+            'urgentItems' => $this->count("SELECT COUNT(*) c FROM event_blockers WHERE status IN ('open','waiting') AND due_date <= DATE_ADD(CURDATE(), INTERVAL 2 DAY)"),
             'published' => $this->count("SELECT COUNT(*) c FROM events WHERE status = 'published' AND date >= CURDATE()"),
             'unsettled' => $this->count("SELECT COUNT(*) c FROM events e LEFT JOIN event_settlements s ON s.event_id = e.id WHERE e.status = 'completed' AND s.id IS NULL"),
         ];
