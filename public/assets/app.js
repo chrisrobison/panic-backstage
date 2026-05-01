@@ -165,11 +165,11 @@ function dashboardTable(events) {
       const tone = event.primary_blocker ? 'red' : statusTone(event.status);
       const issue = event.primary_blocker || (Number(event.approved_flyers) ? 'Ready' : event.status === 'empty' ? 'Needs programming' : 'Flyer missing');
       return `<tr>
-        <td>${esc(shortDate(eventDate(event)))}</td>
-        <td><a href="#event-${event.id}">${esc(event.title)}</a></td>
-        <td>${badge(event.status)}</td>
-        <td><span class="status-dot ${tone}"></span>${esc(issue)}</td>
-        <td>${esc(event.owner_name || '-')}</td>
+        <td data-label="Date">${esc(shortDate(eventDate(event)))}</td>
+        <td data-label="Event"><a href="#event-${event.id}">${esc(event.title)}</a></td>
+        <td data-label="Status">${badge(event.status)}</td>
+        <td data-label="Main Issue"><span class="status-dot ${tone}"></span>${esc(issue)}</td>
+        <td data-label="Owner">${esc(event.owner_name || '-')}</td>
       </tr>`;
     }).join('')}</tbody>
   </table>`;
