@@ -6,26 +6,56 @@
   <title><%= title %> | Panic Backstage</title>
   <link rel="stylesheet" href="/public/css/app.css">
 </head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="/dashboard">Panic Backstage</a>
-    <% if (currentUser) { %>
-      <nav>
-        <a href="/dashboard">Dashboard</a>
-        <a href="/events">Events</a>
-        <a href="/templates">Templates</a>
+<body class="<%= currentUser ? 'app-shell' : 'auth-shell' %>">
+  <% if (currentUser) { %>
+    <aside class="sidebar">
+      <a class="brand" href="/dashboard" aria-label="Panic Backstage dashboard">
+        <span class="brand-mark">☠</span>
+        <span>Panic Backstage</span>
+      </a>
+      <nav class="side-nav" aria-label="Main navigation">
+        <a class="<%= currentPath.startsWith('/dashboard') ? 'active' : '' %>" href="/dashboard"><span>◴</span>Dashboard</a>
+        <a class="<%= currentPath.startsWith('/events') ? 'active' : '' %>" href="/events"><span>▣</span>Calendar</a>
+        <a href="/events?status=proposed"><span>▥</span>Pipeline</a>
+        <a href="/events?status=published"><span>★</span>Events</a>
+        <a class="<%= currentPath.startsWith('/templates') ? 'active' : '' %>" href="/templates"><span>▤</span>Templates</a>
+        <a href="/events?owner_user_id=<%= currentUser.id %>"><span>♙</span>Contacts</a>
+        <a href="/dashboard"><span>▥</span>Reports</a>
+        <a href="/dashboard"><span>⚙</span>Settings</a>
       </nav>
-      <form method="post" action="/logout">
-        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <span><%= currentUser.name %></span>
-        <button class="link-button">Logout</button>
-      </form>
-    <% } %>
-  </header>
+      <div class="sidebar-card"><strong>Good shows.<br>No surprises.</strong></div>
+      <div class="venue-switcher"><span>▥</span><span>The Blackroom</span><span>⌄</span></div>
+      <div class="sidebar-foot">© 2024 Panic Backstage, LLC</div>
+    </aside>
+
+    <header class="topbar">
+      <a class="mobile-brand" href="/dashboard"><span class="brand-mark">☠</span><span>Panic Backstage</span></a>
+      <label class="search-box"><span>⌕</span><input type="search" placeholder="Search events, venues, contacts..."></label>
+      <div class="top-actions">
+        <button class="icon-button" type="button" aria-label="Notifications">♢<span class="notify-badge">7</span></button>
+        <form method="post" action="/logout" class="user-menu">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="avatar-button" title="Logout"><%= currentUser.name.split(' ').map(function(p){ return p[0]; }).join('').slice(0,2).toUpperCase() %></button>
+        </form>
+      </div>
+    </header>
+  <% } %>
+
   <main class="container">
     <% flash.error.forEach(function(message){ %><div class="flash error"><%= message %></div><% }) %>
     <% flash.success.forEach(function(message){ %><div class="flash success"><%= message %></div><% }) %>
     <%- body %>
   </main>
+
+  <% if (currentUser) { %>
+    <nav class="mobile-tabbar" aria-label="Mobile navigation">
+      <a class="<%= currentPath.startsWith('/dashboard') ? 'active' : '' %>" href="/dashboard"><span>◴</span>Dashboard</a>
+      <a class="<%= currentPath.startsWith('/events') ? 'active' : '' %>" href="/events"><span>▣</span>Calendar</a>
+      <a class="<%= currentPath.startsWith('/dashboard') ? 'active' : '' %>" href="/dashboard"><span>🎤</span>Tonight</a>
+      <a href="/events?status=published"><span>★</span>Events</a>
+      <a href="/templates"><span>•••</span>More</a>
+    </nav>
+    <footer class="app-footer"><span>ϟ</span> Built for venues. Run by humans. <a href="/dashboard">Contact Support</a></footer>
+  <% } %>
 </body>
 </html>

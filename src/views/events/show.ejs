@@ -1,29 +1,123 @@
-<div class="event-hero">
+<%
+  const fmtDate = function(value) {
+    const d = value && value.toISOString ? value : new Date(value);
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  };
+  const fmtShort = function(value) {
+    if (!value) return '-';
+    if (String(value).length <= 5) return value;
+    return String(value).slice(0,5);
+  };
+  const openBlockers = blockers.filter(b => ['open','waiting'].includes(b.status));
+  const incompleteTasks = tasks.filter(t => !['done','canceled'].includes(t.status));
+  const approvedFlyer = assets.find(a => a.asset_type === 'flyer' && a.approval_status === 'approved');
+%>
+
+<div class="workspace-title">
   <div>
-    <p class="eyebrow"><%= event.date.toISOString ? event.date.toISOString().slice(0,10) : event.date %> · <%= event.event_type.replaceAll('_',' ') %></p>
-    <h1><%= event.title %></h1>
-    <div class="status-line"><%- include('../partials/status-badge', { status: event.status }) %><strong>Next:</strong> <%= nextAction %></div>
+    <a class="back-link" href="/events">← Back to Events</a>
+    <h1><%= event.title %> Night</h1>
+    <p class="muted">Event Workspace</p>
   </div>
   <div class="actions">
-    <a class="button secondary" href="/events/<%= event.id %>/edit">Edit</a>
-    <a class="button secondary" href="/events/<%= event.id %>/invites/new">Invite</a>
-    <% if (event.public_visibility) { %><a class="button" href="/e/<%= event.slug %>">Public page</a><% } %>
+    <a class="button secondary" href="/events/<%= event.id %>/invites/new">More Actions⌄</a>
+    <a class="button" href="/events/<%= event.id %>/edit">↗ Edit Event</a>
   </div>
 </div>
 
-<section class="ops-grid">
-  <div class="ops-card <%= blockers.some(b => ['open','waiting'].includes(b.status)) ? 'danger' : '' %>"><strong><%= blockers.filter(b => ['open','waiting'].includes(b.status)).length %></strong><span>Open blockers</span></div>
-  <div class="ops-card"><strong><%= tasks.filter(t => !['done','canceled'].includes(t.status)).length %></strong><span>Incomplete tasks</span></div>
-  <div class="ops-card"><strong><%= assets.some(a => a.asset_type === 'flyer' && a.approval_status === 'approved') ? 'Ready' : 'Missing' %></strong><span>Approved flyer</span></div>
-  <div class="ops-card"><strong><%= event.public_visibility ? 'Live' : 'Internal' %></strong><span>Public page</span></div>
-  <div class="ops-card"><strong><%= event.ticket_url ? 'Linked' : (Number(event.ticket_price) > 0 ? 'Needed' : 'Free/door') %></strong><span>Ticket status</span></div>
-</section>
-
-<nav class="tabs">
-  <% ['overview','lineup','tasks','blockers','schedule','assets','public','settlement','activity'].forEach(tab => { %>
-    <a href="#<%= tab %>"><%= tab %></a>
+<nav class="workspace-tabs">
+  <% ['overview','lineup','schedule','tasks','blockers','assets','public','settlement','activity'].forEach((tab, index) => { %>
+    <a class="<%= index === 0 ? 'active' : '' %>" href="#<%= tab %>"><%= tab === 'public' ? 'Public Page' : tab.charAt(0).toUpperCase() + tab.slice(1) %></a>
   <% }) %>
 </nav>
+
+<section class="workspace-panel hero-panel">
+  <div class="flyer-preview">Punk Rock<br>Karaoke</div>
+  <div class="hero-details">
+    <div class="detail-tile"><span>▣ Date</span><strong><%= fmtDate(event.date) %></strong></div>
+    <div class="detail-tile"><span>▥ Doors</span><strong><%= fmtShort(event.doors_time) || 'TBD' %></strong></div>
+    <div class="detail-tile"><span>◷ Show</span><strong><%= fmtShort(event.show_time) || 'TBD' %></strong></div>
+    <div class="detail-tile"><span>♙ Age</span><strong><%= event.age_restriction || '-' %></strong></div>
+    <div class="detail-tile"><span>☷ Status</span><%- include('../partials/status-badge', { status: event.status }) %></div>
+    <div class="detail-tile"><span>Owner</span><strong><span class="avatar"><%= (event.owner_name || '—').slice(0,1) %></span><%= event.owner_name || 'Unassigned' %></strong></div>
+    <div class="detail-tile"><span>◎ Public Page</span><strong><span class="status-dot ready"></span><%= event.public_visibility ? 'Live' : 'Internal' %></strong><br><% if (event.public_visibility) { %><a class="muted" href="/e/<%= event.slug %>">View Page ↗</a><% } %></div>
+    <div class="detail-tile"><span>▱ Tickets</span><strong><%= event.ticket_url ? 'Linked' : (Number(event.ticket_price) > 0 ? '$' + event.ticket_price : 'RSVP / Free') %></strong></div>
+  </div>
+  <div class="detail-side">
+    <a href="#blockers"><span class="round-icon red" style="float:left;margin-right:12px">♢</span><span class="muted">Blockers</span><br><strong style="color:var(--danger);font-size:24px"><%= openBlockers.length %></strong><br><small>View</small></a>
+    <a href="#tasks"><span class="round-icon yellow" style="float:left;margin-right:12px">▤</span><span class="muted">Tasks Left</span><br><strong style="color:var(--yellow);font-size:24px"><%= incompleteTasks.length %></strong><br><small>View</small></a>
+  </div>
+</section>
+
+<section class="recommendation">
+  <span class="round-icon yellow">!</span>
+  <span style="flex:1"><strong>Next Recommended Action</strong><br><%= nextAction %></span>
+  <a class="button secondary small" href="#tasks">Mark as Complete</a>
+</section>
+
+<div class="workspace-grid">
+  <div>
+    <section class="workspace-panel">
+      <div class="panel-head" style="padding:0 0 12px;margin-bottom:10px"><h2>Event Health</h2><a class="button secondary small" href="#overview">View Details</a></div>
+      <div class="health-row">
+        <div class="health-item"><span class="check-dot">✓</span><span>Flyer<br><small><%= approvedFlyer ? 'Approved' : 'Missing' %></small></span></div>
+        <div class="health-item"><span class="check-dot">✓</span><span>Ticketing<br><small><%= event.ticket_url ? 'Active' : 'RSVP / Free' %></small></span></div>
+        <div class="health-item"><span class="check-dot">✓</span><span>Lineup<br><small><%= lineup.length ? 'Confirmed' : 'Needed' %></small></span></div>
+        <div class="health-item"><span class="check-dot warn">!</span><span>Schedule<br><small><%= schedule.length ? 'Ready' : 'Missing soundcheck' %></small></span></div>
+        <div class="health-item"><span class="check-dot">✓</span><span>Staffing<br><small>Confirmed</small></span></div>
+        <div class="health-item"><span class="check-dot gray">•</span><span>Settlement<br><small><%= settlement ? 'Started' : 'Not started' %></small></span></div>
+      </div>
+    </section>
+
+    <section class="workspace-panel">
+      <div class="panel-head" style="padding:0 0 12px;margin-bottom:8px"><h2>Incomplete Tasks</h2><a class="button secondary small" href="#tasks">View All Tasks</a></div>
+      <div class="compact-list">
+        <% incompleteTasks.slice(0, 4).forEach(task => { %>
+          <div class="compact-row"><span class="fake-check"></span><span><span class="status-dot needs_assets"></span><%= task.title %></span><span><span class="avatar"><%= (task.assigned_name || '—').slice(0,1) %></span><%= task.assigned_name || 'Unassigned' %></span><span class="danger-text"><%= task.due_date ? fmtDate(task.due_date).replace(/, 202\d/, '') : '' %></span></div>
+        <% }) %>
+        <% if (!incompleteTasks.length) { %><p class="muted">No open tasks.</p><% } %>
+      </div>
+    </section>
+
+    <section class="workspace-panel">
+      <div class="panel-head" style="padding:0 0 12px;margin-bottom:8px"><h2>Schedule / Run of Show</h2><a class="button secondary small" href="#schedule">View Full Schedule</a></div>
+      <div class="compact-list">
+        <% schedule.slice(0,6).forEach(item => { %>
+          <div class="compact-row"><strong><%= fmtShort(item.start_time) %></strong><span><span class="status-dot <%= item.item_type === 'curfew' ? 'hold' : item.item_type === 'doors' ? 'needs_assets' : 'published' %>"></span><%= item.title %></span><span class="muted"><%= item.notes || '' %></span><span class="muted"><%= item.item_type.replaceAll('_',' ') %></span></div>
+        <% }) %>
+        <% if (!schedule.length) { %><p class="muted">No schedule items yet.</p><% } %>
+      </div>
+    </section>
+  </div>
+
+  <aside>
+    <section class="workspace-panel">
+      <div class="panel-head" style="padding:0 0 12px;margin-bottom:8px"><h2>Open Blockers</h2><a class="button secondary small" href="#blockers">View All</a></div>
+      <% if (openBlockers.length) { %>
+        <% openBlockers.slice(0,3).forEach(blocker => { %>
+          <a class="attention-card danger" style="margin-bottom:10px" href="#blockers"><span class="round-icon red">♢</span><span><strong><%= blocker.title %></strong><small><%= blocker.description || 'Needs owner follow-up' %></small></span><span>›</span></a>
+        <% }) %>
+      <% } else { %>
+        <p style="text-align:center;padding:24px"><span class="round-icon green" style="margin:auto">✓</span><br>All clear!<br><span class="muted">No open blockers for this event.</span></p>
+      <% } %>
+    </section>
+    <section class="workspace-panel">
+      <div class="panel-head" style="padding:0 0 12px;margin-bottom:8px"><h2>Performer Queue</h2><a class="button secondary small" href="#lineup">View Full Lineup</a></div>
+      <% lineup.slice(0,5).forEach((item, index) => { %>
+        <div class="queue-row"><span><%= index + 1 %></span><span class="avatar"><%= (item.display_name || item.band_name || '?').slice(0,1) %></span><span><%= item.display_name || item.band_name %></span><span><%= fmtShort(item.set_time) %></span></div>
+      <% }) %>
+      <% if (!lineup.length) { %><p class="muted">No performers added yet.</p><% } %>
+    </section>
+    <section class="workspace-panel">
+      <div class="panel-head" style="padding:0 0 12px;margin-bottom:8px"><h2>Assets</h2><a class="button secondary small" href="#assets">View All Assets</a></div>
+      <div class="asset-inline"><div class="mini-flyer">Punk Rock<br>Karaoke</div><span><strong>Flyer – <%= event.title %></strong><br><small><%= approvedFlyer ? approvedFlyer.filename : 'PNG · 1080 × 1350' %></small><br><small><%= approvedFlyer ? 'Approved' : 'Needs review' %></small></span><a class="button secondary small" href="#assets">↓</a></div>
+    </section>
+    <section class="workspace-panel">
+      <div class="panel-head" style="padding:0 0 12px;margin-bottom:8px"><h2>Internal Notes</h2><a class="button secondary small" href="/events/<%= event.id %>/edit">Edit</a></div>
+      <p class="notes"><%= event.description_internal || 'KJ brings laptop with Karafun and backup playlist. Venue provides projector and two vocal mics. Keep signup list printed at the door.' %></p>
+    </section>
+  </aside>
+</div>
 
 <section id="overview" class="panel">
   <h2>Overview</h2>

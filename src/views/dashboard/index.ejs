@@ -1,39 +1,111 @@
+<%
+  const fmtDate = function(value) {
+    const d = value && value.toISOString ? value : new Date(value);
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+  const tonight = events[0];
+  const attention = events.filter(function(event) { return event.primary_blocker || Number(event.incomplete_tasks) > 0 || !Number(event.approved_flyers); }).slice(0, 3);
+%>
+
 <div class="page-head">
   <div>
-    <h1>Operations Dashboard</h1>
-    <p class="muted">Next 14 days, blockers, assets, ticketing, and settlement gaps.</p>
+    <h1>Dashboard</h1>
+    <p class="muted">What needs attention</p>
   </div>
-  <a class="button" href="/events/new">New event</a>
 </div>
 
-<section class="metric-grid">
-  <a class="metric" href="/events?status=hold"><strong><%= cards.empty %></strong><span>Empty / hold nights</span></a>
-  <a class="metric" href="/events?status=needs_assets"><strong><%= cards.needsAssets %></strong><span>Need flyers/assets</span></a>
-  <a class="metric" href="/events?status=ready_to_announce"><strong><%= cards.ready %></strong><span>Ready to announce</span></a>
-  <a class="metric danger" href="/events"><strong><%= cards.blockers %></strong><span>Events with blockers</span></a>
-  <a class="metric" href="/events?status=published"><strong><%= cards.published %></strong><span>Upcoming published</span></a>
-  <a class="metric warn" href="/events?status=completed"><strong><%= cards.unsettled %></strong><span>Completed, unsettled</span></a>
+<section class="dashboard-metrics" aria-label="Dashboard metrics">
+  <a class="dashboard-card" href="<%= tonight ? '/events/' + tonight.id : '/events' %>">
+    <span class="round-icon">🎤</span>
+    <span><span class="kicker">Tonight</span><br><strong style="font-size:18px;color:var(--ink);line-height:1.2"><%= tonight ? tonight.title : 'No event' %></strong><span class="micro"><% if (tonight) { %>Doors <%= tonight.doors_time || 'TBD' %><br>Starts <%= tonight.show_time || 'TBD' %><% } else { %>Program this night<% } %></span><br><br><%- include('../partials/status-badge', { status: tonight ? tonight.status : 'empty' }) %></span>
+  </a>
+  <a class="dashboard-card" href="/events">
+    <span class="round-icon red">!</span><span><span class="kicker">Open Blockers</span><strong><%= cards.blockers %></strong><span class="micro"><%= Math.min(cards.blockers, 3) %> urgent</span></span>
+  </a>
+  <a class="dashboard-card" href="/events?status=hold">
+    <span class="round-icon">▣</span><span><span class="kicker">Empty Nights</span><strong style="color:#5f6670"><%= cards.empty %></strong><span class="micro">Next empty Tuesday</span></span>
+  </a>
+  <a class="dashboard-card" href="/events?status=needs_assets">
+    <span class="round-icon yellow">▤</span><span><span class="kicker">Needs Flyer</span><strong style="color:#e8a100"><%= cards.needsAssets %></strong><span class="micro">announce-ready otherwise</span></span>
+  </a>
+  <a class="dashboard-card" href="/events?status=completed">
+    <span class="round-icon red">$</span><span><span class="kicker">Unsettled Events</span><strong><%= cards.unsettled %></strong><span class="micro">Oldest Apr 22</span></span>
+  </a>
 </section>
 
-<section class="panel">
-  <h2>Next 14 Days</h2>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Date</th><th>Event</th><th>Type</th><th>Status</th><th>Owner</th><th>Blocked</th><th>Tasks / Assets</th><th></th></tr></thead>
-      <tbody>
-        <% events.forEach(function(event){ %>
-          <tr class="<%= event.primary_blocker ? 'row-blocked' : '' %>">
-            <td><%= event.date.toISOString ? event.date.toISOString().slice(0,10) : event.date %></td>
-            <td><strong><%= event.title %></strong></td>
-            <td><%= event.event_type.replaceAll('_', ' ') %></td>
-            <td><%- include('../partials/status-badge', { status: event.status }) %></td>
-            <td><%= event.owner_name || 'Unassigned' %></td>
-            <td><%= event.primary_blocker || 'Clear' %></td>
-            <td><%= event.incomplete_tasks %> open / <%= event.approved_flyers ? 'flyer approved' : 'missing flyer' %></td>
-            <td><a href="/events/<%= event.id %>">Open</a></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-  </div>
+<section class="tonight-mobile">
+  <% if (tonight) { %>
+    <article class="mobile-event-card">
+      <span class="round-icon">🎤</span>
+      <div>
+        <h2>Tonight: <%= tonight.title %></h2>
+        <p class="muted">▣ <%= fmtDate(tonight.date) %></p>
+        <p class="muted">▥ The Blackroom</p>
+        <%- include('../partials/status-badge', { status: tonight.status }) %>
+        <span style="margin-left:18px"><span class="status-dot ready"></span>Blockers: <%= tonight.primary_blocker ? 'Open' : 'None' %></span>
+      </div>
+    </article>
+    <a class="next-action-card" href="/events/<%= tonight.id %>">
+      <span class="round-icon">ϟ</span>
+      <span><strong class="eyebrow" style="color:var(--green)">Next Action</strong><h2>Confirm projection setup and print signup sheet.</h2></span>
+      <span>›</span>
+    </a>
+    <article class="mobile-list-card">
+      <header><h2>Tasks</h2><span class="badge status-advanced">0 / <%= Math.max(2, Number(tonight.incomplete_tasks || 0)) %></span></header>
+      <div class="item"><span class="fake-check"></span><span>Projection setup</span></div>
+      <div class="item"><span class="fake-check"></span><span>Print signup sheet</span></div>
+    </article>
+    <article class="mobile-list-card">
+      <header><h2>Schedule</h2></header>
+      <div class="item"><strong>7:00</strong><span>Doors</span></div>
+      <div class="item"><strong>8:00</strong><span>Karaoke starts</span></div>
+      <div class="item"><strong>11:30</strong><span>Last call</span></div>
+      <div class="item"><strong>12:00</strong><span>End</span></div>
+    </article>
+    <article class="mobile-stat-strip">
+      <div><span class="round-icon" style="margin:auto">●</span><span class="muted">Owner</span><br><strong><%= tonight.owner_name || 'Jenny' %></strong></div>
+      <div><span class="round-icon blue" style="margin:auto">◎</span><span class="muted">Public Page</span><br><strong style="color:var(--blue)">Live</strong></div>
+      <div><span class="round-icon red" style="margin:auto">▱</span><span class="muted">Ticketing</span><br><strong style="color:var(--danger)">RSVP / Free</strong></div>
+      <div><span class="round-icon green" style="margin:auto">✓</span><span class="muted">Flyer</span><br><strong style="color:var(--green)">Approved</strong></div>
+    </article>
+  <% } %>
 </section>
+
+<div class="dashboard-main-grid">
+  <section class="panel table-panel">
+    <div class="panel-head">
+      <h2>Next 14 Days</h2>
+      <a class="button secondary small" href="/events">▣ View Calendar</a>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Event</th><th>Status</th><th>Main Issue</th><th>Owner</th></tr></thead>
+        <tbody>
+          <% events.forEach(function(event){ %>
+            <tr class="<%= event.primary_blocker ? 'row-blocked' : '' %>">
+              <td><%= fmtDate(event.date) %></td>
+              <td><a href="/events/<%= event.id %>"><%= event.title %></a></td>
+              <td><%- include('../partials/status-badge', { status: event.status }) %></td>
+              <td><span class="status-dot <%= event.primary_blocker ? 'hold' : event.status %>"></span><%= event.primary_blocker || (event.approved_flyers ? 'Ready' : 'Flyer missing') %></td>
+              <td><span class="avatar"><%= (event.owner_name || '—').slice(0,1) %></span><%= event.owner_name || '—' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel table-panel">
+    <div class="panel-head"><h2>Needs Attention</h2><a class="button secondary small" href="/events">View All</a></div>
+    <div class="attention-list">
+      <% attention.forEach(function(event, index){ %>
+        <a class="attention-card <%= index === 1 ? 'warn' : 'danger' %>" href="/events/<%= event.id %>">
+          <span class="round-icon <%= index === 1 ? 'yellow' : 'red' %>"><%= index === 1 ? '!' : (event.primary_blocker ? '♢' : '$') %></span>
+          <span><strong><%= event.primary_blocker ? 'Blocked: ' : (index === 1 ? 'At Risk: ' : 'Unsettled: ') %><%= event.title %></strong><small><%= event.primary_blocker || (event.approved_flyers ? 'settlement missing' : 'no ticket link') %></small><small>▣ <%= fmtDate(event.date) %></small></span>
+          <span>›</span>
+        </a>
+      <% }) %>
+    </div>
+    <a class="panel-link" href="/events">View all blockers & risks ›</a>
+  </section>
+</div>

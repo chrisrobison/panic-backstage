@@ -5,6 +5,7 @@ function requireAuth(req, res, next) {
 
 function attachUser(req, res, next) {
   res.locals.currentUser = req.session.user || null;
+  res.locals.currentPath = req.path;
   res.locals.flash = {
     error: req.flash('error'),
     success: req.flash('success')
