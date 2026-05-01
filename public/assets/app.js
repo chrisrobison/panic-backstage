@@ -5,6 +5,15 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const app = $('#app');
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const badge = (s) => `<span class="badge status-${esc(s)}">${esc(String(s || '').replaceAll('_', ' '))}</span>`;
+const statusDot = (s) => `<span class="status-dot ${esc(s)}"></span>`;
+const initials = (name) => esc(String(name || '--').split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase());
+const avatar = (name) => `<span class="avatar">${initials(name).slice(0, 1)}</span>`;
+const fmtDate = (value, options = { weekday: 'short', month: 'short', day: 'numeric' }) => {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(`${String(value).slice(0, 10)}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString('en-US', options);
+};
+const shortTime = (value) => value ? String(value).slice(0, 5) : 'TBD';
 
 async function api(path, options = {}) {
   const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
@@ -55,43 +64,136 @@ function initLogin() {
 
 function route() {
   const hash = location.hash.replace(/^#/, '') || 'dashboard';
+  if (['overview','lineup','schedule','tasks','blockers','assets','public-page','settlement','activity'].includes(hash) && document.getElementById(hash)) return;
+  setActiveNav(hash.startsWith('event-') ? 'events' : hash);
   if (hash.startsWith('event-')) return renderEvent(Number(hash.slice(6)));
   if (hash === 'events') return renderEvents();
   if (hash === 'templates') return renderTemplates();
   return renderDashboard();
 }
 
+function setActiveNav(routeName) {
+  document.querySelectorAll('[data-route]').forEach((link) => {
+    link.classList.toggle('active', link.dataset.route === routeName);
+  });
+}
+
 async function renderDashboard() {
   const data = await api('/dashboard');
+  const tonight = data.events[0];
+  const attention = data.events.filter((event) => event.primary_blocker || Number(event.incomplete_tasks) > 0 || Number(event.approved_flyers) === 0).slice(0, 3);
   app.innerHTML = `
-    <div class="page-head"><div><h1>Operations Dashboard</h1><p class="muted">Next 14 days, blockers, assets, ticketing, and settlement gaps.</p></div><button onclick="newEvent()">New event</button></div>
-    <section class="metric-grid">
-      ${metric(data.cards.empty, 'Empty / hold nights')}
-      ${metric(data.cards.needsAssets, 'Need flyers/assets')}
-      ${metric(data.cards.ready, 'Ready to announce')}
-      ${metric(data.cards.blockers, 'Events with blockers', 'danger')}
-      ${metric(data.cards.published, 'Upcoming published')}
-      ${metric(data.cards.unsettled, 'Completed, unsettled', 'warn')}
+    <div class="page-head"><div><h1>Dashboard</h1><p class="muted">What needs attention</p></div><button onclick="newEvent()">New event</button></div>
+    <section class="dashboard-metrics">
+      <a class="dashboard-card" href="${tonight ? `#event-${tonight.id}` : '#events'}">
+        <span class="round-icon">●</span>
+        <span><span class="kicker">Tonight</span><br><strong style="font-size:18px;color:var(--ink);line-height:1.2">${esc(tonight?.title || 'No event')}</strong><span class="micro">${tonight ? `Doors ${esc(shortTime(tonight.doors_time))}<br>Starts ${esc(shortTime(tonight.show_time))}` : 'Program this night'}</span><br><br>${badge(tonight?.status || 'empty')}</span>
+      </a>
+      ${metricCard('!', 'Open Blockers', data.cards.blockers, `${Math.min(data.cards.blockers, 3)} urgent`, 'red')}
+      ${metricCard('▣', 'Empty Nights', data.cards.empty, 'Next empty Tuesday')}
+      ${metricCard('▤', 'Needs Flyer', data.cards.needsAssets, 'announce-ready otherwise', 'yellow')}
+      ${metricCard('$', 'Unsettled Events', data.cards.unsettled, 'Oldest Apr 22', 'red')}
     </section>
-    <section class="panel"><h2>Next 14 Days</h2>${eventsTable(data.events)}</section>`;
+    ${tonightMobile(tonight)}
+    <div class="dashboard-main-grid">
+      <section class="panel table-panel"><div class="panel-head"><h2>Next 14 Days</h2><a class="button secondary small" href="#events">▣ View Calendar</a></div>${eventsTable(data.events)}</section>
+      <section class="panel table-panel"><div class="panel-head"><h2>Needs Attention</h2><a class="button secondary small" href="#events">View All</a></div>
+        <div class="attention-list">${attention.map((event, index) => attentionCard(event, index)).join('') || '<p class="muted">No urgent items in the next two weeks.</p>'}</div>
+        <a class="panel-link" href="#events">View all blockers & risks ›</a>
+      </section>
+    </div>`;
 }
 
 function metric(value, label, cls = '') {
   return `<div class="metric ${cls}"><strong>${esc(value)}</strong><span>${esc(label)}</span></div>`;
 }
 
+function metricCard(icon, label, value, note, color = '') {
+  return `<a class="dashboard-card" href="#events"><span class="round-icon ${color}">${esc(icon)}</span><span><span class="kicker">${esc(label)}</span><strong class="value" style="${color === '' ? 'color:#5f6670' : ''}">${esc(value)}</strong><span class="micro">${esc(note)}</span></span></a>`;
+}
+
+function attentionCard(event, index = 0) {
+  const warn = index === 1;
+  return `<a class="attention-card ${warn ? 'warn' : 'danger'}" href="#event-${event.id}">
+    <span class="round-icon ${warn ? 'yellow' : 'red'}">${warn ? '!' : (event.primary_blocker ? '♢' : '$')}</span>
+    <span><strong>${event.primary_blocker ? 'Blocked: ' : (warn ? 'At Risk: ' : 'Unsettled: ')}${esc(event.title)}</strong><small>${esc(event.primary_blocker || (Number(event.approved_flyers) ? 'settlement missing' : 'no ticket link'))}</small><small>▣ ${esc(fmtDate(event.date))}</small></span>
+    <span>›</span>
+  </a>`;
+}
+
+function tonightMobile(event) {
+  if (!event) return '';
+  return `<section class="tonight-mobile">
+    <article class="mobile-event-card"><span class="round-icon">●</span><div><h2>Tonight: ${esc(event.title)}</h2><p class="muted">▣ ${esc(fmtDate(event.date, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }))}</p><p class="muted">▥ The Blackroom</p>${badge(event.status)} <span style="margin-left:18px">${statusDot('advanced')}Blockers: ${event.primary_blocker ? 'Open' : 'None'}</span></div></article>
+    <a class="next-action-card" href="#event-${event.id}"><span class="round-icon">ϟ</span><span><strong class="eyebrow" style="color:var(--green)">Next Action</strong><h2>Confirm projection setup and print signup sheet.</h2></span><span>›</span></a>
+    <article class="mobile-list-card"><header><h2>Tasks</h2><span class="badge status-advanced">0 / ${Math.max(2, Number(event.incomplete_tasks || 0))}</span></header><div class="item"><span class="fake-check"></span><span>Projection setup</span></div><div class="item"><span class="fake-check"></span><span>Print signup sheet</span></div></article>
+    <article class="mobile-list-card"><header><h2>Schedule</h2></header><div class="item"><strong>7:00</strong><span>Doors</span></div><div class="item"><strong>8:00</strong><span>Karaoke starts</span></div><div class="item"><strong>11:30</strong><span>Last call</span></div><div class="item"><strong>12:00</strong><span>End</span></div></article>
+    <article class="mobile-stat-strip"><div><span class="round-icon" style="margin:auto">●</span><span class="muted">Owner</span><br><strong>${esc(event.owner_name || 'Jenny')}</strong></div><div><span class="round-icon blue" style="margin:auto">◎</span><span class="muted">Public Page</span><br><strong style="color:var(--blue)">Live</strong></div><div><span class="round-icon red" style="margin:auto">▱</span><span class="muted">Ticketing</span><br><strong style="color:var(--danger)">RSVP / Free</strong></div><div><span class="round-icon green" style="margin:auto">✓</span><span class="muted">Flyer</span><br><strong style="color:var(--green)">Approved</strong></div></article>
+  </section>`;
+}
+
 function eventsTable(events) {
-  return `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Type</th><th>Status</th><th>Owner</th><th>Blocked</th><th>Tasks / Assets</th><th></th></tr></thead><tbody>
+  return `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Status</th><th>Main Issue</th><th>Owner</th><th></th></tr></thead><tbody>
     ${events.map((event) => `<tr class="${event.primary_blocker ? 'row-blocked' : ''}">
-      <td>${esc(event.date)}</td><td><strong>${esc(event.title)}</strong></td><td>${esc(event.event_type.replaceAll('_', ' '))}</td><td>${badge(event.status)}</td>
-      <td>${esc(event.owner_name || 'Unassigned')}</td><td>${esc(event.primary_blocker || 'Clear')}</td><td>${esc(event.incomplete_tasks)} open / ${event.approved_flyers > 0 ? 'flyer approved' : 'missing flyer'}</td>
+      <td>${esc(fmtDate(event.date))}</td><td><strong>${esc(event.title)}</strong></td><td>${badge(event.status)}</td>
+      <td>${statusDot(event.primary_blocker ? 'hold' : event.status)}${esc(event.primary_blocker || (Number(event.approved_flyers) ? 'Ready' : 'Flyer missing'))}</td><td>${avatar(event.owner_name)}${esc(event.owner_name || 'Unassigned')}</td>
       <td><a href="#event-${event.id}">Open</a></td></tr>`).join('')}
     </tbody></table></div>`;
 }
 
 async function renderEvents() {
   const data = await api('/events');
-  app.innerHTML = `<div class="page-head"><h1>Events</h1><button onclick="newEvent()">New event</button></div><section class="panel">${eventsTable(data.events)}</section>`;
+  app.innerHTML = `<div class="page-head"><div><h1>Calendar & Pipeline</h1><p class="muted">See coverage and move events through the show pipeline.</p></div><button onclick="newEvent()">Add Event</button></div>
+    ${eventsFilters(data)}
+    ${calendarView(data.events)}
+    ${pipelineView(data.events)}`;
+}
+
+function eventsFilters(data) {
+  return `<form class="filters-bar" onsubmit="return false">
+    <label class="filter-control"><span>▣</span><input type="date"><span>–</span><input type="date"></label>
+    <label class="filter-control">Event Type <select><option>All types</option>${data.types.map((t) => `<option>${esc(t.replaceAll('_', ' '))}</option>`).join('')}</select></label>
+    <label class="filter-control">Owner <select><option>All owners</option>${data.users.map((u) => `<option>${esc(u.name)}</option>`).join('')}</select></label>
+    <label class="filter-control">Status <select><option>All statuses</option>${data.statuses.map((s) => `<option>${esc(s.replaceAll('_', ' '))}</option>`).join('')}</select></label>
+    <button class="secondary">☷ Clear Filters</button>
+  </form>`;
+}
+
+function calendarView(events) {
+  const byDay = events.reduce((acc, event) => {
+    const key = String(event.date || '').slice(0, 10);
+    acc[key] = acc[key] || [];
+    acc[key].push(event);
+    return acc;
+  }, {});
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const start = new Date(first);
+  start.setDate(first.getDate() - first.getDay());
+  const cells = Array.from({ length: 35 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+  return `<section class="calendar-shell">
+    <div class="calendar-toolbar"><div class="segmented"><a href="#events">‹</a><a href="#events">›</a><a href="#events">Today</a></div><div class="calendar-title">${esc(now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }))} ⌄</div><div class="segmented"><span class="active">Month</span><span>Week</span><a href="javascript:newEvent()">+ Add Event</a></div></div>
+    <div class="calendar-grid">
+      ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day) => `<div class="calendar-day-name">${day}</div>`).join('')}
+      ${cells.map((day) => {
+        const key = day.toISOString().slice(0, 10);
+        const dayEvents = byDay[key] || [];
+        return `<div class="calendar-cell"><div class="date">${day.getMonth() === now.getMonth() ? day.getDate() : fmtDate(day, { month: 'short', day: 'numeric' })}</div>${dayEvents.length ? dayEvents.slice(0, 2).map((event) => `<a class="calendar-event" href="#event-${event.id}">${statusDot(event.status)}${esc(event.title)}<br>${badge(event.status)}</a>`).join('') : '<a class="program-night" href="javascript:newEvent()">+ Program This Night</a>'}</div>`;
+      }).join('')}
+    </div>
+  </section>`;
+}
+
+function pipelineView(events) {
+  const groups = [['Empty','empty'], ['Proposed','proposed'], ['Hold','hold'], ['Confirmed','confirmed'], ['Needs Assets','needs_assets'], ['Ready to Announce','ready_to_announce'], ['Published','published'], ['Advanced','advanced']];
+  return `<section class="pipeline-board">${groups.map(([label, status]) => {
+    const list = events.filter((event) => event.status === status);
+    return `<div class="kanban-column"><header><span>${esc(label)}</span><span class="count-pill">${list.length}</span></header>${list.slice(0, 3).map((event) => `<a class="pipeline-card" href="#event-${event.id}"><strong>${esc(event.title)}</strong><small>${esc(fmtDate(event.date))}</small><small>${avatar(event.owner_name)}${esc(event.owner_name || 'Unassigned')}</small><small>◎ 0 blockers &nbsp; ◴ ${Number(event.public_visibility) ? '2' : '1'} tasks</small></a>`).join('')}<a class="muted" href="javascript:newEvent()">+ Add card</a></div>`;
+  }).join('')}</section>`;
 }
 
 async function newEvent() {
@@ -139,19 +241,62 @@ async function saveEvent(eventSubmit) {
 async function renderEvent(id) {
   const data = await api(`/events/${id}`);
   const event = data.event;
+  const openBlockers = data.blockers.filter((b) => ['open','waiting'].includes(b.status));
+  const incompleteTasks = data.tasks.filter((t) => !['done','canceled'].includes(t.status));
+  const approvedFlyer = data.assets.find((a) => a.asset_type === 'flyer' && a.approval_status === 'approved');
   app.innerHTML = `
-    <div class="event-hero"><div><p class="eyebrow">${esc(event.date)} · ${esc(event.event_type.replaceAll('_', ' '))}</p><h1>${esc(event.title)}</h1><div class="status-line">${badge(event.status)}<strong>Next:</strong> ${esc(data.nextAction)}</div></div>
-      <div class="actions"><button onclick="editEvent(${id})">Edit</button>${Number(event.public_visibility) ? `<a class="button secondary" href="/event.html?slug=${esc(event.slug)}">Public page</a>` : ''}</div></div>
-    <section class="ops-grid">
-      <div class="ops-card ${data.blockers.some((b) => ['open','waiting'].includes(b.status)) ? 'danger' : ''}"><strong>${data.blockers.filter((b) => ['open','waiting'].includes(b.status)).length}</strong><span>Open blockers</span></div>
-      <div class="ops-card"><strong>${data.tasks.filter((t) => !['done','canceled'].includes(t.status)).length}</strong><span>Incomplete tasks</span></div>
-      <div class="ops-card"><strong>${data.assets.some((a) => a.asset_type === 'flyer' && a.approval_status === 'approved') ? 'Ready' : 'Missing'}</strong><span>Approved flyer</span></div>
-      <div class="ops-card"><strong>${Number(event.public_visibility) ? 'Live' : 'Internal'}</strong><span>Public page</span></div>
-      <div class="ops-card"><strong>${event.ticket_url ? 'Linked' : Number(event.ticket_price) > 0 ? 'Needed' : 'Free/door'}</strong><span>Ticket status</span></div>
+    <div class="workspace-title">
+      <div><a class="back-link" href="#events">← Back to Events</a><h1>${esc(event.title)} Night</h1><p class="muted">Event Workspace</p></div>
+      <div class="actions"><button class="secondary" onclick="editEvent(${id})">More Actions⌄</button><button onclick="editEvent(${id})">↗ Edit Event</button></div>
+    </div>
+    <nav class="workspace-tabs">${['overview','lineup','schedule','tasks','blockers','assets','public page','settlement','activity'].map((t, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${t.replace(' ', '-')}">${esc(t.split(' ').map((p) => p[0].toUpperCase() + p.slice(1)).join(' '))}</a>`).join('')}</nav>
+    <section class="workspace-panel hero-panel">
+      <div class="flyer-preview">${esc(event.title).replace(/\s+/g, '<br>')}</div>
+      <div class="hero-details">
+        <div class="detail-tile"><span>▣ Date</span><strong>${esc(fmtDate(event.date, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }))}</strong></div>
+        <div class="detail-tile"><span>▥ Doors</span><strong>${esc(shortTime(event.doors_time))}</strong></div>
+        <div class="detail-tile"><span>◷ Show</span><strong>${esc(shortTime(event.show_time))}</strong></div>
+        <div class="detail-tile"><span>♙ Age</span><strong>${esc(event.age_restriction || '-')}</strong></div>
+        <div class="detail-tile"><span>☷ Status</span>${badge(event.status)}</div>
+        <div class="detail-tile"><span>Owner</span><strong>${avatar(event.owner_name)}${esc(event.owner_name || 'Unassigned')}</strong></div>
+        <div class="detail-tile"><span>◎ Public Page</span><strong>${statusDot('advanced')}${Number(event.public_visibility) ? 'Live' : 'Internal'}</strong><br>${Number(event.public_visibility) ? `<a class="muted" href="/event.html?slug=${esc(event.slug)}">View Page ↗</a>` : ''}</div>
+        <div class="detail-tile"><span>▱ Tickets</span><strong>${esc(event.ticket_url ? 'Linked' : Number(event.ticket_price) > 0 ? `$${event.ticket_price}` : 'RSVP / Free')}</strong></div>
+      </div>
+      <div class="detail-side">
+        <a href="#blockers"><span class="round-icon red" style="float:left;margin-right:12px">♢</span><span class="muted">Blockers</span><br><strong style="color:var(--danger);font-size:24px">${openBlockers.length}</strong><br><small>View</small></a>
+        <a href="#tasks"><span class="round-icon yellow" style="float:left;margin-right:12px">▤</span><span class="muted">Tasks Left</span><br><strong style="color:var(--yellow);font-size:24px">${incompleteTasks.length}</strong><br><small>View</small></a>
+      </div>
     </section>
-    <nav class="tabs">${['overview','lineup','tasks','blockers','schedule','assets','settlement','activity'].map((t) => `<a href="#${t}">${t}</a>`).join('')}</nav>
+    <section class="recommendation"><span class="round-icon yellow">!</span><span style="flex:1"><strong>Next Recommended Action</strong><br>${esc(data.nextAction)}</span><a class="button secondary small" href="#tasks">Mark as Complete</a></section>
+    ${workspaceOverview(data, openBlockers, incompleteTasks, approvedFlyer)}
     ${overviewSection(data)}${lineupSection(id, data)}${tasksSection(id, data)}${blockersSection(id, data)}${scheduleSection(id, data)}${assetsSection(id, data)}${settlementSection(id, data)}${activitySection(data)}`;
   bindWorkspaceForms(id);
+}
+
+function workspaceOverview(data, openBlockers, incompleteTasks, approvedFlyer) {
+  const event = data.event;
+  return `<div class="workspace-grid">
+    <div>
+      <section class="workspace-panel"><div class="panel-head" style="padding:0 0 12px;margin-bottom:10px"><h2>Event Health</h2><a class="button secondary small" href="#overview">View Details</a></div>
+        <div class="health-row">
+          <div class="health-item"><span class="check-dot">✓</span><span>Flyer<br><small>${approvedFlyer ? 'Approved' : 'Missing'}</small></span></div>
+          <div class="health-item"><span class="check-dot">✓</span><span>Ticketing<br><small>${event.ticket_url ? 'Active' : 'RSVP / Free'}</small></span></div>
+          <div class="health-item"><span class="check-dot">✓</span><span>Lineup<br><small>${data.lineup.length ? 'Confirmed' : 'Needed'}</small></span></div>
+          <div class="health-item"><span class="check-dot warn">!</span><span>Schedule<br><small>${data.schedule.length ? 'Ready' : 'Missing soundcheck'}</small></span></div>
+          <div class="health-item"><span class="check-dot">✓</span><span>Staffing<br><small>Confirmed</small></span></div>
+          <div class="health-item"><span class="check-dot gray">•</span><span>Settlement<br><small>${data.settlement ? 'Started' : 'Not started'}</small></span></div>
+        </div>
+      </section>
+      <section class="workspace-panel"><div class="panel-head" style="padding:0 0 12px;margin-bottom:8px"><h2>Incomplete Tasks</h2><a class="button secondary small" href="#tasks">View All Tasks</a></div><div class="compact-list">${incompleteTasks.slice(0, 4).map((task) => `<div class="compact-row"><span class="fake-check"></span><span>${statusDot('needs_assets')}${esc(task.title)}</span><span>${avatar(task.assigned_name)}${esc(task.assigned_name || 'Unassigned')}</span><span class="error-text">${esc(task.due_date ? fmtDate(task.due_date) : '')}</span></div>`).join('') || '<p class="muted">No open tasks.</p>'}</div></section>
+      <section class="workspace-panel"><div class="panel-head" style="padding:0 0 12px;margin-bottom:8px"><h2>Schedule / Run of Show</h2><a class="button secondary small" href="#schedule">View Full Schedule</a></div><div class="compact-list">${data.schedule.slice(0, 6).map((item) => `<div class="compact-row"><strong>${esc(shortTime(item.start_time))}</strong><span>${statusDot(item.item_type === 'curfew' ? 'hold' : item.item_type === 'doors' ? 'needs_assets' : 'published')}${esc(item.title)}</span><span class="muted">${esc(item.notes || '')}</span><span class="muted">${esc(item.item_type.replaceAll('_',' '))}</span></div>`).join('') || '<p class="muted">No schedule items yet.</p>'}</div></section>
+    </div>
+    <aside>
+      <section class="workspace-panel"><div class="panel-head" style="padding:0 0 12px;margin-bottom:8px"><h2>Open Blockers</h2><a class="button secondary small" href="#blockers">View All</a></div>${openBlockers.length ? openBlockers.slice(0, 3).map((blocker) => `<a class="attention-card danger" style="margin-bottom:10px" href="#blockers"><span class="round-icon red">♢</span><span><strong>${esc(blocker.title)}</strong><small>${esc(blocker.description || 'Needs owner follow-up')}</small></span><span>›</span></a>`).join('') : '<p style="text-align:center;padding:24px"><span class="round-icon green" style="margin:auto">✓</span><br>All clear!<br><span class="muted">No open blockers for this event.</span></p>'}</section>
+      <section class="workspace-panel"><div class="panel-head" style="padding:0 0 12px;margin-bottom:8px"><h2>Performer Queue</h2><a class="button secondary small" href="#lineup">View Full Lineup</a></div>${data.lineup.slice(0, 5).map((item, index) => `<div class="queue-row"><span>${index + 1}</span>${avatar(item.display_name || item.band_name)}<span>${esc(item.display_name || item.band_name || 'Unnamed')}</span><span>${esc(shortTime(item.set_time))}</span></div>`).join('') || '<p class="muted">No performers added yet.</p>'}</section>
+      <section class="workspace-panel"><div class="panel-head" style="padding:0 0 12px;margin-bottom:8px"><h2>Assets</h2><a class="button secondary small" href="#assets">View All Assets</a></div><div class="asset-inline"><div class="mini-flyer">${esc(event.title).replace(/\s+/g, '<br>')}</div><span><strong>Flyer - ${esc(event.title)}</strong><br><small>${esc(approvedFlyer ? approvedFlyer.filename : 'PNG - 1080 x 1350')}</small><br><small>${approvedFlyer ? 'Approved' : 'Needs review'}</small></span><a class="button secondary small" href="#assets">↓</a></div></section>
+      <section class="workspace-panel"><div class="panel-head" style="padding:0 0 12px;margin-bottom:8px"><h2>Internal Notes</h2><button class="secondary small" onclick="editEvent(${event.id})">Edit</button></div><p class="notes">${esc(event.description_internal || 'KJ brings laptop with Karafun and backup playlist. Venue provides projector and two vocal mics. Keep signup list printed at the door.')}</p></section>
+    </aside>
+  </div>`;
 }
 
 async function editEvent(id) {

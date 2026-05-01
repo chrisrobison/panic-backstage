@@ -6,17 +6,47 @@
   <title>Panic Backstage</title>
   <link rel="stylesheet" href="/assets/app.css">
 </head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="#dashboard">Panic Backstage</a>
-    <nav>
-      <a href="#dashboard">Dashboard</a>
-      <a href="#events">Events</a>
-      <a href="#templates">Templates</a>
+<body class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="#dashboard" aria-label="Panic Backstage dashboard">
+      <span class="brand-mark">PB</span>
+      <span>Panic Backstage</span>
+    </a>
+    <nav class="side-nav" aria-label="Main navigation">
+      <a data-route="dashboard" href="#dashboard"><span>◴</span>Dashboard</a>
+      <a data-route="events" href="#events"><span>▣</span>Calendar</a>
+      <a data-route="pipeline" href="#events"><span>▥</span>Pipeline</a>
+      <a data-route="published" href="#events"><span>★</span>Events</a>
+      <a data-route="templates" href="#templates"><span>▤</span>Templates</a>
+      <a href="#events"><span>♙</span>Contacts</a>
+      <a href="#dashboard"><span>▥</span>Reports</a>
+      <a href="#dashboard"><span>⚙</span>Settings</a>
     </nav>
-    <button id="logout" class="ghost">Logout</button>
+    <div class="sidebar-card"><strong>Good shows.<br>No surprises.</strong></div>
+    <div class="venue-switcher"><span>▥</span><span>The Blackroom</span><span>⌄</span></div>
+    <div class="sidebar-foot">© 2024 Panic Backstage, LLC</div>
+  </aside>
+
+  <header class="topbar">
+    <a class="mobile-brand" href="#dashboard"><span class="brand-mark">PB</span><span>Panic Backstage</span></a>
+    <label class="search-box"><span>⌕</span><input type="search" placeholder="Search events, venues, contacts..."></label>
+    <div class="top-actions">
+      <button class="icon-button" type="button" aria-label="Notifications">♢<span class="notify-badge">7</span></button>
+      <button id="logout" class="avatar-button" title="Logout">MG</button>
+    </div>
   </header>
+
   <main id="app" class="container"></main>
+
+  <nav class="mobile-tabbar" aria-label="Mobile navigation">
+    <a data-route="dashboard" href="#dashboard"><span>◴</span>Dashboard</a>
+    <a data-route="events" href="#events"><span>▣</span>Calendar</a>
+    <a data-route="tonight" href="#dashboard"><span>●</span>Tonight</a>
+    <a href="#events"><span>★</span>Events</a>
+    <a href="#templates"><span>•••</span>More</a>
+  </nav>
+
+  <footer class="app-footer"><span>ϟ</span> Built for venues. Run by humans. <a href="#dashboard">Contact Support</a></footer>
   <script src="/assets/app.js"></script>
 </body>
 </html>
