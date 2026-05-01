@@ -32,6 +32,9 @@ final class Events extends BaseEndpoint
     {
         $where = [];
         $params = [];
+        [$scopeSql, $scopeParams] = $this->eventScopeSql('e');
+        $where[] = $scopeSql;
+        $params = array_merge($params, $scopeParams);
         foreach (['status', 'event_type', 'owner_user_id', 'public_visibility'] as $field) {
             $value = $request->query($field);
             if ($value !== null && $value !== '') {
@@ -57,9 +60,10 @@ final class Events extends BaseEndpoint
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
         $sql .= ' ORDER BY e.date DESC, e.show_time DESC LIMIT 250';
+        $events = array_map(fn ($event) => $event + ['capabilities' => $this->eventCapabilities((int) $event['id'])], $this->db->all($sql, $params));
         return $this->ok([
-            'events' => $this->db->all($sql, $params),
-            'users' => $this->db->all('SELECT id, name, email, role FROM users ORDER BY name'),
+            'events' => $events,
+            'users' => $this->accessibleUsers(),
             'venues' => $this->db->all('SELECT * FROM venues ORDER BY name'),
             'statuses' => self::STATUSES,
             'types' => self::TYPES,
@@ -67,11 +71,15 @@ final class Events extends BaseEndpoint
                 'start_date' => $request->query('start_date'),
                 'end_date' => $request->query('end_date'),
             ],
+            'capabilities' => $this->globalCapabilities(),
         ]);
     }
 
     private function show(int $id): Response
     {
+        if ($denied = $this->requireEventCapability($id, 'read_event')) {
+            return $denied;
+        }
         $event = $this->db->one(
             'SELECT e.*, v.name venue_name, v.address venue_address, v.city venue_city, v.state venue_state, u.name owner_name
              FROM events e JOIN venues v ON v.id = e.venue_id LEFT JOIN users u ON u.id = e.owner_user_id WHERE e.id = ?',
@@ -82,9 +90,21 @@ final class Events extends BaseEndpoint
         }
         $lineup = $this->db->all('SELECT el.*, b.name band_name FROM event_lineup el LEFT JOIN bands b ON b.id = el.band_id WHERE el.event_id = ? ORDER BY billing_order, set_time', [$id]);
         $tasks = $this->db->all('SELECT t.*, u.name assigned_name FROM event_tasks t LEFT JOIN users u ON u.id = t.assigned_user_id WHERE t.event_id = ? ORDER BY FIELD(t.status,"blocked","todo","in_progress","done","canceled"), due_date', [$id]);
+        if ($this->hasEventCapability($id, 'view_assigned_tasks') && !$this->hasEventCapability($id, 'manage_tasks')) {
+            $tasks = array_values(array_filter($tasks, fn ($task) => (int) ($task['assigned_user_id'] ?? 0) === $this->userId()));
+        }
         $blockers = $this->db->all('SELECT b.*, u.name owner_name FROM event_blockers b LEFT JOIN users u ON u.id = b.owner_user_id WHERE b.event_id = ? ORDER BY FIELD(b.status,"open","waiting","resolved","canceled"), due_date', [$id]);
         $assets = $this->db->all('SELECT * FROM event_assets WHERE event_id = ? ORDER BY created_at DESC', [$id]);
-        $settlement = $this->db->one('SELECT * FROM event_settlements WHERE event_id = ? LIMIT 1', [$id]);
+        $canViewSettlement = $this->hasEventCapability($id, 'view_settlement');
+        $settlement = $canViewSettlement ? $this->db->one('SELECT * FROM event_settlements WHERE event_id = ? LIMIT 1', [$id]) : null;
+        $readiness = $this->readiness($event, $lineup, $blockers, $assets, $settlement);
+        if (!$canViewSettlement) {
+            $readiness = array_values(array_filter($readiness, fn ($item) => $item['label'] !== 'Settlement'));
+        }
+        $nextAction = $this->nextAction($event, $blockers, $assets, $settlement);
+        if (!$canViewSettlement && $nextAction === 'Complete settlement') {
+            $nextAction = 'Review event details';
+        }
         return $this->ok([
             'event' => $event,
             'lineup' => $lineup,
@@ -92,13 +112,15 @@ final class Events extends BaseEndpoint
             'blockers' => $blockers,
             'schedule' => $this->db->all('SELECT * FROM event_schedule_items WHERE event_id = ? ORDER BY start_time, id', [$id]),
             'assets' => $assets,
-            'invites' => $this->db->all('SELECT id, email, role, token, used_at, expires_at, created_at FROM event_invites WHERE event_id = ? ORDER BY created_at DESC', [$id]),
+            'invites' => $this->hasEventCapability($id, 'manage_invites') ? $this->db->all('SELECT id, email, role, token, used_at, expires_at, created_at FROM event_invites WHERE event_id = ? ORDER BY created_at DESC', [$id]) : [],
             'settlement' => $settlement,
             'activity' => $this->db->all('SELECT a.*, u.name user_name FROM event_activity_log a LEFT JOIN users u ON u.id = a.user_id WHERE a.event_id = ? ORDER BY a.created_at DESC LIMIT 80', [$id]),
-            'users' => $this->db->all('SELECT id, name, email, role FROM users ORDER BY name'),
+            'users' => $this->assignmentUsersForEvent($id),
             'venues' => $this->db->all('SELECT * FROM venues ORDER BY name'),
-            'nextAction' => $this->nextAction($event, $blockers, $assets, $settlement),
-            'readiness' => $this->readiness($event, $lineup, $blockers, $assets, $settlement),
+            'nextAction' => $nextAction,
+            'readiness' => $readiness,
+            'access' => $this->eventAccess($id),
+            'capabilities' => $this->eventCapabilities($id),
             'links' => [
                 'public_page' => 'event.html?slug=' . rawurlencode((string) $event['slug']),
                 'invite_base' => 'invite.html?token=',
@@ -108,6 +130,9 @@ final class Events extends BaseEndpoint
 
     private function create(Request $request): Response
     {
+        if ($denied = $this->requireGlobalCapability('create_events')) {
+            return $denied;
+        }
         $body = $request->body();
         foreach (['title', 'date', 'venue_id', 'event_type'] as $required) {
             if (empty($body[$required])) {
@@ -128,6 +153,9 @@ final class Events extends BaseEndpoint
     {
         if (!$id) {
             return $this->notFound();
+        }
+        if ($denied = $this->requireEventCapability($id, 'edit_event')) {
+            return $denied;
         }
         $body = $request->body();
         if (isset($body['status']) && count($body) === 1) {
@@ -152,6 +180,9 @@ final class Events extends BaseEndpoint
 
     private function delete(int $id): Response
     {
+        if ($denied = $this->requireEventCapability($id, 'delete_event')) {
+            return $denied;
+        }
         $this->db->run('DELETE FROM events WHERE id = ?', [$id]);
         return Response::noContent();
     }
@@ -160,6 +191,9 @@ final class Events extends BaseEndpoint
     {
         if ($request->method() !== 'POST') {
             return Response::methodNotAllowed();
+        }
+        if ($denied = $this->requireGlobalCapability('create_events')) {
+            return $denied;
         }
         $template = $this->db->one('SELECT * FROM event_templates WHERE id = ?', [$templateId]);
         if (!$template) {

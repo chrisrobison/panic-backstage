@@ -12,6 +12,9 @@ final class Invites extends BaseEndpoint
     public function handle(Request $request): Response
     {
         $eventId = $this->requireEventId();
+        if ($denied = $this->requireEventCapability($eventId, 'manage_invites')) {
+            return $denied;
+        }
         return match ($request->method()) {
             'GET' => $this->ok(['invites' => $this->db->all('SELECT * FROM event_invites WHERE event_id = ? ORDER BY created_at DESC', [$eventId])]),
             'POST' => $this->create($request, $eventId),
@@ -26,7 +29,9 @@ final class Invites extends BaseEndpoint
             return Response::json(['error' => 'Valid email is required'], 422);
         }
         $role = (string) $request->body('role', 'viewer');
-        $roles = ['venue_admin','event_owner','promoter','band','artist','designer','staff','viewer'];
+        $roles = $this->isVenueAdmin()
+            ? ['event_owner','promoter','band','artist','designer','staff','viewer']
+            : ['promoter','band','artist','designer','staff','viewer'];
         if (!in_array($role, $roles, true)) {
             return Response::json(['error' => 'Invalid invite role'], 422);
         }

@@ -14,13 +14,24 @@ final class Tasks extends BaseEndpoint
     {
         $eventId = $this->requireEventId();
         $taskId = $this->params['taskId'] ?? null;
+        if ($denied = $this->requireEventCapability($eventId, $request->method() === 'GET' ? 'read_event' : 'manage_tasks')) {
+            return $denied;
+        }
         return match ($request->method()) {
-            'GET' => $this->ok(['tasks' => $this->db->all('SELECT * FROM event_tasks WHERE event_id = ? ORDER BY due_date, id', [$eventId])]),
+            'GET' => $this->ok(['tasks' => $this->tasks($eventId)]),
             'POST' => $this->create($request, $eventId),
             'PATCH' => $this->update($request, $eventId, (int) $taskId),
             'DELETE' => $this->delete($eventId, (int) $taskId),
             default => Response::methodNotAllowed()
         };
+    }
+
+    private function tasks(int $eventId): array
+    {
+        if ($this->hasEventCapability($eventId, 'view_assigned_tasks') && !$this->hasEventCapability($eventId, 'manage_tasks')) {
+            return $this->db->all('SELECT * FROM event_tasks WHERE event_id = ? AND assigned_user_id = ? ORDER BY due_date, id', [$eventId, $this->userId()]);
+        }
+        return $this->db->all('SELECT * FROM event_tasks WHERE event_id = ? ORDER BY due_date, id', [$eventId]);
     }
 
     private function create(Request $request, int $eventId): Response

@@ -34,18 +34,29 @@ final class Invites extends BaseEndpoint
             return $this->notFound('Invite unavailable');
         }
         $user = $this->db->one('SELECT * FROM users WHERE email = ? LIMIT 1', [$invite['email']]);
+        $password = (string) $request->body('password', '');
+        if ($password === '') {
+            return Response::json(['error' => 'Password is required'], 422);
+        }
         if (!$user) {
             $id = $this->db->insert('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)', [
                 $request->body('name') ?: $invite['email'],
                 $invite['email'],
-                password_hash((string) $request->body('password', bin2hex(random_bytes(8))), PASSWORD_DEFAULT),
+                password_hash($password, PASSWORD_DEFAULT),
                 $invite['role'],
             ]);
             $user = $this->db->one('SELECT * FROM users WHERE id = ?', [$id]);
+        } elseif (!password_verify($password, $user['password_hash'])) {
+            return Response::json(['error' => 'Existing account password is incorrect'], 401);
         }
         $this->db->run('INSERT IGNORE INTO event_collaborators (event_id, user_id, role) VALUES (?, ?, ?)', [$invite['event_id'], $user['id'], $invite['role']]);
         $this->db->run('UPDATE event_invites SET used_at = NOW() WHERE id = ?', [$invite['id']]);
         $this->auth->login($user);
-        return $this->ok(['event_id' => (int) $invite['event_id'], 'user' => $this->auth->user(), 'csrf' => $this->auth->csrf()]);
+        return $this->ok([
+            'event_id' => (int) $invite['event_id'],
+            'user' => $this->auth->user(),
+            'csrf' => $this->auth->csrf(),
+            'capabilities' => $this->globalCapabilities(),
+        ]);
     }
 }

@@ -13,6 +13,9 @@ final class Schedule extends BaseEndpoint
     {
         $eventId = $this->requireEventId();
         $scheduleId = (int) ($this->params['scheduleId'] ?? 0);
+        if ($denied = $this->requireEventCapability($eventId, $request->method() === 'GET' ? 'read_event' : 'manage_schedule')) {
+            return $denied;
+        }
         return match ($request->method()) {
             'GET' => $this->ok(['schedule' => $this->db->all('SELECT * FROM event_schedule_items WHERE event_id = ? ORDER BY start_time, id', [$eventId])]),
             'POST' => $this->create($request, $eventId),

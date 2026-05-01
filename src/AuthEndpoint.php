@@ -26,7 +26,7 @@ final class AuthEndpoint extends BaseEndpoint
             return Response::json(['error' => 'Invalid email or password'], 401);
         }
         $this->auth->login($user);
-        return $this->ok(['user' => $this->auth->user(), 'csrf' => $this->auth->csrf()]);
+        return $this->ok(['user' => $this->auth->user(), 'csrf' => $this->auth->csrf(), 'capabilities' => $this->globalCapabilities()]);
     }
 
     private function logout(): Response

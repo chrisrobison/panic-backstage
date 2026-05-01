@@ -14,6 +14,9 @@ final class Lineup extends BaseEndpoint
     {
         $eventId = $this->requireEventId();
         $lineupId = (int) ($this->params['lineupId'] ?? 0);
+        if ($denied = $this->requireEventCapability($eventId, $request->method() === 'GET' ? 'read_event' : 'manage_lineup')) {
+            return $denied;
+        }
         return match ($request->method()) {
             'GET' => $this->ok(['lineup' => $this->db->all('SELECT * FROM event_lineup WHERE event_id = ? ORDER BY billing_order, set_time', [$eventId])]),
             'POST' => $this->create($request, $eventId),

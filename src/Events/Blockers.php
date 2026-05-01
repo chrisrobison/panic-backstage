@@ -14,6 +14,9 @@ final class Blockers extends BaseEndpoint
     {
         $eventId = $this->requireEventId();
         $blockerId = (int) ($this->params['blockerId'] ?? 0);
+        if ($denied = $this->requireEventCapability($eventId, $request->method() === 'GET' ? 'read_event' : 'manage_open_items')) {
+            return $denied;
+        }
         return match ($request->method()) {
             'GET' => $this->ok(['blockers' => $this->db->all('SELECT * FROM event_blockers WHERE event_id = ? ORDER BY due_date, id', [$eventId])]),
             'POST' => $this->create($request, $eventId),

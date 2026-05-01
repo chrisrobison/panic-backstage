@@ -207,7 +207,7 @@ Endpoint smoke test against a running local or staging server:
 php scripts/endpoint-smoke.php http://localhost:8000
 ```
 
-The smoke script logs in, loads dashboard data, creates an event from a template, updates an open item, creates an invite link, saves settlement data, publishes the event, and verifies the public event API.
+The smoke script logs in as admin, loads dashboard data, creates an event from a template, updates an open item, creates and accepts a viewer invite, verifies collaborator event access, verifies unrelated event access and viewer mutation are blocked, saves settlement data, publishes the event, and verifies the public event API. It does not send email and does not exercise multipart asset upload.
 
 ## Deployment Notes
 
@@ -230,18 +230,46 @@ Staging checklist:
 ## Core Workflow
 
 - `/` shows the staff dashboard after login.
-- Staff can create events from scratch or from templates.
+- Venue admins can create events from templates and see all events.
 - Each event workspace manages overview, lineup, tasks, open items, run sheet, assets, settlement, and activity.
 - Public event pages are loaded by `public/event.html?slug=event-slug`.
 - Public event API responses only include events with `public_visibility` enabled.
 - Web Components publish PAN-compatible topics such as `app.route.changed`, `events.loaded`, `event.saved`, `event.assetUploaded`, `event.openItemResolved`, `event.publicationChanged`, `toast.show`, and `api.error`.
+
+## Roles And Collaborator Access
+
+Server-side authorization is enforced by global user role plus event ownership or `event_collaborators` rows. Venue admins retain full access to every event, template, invite, asset, settlement, and user list. Non-admin users only see events they own or events where they have a collaborator row.
+
+Event collaborator roles:
+
+- `event_owner`: full access to assigned/collaborating events except global user or template administration.
+- `promoter`: read event data, edit lineup, tasks, schedule, and open items, and view/copy the public page. Settlement is hidden.
+- `band` / `artist`: read the collaborating event, upload assets, and view tasks assigned directly to them.
+- `designer`: read the collaborating event and upload/manage event assets. Settlement is hidden.
+- `staff`: read the collaborating event and edit tasks, schedule, and open items.
+- `viewer`: read-only access to the collaborating event.
+
+Invite links still only create copyable links in the UI. They do not send email.
+
+## Collaborator Demo Flow
+
+After logging in as the seeded admin:
+
+1. Open an event workspace and select the Invites tab.
+2. Create a viewer, staff, designer, promoter, artist, or band invite link.
+3. Copy the generated invite link and open it in a separate browser session or private window.
+4. Accept the invite with a name and password.
+5. Confirm the collaborator can open that event from the dashboard or direct event URL.
+6. Confirm unrelated events are not listed and direct access to unrelated event IDs is rejected.
+7. For a viewer invite, confirm event detail fields, settlement, invite creation, and destructive asset controls are unavailable.
+8. For a designer invite, manually verify asset upload/manage controls on that event. The smoke script does not exercise multipart uploads.
 
 ## Verification
 
 Useful checks:
 
 ```bash
-find src public database -name '*.php' -print -exec php -l {} \;
+find src public database scripts -name '*.php' -print -exec php -l {} \;
 node --check public/assets/app.js
 php database/seed.php
 php -S localhost:8000 -t public public/router.php
@@ -253,7 +281,6 @@ php scripts/endpoint-smoke.php http://localhost:8000
 ## MVP Limitations
 
 - Stripe is represented by ticket fields only.
-- Permissions are basic and should be tightened before exposing to untrusted users.
-- Invite links are placeholders and do not send email.
+- Invite links create collaborator-scoped access but still do not send email.
 - Uploads use local disk storage under `storage/uploads/events/:eventId`.
 - The frontend is intentionally browser-native Web Components, optimized for hackability over framework features.

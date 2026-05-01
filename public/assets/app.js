@@ -117,6 +117,10 @@ function emptyState(message) {
   return `<div class="empty-state">${esc(message)}</div>`;
 }
 
+function can(data, capability) {
+  return Boolean(data?.capabilities?.[capability]);
+}
+
 function eventRow(event) {
   const issue = event.primary_blocker || (Number(event.approved_flyers) ? 'Flyer approved' : 'Flyer needs review');
   return `<tr>
@@ -222,11 +226,13 @@ class AppShell extends PanicElement {
       const me = await api('/me');
       csrf = me.csrf;
       this.user = me.user;
+      this.capabilities = me.capabilities || {};
       publish('auth.changed', me);
       if (!this.user) {
         location.href = appUrl('login.html');
         return;
       }
+      this.applyCapabilities();
       await this.route();
     } catch {
       location.href = appUrl('login.html');
@@ -270,6 +276,12 @@ class AppShell extends PanicElement {
     $('[data-search]', this).addEventListener('input', (event) => publish('events.search', { query: event.target.value }));
   }
 
+  applyCapabilities() {
+    if (!this.capabilities?.manage_templates) {
+      $$('[data-nav="templates"]', this).forEach((link) => link.remove());
+    }
+  }
+
   async route() {
     const route = location.hash.replace(/^#/, '') || 'dashboard';
     publish('app.route.changed', { route });
@@ -300,20 +312,20 @@ class DashboardView extends PanicElement {
     try {
       const [dashboard, events] = await Promise.all([api('/dashboard'), api('/events')]);
       publish('events.loaded', events);
-      this.render(dashboard, events.events || []);
+      this.render(dashboard, events.events || [], events.capabilities || {});
     } catch (error) {
       this.showError(error);
     }
   }
 
-  render(dashboard, allEvents) {
+  render(dashboard, allEvents, capabilities = {}) {
     const events = dashboard.events?.length ? dashboard.events : allEvents.slice(0, 8);
     const today = events[0] || allEvents[0] || {};
     const attention = events.filter((event) => event.primary_blocker || Number(event.open_items) || (!Number(event.approved_flyers) && ['confirmed', 'needs_assets', 'ready_to_announce'].includes(event.status))).slice(0, 4);
     const oldest = dashboard.highlights?.oldest_unsettled;
     this.innerHTML = `<section class="page-head">
       <div><h1>Dashboard</h1><p class="subtle">Mabuhay Gardens show operations for the next two weeks.</p></div>
-      <a class="button" href="#templates">Create From Template</a>
+      ${capabilities.manage_templates ? '<a class="button" href="#templates">Create From Template</a>' : ''}
     </section>
     <section class="metric-grid">
       <article class="metric-card"><span class="icon-bubble"><span class="icon mic"></span></span><h3>Next Show<br>${esc(today.title || 'No event')}</h3><p>Doors ${esc(timeLabel(today.doors_time))}<br>Starts ${esc(timeLabel(today.show_time))}</p>${badge(today.status || 'empty')}</article>
@@ -396,7 +408,10 @@ class PipelineBoard extends PanicElement {
       <div class="page-head"><div><h1>Pipeline</h1><p class="subtle">Move events from holds to settlement.</p></div></div>
       <section class="pipeline-board">${statuses.slice(0, 10).map((status) => {
         const items = events.filter((event) => event.status === status);
-        return `<article class="pipe-col"><h3>${esc(titleCase(status))} <span class="pipe-count">${items.length}</span></h3>${items.map((event) => `<article class="pipe-card"><strong>${esc(event.title)}</strong><span>${esc(shortDate(eventDate(event)))}</span><small>${esc(event.owner_name || 'Unassigned')}</small><small>${esc(event.open_items || 0)} open items / ${esc(event.incomplete_tasks || 0)} tasks</small><form data-event="${esc(event.id)}" class="inline-status">${select('status', statuses, event.status)}<button class="small">Move</button><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></form></article>`).join('') || '<small>No events</small>'}</article>`;
+        return `<article class="pipe-col"><h3>${esc(titleCase(status))} <span class="pipe-count">${items.length}</span></h3>${items.map((event) => {
+          const editable = Boolean(event.capabilities?.edit_event);
+          return `<article class="pipe-card"><strong>${esc(event.title)}</strong><span>${esc(shortDate(eventDate(event)))}</span><small>${esc(event.owner_name || 'Unassigned')}</small><small>${esc(event.open_items || 0)} open items / ${esc(event.incomplete_tasks || 0)} tasks</small>${editable ? `<form data-event="${esc(event.id)}" class="inline-status">${select('status', statuses, event.status)}<button class="small">Move</button><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></form>` : `<div class="inline-status"><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></div>`}</article>`;
+        }).join('') || '<small>No events</small>'}</article>`;
       }).join('')}</section>
     </section>`;
     $$('form[data-event]', this).forEach((form) => form.addEventListener('submit', async (event) => {
@@ -425,7 +440,7 @@ class EventsList extends PanicElement {
   render(data) {
     if (!data) return;
     const events = (data.events || []).filter((event) => !this.query || String(event.title).toLowerCase().includes(this.query));
-    this.innerHTML = `<div class="page-head"><div><h1>Events</h1><p class="subtle">Search, open, and advance every show.</p></div><a class="button" href="#templates">Create Event</a></div><article class="panel">${table(events)}</article>`;
+    this.innerHTML = `<div class="page-head"><div><h1>Events</h1><p class="subtle">Search, open, and advance every show.</p></div>${data.capabilities?.manage_templates ? '<a class="button" href="#templates">Create Event</a>' : ''}</div><article class="panel">${table(events)}</article>`;
   }
 }
 
@@ -482,14 +497,17 @@ class EventWorkspace extends PanicElement {
   render() {
     const data = this.data;
     const event = data.event;
+    const tabs = ['overview', 'details', 'tasks', 'lineup', 'schedule', 'open-items', 'assets', 'activity'];
+    if (can(data, 'manage_invites')) tabs.splice(7, 0, 'invites');
+    if (can(data, 'view_settlement')) tabs.splice(tabs.length - 1, 0, 'settlement');
     this.innerHTML = `<section class="event-top">
       <div><a class="back-link" href="#events">&lt;- Back to Events</a><h1>${esc(event.title)}</h1><p class="subtle">${esc(shortDate(eventDate(event)))} at ${esc(event.venue_name)}</p></div>
       <div class="event-actions">
         <a class="button secondary" href="${esc(appUrl(data.links.public_page))}" target="_blank" rel="noreferrer">Public Page</a>
-        <button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>
+        ${can(data, 'publish_event') ? `<button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>` : ''}
       </div>
     </section>
-    <nav class="workspace-tabs tabs">${['overview','details','tasks','lineup','schedule','open-items','assets','invites','settlement','activity'].map((tab, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${tab}">${esc(titleCase(tab))}</a>`).join('')}</nav>
+    <nav class="workspace-tabs tabs">${tabs.map((tab, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${tab}">${esc(titleCase(tab))}</a>`).join('')}</nav>
     <article class="event-summary">
       <div class="flyer">${esc(event.title)}</div>
       <div class="facts-grid">
@@ -513,8 +531,8 @@ class EventWorkspace extends PanicElement {
     <pb-run-sheet id="schedule"></pb-run-sheet>
     <pb-open-items id="open-items"></pb-open-items>
     <pb-asset-manager id="assets"></pb-asset-manager>
-    <pb-invite-manager id="invites"></pb-invite-manager>
-    <pb-settlement-form id="settlement"></pb-settlement-form>
+    ${can(data, 'manage_invites') ? '<pb-invite-manager id="invites"></pb-invite-manager>' : ''}
+    ${can(data, 'view_settlement') ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
     <section id="activity" class="panel"><div class="section-head padded"><h2>Activity</h2></div><ul class="timeline">${data.activity.map((entry) => `<li><strong>${esc(entry.action)}</strong> by ${esc(entry.user_name || 'system')} <span class="muted">${esc(entry.created_at)}</span></li>`).join('')}</ul></section>`;
     $('pb-event-details-form', this).data = data;
     $('pb-task-list', this).data = data;
@@ -522,9 +540,9 @@ class EventWorkspace extends PanicElement {
     $('pb-run-sheet', this).data = data;
     $('pb-open-items', this).data = data;
     $('pb-asset-manager', this).data = data;
-    $('pb-invite-manager', this).data = data;
-    $('pb-settlement-form', this).data = data;
-    $('[data-publish]', this).addEventListener('click', () => this.togglePublic());
+    if ($('pb-invite-manager', this)) $('pb-invite-manager', this).data = data;
+    if ($('pb-settlement-form', this)) $('pb-settlement-form', this).data = data;
+    $('[data-publish]', this)?.addEventListener('click', () => this.togglePublic());
     $('[data-next-action]', this).addEventListener('click', () => this.load());
   }
 
@@ -545,25 +563,28 @@ class EventDetailsForm extends HTMLElement {
   set data(data) {
     this.eventData = data;
     const event = data.event;
+    const editable = can(data, 'edit_event');
+    const disabled = editable ? '' : ' disabled';
     this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Event Details</h2></div><form class="grid-form padded">
-      <label>Title <input name="title" required value="${esc(event.title)}"></label>
-      <label>Date <input type="date" name="date" required value="${esc(event.date)}"></label>
-      <label>Venue <select name="venue_id">${data.venues.map((venue) => option(venue.id, event.venue_id, venue.name)).join('')}</select></label>
-      <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type)}</label>
-      <label>Status ${select('status', statuses, event.status)}</label>
-      <label>Owner ${ownerSelect(data.users, event.owner_user_id)}</label>
-      <label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"></label>
-      <label>Show <input type="time" name="show_time" value="${esc(event.show_time || '')}"></label>
-      <label>End <input type="time" name="end_time" value="${esc(event.end_time || '')}"></label>
-      <label>Age <input name="age_restriction" value="${esc(event.age_restriction || '')}"></label>
-      <label>Ticket price <input type="number" step="0.01" name="ticket_price" value="${esc(event.ticket_price || 0)}"></label>
-      <label>Capacity <input type="number" name="capacity" value="${esc(event.capacity || '')}"></label>
-      <label class="wide">Ticket URL <input type="url" name="ticket_url" value="${esc(event.ticket_url || '')}"></label>
-      <label class="wide">Public description <textarea name="description_public">${esc(event.description_public || '')}</textarea></label>
-      <label class="wide">Internal notes <textarea name="description_internal">${esc(event.description_internal || '')}</textarea></label>
-      <label class="check-label"><input type="checkbox" name="public_visibility" value="1" ${Number(event.public_visibility) ? 'checked' : ''}> Public page visible</label>
-      <button>Save details</button>
+      <label>Title <input name="title" required value="${esc(event.title)}"${disabled}></label>
+      <label>Date <input type="date" name="date" required value="${esc(event.date)}"${disabled}></label>
+      <label>Venue <select name="venue_id"${disabled}>${data.venues.map((venue) => option(venue.id, event.venue_id, venue.name)).join('')}</select></label>
+      <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
+      <label>Status ${select('status', statuses, event.status).replace('<select ', `<select${disabled} `)}</label>
+      <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
+      <label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>
+      <label>Show <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
+      <label>End <input type="time" name="end_time" value="${esc(event.end_time || '')}"${disabled}></label>
+      <label>Age <input name="age_restriction" value="${esc(event.age_restriction || '')}"${disabled}></label>
+      <label>Ticket price <input type="number" step="0.01" name="ticket_price" value="${esc(event.ticket_price || 0)}"${disabled}></label>
+      <label>Capacity <input type="number" name="capacity" value="${esc(event.capacity || '')}"${disabled}></label>
+      <label class="wide">Ticket URL <input type="url" name="ticket_url" value="${esc(event.ticket_url || '')}"${disabled}></label>
+      <label class="wide">Public description <textarea name="description_public"${disabled}>${esc(event.description_public || '')}</textarea></label>
+      <label class="wide">Internal notes <textarea name="description_internal"${disabled}>${esc(event.description_internal || '')}</textarea></label>
+      <label class="check-label"><input type="checkbox" name="public_visibility" value="1" ${Number(event.public_visibility) ? 'checked' : ''}${disabled}> Public page visible</label>
+      ${editable ? '<button>Save details</button>' : ''}
     </form></section>`;
+    if (!editable) return;
     $('form', this).addEventListener('submit', async (submitEvent) => {
       submitEvent.preventDefault();
       const body = formData(submitEvent.target);
@@ -579,8 +600,11 @@ class TaskList extends HTMLElement {
   set data(data) {
     this.eventData = data;
     const tasks = data.tasks || [];
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Tasks</h2></div>${tasks.map((task) => `<form data-api="/events/${data.event.id}/tasks/${task.id}" data-method="PATCH" class="row-form"><label>Task<input name="title" value="${esc(task.title)}"></label><label>Status${select('status', ['todo','in_progress','blocked','done','canceled'], task.status)}</label><label>Assigned${userSelect(data.users, task.assigned_user_id)}</label><label>Due<input type="date" name="due_date" value="${esc(task.due_date || '')}"></label><label>Priority${select('priority', ['low','normal','high','urgent'], task.priority)}</label><label>Details<input name="description" value="${esc(task.description || '')}"></label><button>Save</button><button type="button" class="secondary" data-complete="${esc(task.id)}">Done</button></form>`).join('') || emptyState('No tasks for this event.')}
-    <form data-api="/events/${data.event.id}/tasks" data-method="POST" class="row-form"><label>Task<input name="title" required placeholder="Confirm door count"></label><label>Assigned${userSelect(data.users)}</label><label>Due<input type="date" name="due_date"></label><label>Priority${select('priority', ['low','normal','high','urgent'], 'normal')}</label><input type="hidden" name="status" value="todo"><input name="description" placeholder="Details"><button>Add task</button></form></section>`;
+    const editable = can(data, 'manage_tasks');
+    const disabled = editable ? '' : ' disabled';
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Tasks</h2></div>${tasks.map((task) => `<form data-api="/events/${data.event.id}/tasks/${task.id}" data-method="PATCH" class="row-form"><label>Task<input name="title" value="${esc(task.title)}"${disabled}></label><label>Status${select('status', ['todo','in_progress','blocked','done','canceled'], task.status).replace('<select ', `<select${disabled} `)}</label><label>Assigned${userSelect(data.users, task.assigned_user_id).replace('<select ', `<select${disabled} `)}</label><label>Due<input type="date" name="due_date" value="${esc(task.due_date || '')}"${disabled}></label><label>Priority${select('priority', ['low','normal','high','urgent'], task.priority).replace('<select ', `<select${disabled} `)}</label><label>Details<input name="description" value="${esc(task.description || '')}"${disabled}></label>${editable ? `<button>Save</button><button type="button" class="secondary" data-complete="${esc(task.id)}">Done</button>` : ''}</form>`).join('') || emptyState('No tasks for this event.')}
+    ${editable ? `<form data-api="/events/${data.event.id}/tasks" data-method="POST" class="row-form"><label>Task<input name="title" required placeholder="Confirm door count"></label><label>Assigned${userSelect(data.users)}</label><label>Due<input type="date" name="due_date"></label><label>Priority${select('priority', ['low','normal','high','urgent'], 'normal')}</label><input type="hidden" name="status" value="todo"><input name="description" placeholder="Details"><button>Add task</button></form>` : ''}</section>`;
+    if (!editable) return;
     this.bind();
   }
 
@@ -606,8 +630,11 @@ class LineupEditor extends HTMLElement {
   set data(data) {
     this.eventData = data;
     const lineup = data.lineup || [];
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Lineup</h2></div>${lineup.map((item) => `<form data-api="/events/${data.event.id}/lineup/${item.id}" data-method="PATCH" class="row-form"><input name="billing_order" type="number" value="${esc(item.billing_order)}"><input name="display_name" value="${esc(item.display_name)}"><input name="set_time" type="time" value="${esc(item.set_time || '')}"><input name="set_length_minutes" type="number" value="${esc(item.set_length_minutes || '')}">${select('status', ['invited','tentative','confirmed','canceled'], item.status)}<input name="payout_terms" value="${esc(item.payout_terms || '')}"><input name="notes" value="${esc(item.notes || '')}"><button>Save</button></form>`).join('')}
-    <form data-api="/events/${data.event.id}/lineup" data-method="POST" class="row-form"><input name="band_name" placeholder="Band/artist"><input name="display_name" placeholder="Display name"><input name="billing_order" type="number" placeholder="Order"><input name="set_time" type="time"><input name="set_length_minutes" type="number" placeholder="Minutes">${select('status', ['invited','tentative','confirmed','canceled'], 'tentative')}<input name="payout_terms" placeholder="Payout"><button>Add lineup</button></form></section>`;
+    const editable = can(data, 'manage_lineup');
+    const disabled = editable ? '' : ' disabled';
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Lineup</h2></div>${lineup.map((item) => `<form data-api="/events/${data.event.id}/lineup/${item.id}" data-method="PATCH" class="row-form"><input name="billing_order" type="number" value="${esc(item.billing_order)}"${disabled}><input name="display_name" value="${esc(item.display_name)}"${disabled}><input name="set_time" type="time" value="${esc(item.set_time || '')}"${disabled}><input name="set_length_minutes" type="number" value="${esc(item.set_length_minutes || '')}"${disabled}>${select('status', ['invited','tentative','confirmed','canceled'], item.status).replace('<select ', `<select${disabled} `)}<input name="payout_terms" value="${esc(item.payout_terms || '')}"${disabled}><input name="notes" value="${esc(item.notes || '')}"${disabled}>${editable ? '<button>Save</button>' : ''}</form>`).join('')}
+    ${editable ? `<form data-api="/events/${data.event.id}/lineup" data-method="POST" class="row-form"><input name="band_name" placeholder="Band/artist"><input name="display_name" placeholder="Display name"><input name="billing_order" type="number" placeholder="Order"><input name="set_time" type="time"><input name="set_length_minutes" type="number" placeholder="Minutes">${select('status', ['invited','tentative','confirmed','canceled'], 'tentative')}<input name="payout_terms" placeholder="Payout"><button>Add lineup</button></form>` : ''}</section>`;
+    if (!editable) return;
     this.bind();
   }
 
@@ -625,8 +652,11 @@ class RunSheet extends HTMLElement {
   set data(data) {
     this.eventData = data;
     const schedule = data.schedule || [];
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Run Sheet</h2></div>${schedule.map((item) => `<form data-api="/events/${data.event.id}/schedule/${item.id}" data-method="PATCH" class="row-form"><input name="title" value="${esc(item.title)}">${select('item_type', ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'], item.item_type)}<input type="time" name="start_time" value="${esc(item.start_time || '')}"><input type="time" name="end_time" value="${esc(item.end_time || '')}"><input name="notes" value="${esc(item.notes || '')}"><button>Save</button></form>`).join('')}
-    <form data-api="/events/${data.event.id}/schedule" data-method="POST" class="row-form"><input name="title" required placeholder="Schedule item">${select('item_type', ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'], 'other')}<input type="time" name="start_time"><input type="time" name="end_time"><input name="notes" placeholder="Notes"><button>Add item</button></form></section>`;
+    const editable = can(data, 'manage_schedule');
+    const disabled = editable ? '' : ' disabled';
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Run Sheet</h2></div>${schedule.map((item) => `<form data-api="/events/${data.event.id}/schedule/${item.id}" data-method="PATCH" class="row-form"><input name="title" value="${esc(item.title)}"${disabled}>${select('item_type', ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'], item.item_type).replace('<select ', `<select${disabled} `)}<input type="time" name="start_time" value="${esc(item.start_time || '')}"${disabled}><input type="time" name="end_time" value="${esc(item.end_time || '')}"${disabled}><input name="notes" value="${esc(item.notes || '')}"${disabled}>${editable ? '<button>Save</button>' : ''}</form>`).join('')}
+    ${editable ? `<form data-api="/events/${data.event.id}/schedule" data-method="POST" class="row-form"><input name="title" required placeholder="Schedule item">${select('item_type', ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'], 'other')}<input type="time" name="start_time"><input type="time" name="end_time"><input name="notes" placeholder="Notes"><button>Add item</button></form>` : ''}</section>`;
+    if (!editable) return;
     this.bind();
   }
 
@@ -644,8 +674,11 @@ class OpenItems extends HTMLElement {
   set data(data) {
     this.eventData = data;
     const items = data.blockers || [];
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Open Items</h2></div>${items.map((item) => `<form data-api="/events/${data.event.id}/open-items/${item.id}" data-method="PATCH" class="row-form"><label>Item<input name="title" value="${esc(item.title)}"></label><label>Status${select('status', ['open','waiting','resolved','canceled'], item.status)}</label><label>Due<input type="date" name="due_date" value="${esc(item.due_date || '')}"></label><label>Details<input name="description" value="${esc(item.description || '')}"></label><input type="hidden" name="owner_user_id" value="${esc(item.owner_user_id || '')}"><button>Save</button><button type="button" class="secondary" data-resolve="${esc(item.id)}">Mark Complete</button></form>`).join('') || emptyState('No open items for this event.')}
-    <form data-api="/events/${data.event.id}/open-items" data-method="POST" class="row-form"><label>Item<input name="title" required placeholder="Waiting on ticket link"></label><label>Details<input name="description" placeholder="Details"></label><input type="hidden" name="status" value="open"><input type="date" name="due_date"><button>Add open item</button></form></section>`;
+    const editable = can(data, 'manage_open_items');
+    const disabled = editable ? '' : ' disabled';
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Open Items</h2></div>${items.map((item) => `<form data-api="/events/${data.event.id}/open-items/${item.id}" data-method="PATCH" class="row-form"><label>Item<input name="title" value="${esc(item.title)}"${disabled}></label><label>Status${select('status', ['open','waiting','resolved','canceled'], item.status).replace('<select ', `<select${disabled} `)}</label><label>Due<input type="date" name="due_date" value="${esc(item.due_date || '')}"${disabled}></label><label>Details<input name="description" value="${esc(item.description || '')}"${disabled}></label><input type="hidden" name="owner_user_id" value="${esc(item.owner_user_id || '')}">${editable ? `<button>Save</button><button type="button" class="secondary" data-resolve="${esc(item.id)}">Mark Complete</button>` : ''}</form>`).join('') || emptyState('No open items for this event.')}
+    ${editable ? `<form data-api="/events/${data.event.id}/open-items" data-method="POST" class="row-form"><label>Item<input name="title" required placeholder="Waiting on ticket link"></label><label>Details<input name="description" placeholder="Details"></label><input type="hidden" name="status" value="open"><input type="date" name="due_date"><button>Add open item</button></form>` : ''}</section>`;
+    if (!editable) return;
     this.bind();
   }
 
@@ -671,8 +704,10 @@ class AssetManager extends HTMLElement {
   set data(data) {
     this.eventData = data;
     const assets = data.assets || [];
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets</h2></div><div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img src="${esc(assetUrl(asset.file_path))}" alt="">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(titleCase(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div class="inline-actions"><a class="button small secondary" href="${esc(assetUrl(asset.file_path))}" download>Download</a><button class="small" data-approve="${esc(asset.id)}">Approve</button><button class="small secondary" data-reject="${esc(asset.id)}">Reject</button><button class="small danger" data-delete="${esc(asset.id)}">Delete</button></div></article>`).join('') || emptyState('No assets uploaded yet.')}</div>
-    <form id="asset-form" class="row-form"><input name="title" placeholder="Asset title">${select('asset_type', ['flyer','poster','band_photo','logo','social_square','social_story','press_photo','other'], 'flyer')}<input type="file" name="asset" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.pdf" required><input name="notes" placeholder="Notes"><button>Upload asset</button></form></section>`;
+    const canManage = can(data, 'manage_assets');
+    const canUpload = can(data, 'upload_assets');
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets</h2></div><div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img src="${esc(assetUrl(asset.file_path))}" alt="">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(titleCase(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div class="inline-actions"><a class="button small secondary" href="${esc(assetUrl(asset.file_path))}" download>Download</a>${canManage ? `<button class="small" data-approve="${esc(asset.id)}">Approve</button><button class="small secondary" data-reject="${esc(asset.id)}">Reject</button><button class="small danger" data-delete="${esc(asset.id)}">Delete</button>` : ''}</div></article>`).join('') || emptyState('No assets uploaded yet.')}</div>
+    ${canUpload ? `<form id="asset-form" class="row-form"><input name="title" placeholder="Asset title">${select('asset_type', ['flyer','poster','band_photo','logo','social_square','social_story','press_photo','other'], 'flyer')}<input type="file" name="asset" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.pdf" required><input name="notes" placeholder="Notes"><button>Upload asset</button></form>` : ''}</section>`;
     this.bind();
   }
 

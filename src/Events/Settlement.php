@@ -13,6 +13,9 @@ final class Settlement extends BaseEndpoint
     public function handle(Request $request): Response
     {
         $eventId = $this->requireEventId();
+        if ($denied = $this->requireEventCapability($eventId, $request->method() === 'GET' ? 'view_settlement' : 'edit_settlement')) {
+            return $denied;
+        }
         return match ($request->method()) {
             'GET' => $this->ok(['settlement' => $this->db->one('SELECT * FROM event_settlements WHERE event_id = ?', [$eventId])]),
             'POST', 'PATCH' => $this->save($request, $eventId),

@@ -15,6 +15,14 @@ final class Assets extends BaseEndpoint
     {
         $eventId = $this->requireEventId();
         $assetId = (int) ($this->params['assetId'] ?? 0);
+        $capability = match ($request->method()) {
+            'GET' => 'read_event',
+            'POST' => 'upload_assets',
+            default => 'manage_assets',
+        };
+        if ($denied = $this->requireEventCapability($eventId, $capability)) {
+            return $denied;
+        }
         return match ($request->method()) {
             'GET' => $this->ok(['assets' => $this->db->all('SELECT * FROM event_assets WHERE event_id = ? ORDER BY created_at DESC', [$eventId])]),
             'POST' => $this->create($request, $eventId),

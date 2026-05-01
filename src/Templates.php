@@ -7,6 +7,9 @@ final class Templates extends BaseEndpoint
 {
     public function handle(Request $request): Response
     {
+        if ($denied = $this->requireGlobalCapability('manage_templates')) {
+            return $denied;
+        }
         return match ($request->method()) {
             'GET' => $this->index(),
             'POST' => $this->create($request),

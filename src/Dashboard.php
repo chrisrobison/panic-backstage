@@ -7,6 +7,7 @@ final class Dashboard extends BaseEndpoint
 {
     public function handle(Request $request): Response
     {
+        [$scopeSql, $scopeParams] = $this->eventScopeSql('e');
         $events = $this->db->all(
             "SELECT e.*, u.name owner_name,
               (SELECT title FROM event_blockers b WHERE b.event_id = e.id AND b.status IN ('open','waiting') ORDER BY due_date, id LIMIT 1) primary_blocker,
@@ -16,18 +17,22 @@ final class Dashboard extends BaseEndpoint
              FROM events e
              LEFT JOIN users u ON u.id = e.owner_user_id
              WHERE e.date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 14 DAY)
-             ORDER BY e.date, e.show_time"
+               AND $scopeSql
+             ORDER BY e.date, e.show_time",
+            $scopeParams
         );
-        $nextEmpty = $this->db->one("SELECT date FROM events WHERE date >= CURDATE() AND status IN ('empty','hold') ORDER BY date LIMIT 1");
-        $oldestUnsettled = $this->db->one("SELECT e.id, e.title, e.date FROM events e LEFT JOIN event_settlements s ON s.event_id = e.id WHERE e.status = 'completed' AND s.id IS NULL ORDER BY e.date LIMIT 1");
+        [$settlementSql, $settlementParams] = $this->settlementScopeSql();
+        $nextEmpty = $this->db->one("SELECT e.date FROM events e WHERE e.date >= CURDATE() AND e.status IN ('empty','hold') AND $scopeSql ORDER BY e.date LIMIT 1", $scopeParams);
+        $oldestUnsettled = $this->db->one("SELECT e.id, e.title, e.date FROM events e LEFT JOIN event_settlements s ON s.event_id = e.id WHERE e.status = 'completed' AND s.id IS NULL AND $scopeSql AND $settlementSql ORDER BY e.date LIMIT 1", array_merge($scopeParams, $settlementParams));
+        $events = array_map(fn ($event) => $event + ['capabilities' => $this->eventCapabilities((int) $event['id'])], $events);
         $cards = [
-            'empty' => $this->count("SELECT COUNT(*) c FROM events WHERE date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 14 DAY) AND status IN ('empty','hold')"),
-            'needsAssets' => $this->count("SELECT COUNT(*) c FROM events WHERE status IN ('confirmed','needs_assets') AND id NOT IN (SELECT event_id FROM event_assets WHERE asset_type='flyer' AND approval_status='approved')"),
-            'ready' => $this->count("SELECT COUNT(*) c FROM events WHERE status = 'ready_to_announce'"),
-            'blockers' => $this->count("SELECT COUNT(*) c FROM event_blockers WHERE status IN ('open','waiting')"),
-            'urgentItems' => $this->count("SELECT COUNT(*) c FROM event_blockers WHERE status IN ('open','waiting') AND due_date <= DATE_ADD(CURDATE(), INTERVAL 2 DAY)"),
-            'published' => $this->count("SELECT COUNT(*) c FROM events WHERE status = 'published' AND date >= CURDATE()"),
-            'unsettled' => $this->count("SELECT COUNT(*) c FROM events e LEFT JOIN event_settlements s ON s.event_id = e.id WHERE e.status = 'completed' AND s.id IS NULL"),
+            'empty' => $this->count("SELECT COUNT(*) c FROM events e WHERE e.date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 14 DAY) AND e.status IN ('empty','hold') AND $scopeSql", $scopeParams),
+            'needsAssets' => $this->count("SELECT COUNT(*) c FROM events e WHERE e.status IN ('confirmed','needs_assets') AND e.id NOT IN (SELECT event_id FROM event_assets WHERE asset_type='flyer' AND approval_status='approved') AND $scopeSql", $scopeParams),
+            'ready' => $this->count("SELECT COUNT(*) c FROM events e WHERE e.status = 'ready_to_announce' AND $scopeSql", $scopeParams),
+            'blockers' => $this->count("SELECT COUNT(*) c FROM event_blockers b JOIN events e ON e.id = b.event_id WHERE b.status IN ('open','waiting') AND $scopeSql", $scopeParams),
+            'urgentItems' => $this->count("SELECT COUNT(*) c FROM event_blockers b JOIN events e ON e.id = b.event_id WHERE b.status IN ('open','waiting') AND b.due_date <= DATE_ADD(CURDATE(), INTERVAL 2 DAY) AND $scopeSql", $scopeParams),
+            'published' => $this->count("SELECT COUNT(*) c FROM events e WHERE e.status = 'published' AND e.date >= CURDATE() AND $scopeSql", $scopeParams),
+            'unsettled' => $this->count("SELECT COUNT(*) c FROM events e LEFT JOIN event_settlements s ON s.event_id = e.id WHERE e.status = 'completed' AND s.id IS NULL AND $scopeSql AND $settlementSql", array_merge($scopeParams, $settlementParams)),
         ];
         return $this->ok([
             'cards' => $cards,
@@ -39,8 +44,19 @@ final class Dashboard extends BaseEndpoint
         ]);
     }
 
-    private function count(string $sql): int
+    private function count(string $sql, array $params = []): int
     {
-        return (int) ($this->db->one($sql)['c'] ?? 0);
+        return (int) ($this->db->one($sql, $params)['c'] ?? 0);
+    }
+
+    private function settlementScopeSql(): array
+    {
+        if ($this->isVenueAdmin()) {
+            return ['1=1', []];
+        }
+        return [
+            "(e.owner_user_id = ? OR EXISTS (SELECT 1 FROM event_collaborators ec_settle WHERE ec_settle.event_id = e.id AND ec_settle.user_id = ? AND ec_settle.role IN ('venue_admin','event_owner')))",
+            [$this->userId(), $this->userId()],
+        ];
     }
 }
