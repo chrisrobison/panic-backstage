@@ -1,30 +1,65 @@
 # Panic Backstage
 
-Panic Backstage is an internal venue-operations MVP for moving shows from idea to confirmed, announced, ticketed, staffed, performed, and settled.
+Panic Backstage is a dependency-light internal venue-operations MVP for moving shows from idea to confirmed, announced, ticketed, staffed, performed, and settled.
 
-It is intentionally server-rendered and hackable: Node.js, Express, MySQL, EJS, vanilla JavaScript, session auth, bcrypt, and local file uploads.
+The current implementation is PHP-first and API-first:
+
+- no Composer runtime dependencies
+- no npm or frontend build step
+- PHP 8 with a small custom endpoint kernel
+- PDO prepared statements for MySQL
+- native PHP sessions, password hashing, uploads, and CSRF tokens
+- static HTML/CSS/vanilla JS pages that call JSON endpoints under `/api`
+
+## Layout
+
+```text
+public/
+  index.html
+  login.html
+  event.html
+  invite.html
+  api/index.php
+  assets/app.css
+  assets/app.js
+
+src/
+  Kernel.php
+  Request.php
+  Response.php
+  Database.php
+  Auth.php
+  Dashboard.php
+  Events.php
+  Events/
+    Tasks.php
+    Blockers.php
+    Lineup.php
+    Schedule.php
+    Assets.php
+    Settlement.php
+    Invites.php
+
+database/
+  schema.sql
+  seed.php
+
+storage/
+  uploads/events/
+```
 
 ## Setup
 
 ```bash
-npm install
 cp .env.example .env
 ```
 
-Create a MySQL database user that can create/use the configured database, then update `.env` as needed.
+Update `.env` with MySQL credentials.
 
-## Database
-
-Load the schema manually:
+Create and seed the database:
 
 ```bash
-mysql -u root -p < schema.sql
-```
-
-Or run the seed script, which applies `schema.sql`, truncates MVP tables, and inserts sample data:
-
-```bash
-npm run seed
+php database/seed.php
 ```
 
 Seed admin login:
@@ -36,34 +71,42 @@ password: changeme
 
 ## Development
 
+Use PHP's built-in server for local development:
+
 ```bash
-npm run dev
+php -S localhost:8000 -t public public/router.php
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:8000`.
+
+For PHP-FPM/Nginx or Apache, serve `public/` as the web root and route `/api/*` to `public/api/index.php`.
+
+## API Routing
+
+The custom kernel maps constrained API paths to endpoint classes:
+
+```text
+GET /api/dashboard              -> src/Dashboard.php
+GET /api/events                 -> src/Events.php
+GET /api/events/{id}            -> src/Events.php
+POST /api/events/{id}/tasks     -> src/Events/Tasks.php
+PATCH /api/events/{id}/assets   -> src/Events/Assets.php
+GET /api/public/events/{slug}   -> src/PublicEvents.php
+```
+
+Endpoint classes return JSON only. Static pages render with vanilla JavaScript.
 
 ## Core Workflow
 
-- Use `/dashboard` to see the next 14 days, empty/hold nights, blockers, missing flyers, ready-to-announce shows, published events, and completed-but-unsettled events.
-- Create shows from `/events/new` or from default templates at `/templates`.
-- Use each event workspace to manage overview details, lineup, tasks, blockers, run sheet, assets, public page status, settlement, activity, and collaborator invites.
-- Public pages live at `/e/:slug` and only render when `public_visibility` is enabled.
-
-## Environment Variables
-
-- `PORT`
-- `NODE_ENV`
-- `SESSION_SECRET`
-- `DB_HOST`
-- `DB_PORT`
-- `DB_USER`
-- `DB_PASSWORD`
-- `DB_NAME`
+- `/` shows the operations dashboard after login.
+- Events can be created from scratch or from templates.
+- Each event workspace manages overview, lineup, tasks, blockers, run sheet, assets, settlement, and activity.
+- Public event pages are served by `public/event.html?slug=event-slug` and only load visible events from the public API.
 
 ## MVP Limitations
 
-- Stripe is represented by ticket fields only; no live Stripe API integration is included.
-- RBAC is intentionally basic and route-level. The service structure is ready for stricter per-field permissions.
-- File uploads use local disk storage under `/uploads/events/:eventId/`.
-- Invite links are placeholder magic links. They create or associate a user by email, but do not send email.
-- CSRF protection is enabled for standard form posts.
+- Stripe remains represented by ticket fields only.
+- Permissions are still intentionally basic.
+- Invite links are placeholders and do not send email.
+- Uploads use local disk storage under `storage/uploads/events/:eventId`.
+- The frontend is intentionally small vanilla JS; it is functional, not a full UI framework.
