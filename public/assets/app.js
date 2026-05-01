@@ -8,7 +8,10 @@ const app = $('#app');
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const titleCase = (v) => String(v || '').replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 const appScript = document.currentScript || $$('script[src*="assets/app.js"]').at(-1);
-const appBaseUrl = new URL('..', appScript ? appScript.src : location.href);
+const scriptUrl = appScript ? new URL(appScript.src) : new URL(location.href);
+const appBaseUrl = /\/public\/assets\/app\.js$/i.test(scriptUrl.pathname)
+  ? new URL('../..', scriptUrl)
+  : new URL('..', scriptUrl);
 const terminology = {
   openItemSingular: 'Open Item',
   openItemPlural: 'Open Items',

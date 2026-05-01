@@ -50,6 +50,9 @@ final class Kernel
     private function resolve(string $path): array
     {
         $path = $this->stripBasePath($path);
+        if (str_starts_with($path, '/public/')) {
+            $path = substr($path, strlen('/public')) ?: '/';
+        }
         $segments = array_values(array_filter(explode('/', trim($path, '/')), 'strlen'));
         if (($segments[0] ?? '') === 'api') {
             array_shift($segments);
