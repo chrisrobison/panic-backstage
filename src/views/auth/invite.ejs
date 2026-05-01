@@ -1,0 +1,10 @@
+<section class="panel narrow">
+  <h1>Join <%= invite.event_title %></h1>
+  <p>You were invited as <strong><%= invite.role.replaceAll('_', ' ') %></strong> using <%= invite.email %>.</p>
+  <form method="post" action="/invite/<%= invite.token %>" class="grid-form">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <label>Name <input name="name"></label>
+    <label>Password <input type="password" name="password" placeholder="Required for new accounts"></label>
+    <button>Accept invite</button>
+  </form>
+</section>

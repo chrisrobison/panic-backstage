@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= title %> | Mabuhay Show Pipeline</title>
+  <link rel="stylesheet" href="/public/css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/dashboard">Mabuhay Show Pipeline</a>
+    <% if (currentUser) { %>
+      <nav>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/events">Events</a>
+        <a href="/templates">Templates</a>
+      </nav>
+      <form method="post" action="/logout">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <span><%= currentUser.name %></span>
+        <button class="link-button">Logout</button>
+      </form>
+    <% } %>
+  </header>
+  <main class="container">
+    <% flash.error.forEach(function(message){ %><div class="flash error"><%= message %></div><% }) %>
+    <% flash.success.forEach(function(message){ %><div class="flash success"><%= message %></div><% }) %>
+    <%- body %>
+  </main>
+</body>
+</html>

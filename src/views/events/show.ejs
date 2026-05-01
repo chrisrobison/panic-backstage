@@ -1,0 +1,194 @@
+<div class="event-hero">
+  <div>
+    <p class="eyebrow"><%= event.date.toISOString ? event.date.toISOString().slice(0,10) : event.date %> · <%= event.event_type.replaceAll('_',' ') %></p>
+    <h1><%= event.title %></h1>
+    <div class="status-line"><%- include('../partials/status-badge', { status: event.status }) %><strong>Next:</strong> <%= nextAction %></div>
+  </div>
+  <div class="actions">
+    <a class="button secondary" href="/events/<%= event.id %>/edit">Edit</a>
+    <a class="button secondary" href="/events/<%= event.id %>/invites/new">Invite</a>
+    <% if (event.public_visibility) { %><a class="button" href="/e/<%= event.slug %>">Public page</a><% } %>
+  </div>
+</div>
+
+<section class="ops-grid">
+  <div class="ops-card <%= blockers.some(b => ['open','waiting'].includes(b.status)) ? 'danger' : '' %>"><strong><%= blockers.filter(b => ['open','waiting'].includes(b.status)).length %></strong><span>Open blockers</span></div>
+  <div class="ops-card"><strong><%= tasks.filter(t => !['done','canceled'].includes(t.status)).length %></strong><span>Incomplete tasks</span></div>
+  <div class="ops-card"><strong><%= assets.some(a => a.asset_type === 'flyer' && a.approval_status === 'approved') ? 'Ready' : 'Missing' %></strong><span>Approved flyer</span></div>
+  <div class="ops-card"><strong><%= event.public_visibility ? 'Live' : 'Internal' %></strong><span>Public page</span></div>
+  <div class="ops-card"><strong><%= event.ticket_url ? 'Linked' : (Number(event.ticket_price) > 0 ? 'Needed' : 'Free/door') %></strong><span>Ticket status</span></div>
+</section>
+
+<nav class="tabs">
+  <% ['overview','lineup','tasks','blockers','schedule','assets','public','settlement','activity'].forEach(tab => { %>
+    <a href="#<%= tab %>"><%= tab %></a>
+  <% }) %>
+</nav>
+
+<section id="overview" class="panel">
+  <h2>Overview</h2>
+  <div class="detail-grid">
+    <p><strong>Venue</strong><br><%= event.venue_name %></p>
+    <p><strong>Owner</strong><br><%= event.owner_name || 'Unassigned' %></p>
+    <p><strong>Doors / Show / End</strong><br><%= event.doors_time || '-' %> / <%= event.show_time || '-' %> / <%= event.end_time || '-' %></p>
+    <p><strong>Age</strong><br><%= event.age_restriction || '-' %></p>
+    <p><strong>Tickets</strong><br>$<%= event.ticket_price || 0 %> <%= event.ticket_url ? '· link configured' : '' %></p>
+    <p><strong>Capacity</strong><br><%= event.capacity || '-' %></p>
+  </div>
+  <h3>Public copy</h3><p><%= event.description_public || 'No public copy yet.' %></p>
+  <h3>Internal notes</h3><p><%= event.description_internal || 'No internal notes yet.' %></p>
+  <form method="post" action="/events/<%= event.id %>/status" class="inline-form">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <select name="status"><% enums.statuses.forEach(s => { %><option value="<%= s %>" <%= event.status===s?'selected':'' %>><%= s.replaceAll('_',' ') %></option><% }) %></select>
+    <button>Update status</button>
+  </form>
+</section>
+
+<section id="lineup" class="panel">
+  <h2>Lineup</h2>
+  <% lineup.forEach(item => { %>
+    <form method="post" action="/events/<%= event.id %>/lineup/<%= item.id %>" class="row-form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input name="billing_order" type="number" value="<%= item.billing_order %>">
+      <input name="display_name" value="<%= item.display_name %>">
+      <input name="set_time" type="time" value="<%= item.set_time || '' %>">
+      <input name="set_length_minutes" type="number" value="<%= item.set_length_minutes || '' %>" placeholder="min">
+      <select name="status"><% enums.lineupStatuses.forEach(s => { %><option value="<%= s %>" <%= item.status===s?'selected':'' %>><%= s %></option><% }) %></select>
+      <input name="payout_terms" value="<%= item.payout_terms || '' %>" placeholder="payout">
+      <input name="notes" value="<%= item.notes || '' %>" placeholder="notes">
+      <button>Save</button>
+    </form>
+    <form method="post" action="/events/<%= event.id %>/lineup/<%= item.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="link-button danger-text">Delete <%= item.display_name %></button></form>
+  <% }) %>
+  <form method="post" action="/events/<%= event.id %>/lineup" class="grid-form compact">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input name="band_name" placeholder="Band/artist name">
+    <input name="display_name" placeholder="Display name override">
+    <input name="billing_order" type="number" placeholder="Billing order">
+    <input name="set_time" type="time">
+    <input name="set_length_minutes" type="number" placeholder="Set minutes">
+    <select name="status"><% enums.lineupStatuses.forEach(s => { %><option value="<%= s %>"><%= s %></option><% }) %></select>
+    <input name="payout_terms" placeholder="Payout terms">
+    <input name="notes" placeholder="Notes">
+    <button>Add lineup</button>
+  </form>
+</section>
+
+<section id="tasks" class="panel">
+  <h2>Tasks</h2>
+  <% tasks.forEach(task => { %>
+    <form method="post" action="/events/<%= event.id %>/tasks/<%= task.id %>" class="row-form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input name="title" value="<%= task.title %>">
+      <select name="status"><% enums.taskStatuses.forEach(s => { %><option value="<%= s %>" <%= task.status===s?'selected':'' %>><%= s.replaceAll('_',' ') %></option><% }) %></select>
+      <select name="assigned_user_id"><option value="">Unassigned</option><% users.forEach(u => { %><option value="<%= u.id %>" <%= String(task.assigned_user_id)===String(u.id)?'selected':'' %>><%= u.name %></option><% }) %></select>
+      <input type="date" name="due_date" value="<%= task.due_date ? (task.due_date.toISOString ? task.due_date.toISOString().slice(0,10) : task.due_date) : '' %>">
+      <select name="priority"><% ['low','normal','high','urgent'].forEach(p => { %><option value="<%= p %>" <%= task.priority===p?'selected':'' %>><%= p %></option><% }) %></select>
+      <input name="description" value="<%= task.description || '' %>" placeholder="description">
+      <button>Save</button>
+    </form>
+    <form method="post" action="/events/<%= event.id %>/tasks/<%= task.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="link-button danger-text">Delete <%= task.title %></button></form>
+  <% }) %>
+  <form method="post" action="/events/<%= event.id %>/tasks" class="grid-form compact">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input name="title" required placeholder="New task">
+    <input name="description" placeholder="Description">
+    <select name="status"><% enums.taskStatuses.forEach(s => { %><option value="<%= s %>"><%= s.replaceAll('_',' ') %></option><% }) %></select>
+    <select name="assigned_user_id"><option value="">Unassigned</option><% users.forEach(u => { %><option value="<%= u.id %>"><%= u.name %></option><% }) %></select>
+    <input type="date" name="due_date">
+    <select name="priority"><option>normal</option><option>high</option><option>urgent</option><option>low</option></select>
+    <button>Add task</button>
+  </form>
+</section>
+
+<section id="blockers" class="panel">
+  <h2>Blockers</h2>
+  <% blockers.forEach(blocker => { %>
+    <form method="post" action="/events/<%= event.id %>/blockers/<%= blocker.id %>" class="row-form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input name="title" value="<%= blocker.title %>">
+      <select name="status"><% enums.blockerStatuses.forEach(s => { %><option value="<%= s %>" <%= blocker.status===s?'selected':'' %>><%= s %></option><% }) %></select>
+      <select name="owner_user_id"><option value="">No owner</option><% users.forEach(u => { %><option value="<%= u.id %>" <%= String(blocker.owner_user_id)===String(u.id)?'selected':'' %>><%= u.name %></option><% }) %></select>
+      <input type="date" name="due_date" value="<%= blocker.due_date ? (blocker.due_date.toISOString ? blocker.due_date.toISOString().slice(0,10) : blocker.due_date) : '' %>">
+      <input name="description" value="<%= blocker.description || '' %>">
+      <button>Save</button>
+    </form>
+    <% if (blocker.status !== 'resolved') { %><form method="post" action="/events/<%= event.id %>/blockers/<%= blocker.id %>/resolve"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="small">Resolve</button></form><% } %>
+  <% }) %>
+  <form method="post" action="/events/<%= event.id %>/blockers" class="grid-form compact">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input name="title" required placeholder="New blocker">
+    <input name="description" placeholder="Description">
+    <select name="owner_user_id"><option value="">No owner</option><% users.forEach(u => { %><option value="<%= u.id %>"><%= u.name %></option><% }) %></select>
+    <input type="date" name="due_date">
+    <button>Add blocker</button>
+  </form>
+</section>
+
+<section id="schedule" class="panel">
+  <h2>Run Sheet</h2>
+  <% schedule.forEach(item => { %>
+    <form method="post" action="/events/<%= event.id %>/schedule/<%= item.id %>" class="row-form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input name="title" value="<%= item.title %>">
+      <select name="item_type"><% enums.scheduleTypes.forEach(s => { %><option value="<%= s %>" <%= item.item_type===s?'selected':'' %>><%= s.replaceAll('_',' ') %></option><% }) %></select>
+      <input type="time" name="start_time" value="<%= item.start_time || '' %>">
+      <input type="time" name="end_time" value="<%= item.end_time || '' %>">
+      <input name="notes" value="<%= item.notes || '' %>">
+      <button>Save</button>
+    </form>
+    <form method="post" action="/events/<%= event.id %>/schedule/<%= item.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="link-button danger-text">Delete <%= item.title %></button></form>
+  <% }) %>
+  <form method="post" action="/events/<%= event.id %>/schedule" class="grid-form compact">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input name="title" required placeholder="Schedule item">
+    <select name="item_type"><% enums.scheduleTypes.forEach(s => { %><option value="<%= s %>"><%= s.replaceAll('_',' ') %></option><% }) %></select>
+    <input type="time" name="start_time"><input type="time" name="end_time">
+    <input name="notes" placeholder="Notes">
+    <button>Add item</button>
+  </form>
+</section>
+
+<section id="assets" class="panel">
+  <h2>Assets</h2>
+  <div class="asset-grid"><% assets.forEach(asset => { %>
+    <article class="asset-card">
+      <% if (/\.(png|jpg|jpeg|gif|webp)$/i.test(asset.filename)) { %><img src="<%= asset.file_path %>" alt=""><% } %>
+      <strong><%= asset.title %></strong><span><%= asset.asset_type %> · <%= asset.approval_status %></span>
+      <form method="post" action="/events/<%= event.id %>/assets/<%= asset.id %>/approve"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="small">Approve</button></form>
+      <form method="post" action="/events/<%= event.id %>/assets/<%= asset.id %>/reject"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="small secondary">Reject</button></form>
+    </article>
+  <% }) %></div>
+  <form method="post" action="/events/<%= event.id %>/assets" enctype="multipart/form-data" class="grid-form compact">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input name="title" placeholder="Asset title">
+    <select name="asset_type"><% enums.assetTypes.forEach(s => { %><option value="<%= s %>"><%= s.replaceAll('_',' ') %></option><% }) %></select>
+    <input type="file" name="asset" required>
+    <input name="notes" placeholder="Notes">
+    <button>Upload asset</button>
+  </form>
+</section>
+
+<section id="public" class="panel">
+  <h2>Public Page</h2>
+  <p>Status: <strong><%= event.public_visibility ? 'Visible' : 'Hidden' %></strong></p>
+  <p>Slug: <code>/e/<%= event.slug %></code></p>
+  <p><%= event.description_public || 'Add public copy before publishing.' %></p>
+</section>
+
+<section id="settlement" class="panel">
+  <h2>Settlement</h2>
+  <form method="post" action="/events/<%= event.id %>/settlement" class="grid-form">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <% ['gross_ticket_sales','tickets_sold','bar_sales','expenses','band_payouts','promoter_payout','venue_net'].forEach(field => { %>
+      <label><%= field.replaceAll('_',' ') %><input name="<%= field %>" type="number" step="0.01" value="<%= settlement ? settlement[field] : 0 %>"></label>
+    <% }) %>
+    <label class="wide">Notes <textarea name="notes"><%= settlement ? settlement.notes || '' : '' %></textarea></label>
+    <button>Save settlement</button>
+  </form>
+</section>
+
+<section id="activity" class="panel">
+  <h2>Activity</h2>
+  <ul class="timeline"><% activity.forEach(item => { %><li><strong><%= item.action %></strong> by <%= item.user_name || 'system' %> <span><%= item.created_at.toISOString ? item.created_at.toISOString().slice(0,16).replace('T',' ') : item.created_at %></span></li><% }) %></ul>
+</section>
