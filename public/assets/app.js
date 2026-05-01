@@ -7,6 +7,8 @@ const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selec
 const app = $('#app');
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const titleCase = (v) => String(v || '').replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+const appScript = document.currentScript || $$('script[src*="assets/app.js"]').at(-1);
+const appBaseUrl = new URL('..', appScript ? appScript.src : location.href);
 const terminology = {
   openItemSingular: 'Open Item',
   openItemPlural: 'Open Items',
@@ -30,11 +32,18 @@ const waitingOnText = (value) => {
   if (!text) return `${terminology.waitingOn} details`;
   return /^waiting on\b/i.test(text) ? text.replace(/^waiting on\b/i, 'Waiting on') : `Waiting on ${text}`;
 };
+const appUrl = (path = '') => new URL(path.replace(/^\/+/, ''), appBaseUrl).toString();
+const apiUrl = (path = '') => appUrl(`api/${path.replace(/^\/+/, '')}`);
+const assetUrl = (path = '') => {
+  const value = String(path || '');
+  if (/^(?:[a-z]+:|#)/i.test(value)) return value;
+  return appUrl(value);
+};
 
 async function api(path, options = {}) {
   const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
   if (csrf) headers['X-CSRF-Token'] = csrf;
-  const res = await fetch(`/api${path}`, { credentials: 'same-origin', ...options, headers: { ...headers, ...(options.headers || {}) } });
+  const res = await fetch(apiUrl(path), { credentials: 'same-origin', ...options, headers: { ...headers, ...(options.headers || {}) } });
   const body = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) throw new Error(body?.error || `Request failed: ${res.status}`);
   if (body?.csrf) csrf = body.csrf;
@@ -53,14 +62,14 @@ async function init() {
     const me = await api('/me');
     currentUser = me.user;
     csrf = me.csrf;
-    if (!currentUser) location.href = '/login.html';
+    if (!currentUser) location.href = appUrl('login.html');
   } catch {
-    location.href = '/login.html';
+    location.href = appUrl('login.html');
     return;
   }
   $('#logout')?.addEventListener('click', async () => {
     await api('/logout', { method: 'POST', body: '{}' });
-    location.href = '/login.html';
+    location.href = appUrl('login.html');
   });
   window.addEventListener('hashchange', route);
   route();
@@ -71,7 +80,7 @@ function initLogin() {
     event.preventDefault();
     try {
       await api('/login', { method: 'POST', body: JSON.stringify(formData(event.target)) });
-      location.href = '/';
+      location.href = appUrl();
     } catch (error) {
       $('#error').textContent = error.message;
     }
@@ -530,7 +539,7 @@ function scheduleSection(id, data) {
 }
 
 function assetsSection(id, data) {
-  return `<section id="assets" class="panel"><div class="section-head padded"><h2>Assets</h2></div><div class="asset-grid">${data.assets.map((a) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp)$/i.test(a.filename) ? `<img src="${esc(a.file_path)}" alt="">` : '<span class="asset-thumb">Asset</span>'}<strong>${esc(a.title)}</strong><span>${esc(titleCase(a.asset_type))} - ${esc(titleCase(a.approval_status))}</span><div><button class="small" onclick="approveAsset(${id},${a.id},'approved')">Approve</button> <button class="small secondary" onclick="approveAsset(${id},${a.id},'rejected')">Reject</button></div></article>`).join('')}</div>
+  return `<section id="assets" class="panel"><div class="section-head padded"><h2>Assets</h2></div><div class="asset-grid">${data.assets.map((a) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp)$/i.test(a.filename) ? `<img src="${esc(assetUrl(a.file_path))}" alt="">` : '<span class="asset-thumb">Asset</span>'}<strong>${esc(a.title)}</strong><span>${esc(titleCase(a.asset_type))} - ${esc(titleCase(a.approval_status))}</span><div><button class="small" onclick="approveAsset(${id},${a.id},'approved')">Approve</button> <button class="small secondary" onclick="approveAsset(${id},${a.id},'rejected')">Reject</button></div></article>`).join('')}</div>
   <form id="asset-form" class="row-form"><input name="title" placeholder="Asset title">${select('asset_type', ['flyer','poster','band_photo','logo','social_square','social_story','press_photo','other'], 'flyer')}<input type="file" name="asset" required><input name="notes" placeholder="Notes"><button>Upload asset</button></form></section>`;
 }
 
@@ -638,7 +647,7 @@ async function renderPublicEvent() {
   const slug = new URLSearchParams(location.search).get('slug');
   const data = await api(`/public/events/${encodeURIComponent(slug)}`);
   const e = data.event;
-  $('#public-event').innerHTML = `<article class="public-event">${data.flyer ? `<img class="public-flyer" src="${esc(data.flyer.file_path)}" alt="">` : ''}<div class="public-copy"><p class="eyebrow">${esc(e.date)} - ${esc(e.venue_name)}</p><h1>${esc(e.title)}</h1><p><strong>Doors</strong> ${esc(e.doors_time || 'TBA')} - <strong>Show</strong> ${esc(e.show_time || 'TBA')}</p><p>${esc(e.age_restriction || 'All ages unless noted')} - ${Number(e.ticket_price) > 0 ? `$${esc(e.ticket_price)}` : 'Free / door'}</p>${e.ticket_url ? `<a class="button" href="${esc(e.ticket_url)}">Tickets</a>` : ''}<p>${esc(e.description_public || '')}</p><h2>Lineup</h2><ul class="plain-list">${data.lineup.map((l) => `<li>${esc(l.display_name)} ${l.set_time ? `<span>${esc(l.set_time)}</span>` : ''}</li>`).join('')}</ul><p class="muted">${esc(e.address)}, ${esc(e.city)}, ${esc(e.state)}</p></div></article>`;
+  $('#public-event').innerHTML = `<article class="public-event">${data.flyer ? `<img class="public-flyer" src="${esc(assetUrl(data.flyer.file_path))}" alt="">` : ''}<div class="public-copy"><p class="eyebrow">${esc(e.date)} - ${esc(e.venue_name)}</p><h1>${esc(e.title)}</h1><p><strong>Doors</strong> ${esc(e.doors_time || 'TBA')} - <strong>Show</strong> ${esc(e.show_time || 'TBA')}</p><p>${esc(e.age_restriction || 'All ages unless noted')} - ${Number(e.ticket_price) > 0 ? `$${esc(e.ticket_price)}` : 'Free / door'}</p>${e.ticket_url ? `<a class="button" href="${esc(e.ticket_url)}">Tickets</a>` : ''}<p>${esc(e.description_public || '')}</p><h2>Lineup</h2><ul class="plain-list">${data.lineup.map((l) => `<li>${esc(l.display_name)} ${l.set_time ? `<span>${esc(l.set_time)}</span>` : ''}</li>`).join('')}</ul><p class="muted">${esc(e.address)}, ${esc(e.city)}, ${esc(e.state)}</p></div></article>`;
 }
 
 async function renderInvite() {
@@ -648,7 +657,7 @@ async function renderInvite() {
   $('#invite-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const res = await api(`/invite/${encodeURIComponent(token)}`, { method: 'POST', body: JSON.stringify(formData(event.target)) });
-    location.href = `/#event-${res.event_id}`;
+    location.href = appUrl(`#event-${res.event_id}`);
   });
 }
 

@@ -49,6 +49,7 @@ final class Kernel
 
     private function resolve(string $path): array
     {
+        $path = $this->stripBasePath($path);
         $segments = array_values(array_filter(explode('/', trim($path, '/')), 'strlen'));
         if (($segments[0] ?? '') === 'api') {
             array_shift($segments);
@@ -110,5 +111,16 @@ final class Kernel
     private function intOrNull(?string $value): ?int
     {
         return ctype_digit((string) $value) ? (int) $value : null;
+    }
+
+    private function stripBasePath(string $path): string
+    {
+        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+        $apiPrefix = preg_replace('#/api/index\.php$#', '', $scriptName);
+        $basePath = rtrim((string) (getenv('APP_BASE_PATH') ?: $apiPrefix), '/');
+        if ($basePath !== '' && $basePath !== '/' && str_starts_with($path, $basePath . '/')) {
+            return substr($path, strlen($basePath)) ?: '/';
+        }
+        return $path;
     }
 }

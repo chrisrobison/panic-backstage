@@ -41,7 +41,7 @@ final class Assets extends BaseEndpoint
         if (!move_uploaded_file($file['tmp_name'], $target)) {
             return Response::json(['error' => 'Could not store upload'], 500);
         }
-        $path = '/uploads/events/' . $eventId . '/' . $filename;
+        $path = 'uploads/events/' . $eventId . '/' . $filename;
         $id = $this->db->insert('INSERT INTO event_assets (event_id, asset_type, title, filename, original_filename, file_path, uploaded_by_user_id, approval_status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
             $eventId, $request->body('asset_type', 'other'), $request->body('title') ?: $file['name'], $filename, $file['name'], $path, $this->userId(), 'needs_review', $request->body('notes')
         ]);

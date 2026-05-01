@@ -152,13 +152,21 @@ http://localhost:8000
 
 The built-in router serves static files normally and dispatches `/api/*` to `public/api/index.php`.
 
+To smoke-test the app under a subdirectory path, set `APP_BASE_PATH`:
+
+```bash
+APP_BASE_PATH=/backstage php -S localhost:8000 -t public public/router.php
+```
+
+Then open `http://localhost:8000/backstage/`. Static assets, API calls, invite links, and uploaded media are resolved relative to the app base path instead of the server document root.
+
 ## Deployment Notes
 
 Use `public/` as the web root.
 
 For Apache, the included `public/.htaccess` routes API requests to `public/api/index.php`.
 
-For Nginx/PHP-FPM, route `/api/*` to `public/api/index.php` and serve static files from `public/`. Uploads should resolve through the `public/uploads` symlink to `storage/uploads`.
+For Nginx/PHP-FPM, route `/api/*` to `public/api/index.php` and serve static files from `public/`. If the app is mounted under a subdirectory such as `/backstage`, route that prefix to `public/` and set `APP_BASE_PATH=/backstage` if the server does not expose the prefix through `SCRIPT_NAME`. Uploads should resolve through the `public/uploads` symlink to `storage/uploads`.
 
 Keep `.env` outside version control. It is ignored by `.gitignore`.
 

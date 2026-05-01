@@ -25,6 +25,6 @@ final class Invites extends BaseEndpoint
         $this->db->insert('INSERT INTO event_invites (event_id, email, role, token, expires_at) VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 14 DAY))', [
             $eventId, $request->body('email'), $request->body('role', 'viewer'), $token
         ]);
-        return $this->ok(['token' => $token, 'url' => '/invite.html?token=' . $token]);
+        return $this->ok(['token' => $token, 'url' => 'invite.html?token=' . $token]);
     }
 }
