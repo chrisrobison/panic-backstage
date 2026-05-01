@@ -1,6 +1,6 @@
-# Mabuhay Show Pipeline
+# Panic Backstage
 
-Mabuhay Show Pipeline is an internal venue-operations MVP for moving shows from idea to confirmed, announced, ticketed, staffed, performed, and settled.
+Panic Backstage is an internal venue-operations MVP for moving shows from idea to confirmed, announced, ticketed, staffed, performed, and settled.
 
 It is intentionally server-rendered and hackable: Node.js, Express, MySQL, EJS, vanilla JavaScript, session auth, bcrypt, and local file uploads.
 
