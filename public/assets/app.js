@@ -1,4 +1,16 @@
-let csrf = null;
+// ── JWT token storage ────────────────────────────────────────────────────────
+const TOKEN_KEY   = 'backstage_access_token';
+const REFRESH_KEY = 'backstage_refresh_token';
+const getToken        = () => localStorage.getItem(TOKEN_KEY);
+const getRefreshToken = () => localStorage.getItem(REFRESH_KEY);
+const setTokens = (access, refresh) => {
+  localStorage.setItem(TOKEN_KEY, access);
+  if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
+};
+const clearTokens = () => {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_KEY);
+};
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -37,17 +49,52 @@ function subscribe(topic, handler, signal) {
 
 async function api(path, options = {}) {
   publish('events.requested', { path });
-  const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
-  if (csrf) headers['X-CSRF-Token'] = csrf;
-  const response = await fetch(apiUrl(path), { credentials: 'same-origin', ...options, headers: { ...headers, ...(options.headers || {}) } });
+  const doFetch = async (token) => {
+    const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return fetch(apiUrl(path), { ...options, headers: { ...headers, ...(options.headers || {}) } });
+  };
+
+  let response = await doFetch(getToken());
+
+  // On 401, attempt a silent token refresh then retry once
+  if (response.status === 401) {
+    const newToken = await tryRefresh();
+    if (newToken) {
+      response = await doFetch(newToken);
+    } else {
+      clearTokens();
+      location.href = appUrl('login.html');
+      throw new Error('Session expired');
+    }
+  }
+
   const body = response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) {
     const message = body?.error || `Request failed: ${response.status}`;
     publish('api.error', { message, path });
     throw new Error(message);
   }
-  if (body?.csrf) csrf = body.csrf;
   return body;
+}
+
+async function tryRefresh() {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+  try {
+    const response = await fetch(apiUrl('/auth/refresh'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data.access_token) {
+      setTokens(data.access_token, data.refresh_token);
+      return data.access_token;
+    }
+  } catch { /* network error */ }
+  return null;
 }
 
 function formData(form) {
@@ -188,26 +235,52 @@ class ToastStack extends PanicElement {
 }
 
 class LoginPage extends PanicElement {
-  connect() {
+  async connect() {
+    // If a magic-link token is in the URL, verify it immediately
+    const token = new URLSearchParams(location.search).get('token');
+    if (token) {
+      this.innerHTML = `<main class="auth-card"><pb-loading-state label="Signing you in"></pb-loading-state></main>`;
+      try {
+        const data = await api('/auth/verify', { method: 'POST', body: JSON.stringify({ token }) });
+        setTokens(data.access_token, data.refresh_token);
+        publish('auth.changed', data);
+        location.href = appUrl();
+      } catch {
+        this.showEmailForm('That login link is invalid or has already been used. Request a new one below.');
+      }
+      return;
+    }
+    this.showEmailForm();
+  }
+
+  showEmailForm(notice = '') {
     this.innerHTML = `<main class="auth-card">
       <h1>Panic Backstage</h1>
-      <p class="muted">Mabuhay Gardens demo workspace</p>
-      <form class="stack">
-        <label>Email <input type="email" name="email" value="admin@mabuhay.local" required autofocus></label>
-        <label>Password <input type="password" name="password" value="changeme" required></label>
-        <button>Login</button>
+      <p class="muted">Enter your email and we'll send you a login link.</p>
+      ${notice ? `<p class="error-text">${esc(notice)}</p>` : ''}
+      <form class="stack" data-form="request">
+        <label>Email <input type="email" name="email" required autofocus placeholder="you@example.com"></label>
+        <button>Send login link</button>
         <p class="error-text" data-error></p>
       </form>
     </main>
     <pb-toast-stack></pb-toast-stack>`;
     $('form', this).addEventListener('submit', async (event) => {
       event.preventDefault();
+      const btn = $('button', event.target);
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
       try {
-        const body = await api('/login', { method: 'POST', body: JSON.stringify(formData(event.target)) });
-        publish('auth.changed', body);
-        location.href = appUrl();
+        await api('/auth/magic-link', { method: 'POST', body: JSON.stringify(formData(event.target)) });
+        this.innerHTML = `<main class="auth-card">
+          <h1>Check your email</h1>
+          <p>A login link is on its way. It expires in 15 minutes.</p>
+          <p class="muted">Didn't get it? Check your spam folder, or <a href="${esc(appUrl('login.html'))}">request another link</a>.</p>
+        </main>`;
       } catch (error) {
         $('[data-error]', this).textContent = error.message;
+        btn.disabled = false;
+        btn.textContent = 'Send login link';
       }
     });
   }
@@ -224,7 +297,6 @@ class AppShell extends PanicElement {
     window.addEventListener('hashchange', () => this.route(), { signal: this.abort.signal });
     try {
       const me = await api('/me');
-      csrf = me.csrf;
       this.user = me.user;
       this.capabilities = me.capabilities || {};
       publish('auth.changed', me);
@@ -270,7 +342,11 @@ class AppShell extends PanicElement {
     </nav>
     <pb-toast-stack></pb-toast-stack>`;
     $('#logout', this).addEventListener('click', async () => {
-      await api('/logout', { method: 'POST', body: '{}' });
+      const refreshToken = getRefreshToken();
+      if (refreshToken) {
+        await api('/auth/logout', { method: 'POST', body: JSON.stringify({ refresh_token: refreshToken }) }).catch(() => {});
+      }
+      clearTokens();
       location.href = appUrl('login.html');
     });
     $('[data-search]', this).addEventListener('input', (event) => publish('events.search', { query: event.target.value }));
@@ -803,10 +879,11 @@ class InviteAcceptance extends PanicElement {
     const token = new URLSearchParams(location.search).get('token');
     try {
       const data = await api(`/invite/${encodeURIComponent(token || '')}`);
-      this.innerHTML = `<main class="auth-card"><h1>Join ${esc(data.invite.event_title)}</h1><p>Invited as <strong>${esc(titleCase(data.invite.role))}</strong> using ${esc(data.invite.email)}.</p><form class="grid-form"><label>Name <input name="name" required></label><label>Password <input type="password" name="password" required></label><button>Accept Invite</button></form></main><pb-toast-stack></pb-toast-stack>`;
+      this.innerHTML = `<main class="auth-card"><h1>Join ${esc(data.invite.event_title)}</h1><p>Invited as <strong>${esc(titleCase(data.invite.role))}</strong> using ${esc(data.invite.email)}.</p><form class="grid-form"><label>Your name <input name="name" required placeholder="First and last name" autofocus></label><button>Accept Invite</button></form></main><pb-toast-stack></pb-toast-stack>`;
       $('form', this).addEventListener('submit', async (event) => {
         event.preventDefault();
         const result = await api(`/invite/${encodeURIComponent(token || '')}`, { method: 'POST', body: JSON.stringify(formData(event.target)) });
+        setTokens(result.access_token, result.refresh_token);
         location.href = appUrl(`#event-${result.event_id}`);
       });
     } catch (error) {
