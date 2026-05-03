@@ -14,28 +14,24 @@ final class Kernel
     public static function boot(string $root): self
     {
         Env::load($root . '/.env');
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            session_name('panic_backstage');
-            session_start();
-        }
         return new self($root, new Database(), new Auth());
     }
 
     public function handle(): Response
     {
         $request = Request::fromGlobals();
+
+        // Populate $auth->user() from Bearer token if present
+        $this->auth->authenticate($request);
+
         try {
             [$class, $params] = $this->resolve($request->path());
             if (!class_exists($class)) {
                 return Response::json(['error' => 'Endpoint not found'], 404);
             }
 
-            if (!$this->isPublic($class, $request) && !$this->auth->user()) {
+            if (!$this->isPublic($class) && !$this->auth->user()) {
                 return Response::json(['error' => 'Authentication required'], 401);
-            }
-
-            if (!$request->isSafeMethod() && !$this->isCsrfExempt($class) && !$this->auth->validCsrf($request)) {
-                return Response::json(['error' => 'Invalid CSRF token'], 419);
             }
 
             /** @var Endpoint $endpoint */
@@ -58,41 +54,55 @@ final class Kernel
             array_shift($segments);
         }
 
+        // Auth (all actions are POST; public at kernel level)
+        if ($segments[0] === 'auth') {
+            return [AuthEndpoint::class, ['action' => $segments[1] ?? '']];
+        }
+
+        // Current user info
         if ($segments === [] || $segments[0] === 'me') {
             return [Me::class, []];
         }
-        if ($segments[0] === 'login' || $segments[0] === 'logout') {
-            return [AuthEndpoint::class, ['action' => $segments[0]]];
-        }
-        if ($segments[0] === 'dashboard') {
-            return [Dashboard::class, []];
-        }
+
+        // Event templates
         if ($segments[0] === 'templates') {
             return [Templates::class, ['templateId' => $this->intOrNull($segments[1] ?? null)]];
         }
+
+        // Public event pages (unauthenticated)
         if ($segments[0] === 'public' && ($segments[1] ?? '') === 'events') {
             return [PublicEvents::class, ['slug' => $segments[2] ?? null]];
         }
+
+        // Invite acceptance (unauthenticated)
         if ($segments[0] === 'invite') {
             return [Invites::class, ['token' => $segments[1] ?? null]];
         }
+
+        // Dashboard
+        if ($segments[0] === 'dashboard') {
+            return [Dashboard::class, []];
+        }
+
+        // Events + sub-resources
         if ($segments[0] === 'events') {
             if (($segments[1] ?? '') === 'from-template') {
                 return [Events::class, ['fromTemplateId' => $this->intOrNull($segments[2] ?? null)]];
             }
             $eventId = $this->intOrNull($segments[1] ?? null);
-            $child = $segments[2] ?? null;
+            $child   = $segments[2] ?? null;
             $childId = $this->intOrNull($segments[3] ?? null);
             return match ($child) {
-                'tasks' => [Events\Tasks::class, ['eventId' => $eventId, 'taskId' => $childId]],
-                'blockers' => [Events\Blockers::class, ['eventId' => $eventId, 'blockerId' => $childId]],
-                'open-items' => [Events\Blockers::class, ['eventId' => $eventId, 'blockerId' => $childId]],
-                'lineup' => [Events\Lineup::class, ['eventId' => $eventId, 'lineupId' => $childId]],
-                'schedule' => [Events\Schedule::class, ['eventId' => $eventId, 'scheduleId' => $childId]],
-                'assets' => [Events\Assets::class, ['eventId' => $eventId, 'assetId' => $childId]],
+                'tasks'      => [Events\Tasks::class,    ['eventId' => $eventId, 'taskId'     => $childId]],
+                'blockers',
+                'open-items' => [Events\Blockers::class, ['eventId' => $eventId, 'blockerId'  => $childId]],
+                'lineup'     => [Events\Lineup::class,   ['eventId' => $eventId, 'lineupId'   => $childId]],
+                'schedule'   => [Events\Schedule::class, ['eventId' => $eventId, 'scheduleId' => $childId]],
+                'assets'     => [Events\Assets::class,   ['eventId' => $eventId, 'assetId'    => $childId]],
                 'settlement' => [Events\Settlement::class, ['eventId' => $eventId]],
-                'invites' => [Events\Invites::class, ['eventId' => $eventId, 'inviteId' => $childId]],
-                default => [Events::class, ['eventId' => $eventId]]
+                'invites'    => [Events\Invites::class,  ['eventId' => $eventId, 'inviteId'   => $childId]],
+                'stream'     => [Events\Stream::class,   ['eventId' => $eventId]],
+                default      => [Events::class,          ['eventId' => $eventId]],
             };
         }
 
@@ -100,15 +110,18 @@ final class Kernel
         return ["Panic\\$name", []];
     }
 
-    private function isPublic(string $class, Request $request): bool
+    /**
+     * Endpoints that do not require an authenticated user.
+     * AuthEndpoint handles its own token validation internally.
+     */
+    private function isPublic(string $class): bool
     {
-        return in_array($class, [AuthEndpoint::class, PublicEvents::class, Invites::class], true)
-            || ($class === Me::class && $request->method() === 'GET');
-    }
-
-    private function isCsrfExempt(string $class): bool
-    {
-        return $class === AuthEndpoint::class || $class === Invites::class;
+        return in_array($class, [
+            AuthEndpoint::class,
+            PublicEvents::class,
+            Invites::class,
+            Me::class,          // returns null user gracefully when unauthenticated
+        ], true);
     }
 
     private function intOrNull(?string $value): ?int
@@ -119,8 +132,8 @@ final class Kernel
     private function stripBasePath(string $path): string
     {
         $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
-        $apiPrefix = preg_replace('#/api/index\.php$#', '', $scriptName);
-        $basePath = rtrim((string) (($_SERVER['APP_BASE_PATH'] ?? '') ?: getenv('APP_BASE_PATH') ?: $apiPrefix), '/');
+        $apiPrefix  = preg_replace('#/api/index\.php$#', '', $scriptName);
+        $basePath   = rtrim((string) (($_SERVER['APP_BASE_PATH'] ?? '') ?: getenv('APP_BASE_PATH') ?: $apiPrefix), '/');
         if ($basePath !== '' && $basePath !== '/' && str_starts_with($path, $basePath . '/')) {
             return substr($path, strlen($basePath)) ?: '/';
         }
