@@ -2,3 +2,10 @@ RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^api/ api/index.php [L]
+
+# Increase upload limits to match the app's 10MB cap (mod_php only;
+# for PHP-FPM set upload_max_filesize in the pool .conf instead)
+<IfModule mod_php.c>
+  php_value upload_max_filesize 10M
+  php_value post_max_size 12M
+</IfModule>

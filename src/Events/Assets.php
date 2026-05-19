@@ -35,8 +35,14 @@ final class Assets extends BaseEndpoint
     private function create(Request $request, int $eventId): Response
     {
         $file = $request->files()['asset'] ?? null;
-        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            return Response::json(['error' => 'Upload failed'], 422);
+        $uploadError = $file['error'] ?? UPLOAD_ERR_NO_FILE;
+        if (!$file || $uploadError !== UPLOAD_ERR_OK) {
+            $message = match ($uploadError) {
+                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'File is too large — check your server upload_max_filesize setting (currently ' . ini_get('upload_max_filesize') . ')',
+                UPLOAD_ERR_NO_FILE => 'No file was received',
+                default => 'Upload failed (PHP error ' . $uploadError . ')',
+            };
+            return Response::json(['error' => $message], 422);
         }
         if (($file['size'] ?? 0) > 10 * 1024 * 1024) {
             return Response::json(['error' => 'Uploads must be 10MB or smaller'], 422);
@@ -44,12 +50,12 @@ final class Assets extends BaseEndpoint
         $mime = mime_content_type($file['tmp_name']) ?: '';
         $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
         if (!in_array($mime, $allowed, true)) {
-            return Response::json(['error' => 'Only images and PDFs can be uploaded'], 422);
+            return Response::json(['error' => 'Only images and PDFs are accepted (detected: ' . $mime . ')'], 422);
         }
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         $base = slugify(pathinfo($file['name'], PATHINFO_FILENAME));
         $filename = time() . '-' . bin2hex(random_bytes(4)) . '-' . $base . ($ext ? ".$ext" : '');
-        $dir = $this->root . '/storage/uploads/events/' . $eventId;
+        $dir = $this->root . '/public/uploads/events/' . $eventId;
         if (!is_dir($dir)) {
             mkdir($dir, 0775, true);
         }
@@ -81,7 +87,7 @@ final class Assets extends BaseEndpoint
         $this->db->run('DELETE FROM event_assets WHERE id=? AND event_id=?', [$assetId, $eventId]);
         if ($asset && !empty($asset['file_path'])) {
             $file = realpath($this->root . '/public/' . $asset['file_path']);
-            $uploads = realpath($this->root . '/storage/uploads');
+            $uploads = realpath($this->root . '/public/uploads');
             if ($file && $uploads && str_starts_with($file, $uploads) && is_file($file)) {
                 unlink($file);
             }
