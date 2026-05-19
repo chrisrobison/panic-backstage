@@ -4,12 +4,30 @@ declare(strict_types=1);
 namespace Panic;
 
 /**
- * Passwordless authentication endpoints.
+ * Authentication endpoints.
  *
- * POST /api/auth/magic-link          Request a magic-link email
- * POST /api/auth/verify              Exchange magic-link token → JWT pair
- * POST /api/auth/refresh             Exchange refresh token → new JWT pair (rotates token)
- * POST /api/auth/logout              Revoke a refresh token
+ * All routes are POST and publicly accessible at the Kernel level;
+ * endpoints that require a logged-in user enforce that internally.
+ *
+ * ── Magic-link (email) ──────────────────────────────────────────
+ * POST /api/auth/magic-link              Request a magic-link email
+ * POST /api/auth/verify                  Exchange token → JWT pair
+ *
+ * ── Password ────────────────────────────────────────────────────
+ * POST /api/auth/login                   Email + password → JWT pair
+ * POST /api/auth/set-password            Set / change password  [auth required]
+ *
+ * ── Passkeys (WebAuthn) ─────────────────────────────────────────
+ * POST /api/auth/passkey-register-begin  Start passkey registration [auth required]
+ * POST /api/auth/passkey-register-complete Finish registration    [auth required]
+ * POST /api/auth/passkey-login-begin     Start passkey login
+ * POST /api/auth/passkey-login-complete  Finish login → JWT pair
+ * POST /api/auth/passkeys                List user's passkeys       [auth required]
+ * POST /api/auth/remove-passkey          Delete a passkey           [auth required]
+ *
+ * ── Session ─────────────────────────────────────────────────────
+ * POST /api/auth/refresh                 Rotate refresh token → new JWT pair
+ * POST /api/auth/logout                  Revoke a refresh token
  */
 final class AuthEndpoint extends BaseEndpoint
 {
@@ -19,17 +37,27 @@ final class AuthEndpoint extends BaseEndpoint
             return Response::methodNotAllowed();
         }
         return match ($this->params['action'] ?? '') {
-            'magic-link' => $this->requestMagicLink($request),
-            'verify'     => $this->verify($request),
-            'refresh'    => $this->refresh($request),
-            'logout'     => $this->logout($request),
-            default      => $this->notFound(),
+            // Magic-link
+            'magic-link'               => $this->requestMagicLink($request),
+            'verify'                   => $this->verify($request),
+            // Password
+            'login'                    => $this->login($request),
+            'set-password'             => $this->setPassword($request),
+            // Passkeys
+            'passkey-register-begin'   => $this->passkeyRegisterBegin($request),
+            'passkey-register-complete'=> $this->passkeyRegisterComplete($request),
+            'passkey-login-begin'      => $this->passkeyLoginBegin($request),
+            'passkey-login-complete'   => $this->passkeyLoginComplete($request),
+            'passkeys'                 => $this->listPasskeys($request),
+            'remove-passkey'           => $this->removePasskey($request),
+            // Session
+            'refresh'                  => $this->refresh($request),
+            'logout'                   => $this->logout($request),
+            default                    => $this->notFound(),
         };
     }
 
-    // -------------------------------------------------------------------------
-    // Request a magic link
-    // -------------------------------------------------------------------------
+    // ─── Magic-link ───────────────────────────────────────────────────────────
 
     private function requestMagicLink(Request $request): Response
     {
@@ -58,13 +86,8 @@ final class AuthEndpoint extends BaseEndpoint
             . "If you did not request this you can safely ignore this email.\n"
         );
 
-        // Always return ok so we don't reveal whether the address is registered
         return $this->ok(['ok' => true]);
     }
-
-    // -------------------------------------------------------------------------
-    // Verify a magic-link token → issue JWT pair
-    // -------------------------------------------------------------------------
 
     private function verify(Request $request): Response
     {
@@ -92,7 +115,6 @@ final class AuthEndpoint extends BaseEndpoint
 
         $user = $this->db->one('SELECT * FROM users WHERE email = ? LIMIT 1', [$row['email']]);
         if (!$user) {
-            // First login for this address — create a minimal account
             $id   = $this->db->insert(
                 'INSERT INTO users (name, email, role) VALUES (?, ?, ?)',
                 [$row['email'], $row['email'], 'viewer']
@@ -103,9 +125,301 @@ final class AuthEndpoint extends BaseEndpoint
         return $this->ok($this->issueTokenPair($user));
     }
 
-    // -------------------------------------------------------------------------
-    // Refresh — rotate refresh token, issue new access token
-    // -------------------------------------------------------------------------
+    // ─── Password auth ────────────────────────────────────────────────────────
+
+    private function login(Request $request): Response
+    {
+        $email    = trim(strtolower((string) $request->body('email', '')));
+        $password = (string) $request->body('password', '');
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $password === '') {
+            return Response::json(['error' => 'Email and password are required'], 422);
+        }
+
+        $user = $this->db->one('SELECT * FROM users WHERE email = ? LIMIT 1', [$email]);
+        if (!$user || !$user['password_hash'] || !password_verify($password, (string) $user['password_hash'])) {
+            return Response::json(['error' => 'Invalid email or password'], 401);
+        }
+
+        return $this->ok($this->issueTokenPair($user));
+    }
+
+    private function setPassword(Request $request): Response
+    {
+        $currentUser = $this->auth->user();
+        if (!$currentUser) {
+            return Response::json(['error' => 'Authentication required'], 401);
+        }
+
+        $newPassword = (string) $request->body('password', '');
+        $curPassword = (string) $request->body('current_password', '');
+
+        if (strlen($newPassword) < 8) {
+            return Response::json(['error' => 'Password must be at least 8 characters'], 422);
+        }
+
+        $user = $this->db->one('SELECT * FROM users WHERE id = ? LIMIT 1', [$currentUser['id']]);
+
+        // If user already has a password, require the current one before changing
+        if ($user && $user['password_hash'] && !password_verify($curPassword, (string) $user['password_hash'])) {
+            return Response::json(['error' => 'Current password is incorrect'], 401);
+        }
+
+        $hash = password_hash($newPassword, PASSWORD_BCRYPT);
+        $this->db->run('UPDATE users SET password_hash = ? WHERE id = ?', [$hash, $currentUser['id']]);
+
+        return $this->ok(['ok' => true]);
+    }
+
+    // ─── Passkey registration ─────────────────────────────────────────────────
+
+    private function passkeyRegisterBegin(Request $request): Response
+    {
+        $currentUser = $this->auth->user();
+        if (!$currentUser) {
+            return Response::json(['error' => 'Authentication required'], 401);
+        }
+
+        $wc        = new Webauthn();
+        $challenge = $wc->generateChallenge();
+
+        $this->db->run(
+            'INSERT INTO webauthn_challenges (challenge, user_id, intent, expires_at)
+             VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))',
+            [$challenge, $currentUser['id'], 'register']
+        );
+
+        $user = $this->db->one('SELECT * FROM users WHERE id = ? LIMIT 1', [$currentUser['id']]);
+
+        // Exclude already-registered credentials so the authenticator doesn't create duplicates
+        $existing           = $this->db->all(
+            'SELECT credential_id, transports FROM passkeys WHERE user_id = ?',
+            [$currentUser['id']]
+        );
+        $excludeCredentials = array_map(fn ($pk) => [
+            'type'       => 'public-key',
+            'id'         => $pk['credential_id'],
+            'transports' => $pk['transports'] ? json_decode((string) $pk['transports'], true) : [],
+        ], $existing);
+
+        return $this->ok([
+            'challenge'               => $challenge,
+            'rp'                      => ['name' => $wc->getRpName(), 'id' => $wc->getRpId()],
+            'user'                    => [
+                'id'          => $wc->b64u(pack('N', (int) $currentUser['id'])),
+                'name'        => (string) ($user['email'] ?? ''),
+                'displayName' => (string) ($user['name'] ?? ''),
+            ],
+            'pubKeyCredParams'        => [
+                ['type' => 'public-key', 'alg' => -7],    // ES256 (P-256 ECDSA)
+                ['type' => 'public-key', 'alg' => -257],  // RS256
+            ],
+            'excludeCredentials'      => $excludeCredentials,
+            'authenticatorSelection'  => [
+                'authenticatorAttachment' => 'platform',
+                'residentKey'             => 'preferred',
+                'requireResidentKey'      => false,
+                'userVerification'        => 'preferred',
+            ],
+            'timeout'                 => 60000,
+            'attestation'             => 'none',
+        ]);
+    }
+
+    private function passkeyRegisterComplete(Request $request): Response
+    {
+        $currentUser = $this->auth->user();
+        if (!$currentUser) {
+            return Response::json(['error' => 'Authentication required'], 401);
+        }
+
+        $response = $request->body('response', null);
+        if (!is_array($response)) {
+            return Response::json(['error' => 'Credential response is required'], 422);
+        }
+
+        // Extract the challenge the browser echoed back inside clientDataJSON
+        $challenge = $this->extractChallenge((string) ($response['clientDataJSON'] ?? ''));
+        if ($challenge === '') {
+            return Response::json(['error' => 'Could not extract challenge'], 422);
+        }
+
+        $row = $this->db->one(
+            'SELECT * FROM webauthn_challenges
+             WHERE challenge = ? AND user_id = ? AND intent = ? AND expires_at > NOW()
+             LIMIT 1',
+            [$challenge, $currentUser['id'], 'register']
+        );
+        if (!$row) {
+            return Response::json(['error' => 'Invalid or expired registration challenge'], 401);
+        }
+        $this->db->run('DELETE FROM webauthn_challenges WHERE id = ?', [$row['id']]);
+
+        try {
+            $wc         = new Webauthn();
+            $credential = $wc->verifyRegistration($challenge, $response);
+
+            $name = trim((string) $request->body('name', 'Passkey'));
+            if ($name === '') $name = 'Passkey';
+
+            $this->db->insert(
+                'INSERT INTO passkeys (user_id, credential_id, public_key_pem, sign_count, transports, name)
+                 VALUES (?, ?, ?, ?, ?, ?)',
+                [
+                    (int) $currentUser['id'],
+                    $credential['credential_id'],
+                    $credential['public_key_pem'],
+                    $credential['sign_count'],
+                    $credential['transports'] ? json_encode($credential['transports']) : null,
+                    $name,
+                ]
+            );
+
+            return $this->ok(['ok' => true]);
+        } catch (\RuntimeException $e) {
+            return Response::json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    // ─── Passkey login ────────────────────────────────────────────────────────
+
+    private function passkeyLoginBegin(Request $request): Response
+    {
+        $wc        = new Webauthn();
+        $challenge = $wc->generateChallenge();
+
+        // If an email is provided, limit allowCredentials to credentials for that account
+        $allowCredentials = [];
+        $email            = trim(strtolower((string) $request->body('email', '')));
+        if ($email && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $user = $this->db->one('SELECT id FROM users WHERE email = ? LIMIT 1', [$email]);
+            if ($user) {
+                $rows = $this->db->all(
+                    'SELECT credential_id, transports FROM passkeys WHERE user_id = ?',
+                    [$user['id']]
+                );
+                $allowCredentials = array_map(fn ($pk) => [
+                    'type'       => 'public-key',
+                    'id'         => $pk['credential_id'],
+                    'transports' => $pk['transports'] ? json_decode((string) $pk['transports'], true) : [],
+                ], $rows);
+            }
+        }
+
+        $this->db->run(
+            'INSERT INTO webauthn_challenges (challenge, intent, expires_at)
+             VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE))',
+            [$challenge, 'login']
+        );
+
+        return $this->ok([
+            'challenge'        => $challenge,
+            'timeout'          => 60000,
+            'rpId'             => $wc->getRpId(),
+            'allowCredentials' => $allowCredentials,
+            'userVerification' => 'preferred',
+        ]);
+    }
+
+    private function passkeyLoginComplete(Request $request): Response
+    {
+        $response = $request->body('response', null);
+        $credId   = trim((string) $request->body('id', ''));
+
+        if (!is_array($response) || $credId === '') {
+            return Response::json(['error' => 'Credential data is required'], 422);
+        }
+
+        // Extract and look up the challenge
+        $challenge = $this->extractChallenge((string) ($response['clientDataJSON'] ?? ''));
+        if ($challenge === '') {
+            return Response::json(['error' => 'Could not extract challenge'], 422);
+        }
+
+        $row = $this->db->one(
+            'SELECT * FROM webauthn_challenges
+             WHERE challenge = ? AND user_id IS NULL AND intent = ? AND expires_at > NOW()
+             LIMIT 1',
+            [$challenge, 'login']
+        );
+        if (!$row) {
+            return Response::json(['error' => 'Invalid or expired login challenge'], 401);
+        }
+        $this->db->run('DELETE FROM webauthn_challenges WHERE id = ?', [$row['id']]);
+
+        // Look up the credential
+        $passkey = $this->db->one(
+            'SELECT * FROM passkeys WHERE credential_id = ? LIMIT 1',
+            [$credId]
+        );
+        if (!$passkey) {
+            return Response::json(['error' => 'Passkey not recognised'], 401);
+        }
+
+        try {
+            $wc          = new Webauthn();
+            $newSignCount = $wc->verifyAssertion($challenge, $response, $passkey);
+
+            $this->db->run(
+                'UPDATE passkeys SET sign_count = ?, last_used_at = NOW() WHERE id = ?',
+                [$newSignCount, $passkey['id']]
+            );
+
+            $user = $this->db->one('SELECT * FROM users WHERE id = ? LIMIT 1', [$passkey['user_id']]);
+            if (!$user) {
+                return Response::json(['error' => 'User account not found'], 401);
+            }
+
+            return $this->ok($this->issueTokenPair($user));
+        } catch (\RuntimeException $e) {
+            return Response::json(['error' => $e->getMessage()], 401);
+        }
+    }
+
+    // ─── Passkey management ───────────────────────────────────────────────────
+
+    private function listPasskeys(Request $request): Response
+    {
+        $currentUser = $this->auth->user();
+        if (!$currentUser) {
+            return Response::json(['error' => 'Authentication required'], 401);
+        }
+
+        $passkeys = $this->db->all(
+            'SELECT id, name, created_at, last_used_at
+             FROM passkeys
+             WHERE user_id = ?
+             ORDER BY created_at DESC',
+            [$currentUser['id']]
+        );
+
+        $user        = $this->db->one('SELECT password_hash FROM users WHERE id = ? LIMIT 1', [$currentUser['id']]);
+        $hasPassword = !empty($user['password_hash']);
+
+        return $this->ok(['passkeys' => $passkeys, 'has_password' => $hasPassword]);
+    }
+
+    private function removePasskey(Request $request): Response
+    {
+        $currentUser = $this->auth->user();
+        if (!$currentUser) {
+            return Response::json(['error' => 'Authentication required'], 401);
+        }
+
+        $id = (int) $request->body('id', 0);
+        if (!$id) {
+            return Response::json(['error' => 'Passkey id is required'], 422);
+        }
+
+        $this->db->run(
+            'DELETE FROM passkeys WHERE id = ? AND user_id = ?',
+            [$id, $currentUser['id']]
+        );
+
+        return $this->ok(['ok' => true]);
+    }
+
+    // ─── Session management ───────────────────────────────────────────────────
 
     private function refresh(Request $request): Response
     {
@@ -131,7 +445,6 @@ final class AuthEndpoint extends BaseEndpoint
             return Response::json(['error' => 'Invalid or expired refresh token'], 401);
         }
 
-        // Revoke the used token immediately (rotation prevents replay)
         $this->db->run(
             'UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = ?',
             [$row['id']]
@@ -147,10 +460,6 @@ final class AuthEndpoint extends BaseEndpoint
         return $this->ok($this->issueTokenPair($user));
     }
 
-    // -------------------------------------------------------------------------
-    // Logout — revoke a refresh token
-    // -------------------------------------------------------------------------
-
     private function logout(Request $request): Response
     {
         $token = trim((string) $request->body('refresh_token', ''));
@@ -163,34 +472,47 @@ final class AuthEndpoint extends BaseEndpoint
         return $this->ok(['ok' => true]);
     }
 
-    // -------------------------------------------------------------------------
-    // Shared: mint a fresh access + refresh token pair
-    // -------------------------------------------------------------------------
+    // ─── Shared helpers ───────────────────────────────────────────────────────
 
+    /** Mint a fresh access + refresh token pair for a user. */
     private function issueTokenPair(array $user): array
     {
         $refreshToken = $this->auth->generateToken(32);
 
         $this->db->insert(
             'INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-             VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 60 DAY))',
+             VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 180 DAY))',
             [(int) $user['id'], $this->auth->hashToken($refreshToken)]
         );
 
-        // Populate auth so globalCapabilities() resolves correctly
         $this->auth->setUser($user);
 
         return [
             'access_token'  => $this->auth->issueAccessToken($user),
             'refresh_token' => $refreshToken,
-            'expires_in'    => 3600,
+            'expires_in'    => 90 * 24 * 3600,  // 90 days in seconds
             'user'          => [
                 'id'    => (int) $user['id'],
-                'name'  => $user['name'],
-                'email' => $user['email'],
-                'role'  => $user['role'],
+                'name'  => (string) $user['name'],
+                'email' => (string) $user['email'],
+                'role'  => (string) $user['role'],
             ],
             'capabilities'  => $this->globalCapabilities(),
         ];
+    }
+
+    /**
+     * Extract and normalise the challenge embedded in a base64url-encoded clientDataJSON.
+     * Returns empty string on failure.
+     */
+    private function extractChallenge(string $clientDataJsonB64u): string
+    {
+        if ($clientDataJsonB64u === '') return '';
+        $pad     = strlen($clientDataJsonB64u) % 4;
+        $b64     = strtr($clientDataJsonB64u, '-_', '+/') . ($pad ? str_repeat('=', 4 - $pad) : '');
+        $decoded = json_decode((string) base64_decode($b64), true);
+        $raw     = (string) ($decoded['challenge'] ?? '');
+        // Normalise to unpadded base64url
+        return rtrim(strtr($raw, '+/', '-_'), '=');
     }
 }

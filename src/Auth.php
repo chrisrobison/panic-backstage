@@ -74,7 +74,7 @@ final class Auth
     // Token helpers
     // -------------------------------------------------------------------------
 
-    /** Issue a signed HS256 access token valid for 60 minutes. */
+    /** Issue a signed HS256 access token valid for 90 days. */
     public function issueAccessToken(array $user): string
     {
         return $this->buildJwt([
@@ -83,7 +83,7 @@ final class Auth
             'email' => $user['email'],
             'role'  => $user['role'],
             'iat'   => time(),
-            'exp'   => time() + 3600,
+            'exp'   => time() + (90 * 24 * 3600),  // 90 days
         ]);
     }
 
