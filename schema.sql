@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
-  password_hash VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(255) NULL DEFAULT NULL,
   role ENUM('venue_admin','event_owner','promoter','band','artist','designer','staff','viewer') NOT NULL DEFAULT 'viewer',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS venues (
 
 CREATE TABLE IF NOT EXISTS events (
   id INT AUTO_INCREMENT PRIMARY KEY,
+  external_id VARCHAR(50) DEFAULT NULL,          -- legacy tracker ID, e.g. EVT-1050
   venue_id INT NOT NULL,
   title VARCHAR(255) NOT NULL,
   slug VARCHAR(255) NOT NULL UNIQUE,
@@ -32,6 +33,8 @@ CREATE TABLE IF NOT EXISTS events (
   status ENUM('empty','proposed','hold','confirmed','needs_assets','ready_to_announce','published','advanced','completed','settled','canceled') NOT NULL DEFAULT 'proposed',
   description_public TEXT,
   description_internal TEXT,
+  referral_source VARCHAR(255) DEFAULT NULL,     -- who referred this booking inquiry
+  promoter_name VARCHAR(255) DEFAULT NULL,       -- organizer / promoter (free-text)
   date DATE NOT NULL,
   doors_time TIME,
   show_time TIME,
@@ -40,12 +43,14 @@ CREATE TABLE IF NOT EXISTS events (
   ticket_price DECIMAL(10,2) DEFAULT 0,
   ticket_url VARCHAR(500),
   capacity INT,
+  room ENUM('upstairs','downstairs','both') DEFAULT NULL,  -- room / floor at multi-space venues
   public_visibility TINYINT(1) NOT NULL DEFAULT 0,
   owner_user_id INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (venue_id) REFERENCES venues(id),
-  FOREIGN KEY (owner_user_id) REFERENCES users(id)
+  FOREIGN KEY (owner_user_id) REFERENCES users(id),
+  INDEX idx_events_external_id (external_id)
 );
 
 CREATE TABLE IF NOT EXISTS event_collaborators (
@@ -193,6 +198,56 @@ CREATE TABLE IF NOT EXISTS event_activity_log (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- One-time tokens for magic-link login (15-minute TTL)
+CREATE TABLE IF NOT EXISTS magic_link_tokens (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  email      VARCHAR(255) NOT NULL,
+  token_hash VARCHAR(255) NOT NULL UNIQUE,
+  expires_at TIMESTAMP NOT NULL,
+  used_at    TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_mlt_hash  (token_hash),
+  INDEX idx_mlt_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Long-lived refresh tokens (180-day TTL, rotated on each use)
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  user_id    INT NOT NULL,
+  token_hash VARCHAR(255) NOT NULL UNIQUE,
+  expires_at TIMESTAMP NOT NULL,
+  revoked_at TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_rt_hash (token_hash),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- WebAuthn registered credentials (passkeys)
+CREATE TABLE IF NOT EXISTS passkeys (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  user_id        INT NOT NULL,
+  credential_id  VARCHAR(1024) NOT NULL UNIQUE,
+  public_key_pem TEXT NOT NULL,
+  sign_count     BIGINT NOT NULL DEFAULT 0,
+  transports     VARCHAR(255) NULL,
+  name           VARCHAR(255) NOT NULL DEFAULT 'Passkey',
+  created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_used_at   TIMESTAMP NULL,
+  INDEX idx_passkeys_user (user_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Short-lived WebAuthn challenges (5-minute TTL)
+CREATE TABLE IF NOT EXISTS webauthn_challenges (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  challenge  VARCHAR(512) NOT NULL UNIQUE,
+  user_id    INT NULL,
+  intent     ENUM('register','login') NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_wc_challenge (challenge)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS event_invites (
   id INT AUTO_INCREMENT PRIMARY KEY,
   event_id INT NOT NULL,
@@ -203,4 +258,22 @@ CREATE TABLE IF NOT EXISTS event_invites (
   expires_at TIMESTAMP NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS event_guest_list (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  event_id INT NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  party_size INT NOT NULL DEFAULT 1,
+  list_type ENUM('comp','guest','will_call','vip','press','industry') NOT NULL DEFAULT 'guest',
+  guest_of VARCHAR(255) NULL,
+  notes TEXT NULL,
+  checked_in TINYINT(1) NOT NULL DEFAULT 0,
+  checked_in_at TIMESTAMP NULL,
+  created_by_user_id INT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_guest_event (event_id),
+  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
 );
