@@ -112,6 +112,20 @@ final class Events extends BaseEndpoint
             'blockers' => $blockers,
             'schedule' => $this->db->all('SELECT * FROM event_schedule_items WHERE event_id = ? ORDER BY start_time, id', [$id]),
             'assets' => $assets,
+            'collaborators' => $this->db->all(
+                'SELECT ec.id, ec.user_id, ec.role event_role, u.name, u.email
+                 FROM event_collaborators ec JOIN users u ON u.id = ec.user_id
+                 WHERE ec.event_id = ?
+                 ORDER BY FIELD(ec.role,"venue_admin","event_owner","promoter","staff","designer","band","artist","viewer"), u.name',
+                [$id]
+            ),
+            'guests' => $this->db->all(
+                'SELECT g.*, u.name created_by_name
+                 FROM event_guest_list g LEFT JOIN users u ON u.id = g.created_by_user_id
+                 WHERE g.event_id = ?
+                 ORDER BY g.list_type, g.name',
+                [$id]
+            ),
             'invites' => $this->hasEventCapability($id, 'manage_invites') ? $this->db->all('SELECT id, email, role, token, used_at, expires_at, created_at FROM event_invites WHERE event_id = ? ORDER BY created_at DESC', [$id]) : [],
             'settlement' => $settlement,
             'activity' => $this->db->all('SELECT a.*, u.name user_name FROM event_activity_log a LEFT JOIN users u ON u.id = a.user_id WHERE a.event_id = ? ORDER BY a.created_at DESC LIMIT 80', [$id]),

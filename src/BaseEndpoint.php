@@ -10,22 +10,24 @@ abstract class BaseEndpoint implements Endpoint
             'read_event', 'edit_event', 'publish_event', 'delete_event',
             'manage_lineup', 'manage_tasks', 'manage_schedule', 'manage_open_items',
             'upload_assets', 'manage_assets', 'manage_invites',
+            'manage_guest_list',
             'view_settlement', 'edit_settlement',
         ],
         'event_owner' => [
             'read_event', 'edit_event', 'publish_event', 'delete_event',
             'manage_lineup', 'manage_tasks', 'manage_schedule', 'manage_open_items',
             'upload_assets', 'manage_assets', 'manage_invites',
+            'manage_guest_list',
             'view_settlement', 'edit_settlement',
         ],
         'promoter' => [
             'read_event', 'manage_lineup', 'manage_tasks', 'manage_schedule',
-            'manage_open_items', 'view_public_page',
+            'manage_open_items', 'manage_guest_list', 'view_public_page',
         ],
         'band' => ['read_event', 'upload_assets', 'view_assigned_tasks'],
         'artist' => ['read_event', 'upload_assets', 'view_assigned_tasks'],
         'designer' => ['read_event', 'upload_assets', 'manage_assets'],
-        'staff' => ['read_event', 'manage_tasks', 'manage_schedule', 'manage_open_items'],
+        'staff' => ['read_event', 'manage_tasks', 'manage_schedule', 'manage_open_items', 'manage_guest_list'],
         'viewer' => ['read_event'],
     ];
 
@@ -33,6 +35,7 @@ abstract class BaseEndpoint implements Endpoint
         'read_event', 'edit_event', 'publish_event', 'delete_event',
         'manage_lineup', 'manage_tasks', 'manage_schedule', 'manage_open_items',
         'upload_assets', 'manage_assets', 'manage_invites',
+        'manage_guest_list',
         'view_settlement', 'edit_settlement', 'view_public_page', 'view_assigned_tasks',
     ];
 

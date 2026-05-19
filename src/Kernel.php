@@ -101,6 +101,7 @@ final class Kernel
                 'assets'     => [Events\Assets::class,   ['eventId' => $eventId, 'assetId'    => $childId]],
                 'settlement' => [Events\Settlement::class, ['eventId' => $eventId]],
                 'invites'    => [Events\Invites::class,  ['eventId' => $eventId, 'inviteId'   => $childId]],
+                'guest-list' => [Events\GuestList::class, ['eventId' => $eventId, 'guestId'   => $childId]],
                 'stream'     => [Events\Stream::class,   ['eventId' => $eventId]],
                 default      => [Events::class,          ['eventId' => $eventId]],
             };
