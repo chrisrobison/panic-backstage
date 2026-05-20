@@ -3,11 +3,15 @@
 #
 #   TEST_BASE_URL  override the site URL (defaults to APP_URL from .env)
 #   TEST_EMAIL     email used for the magic-link round-trip (default below)
+#
+# NOTE: the magic-link endpoint only mails users who already exist (or who
+# have an open event_invites row), so the default test email must be a real
+# seeded account. Override TEST_EMAIL if your local DB uses a different one.
 . "$(dirname "$0")/lib.sh"
 
 require_cmd curl php grep sed
 
-TEST_EMAIL="${TEST_EMAIL:-backstage-test@example.com}"
+TEST_EMAIL="${TEST_EMAIL:-admin@mabuhay.local}"
 
 # Sanity: BASE_URL must be reachable and serve /api/me as JSON.
 status="$(http_get /api/me)"
