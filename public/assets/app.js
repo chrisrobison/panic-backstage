@@ -929,6 +929,132 @@ function openCredentialSetupModal(user, onChange) {
   bind();
 }
 
+// ── Quick-create event modal ─────────────────────────────────────────────────
+//
+// Friction-reducing entry point for new events: opened from a calendar day
+// cell, the topbar "+ New event" button, or any other future affordance.
+// Picks an event template (or "Blank event"), pre-fills sensible defaults,
+// posts to /events/from-template/{id} or /events, then jumps to the new
+// event's workspace.
+
+async function openEventQuickCreate({ date = null } = {}) {
+  if (document.querySelector('[data-event-quick-create-modal]')) return;
+  const isoToday = isoDate(new Date());
+  const startDate = date || isoToday;
+
+  const dialog = document.createElement('div');
+  dialog.className = 'modal-backdrop';
+  dialog.setAttribute('data-event-quick-create-modal', '');
+  dialog.innerHTML = `<div class="modal-card">
+    <div class="section-head padded"><h2>New event</h2><button class="small secondary" data-close type="button">Close</button></div>
+    <div class="padded"><pb-loading-state label="Loading templates"></pb-loading-state></div>
+  </div>`;
+  document.body.appendChild(dialog);
+
+  const close = () => dialog.remove();
+  $('[data-close]', dialog).addEventListener('click', close);
+  dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
+  document.addEventListener('keydown', function onEsc(e) {
+    if (e.key === 'Escape') { document.removeEventListener('keydown', onEsc); close(); }
+  });
+
+  let data;
+  try {
+    data = await api('/templates');
+  } catch (err) {
+    dialog.querySelector('.modal-card .padded').innerHTML = `<p class="error-text">${esc(err.message || 'Could not load templates.')}</p>`;
+    return;
+  }
+
+  const templates = data.templates || [];
+  const venues    = data.venues    || [];
+  const types     = data.types     || ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'];
+  // Default to "General Event" if it exists, else the first template.
+  const defaultTemplate = templates.find((t) => t.name === 'General Event') || templates[0];
+
+  const body = dialog.querySelector('.modal-card .padded');
+  body.innerHTML = `<form class="grid-form" data-form="quick-create">
+    <label class="wide">Template
+      <select name="template_id">
+        ${templates.map((t) => `<option value="${esc(t.id)}" ${defaultTemplate && Number(t.id) === Number(defaultTemplate.id) ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
+        <option value="">— Blank event —</option>
+      </select>
+    </label>
+
+    <label>Date <input type="date" name="date" required value="${esc(startDate)}"></label>
+    <label class="wide">Title <input name="title" required value="${esc(defaultTemplate?.default_title || defaultTemplate?.name || '')}" placeholder="Event title"></label>
+    <label>Doors <input type="time" name="doors_time" value="19:00"></label>
+    <label>Show <input type="time" name="show_time" value="20:00"></label>
+
+    <fieldset class="quick-create-blank-fields" hidden>
+      <label>Venue <select name="venue_id">${venues.map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join('')}</select></label>
+      <label>Type <select name="event_type">${types.map((t) => `<option value="${esc(t)}">${esc(titleCase(t))}</option>`).join('')}</select></label>
+    </fieldset>
+
+    <div class="wide quick-create-actions">
+      <button type="submit" class="primary">Create event</button>
+      <button type="button" class="secondary" data-close>Cancel</button>
+    </div>
+    <p class="error-text wide" data-error></p>
+  </form>`;
+
+  // Make the second "Cancel" close button work, too.
+  $$('[data-close]', dialog).forEach((btn) => btn.addEventListener('click', close));
+
+  const form          = $('[data-form="quick-create"]', dialog);
+  const templateSelect = $('select[name="template_id"]', form);
+  const titleInput    = $('input[name="title"]', form);
+  const blankFields   = $('.quick-create-blank-fields', form);
+
+  // Keep the title in sync with the chosen template's default until the user
+  // edits it manually. Show the venue/type fields when "Blank event" is picked.
+  let titleEdited = false;
+  titleInput.addEventListener('input', () => { titleEdited = true; });
+  templateSelect.addEventListener('change', () => {
+    const id = templateSelect.value;
+    const chosen = templates.find((t) => String(t.id) === id);
+    if (!titleEdited) {
+      titleInput.value = chosen?.default_title || chosen?.name || '';
+    }
+    blankFields.hidden = Boolean(id);
+    if (!id) {
+      blankFields.querySelectorAll('select').forEach((select) => select.required = true);
+    } else {
+      blankFields.querySelectorAll('select').forEach((select) => select.required = false);
+    }
+  });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const submit = $('button[type="submit"]', form);
+    submit.disabled = true;
+    submit.textContent = 'Creating…';
+    $('[data-error]', form).textContent = '';
+    const fd = formData(form);
+    try {
+      let created;
+      if (fd.template_id) {
+        const id = Number(fd.template_id);
+        delete fd.template_id; delete fd.venue_id; delete fd.event_type;
+        created = await api(`/events/from-template/${id}`, { method: 'POST', body: JSON.stringify(fd) });
+      } else {
+        delete fd.template_id;
+        // Blank-event path uses /events POST which needs venue_id + event_type.
+        fd.status = 'proposed';
+        created = await api('/events', { method: 'POST', body: JSON.stringify(fd) });
+      }
+      publish('toast.show', { message: `Created "${fd.title}".`, tone: 'success' });
+      publish('event.saved', { id: created.id });
+      close();
+      location.hash = `event-${created.id}`;
+    } catch (err) {
+      $('[data-error]', form).textContent = err.message || 'Could not create event.';
+      submit.disabled = false;
+      submit.textContent = 'Create event';
+    }
+  });
+}
+
 function renderCredentialSetupBody(user, isRefresh = false) {
   const passkeySupported = Boolean(window.PublicKeyCredential);
   const name = user?.name || user?.email || 'there';
@@ -1038,6 +1164,7 @@ class AppShell extends PanicElement {
     <header class="topbar">
       <a class="mobile-brand" href="#dashboard"><span class="brand-mark"></span><span>Panic Backstage</span></a>
       <label class="search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input data-search placeholder="Search events..." aria-label="Search events"></label>
+      <button class="topbar-create" data-action="new-event" type="button" title="Create event" aria-label="Create event"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>New event</span></button>
       <span class="session-pill" data-user-pill>…</span>
       <a href="#account" class="logout" style="text-decoration:none">Account</a>
       <button id="logout" class="logout">Logout</button>
@@ -1063,11 +1190,15 @@ class AppShell extends PanicElement {
       location.href = appUrl('login.html');
     });
     $('[data-search]', this).addEventListener('input', (event) => publish('events.search', { query: event.target.value }));
+    $('[data-action="new-event"]', this).addEventListener('click', () => openEventQuickCreate());
   }
 
   applyCapabilities() {
     if (!this.capabilities?.manage_templates) {
       $$('[data-nav="templates"]', this).forEach((link) => link.remove());
+    }
+    if (!this.capabilities?.create_events) {
+      $$('[data-action="new-event"]', this).forEach((btn) => btn.remove());
     }
     if (!this.capabilities?.manage_users && !this.capabilities?.manage_staff_roster && !this.capabilities?.manage_templates) {
       $$('[data-nav="admin"]', this).forEach((link) => link.remove());
@@ -1164,6 +1295,7 @@ class EventCalendar extends PanicElement {
     try {
       const data = await api(`/events?start_date=${isoDate(start)}&end_date=${isoDate(end)}`);
       publish('events.loaded', data);
+      this.canCreate = Boolean(data?.capabilities?.create_events);
       this.render(data.events || [], start);
     } catch (error) {
       this.showError(error);
@@ -1172,8 +1304,9 @@ class EventCalendar extends PanicElement {
 
   render(events, start) {
     const days = Array.from({ length: 42 }, (_, index) => addDays(start, index));
+    const createable = this.canCreate ? ' calendar-clickable' : '';
     this.innerHTML = `<section class="calendar-page">
-      <div class="page-head"><div><h1>Calendar</h1><p class="subtle">Dynamic booking window for Mabuhay Gardens.</p></div><a class="button" href="#templates">Program a Night</a></div>
+      <div class="page-head"><div><h1>Calendar</h1><p class="subtle">Dynamic booking window for Mabuhay Gardens.${this.canCreate ? ' <span class="muted small">Click any day to create.</span>' : ''}</p></div>${this.canCreate ? '<button class="button" data-action="quick-new" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> New event</button>' : ''}</div>
       <article class="panel calendar-shell">
         <div class="calendar-toolbar">
           <div class="calendar-controls"><button class="secondary small" data-prev>&lt;</button><button class="secondary small" data-next>&gt;</button><button class="secondary small" data-today>Today</button></div>
@@ -1183,8 +1316,10 @@ class EventCalendar extends PanicElement {
         <div class="calendar-grid">
           ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day) => `<div class="weekday">${day}</div>`).join('')}
           ${days.map((date) => {
-            const dayEvents = events.filter((event) => event.date === isoDate(date));
-            return `<div class="calendar-day"><span class="day-num">${date.getDate()}</span>${dayEvents.length ? dayEvents.map((event) => `<a class="mini-event" href="#event-${esc(event.id)}"><span class="status-dot ${statusTone(event.status)}"></span>${esc(event.title)}<br>${badge(event.status)}</a>`).join('') : '<div class="program-night">Available</div>'}</div>`;
+            const iso = isoDate(date);
+            const dayEvents = events.filter((event) => event.date === iso);
+            const clickAttr = this.canCreate ? ` data-create-date="${esc(iso)}" role="button" tabindex="0"` : '';
+            return `<div class="calendar-day${createable}"${clickAttr}><span class="day-num">${date.getDate()}</span>${dayEvents.length ? dayEvents.map((event) => `<a class="mini-event" href="#event-${esc(event.id)}"><span class="status-dot ${statusTone(event.status)}"></span>${esc(event.title)}<br>${badge(event.status)}</a>`).join('') : `<div class="program-night">${this.canCreate ? '+ Available' : 'Available'}</div>`}</div>`;
           }).join('')}
         </div>
       </article>
@@ -1192,6 +1327,23 @@ class EventCalendar extends PanicElement {
     $('[data-prev]', this).addEventListener('click', () => { this.month = new Date(this.month.getFullYear(), this.month.getMonth() - 1, 1); this.load(); });
     $('[data-next]', this).addEventListener('click', () => { this.month = new Date(this.month.getFullYear(), this.month.getMonth() + 1, 1); this.load(); });
     $('[data-today]', this).addEventListener('click', () => { this.month = new Date(); this.load(); });
+    $('[data-action="quick-new"]', this)?.addEventListener('click', () => openEventQuickCreate());
+
+    if (this.canCreate) {
+      // Day-cell click → open the quick-create modal with that date pre-filled.
+      // Mini-event links inside the cell still navigate normally (the listener
+      // ignores clicks that originated on an <a>, button, or other link).
+      $$('[data-create-date]', this).forEach((cell) => {
+        const open = () => openEventQuickCreate({ date: cell.dataset.createDate });
+        cell.addEventListener('click', (event) => {
+          if (event.target.closest('a, button')) return;
+          open();
+        });
+        cell.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+        });
+      });
+    }
   }
 }
 
