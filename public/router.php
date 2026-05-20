@@ -25,6 +25,7 @@ if ($basePath !== '' && $basePath !== '/' && str_starts_with($path, $basePath . 
 $file = __DIR__ . $path;
 
 if ($path !== '/' && is_file($file)) {
+    sensitive_html_headers($path);
     if ($strippedBasePath) {
         header('Content-Type: ' . content_type($file));
         readfile($file);
@@ -39,6 +40,25 @@ if (str_starts_with($path, '/api/')) {
 }
 
 require __DIR__ . '/index.html';
+
+/**
+ * For HTML pages that may carry a one-shot token in the URL (login,
+ * invite acceptance) prevent caches, mirrors, and search crawlers from
+ * retaining the URL. Apache's mod_headers picks the same set up via
+ * .htaccess in production; this is the dev-server (`router.php`) path.
+ */
+function sensitive_html_headers(string $path): void
+{
+    $name = strtolower(basename($path));
+    if ($name !== 'login.html' && $name !== 'invite.html') {
+        return;
+    }
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+    header('X-Robots-Tag: noindex, nofollow, noarchive, nosnippet');
+    header('Referrer-Policy: no-referrer');
+}
 
 function content_type(string $file): string
 {

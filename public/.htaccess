@@ -9,3 +9,16 @@ RewriteRule ^api/ api/index.php [L]
   php_value upload_max_filesize 10M
   php_value post_max_size 12M
 </IfModule>
+
+# Never cache or index login.html or invite.html — both can carry a one-shot
+# token in the query string. We don't want caches, archives, or search
+# crawlers to retain those URLs.
+<IfModule mod_headers.c>
+  <FilesMatch "^(login|invite)\.html$">
+    Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+    Header set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+    Header set Referrer-Policy "no-referrer"
+  </FilesMatch>
+</IfModule>
