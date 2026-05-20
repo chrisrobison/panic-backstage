@@ -782,6 +782,87 @@ h3 { margin-bottom: 8px; font-size: 15px; }
 }
 .auth-notice.success { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
 .auth-notice.error   { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.auth-card .primary.block,
+.auth-card button.primary.block {
+  width: 100%;
+  padding: 13px 18px;
+  font-size: 15px;
+  font-weight: 700;
+  background: var(--accent, #2563eb);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.auth-card .primary.block:disabled { opacity: .55; cursor: default; }
+.auth-card .primary.block:hover:not(:disabled) { opacity: .9; }
+.auth-greeting { margin: 0 0 12px; font-size: 15px; }
+.auth-greeting a.small { font-size: 12px; margin-left: 8px; color: var(--muted); }
+.auth-sub { margin-top: 14px; text-align: center; font-size: 13px; }
+.auth-sub a { color: var(--muted); }
+.muted.small { font-size: 12px; }
+
+/* Credential-setup modal — shown after sign-in for accounts with no
+   passkey/password (until they set one or opt out). */
+.credential-setup-card { width: min(640px, 100%); }
+.credential-setup-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 18px 0 14px;
+}
+@media (max-width: 560px) {
+  .credential-setup-options { grid-template-columns: 1fr; }
+}
+.credential-setup-option {
+  border: 1px solid var(--line, #e3e4e8);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fafbfd;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.credential-setup-option h3 { font-size: 14px; margin: 0; display: flex; align-items: center; gap: 8px; }
+.credential-setup-option form { margin: 0; }
+.credential-setup-option .primary.block {
+  margin-top: auto;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--accent, #2563eb);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.credential-setup-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--line, #e3e4e8);
+  padding-top: 14px;
+}
+.credential-setup-footer .secondary {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid var(--line, #e3e4e8);
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.checkbox-row input[type="checkbox"] { width: auto; }
+
 /* Account settings panel */
 .account-section { border-bottom: 1px solid var(--line); padding-bottom: 22px; margin-bottom: 22px; }
 .account-section:last-child { border-bottom: none; margin-bottom: 0; }

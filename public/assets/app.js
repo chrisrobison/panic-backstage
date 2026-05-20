@@ -579,61 +579,174 @@ class ToastStack extends PanicElement {
 
 class LoginPage extends PanicElement {
   async connect() {
-    // If a magic-link token is in the URL, verify it immediately
+    // ── Magic-link landing ────────────────────────────────────────────────
+    // Critical: do NOT call /auth/verify on page load. iMessage / SMS link
+    // previewers and some corporate scanners execute the page's JavaScript,
+    // and a verify call here would mark the token used_at and burn it
+    // before the human ever clicks the bubble. Instead we render an
+    // explicit "Continue" interstitial and verify only on a real click.
     const urlToken = new URLSearchParams(location.search).get('token');
     if (urlToken) {
-      this.innerHTML = `<main class="auth-card"><pb-loading-state label="Signing you in"></pb-loading-state></main>`;
-      try {
-        const data = await api('/auth/verify', { method: 'POST', body: JSON.stringify({ token: urlToken }) });
-        setTokens(data.access_token, data.refresh_token);
-        publish('auth.changed', data);
-        location.href = appUrl();
-      } catch {
-        this.showForm('That login link is invalid or has already been used.');
-      }
+      await this.renderTokenLanding(urlToken);
       return;
     }
-    this.showForm();
+    this.email = '';
+    this.showEmailStep();
     this.startConditionalPasskey();
   }
 
-  showForm(notice = '') {
+  /** Step 0: explicit "Continue to your account" interstitial for magic-link URLs. */
+  async renderTokenLanding(token) {
+    this.innerHTML = `<main class="auth-card"><pb-loading-state label="Checking your link"></pb-loading-state></main>`;
+    let status;
+    try {
+      status = await api('/auth/verify-status', { method: 'POST', body: JSON.stringify({ token }) });
+    } catch {
+      this.showEmailStep('We could not check that login link. Please request a new one.');
+      return;
+    }
+    if (!status?.valid) {
+      this.showEmailStep('That login link is invalid or has already been used. Request a new one below.');
+      return;
+    }
+
+    const greeting = status.name ? esc(status.name) : esc(status.email);
     this.innerHTML = `<main class="auth-card">
       <h1>Panic Backstage</h1>
-      ${notice ? `<div class="auth-notice error">${esc(notice)}</div>` : ''}
+      <p class="auth-greeting">Hi, <strong>${greeting}</strong></p>
+      <p class="muted">Click below to finish signing in. This link can only be used once.</p>
+      <button class="primary block" data-action="continue" type="button">Continue to your account</button>
+      <p class="auth-sub"><a href="#" data-action="request-new">Send a new login link</a></p>
+      <p class="error-text" data-error></p>
+    </main>
+    <pb-toast-stack></pb-toast-stack>`;
 
-      <button class="passkey-btn" data-action="passkey" type="button">
-        <span class="passkey-icon">🔑</span>Sign in with passkey
-      </button>
+    $('[data-action="continue"]', this).addEventListener('click', () => this.consumeToken(token));
+    $('[data-action="request-new"]', this).addEventListener('click', (e) => {
+      e.preventDefault();
+      this.email = status.email || '';
+      this.showEmailStep('Enter your email and we will send a fresh link.');
+    });
+  }
 
-      <div class="auth-or"><span>or use password</span></div>
+  async consumeToken(token) {
+    const btn = $('[data-action="continue"]', this);
+    if (btn) { btn.disabled = true; btn.textContent = 'Signing you in…'; }
+    try {
+      const data = await api('/auth/verify', { method: 'POST', body: JSON.stringify({ token }) });
+      this.completeLogin(data);
+    } catch (err) {
+      const errEl = $('[data-error]', this);
+      if (errEl) errEl.textContent = err.message || 'Could not sign in. Request a fresh link.';
+      if (btn) { btn.disabled = false; btn.textContent = 'Continue to your account'; }
+    }
+  }
 
-      <form class="stack" data-form="password">
-        <label>Email <input type="email" name="email" required autocomplete="username webauthn" placeholder="you@example.com" autofocus></label>
-        <label>Password <input type="password" name="password" required autocomplete="current-password" placeholder="Password"></label>
-        <button type="submit">Sign in</button>
-        <p class="error-text" data-pw-error></p>
+  /** Hand off to the app after any successful sign-in path. */
+  completeLogin(data) {
+    setTokens(data.access_token, data.refresh_token);
+    publish('auth.changed', data);
+    // The app shell calls /api/me on load and decides whether to show the
+    // credential-setup modal from that — no client-side hint needed.
+    location.href = appUrl();
+  }
+
+  // ── Email-first multi-step sign-in ────────────────────────────────────────
+
+  /** Step 1: just an email field. We branch from here based on what the account has. */
+  showEmailStep(notice = '') {
+    this.innerHTML = `<main class="auth-card">
+      <h1>Panic Backstage</h1>
+      ${notice ? `<div class="auth-notice ${notice.startsWith('✓') ? 'success' : 'error'}">${esc(notice)}</div>` : ''}
+
+      <form class="stack" data-form="email-step">
+        <label>Email <input type="email" name="email" required autocomplete="username webauthn" placeholder="you@example.com" autofocus value="${esc(this.email || '')}"></label>
+        <button class="primary block" type="submit">Continue</button>
+        <p class="error-text" data-email-error></p>
       </form>
 
       <div class="auth-or"><span>or</span></div>
 
-      <details class="auth-email-link">
-        <summary>Email me a login link instead</summary>
-        <form class="stack" data-form="magic-link">
-          <label>Email <input type="email" name="email" required placeholder="you@example.com"></label>
-          <button type="submit">Send login link</button>
-          <p class="error-text" data-ml-error></p>
-        </form>
-      </details>
+      <button class="passkey-btn" data-action="passkey" type="button">
+        <span class="passkey-icon">🔑</span>Sign in with passkey
+      </button>
     </main>
     <pb-toast-stack></pb-toast-stack>`;
 
+    $('[data-form="email-step"]', this).addEventListener('submit', (e) => this.onEmailContinue(e));
     $('[data-action="passkey"]', this).addEventListener('click', () => this.passkeyLogin());
-    $('[data-form="password"]', this).addEventListener('submit', (e) => this.passwordLogin(e));
+  }
+
+  /** Step 2: per-account methods. Always offers the magic-link fallback. */
+  showMethodStep(email, methods) {
+    this.email = email;
+    const friendly = methods?.name ? esc(methods.name) : esc(email);
+
+    const blocks = [];
+    if (methods?.has_passkey) {
+      blocks.push(`<button class="passkey-btn" data-action="passkey" type="button">
+        <span class="passkey-icon">🔑</span>Sign in with passkey
+      </button>`);
+    }
+    if (methods?.has_password) {
+      if (blocks.length) blocks.push(`<div class="auth-or"><span>or password</span></div>`);
+      blocks.push(`<form class="stack" data-form="password">
+        <input type="hidden" name="email" value="${esc(email)}">
+        <label>Password <input type="password" name="password" required autocomplete="current-password" placeholder="Password" autofocus></label>
+        <button type="submit">Sign in</button>
+        <p class="error-text" data-pw-error></p>
+      </form>`);
+    }
+    if (blocks.length) blocks.push(`<div class="auth-or"><span>or</span></div>`);
+
+    // Magic-link is always offered. For accounts with no credentials yet
+    // this is the primary path; otherwise it's the fallback.
+    const isOnly = !methods?.has_password && !methods?.has_passkey;
+    blocks.push(`<form class="stack" data-form="magic-link">
+      <input type="hidden" name="email" value="${esc(email)}">
+      <button type="submit" class="${isOnly ? 'primary block' : ''}">Email me a login link</button>
+      ${isOnly ? '<p class="muted small">We will email <strong>' + esc(email) + '</strong> a one-time link that expires in 24 hours.</p>' : ''}
+      <p class="error-text" data-ml-error></p>
+    </form>`);
+
+    this.innerHTML = `<main class="auth-card">
+      <h1>Panic Backstage</h1>
+      <p class="auth-greeting">Signing in as <strong>${friendly}</strong> <a href="#" data-action="back" class="small">change</a></p>
+      ${blocks.join('\n')}
+    </main>
+    <pb-toast-stack></pb-toast-stack>`;
+
+    $('[data-action="back"]', this).addEventListener('click', (e) => {
+      e.preventDefault();
+      this.showEmailStep();
+    });
+    $('[data-action="passkey"]', this)?.addEventListener('click', () => this.passkeyLogin(email));
+    $('[data-form="password"]', this)?.addEventListener('submit', (e) => this.passwordLogin(e));
     $('[data-form="magic-link"]', this).addEventListener('submit', (e) => this.requestMagicLink(e));
   }
 
-  /** Offer browser-native passkey autocomplete on the email field (silent, non-blocking). */
+  async onEmailContinue(event) {
+    event.preventDefault();
+    const fd = formData(event.target);
+    const email = String(fd.email || '').trim().toLowerCase();
+    if (!email) return;
+    const btn = $('button[type="submit"]', event.target);
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+    $('[data-email-error]', this).textContent = '';
+    try {
+      const methods = await api('/auth/lookup', { method: 'POST', body: JSON.stringify({ email }) });
+      this.showMethodStep(email, methods);
+    } catch (err) {
+      $('[data-email-error]', this).textContent = err.message || 'Could not look that up. Try again.';
+      btn.disabled = false;
+      btn.textContent = 'Continue';
+    }
+  }
+
+  // ── Passkey / password / magic-link handlers ──────────────────────────────
+
+  /** Browser-native passkey autocomplete on the email field. Silent, non-blocking. */
   async startConditionalPasskey() {
     try {
       if (!window.PublicKeyCredential?.isConditionalMediationAvailable) return;
@@ -648,21 +761,24 @@ class LoginPage extends PanicElement {
     } catch { /* cancelled or unsupported — silently ignore */ }
   }
 
-  async passkeyLogin() {
+  async passkeyLogin(email = '') {
     const btn = $('[data-action="passkey"]', this);
-    if (!btn) return;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="passkey-icon">🔑</span>Waiting for passkey…';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="passkey-icon">🔑</span>Waiting for passkey…';
+    }
     try {
       const opts = await fetch(apiUrl('/auth/passkey-login-begin'), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(email ? { email } : {}),
       }).then((r) => r.json());
       const cred = await navigator.credentials.get({ publicKey: prepareGetOptions(opts) });
       await this.finishPasskeyLogin(cred);
     } catch (err) {
       if (btn) { btn.disabled = false; btn.innerHTML = '<span class="passkey-icon">🔑</span>Sign in with passkey'; }
       if (err?.name !== 'NotAllowedError') {
-        const errEl = $('[data-pw-error]', this);
+        const errEl = $('[data-pw-error]', this) || $('[data-email-error]', this);
         if (errEl) errEl.textContent = err.message || 'Passkey sign-in failed';
       }
     }
@@ -675,9 +791,7 @@ class LoginPage extends PanicElement {
     });
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || 'Passkey login failed');
-    setTokens(data.access_token, data.refresh_token);
-    publish('auth.changed', data);
-    location.href = appUrl();
+    this.completeLogin(data);
   }
 
   async passwordLogin(event) {
@@ -688,9 +802,7 @@ class LoginPage extends PanicElement {
     $('[data-pw-error]', this).textContent = '';
     try {
       const data = await api('/auth/login', { method: 'POST', body: JSON.stringify(formData(event.target)) });
-      setTokens(data.access_token, data.refresh_token);
-      publish('auth.changed', data);
-      location.href = appUrl();
+      this.completeLogin(data);
     } catch (err) {
       $('[data-pw-error]', this).textContent = err.message;
       btn.disabled = false;
@@ -706,13 +818,162 @@ class LoginPage extends PanicElement {
     $('[data-ml-error]', this).textContent = '';
     try {
       await api('/auth/magic-link', { method: 'POST', body: JSON.stringify(formData(event.target)) });
-      event.target.innerHTML = `<div class="auth-notice success">✓ Login link sent — check your email. It expires in 15 minutes.</div>`;
+      event.target.innerHTML = `<div class="auth-notice success">✓ Login link sent — check your email. It expires in 24 hours and can be used once.</div>`;
     } catch (err) {
       $('[data-ml-error]', this).textContent = err.message;
       btn.disabled = false;
-      btn.textContent = 'Send login link';
+      btn.textContent = 'Email me a login link';
     }
   }
+}
+
+// ── Credential setup modal ──────────────────────────────────────────────────
+//
+// Shown after sign-in when a user has neither a passkey nor a password.
+// Dismissible — re-shown on every sign-in until they set up at least one
+// credential or check "Don't show this again". Reuses the existing
+// `/auth/passkey-register-*` and `/auth/set-password` endpoints.
+
+function openCredentialSetupModal(user, onChange) {
+  if (document.querySelector('[data-credential-setup-modal]')) return; // already open
+  const dialog = document.createElement('div');
+  dialog.className = 'modal-backdrop';
+  dialog.setAttribute('data-credential-setup-modal', '');
+  dialog.innerHTML = renderCredentialSetupBody(user);
+  document.body.appendChild(dialog);
+
+  const close = () => dialog.remove();
+  const refresh = async () => {
+    try {
+      const me = await api('/me');
+      if (me?.user) {
+        user = me.user;
+        if (typeof onChange === 'function') onChange(user);
+        // If they now have a credential, close the modal.
+        if (user.has_password || user.has_passkey) {
+          publish('toast.show', { message: 'Sign-in method saved.', tone: 'success' });
+          close();
+          return;
+        }
+        dialog.querySelector('.modal-card').outerHTML = renderCredentialSetupBody(user, true);
+        bind();
+      }
+    } catch { /* ignore */ }
+  };
+
+  const bind = () => {
+    $('[data-action="skip"]', dialog).addEventListener('click', async () => {
+      const hide = $('[data-hide-future]', dialog)?.checked;
+      if (hide) {
+        try {
+          await api('/auth/preferences', {
+            method: 'POST',
+            body: JSON.stringify({ hide_credential_setup_prompt: true }),
+          });
+          user.hide_credential_setup_prompt = true;
+          if (typeof onChange === 'function') onChange(user);
+        } catch (err) {
+          publish('toast.show', { message: err.message || 'Could not save preference', tone: 'error' });
+          return;
+        }
+      }
+      close();
+    });
+
+    $('[data-action="add-passkey"]', dialog)?.addEventListener('click', async () => {
+      const btn = $('[data-action="add-passkey"]', dialog);
+      btn.disabled = true;
+      btn.textContent = 'Waiting for device…';
+      try {
+        const opts = await api('/auth/passkey-register-begin', { method: 'POST', body: '{}' });
+        const cred = await navigator.credentials.create({ publicKey: prepareCreateOptions(opts) });
+        const body = serializeCredential(cred);
+        const name = (cred.authenticatorAttachment === 'platform' ? 'This device' : 'Security key')
+                   + ' — ' + new Date().toLocaleDateString();
+        await api('/auth/passkey-register-complete', {
+          method: 'POST',
+          body: JSON.stringify({ name, response: body.response }),
+        });
+        await refresh();
+      } catch (err) {
+        if (err?.name !== 'NotAllowedError') {
+          publish('toast.show', { message: err.message || 'Could not add passkey', tone: 'error' });
+        }
+        btn.disabled = false;
+        btn.textContent = 'Add a passkey for this device';
+      }
+    });
+
+    $('[data-form="password"]', dialog)?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const fd = formData(event.target);
+      if (fd.password !== fd.confirm_password) {
+        $('[data-pw-error]', dialog).textContent = 'Passwords do not match';
+        return;
+      }
+      const btn = $('button[type="submit"]', event.target);
+      btn.disabled = true;
+      $('[data-pw-error]', dialog).textContent = '';
+      try {
+        // current_password is empty — user has no password yet, the server
+        // accepts that path.
+        await api('/auth/set-password', { method: 'POST', body: JSON.stringify(fd) });
+        await refresh();
+      } catch (err) {
+        $('[data-pw-error]', dialog).textContent = err.message || 'Could not set password';
+        btn.disabled = false;
+      }
+    });
+  };
+
+  bind();
+}
+
+function renderCredentialSetupBody(user, isRefresh = false) {
+  const passkeySupported = Boolean(window.PublicKeyCredential);
+  const name = user?.name || user?.email || 'there';
+  return `<div class="modal-card credential-setup-card">
+    <div class="section-head padded">
+      <h2>Make future sign-ins faster</h2>
+    </div>
+    <div class="padded">
+      <p>Welcome, <strong>${esc(name)}</strong>. You're signed in.</p>
+      <p class="muted">Email links work, but they can get eaten by message previews before you click them.
+        Set up one (or both) of the options below so future sign-ins go straight through.</p>
+
+      <div class="credential-setup-options">
+        ${passkeySupported ? `
+        <div class="credential-setup-option">
+          <h3><span class="passkey-icon">🔑</span>Passkey</h3>
+          <p class="muted small">Use Face ID, Touch ID, Windows Hello, or your password manager. Fastest option on a phone or laptop you trust.</p>
+          <button class="primary block" data-action="add-passkey" type="button">Add a passkey for this device</button>
+        </div>` : `
+        <div class="credential-setup-option muted">
+          <h3>Passkey</h3>
+          <p class="small">Your browser does not support passkeys. Set a password instead.</p>
+        </div>`}
+
+        <div class="credential-setup-option">
+          <h3><i class="fa-solid fa-lock" aria-hidden="true"></i> Password</h3>
+          <p class="muted small">Classic email + password. Works everywhere.</p>
+          <form class="stack" data-form="password">
+            <label>New password <input type="password" name="password" required autocomplete="new-password" placeholder="At least 8 characters" minlength="8"></label>
+            <label>Confirm <input type="password" name="confirm_password" required autocomplete="new-password" placeholder="Same password again"></label>
+            <button type="submit">Set password</button>
+            <p class="error-text" data-pw-error></p>
+          </form>
+        </div>
+      </div>
+
+      <div class="credential-setup-footer">
+        <label class="checkbox-row">
+          <input type="checkbox" data-hide-future>
+          <span>Don't show this again — I'm fine using email links</span>
+        </label>
+        <button class="secondary" data-action="skip" type="button">Skip for now</button>
+      </div>
+    </div>
+  </div>`;
 }
 
 class AppShell extends PanicElement {
@@ -735,9 +996,27 @@ class AppShell extends PanicElement {
       }
       this.applyCapabilities();
       await this.route();
+      this.maybeShowCredentialSetup();
     } catch {
       location.href = appUrl('login.html');
     }
+  }
+
+  /**
+   * Show the credential-setup modal when the user has no password AND no
+   * passkey AND has not opted out via hide_credential_setup_prompt.
+   */
+  maybeShowCredentialSetup() {
+    const u = this.user || {};
+    if (u.hide_credential_setup_prompt) return;
+    if (u.has_password || u.has_passkey) return;
+
+    openCredentialSetupModal(this.user, (updatedUser) => {
+      // Modal calls back with the latest user state after setup or skip.
+      this.user = updatedUser;
+      const pill = $('[data-user-pill]', this);
+      if (pill) pill.textContent = updatedUser.name || updatedUser.email || 'Account';
+    });
   }
 
   renderShell() {
@@ -1668,9 +1947,13 @@ class AccountSettings extends PanicElement {
   async connect() {
     this.setLoading('Loading account settings');
     try {
-      const data   = await api('/auth/passkeys', { method: 'POST', body: '{}' });
-      this.passkeys    = data.passkeys || [];
-      this.hasPassword = Boolean(data.has_password);
+      const [data, me] = await Promise.all([
+        api('/auth/passkeys', { method: 'POST', body: '{}' }),
+        api('/me'),
+      ]);
+      this.passkeys           = data.passkeys || [];
+      this.hasPassword        = Boolean(data.has_password);
+      this.hideCredentialNudge = Boolean(me?.user?.hide_credential_setup_prompt);
       this.render();
     } catch (err) {
       this.showError(err);
@@ -1714,6 +1997,15 @@ class AccountSettings extends PanicElement {
         </form>
       </div>
 
+      <div class="account-section">
+        <h2>Sign-in nudges</h2>
+        <label class="checkbox-row">
+          <input type="checkbox" data-pref-nudge ${this.hideCredentialNudge ? '' : 'checked'}>
+          <span>Remind me to set up a passkey or password when I don't have one</span>
+        </label>
+        <p class="muted small">When this is on and your account has neither a passkey nor a password, a small modal appears after each sign-in to help you set one up. Turn it off if you prefer email-link sign-ins.</p>
+      </div>
+
     </div>`;
 
     $$('[data-remove]', this).forEach((btn) => {
@@ -1725,6 +2017,28 @@ class AccountSettings extends PanicElement {
     });
     $('[data-action="add-passkey"]', this)?.addEventListener('click', () => this.addPasskey());
     $('[data-form="password"]', this)?.addEventListener('submit', (e) => this.setPassword(e));
+    $('[data-pref-nudge]', this)?.addEventListener('change', (e) => this.setNudgePref(e.target.checked));
+  }
+
+  async setNudgePref(remind) {
+    // UI shows "remind me" — DB stores the inverse (hide_credential_setup_prompt).
+    const hide = !remind;
+    try {
+      await api('/auth/preferences', {
+        method: 'POST',
+        body: JSON.stringify({ hide_credential_setup_prompt: hide }),
+      });
+      this.hideCredentialNudge = hide;
+      publish('toast.show', {
+        message: remind ? 'Reminders enabled.' : 'Reminders off — you can re-enable from this page.',
+        tone: 'info',
+      });
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Could not save preference', tone: 'error' });
+      // Roll the checkbox back
+      const cb = $('[data-pref-nudge]', this);
+      if (cb) cb.checked = !remind;
+    }
   }
 
   async removePasskey(id) {
