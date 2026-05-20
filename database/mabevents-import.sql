@@ -1,7 +1,7 @@
 -- =============================================================
 -- MabEvents.xlsx import (idempotent UPSERT)
 -- Run AFTER: schema.sql, migration 001, migration 002
--- Events: 146  |  Staff: 9
+-- Events: 147  |  Staff: 9
 --
 -- Idempotency keys:
 --   users  : email (UNIQUE)            — name refreshed; role/password preserved
@@ -2035,6 +2035,25 @@ Contract: Tickets- 70/30', '2026-06-11', NULL, NULL, NULL, 1, @owner_id, NULL, '
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
 INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Load-in', 'load_in', '18:00:00');
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'DJ collab - Matthew Holt', 'dj-collab-matthew-holt-2026-06-11', 'live_music', 'proposed', 'Contract: MATT HOLT DJ NIGHT — EVENT ONE SHEET - Google Docs', '2026-06-11', '22:00:00', '02:00:00', NULL, 1, @owner_id, NULL, 'Sasha', 'Matt Holt', 'downstairs')
+  ON DUPLICATE KEY UPDATE
+    id = LAST_INSERT_ID(id),
+    venue_id = VALUES(venue_id),
+    title = VALUES(title),
+    event_type = VALUES(event_type),
+    description_internal = VALUES(description_internal),
+    date = VALUES(date),
+    doors_time = VALUES(doors_time),
+    end_time = VALUES(end_time),
+    capacity = VALUES(capacity),
+    public_visibility = VALUES(public_visibility),
+    owner_user_id = VALUES(owner_user_id),
+    external_id = VALUES(external_id),
+    referral_source = VALUES(referral_source),
+    promoter_name = VALUES(promoter_name),
+    room = VALUES(room);
+SET @eid = LAST_INSERT_ID();
+DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
 INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Day Party DJ', 'day-party-dj-2026-06-13', 'live_music', 'proposed', 'Ticket system: TIXR
 Potential revenue: $6,500
 Contract: DJ DAY PARTY — EVENT ONE SHEET - Google Docs', '2026-06-13', NULL, NULL, NULL, 1, @owner_id, NULL, 'Sasha', 'Conjunction.co', 'upstairs')
