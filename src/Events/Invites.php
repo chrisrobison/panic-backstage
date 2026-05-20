@@ -4,9 +4,21 @@ declare(strict_types=1);
 namespace Panic\Events;
 
 use Panic\BaseEndpoint;
+use Panic\Mailer;
 use Panic\Request;
 use Panic\Response;
+use function Panic\log_activity;
 
+/**
+ *   GET    /api/events/{id}/invites                      list invites
+ *   POST   /api/events/{id}/invites                      create invite (optionally email)
+ *   POST   /api/events/{id}/invites/{inviteId}           resend email for an existing invite
+ *
+ * The create payload accepts a `send_email` flag (defaults to true for
+ * backward compatibility). When false, the invite link is generated and
+ * returned but no email is delivered — useful when an admin wants to copy
+ * the link and share it manually.
+ */
 final class Invites extends BaseEndpoint
 {
     public function handle(Request $request): Response
@@ -15,10 +27,18 @@ final class Invites extends BaseEndpoint
         if ($denied = $this->requireEventCapability($eventId, 'manage_invites')) {
             return $denied;
         }
+        $inviteId = $this->params['inviteId'] ?? null;
         return match ($request->method()) {
-            'GET' => $this->ok(['invites' => $this->db->all('SELECT * FROM event_invites WHERE event_id = ? ORDER BY created_at DESC', [$eventId])]),
-            'POST' => $this->create($request, $eventId),
-            default => Response::methodNotAllowed()
+            'GET'  => $this->ok([
+                'invites' => $this->db->all(
+                    'SELECT * FROM event_invites WHERE event_id = ? ORDER BY created_at DESC',
+                    [$eventId]
+                ),
+            ]),
+            'POST' => $inviteId
+                ? $this->resend($eventId, (int) $inviteId)
+                : $this->create($request, $eventId),
+            default => Response::methodNotAllowed(),
         };
     }
 
@@ -36,28 +56,80 @@ final class Invites extends BaseEndpoint
             return Response::json(['error' => 'Invalid invite role'], 422);
         }
 
-        // Check for an existing un-used invite for this address + event
+        // Reuse any active, unused invite for the same email + event so a
+        // duplicate "add" doesn't create a second token to confuse the user.
         $existing = $this->db->one(
-            'SELECT token FROM event_invites WHERE event_id = ? AND email = ? AND used_at IS NULL AND expires_at > NOW() LIMIT 1',
+            'SELECT id, token FROM event_invites WHERE event_id = ? AND email = ? AND used_at IS NULL AND expires_at > NOW() LIMIT 1',
             [$eventId, $email]
         );
         if ($existing) {
             $token = $existing['token'];
+            $inviteId = (int) $existing['id'];
         } else {
             $token = bin2hex(random_bytes(24));
-            $this->db->insert(
+            $inviteId = $this->db->insert(
                 'INSERT INTO event_invites (event_id, email, role, token, expires_at)
                  VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 14 DAY))',
                 [$eventId, $email, $role, $token]
             );
         }
 
-        $event  = $this->db->one('SELECT title FROM events WHERE id = ?', [$eventId]);
-        $title  = $event['title'] ?? 'an event';
-        $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
-        $url    = "{$appUrl}/invite.html?token={$token}";
+        // `send_email` defaults to true so existing clients keep their old
+        // behavior; the new UI sends an explicit value either way.
+        $sendEmail = $this->boolish($request->body('send_email', true));
+        $emailed   = false;
+        if ($sendEmail) {
+            $this->sendInviteEmail($eventId, $email, $token);
+            $emailed = true;
+            log_activity($this->db, $eventId, $this->userId(), 'invite emailed', [
+                'invite_id' => $inviteId,
+                'email'     => $email,
+                'role'      => $role,
+            ]);
+        }
 
-        (new \Panic\Mailer($this->root))->send(
+        return $this->ok([
+            'id'      => $inviteId,
+            'token'   => $token,
+            'url'     => "invite.html?token={$token}",
+            'emailed' => $emailed,
+        ]);
+    }
+
+    private function resend(int $eventId, int $inviteId): Response
+    {
+        $invite = $this->db->one(
+            'SELECT id, email, token, used_at, expires_at
+             FROM event_invites WHERE id = ? AND event_id = ? LIMIT 1',
+            [$inviteId, $eventId]
+        );
+        if (!$invite) {
+            return $this->notFound('Invite not found');
+        }
+        if ($invite['used_at']) {
+            return Response::json(['error' => 'This invite has already been accepted.'], 422);
+        }
+        if (strtotime((string) $invite['expires_at']) < time()) {
+            return Response::json(['error' => 'This invite has expired. Create a new one.'], 422);
+        }
+
+        $this->sendInviteEmail($eventId, (string) $invite['email'], (string) $invite['token']);
+        log_activity($this->db, $eventId, $this->userId(), 'invite re-emailed', [
+            'invite_id' => $inviteId,
+            'email'     => $invite['email'],
+        ]);
+        return $this->ok(['ok' => true, 'emailed' => true]);
+    }
+
+    /** Build and dispatch the standard invite email via the shared Mailer. */
+    private function sendInviteEmail(int $eventId, string $email, string $token): void
+    {
+        $event   = $this->db->one('SELECT title FROM events WHERE id = ?', [$eventId]);
+        $title   = $event['title'] ?? 'an event';
+        $appUrl  = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        $url     = "{$appUrl}/invite.html?token={$token}";
+
+        (new Mailer($this->root))->send(
             $email,
             "You're invited to collaborate on {$title}",
             "You've been invited to join the team for {$title}.\n\n"
@@ -65,7 +137,16 @@ final class Invites extends BaseEndpoint
             . "  {$url}\n\n"
             . "This invitation expires in 14 days.\n"
         );
+    }
 
-        return $this->ok(['token' => $token, 'url' => "invite.html?token={$token}"]);
+    /** Accept the standard truthy variants the JSON body might carry. */
+    private function boolish(mixed $value): bool
+    {
+        if (is_bool($value)) return $value;
+        if (is_int($value))  return $value !== 0;
+        if (is_string($value)) {
+            return in_array(strtolower($value), ['1','true','on','yes'], true);
+        }
+        return false;
     }
 }

@@ -1529,19 +1529,56 @@ class AssetManager extends HTMLElement {
 class InviteManager extends HTMLElement {
   set data(data) {
     this.eventData = data;
+    const eventId = data.event.id;
     const roles = ['event_owner','promoter','band','artist','designer','staff','viewer'];
     const invites = data.invites || [];
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Invites ${helpLink('invites', 'Invites &amp; Collaborators')}</h2></div><div class="invite-list">${invites.length ? invites.map((invite) => {
+
+    const rowsHtml = invites.length ? invites.map((invite) => {
       const url = appUrl(`invite.html?token=${invite.token}`);
-      return `<article class="invite-row"><span><strong>${esc(invite.email)}</strong><br><small>${esc(titleCase(invite.role))} - ${invite.used_at ? 'Accepted' : `Expires ${esc(invite.expires_at)}`}</small></span><input readonly value="${esc(url)}"><button class="secondary small" data-copy="${esc(url)}">Copy link</button></article>`;
-    }).join('') : emptyState('No invites have been created for this event.')}</div>
-    <form class="row-form"><label>Email<input type="email" name="email" required placeholder="promoter@example.com"></label><label>Role${select('role', roles, 'viewer')}</label><button>Create invite link</button></form></section>`;
+      const accepted = Boolean(invite.used_at);
+      const meta = accepted ? 'Accepted' : `Expires ${esc(invite.expires_at)}`;
+      const emailBtn = accepted
+        ? ''
+        : `<button class="secondary small" data-email="${esc(invite.id)}">Email invite</button>`;
+      return `<article class="invite-row">
+        <span><strong>${esc(invite.email)}</strong><br><small>${esc(titleCase(invite.role))} - ${meta}</small></span>
+        <input readonly value="${esc(url)}">
+        <button class="secondary small" data-copy="${esc(url)}">Copy link</button>
+        ${emailBtn}
+      </article>`;
+    }).join('') : emptyState('No invites have been created for this event.');
+
+    this.innerHTML = `<section class="panel">
+      <div class="section-head padded"><h2>Invites ${helpLink('invites', 'Invites &amp; Collaborators')}</h2></div>
+      <div class="invite-list">${rowsHtml}</div>
+      <form class="row-form invite-add">
+        <label>Email <input type="email" name="email" required placeholder="promoter@example.com"></label>
+        <label>Role ${select('role', roles, 'viewer')}</label>
+        <label class="check-label"><input type="checkbox" name="send_email" value="1" checked> Send invitation email</label>
+        <button>Create invite</button>
+      </form>
+    </section>`;
+
     $('form', this).addEventListener('submit', async (event) => {
       event.preventDefault();
-      const result = await api(`/events/${this.eventData.event.id}/invites`, { method: 'POST', body: JSON.stringify(formData(event.target)) });
-      publish('event.saved', { id: this.eventData.event.id });
-      publish('toast.show', { message: `Invite created: ${appUrl(result.url)}` });
+      const body = formData(event.target);
+      // formData() omits unchecked checkboxes entirely, so coerce to a clean boolean.
+      body.send_email = event.target.send_email.checked;
+      try {
+        const result = await api(`/events/${eventId}/invites`, { method: 'POST', body: JSON.stringify(body) });
+        publish('event.saved', { id: eventId });
+        publish('toast.show', {
+          message: result.emailed
+            ? `Invite emailed to ${body.email}.`
+            : `Invite link created: ${appUrl(result.url)}`,
+        });
+        event.target.reset();
+        event.target.send_email.checked = true;
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
     });
+
     $$('[data-copy]', this).forEach((button) => button.addEventListener('click', async () => {
       if (navigator.clipboard) {
         await navigator.clipboard.writeText(button.dataset.copy);
@@ -1550,6 +1587,23 @@ class InviteManager extends HTMLElement {
         document.execCommand('copy');
       }
       publish('toast.show', { message: 'Invite link copied.' });
+    }));
+
+    $$('[data-email]', this).forEach((button) => button.addEventListener('click', async () => {
+      const inviteId = button.dataset.email;
+      button.disabled = true;
+      const original = button.textContent;
+      button.textContent = 'Sending...';
+      try {
+        await api(`/events/${eventId}/invites/${inviteId}`, { method: 'POST', body: '{}' });
+        publish('toast.show', { message: 'Invite email sent.' });
+        button.textContent = 'Sent';
+        setTimeout(() => { button.textContent = original; button.disabled = false; }, 2000);
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+        button.textContent = original;
+        button.disabled = false;
+      }
     }));
   }
 }
@@ -2097,14 +2151,16 @@ const HELP_CONTENT = {
     <ol>
       <li>Scroll to the Invites panel on the event.</li>
       <li>Enter the collaborator's email and pick the role.</li>
-      <li>Click <em>Create invite link</em>.</li>
-      <li>Use the <em>Copy link</em> button and share the link via your preferred channel.</li>
+      <li>Leave <em>Send invitation email</em> checked to have Backstage email the link directly, or uncheck it to generate the link silently (useful when you want to share it via Slack, SMS, or a calendar invite).</li>
+      <li>Click <em>Create invite</em>.</li>
+      <li>Use <em>Copy link</em> to copy the URL, or — for pending invites — click <em>Email invite</em> later to (re-)send the link.</li>
     </ol>
     <h3>Accepting an invite</h3>
     <p>When the recipient opens the link they see an acceptance page with the event title and role. They enter their name and are signed straight into the event workspace. If they already have an account, the invite is attached to it.</p>
     <h3>Expiration</h3>
-    <p>Invite links show their expiry date. Once used they switch to <em>Accepted</em>. Create a fresh invite if a link expires before it is used.</p>
-    <p><strong>Note:</strong> Backstage generates the link only; it does not send email.</p>
+    <p>Invite links show their expiry date and last 14 days. Once used they switch to <em>Accepted</em> and the <em>Email invite</em> button disappears. Create a fresh invite if a link expires before it is used.</p>
+    <h3>Email delivery</h3>
+    <p>Backstage hands invitation emails to the server's <code>sendmail</code> (Exim) for delivery and writes a copy to <code>storage/mail/</code> for local inspection. Delivery problems are logged but never block the API response — if a message fails to send, your link is still valid and you can resend with the <em>Email invite</em> button.</p>
   `,
 
   settlement: `
