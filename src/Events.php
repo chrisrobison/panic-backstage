@@ -126,6 +126,19 @@ final class Events extends BaseEndpoint
                  ORDER BY g.list_type, g.name',
                 [$id]
             ),
+            'staffing' => $this->db->all(
+                'SELECT es.*, sm.name staff_name, sm.email staff_email, sm.phone staff_phone, sm.default_role staff_default_role
+                 FROM event_staffing es
+                 LEFT JOIN staff_members sm ON sm.id = es.staff_member_id
+                 WHERE es.event_id = ?
+                 ORDER BY es.call_time, FIELD(es.role,"manager","sound","lighting","security","door","bartender","barback","stagehand","runner","cleaner","other"), es.id',
+                [$id]
+            ),
+            'staffRoster' => $this->hasEventCapability($id, 'manage_staffing')
+                ? $this->db->all('SELECT id, name, email, phone, default_role, hourly_rate FROM staff_members WHERE active = 1 ORDER BY name')
+                : [],
+            'staffRoles' => \Panic\StaffMembers::ROLES,
+            'staffingStatuses' => ['scheduled','confirmed','declined','no_show','completed','canceled'],
             'invites' => $this->hasEventCapability($id, 'manage_invites') ? $this->db->all('SELECT id, email, role, token, used_at, expires_at, created_at FROM event_invites WHERE event_id = ? ORDER BY created_at DESC', [$id]) : [],
             'settlement' => $settlement,
             'activity' => $this->db->all('SELECT a.*, u.name user_name FROM event_activity_log a LEFT JOIN users u ON u.id = a.user_id WHERE a.event_id = ? ORDER BY a.created_at DESC LIMIT 80', [$id]),

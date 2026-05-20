@@ -69,6 +69,16 @@ final class Kernel
             return [Templates::class, ['templateId' => $this->intOrNull($segments[1] ?? null)]];
         }
 
+        // User accounts (admin)
+        if ($segments[0] === 'users') {
+            return [Users::class, ['userId' => $this->intOrNull($segments[1] ?? null)]];
+        }
+
+        // Staff roster (admin)
+        if ($segments[0] === 'staff-members') {
+            return [StaffMembers::class, ['staffId' => $this->intOrNull($segments[1] ?? null)]];
+        }
+
         // Public event pages (unauthenticated)
         if ($segments[0] === 'public' && ($segments[1] ?? '') === 'events') {
             return [PublicEvents::class, ['slug' => $segments[2] ?? null]];
@@ -102,6 +112,7 @@ final class Kernel
                 'settlement' => [Events\Settlement::class, ['eventId' => $eventId]],
                 'invites'    => [Events\Invites::class,  ['eventId' => $eventId, 'inviteId'   => $childId]],
                 'guest-list' => [Events\GuestList::class, ['eventId' => $eventId, 'guestId'   => $childId]],
+                'staffing'   => [Events\Staffing::class,  ['eventId' => $eventId, 'staffingId' => $childId]],
                 'stream'     => [Events\Stream::class,   ['eventId' => $eventId]],
                 default      => [Events::class,          ['eventId' => $eventId]],
             };

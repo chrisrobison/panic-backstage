@@ -164,6 +164,12 @@ function emptyState(message) {
   return `<div class="empty-state">${esc(message)}</div>`;
 }
 
+function helpLink(slug, label) {
+  const safe = esc(slug);
+  const title = label ? `Help: ${esc(label)}` : 'Open help for this section';
+  return `<a class="help-link" href="#help-${safe}" target="_blank" rel="noopener noreferrer" title="${title}" aria-label="${title}"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></a>`;
+}
+
 function can(data, capability) {
   return Boolean(data?.capabilities?.[capability]);
 }
@@ -353,29 +359,44 @@ function renderLineupSection(data) {
 }
 
 function renderStaffingSection(data) {
+  const shifts = (data.staffing || []).slice().sort((a, b) => {
+    const ta = a.call_time || '99:99:99';
+    const tb = b.call_time || '99:99:99';
+    return ta.localeCompare(tb);
+  });
   const collaborators = (data.collaborators || []).filter((c) => ['venue_admin','event_owner','promoter','staff','designer'].includes(c.event_role));
   const staffCalls = (data.schedule || []).filter((item) => item.item_type === 'staff_call');
-  const peopleRows = collaborators.length
-    ? collaborators.map((c) => `<tr>
-        <td><strong>${esc(c.name || '—')}</strong></td>
-        <td>${esc(titleCase(c.event_role))}</td>
-        <td>${esc(c.email || '')}</td>
-      </tr>`).join('')
-    : '';
-  const callRows = staffCalls.length
-    ? staffCalls.map((item) => `<tr>
-        <td class="time">${esc(timeLabel(item.start_time))}</td>
-        <td><strong>${esc(item.title)}</strong></td>
-        <td>${esc(item.notes || '')}</td>
-      </tr>`).join('')
-    : '';
+
+  const shiftRows = shifts.length ? shifts.map((s) => `<tr>
+    <td class="time">${esc(timeLabel(s.call_time))}${s.end_time ? `<br><span style="color:#666;">${esc(timeLabel(s.end_time))}</span>` : ''}</td>
+    <td>${esc(titleCase(s.role))}</td>
+    <td><strong>${esc(s.staff_name || 'TBD')}</strong>${s.staff_phone ? `<br><span style="color:#666;">${esc(s.staff_phone)}</span>` : ''}</td>
+    <td>${printPill(s.status)}</td>
+    <td>${esc(s.notes || '')}</td>
+  </tr>`).join('') : '';
+  const peopleRows = collaborators.length ? collaborators.map((c) => `<tr>
+    <td><strong>${esc(c.name || '—')}</strong></td>
+    <td>${esc(titleCase(c.event_role))}</td>
+    <td>${esc(c.email || '')}</td>
+  </tr>`).join('') : '';
+  const callRows = staffCalls.length ? staffCalls.map((item) => `<tr>
+    <td class="time">${esc(timeLabel(item.start_time))}</td>
+    <td><strong>${esc(item.title)}</strong></td>
+    <td>${esc(item.notes || '')}</td>
+  </tr>`).join('') : '';
+
   return `<h2 class="section">Staffing Schedule</h2>
-    <h3 class="subsection">Personnel</h3>
+    <h3 class="subsection">Shifts</h3>
+    ${shiftRows ? `<table>
+      <thead><tr><th class="time">Call / End</th><th>Role</th><th>Staff</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody>${shiftRows}</tbody>
+    </table>` : `<p class="empty">No shifts scheduled.</p>`}
+    <h3 class="subsection">Event Collaborators</h3>
     ${peopleRows ? `<table>
       <thead><tr><th>Name</th><th>Role</th><th>Email</th></tr></thead>
       <tbody>${peopleRows}</tbody>
-    </table>` : `<p class="empty">No staff or collaborators assigned.</p>`}
-    <h3 class="subsection">Staff Call Times</h3>
+    </table>` : `<p class="empty">No collaborators assigned.</p>`}
+    <h3 class="subsection">Staff Call Times (Run Sheet)</h3>
     ${callRows ? `<table>
       <thead><tr><th class="time">Call</th><th>What</th><th>Notes</th></tr></thead>
       <tbody>${callRows}</tbody>
@@ -728,6 +749,8 @@ class AppShell extends PanicElement {
         <a data-nav="pipeline" href="#pipeline"><i class="fa-solid fa-table-columns" aria-hidden="true"></i>Pipeline</a>
         <a data-nav="events" href="#events"><i class="fa-solid fa-ticket" aria-hidden="true"></i>Events</a>
         <a data-nav="templates" href="#templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
+        <a data-nav="admin" href="#admin"><i class="fa-solid fa-user-shield" aria-hidden="true"></i>Admin</a>
+        <a data-nav="help" href="#help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i>Help</a>
       </nav>
       <div class="side-card"><span class="bolt"></span><strong>Good shows.<br><span>No surprises.</span></strong></div>
       <button class="venue-switch" type="button"><i class="fa-solid fa-building" aria-hidden="true"></i>Mabuhay Gardens</button>
@@ -748,6 +771,8 @@ class AppShell extends PanicElement {
       <a data-nav="pipeline" href="#pipeline"><i class="fa-solid fa-table-columns" aria-hidden="true"></i>Pipeline</a>
       <a data-nav="events" href="#events"><i class="fa-solid fa-ticket" aria-hidden="true"></i>Events</a>
       <a data-nav="templates" href="#templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
+      <a data-nav="admin" href="#admin"><i class="fa-solid fa-user-shield" aria-hidden="true"></i>Admin</a>
+      <a data-nav="help" href="#help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i>Help</a>
     </nav>
     <pb-toast-stack></pb-toast-stack>`;
     $('#logout', this).addEventListener('click', async () => {
@@ -765,6 +790,9 @@ class AppShell extends PanicElement {
     if (!this.capabilities?.manage_templates) {
       $$('[data-nav="templates"]', this).forEach((link) => link.remove());
     }
+    if (!this.capabilities?.manage_users && !this.capabilities?.manage_staff_roster && !this.capabilities?.manage_templates) {
+      $$('[data-nav="admin"]', this).forEach((link) => link.remove());
+    }
     const pill = $('[data-user-pill]', this);
     if (pill && this.user) pill.textContent = this.user.name || this.user.email || 'Account';
   }
@@ -780,6 +808,14 @@ class AppShell extends PanicElement {
     if (route === 'events')    return this.mount(outlet, 'pb-events-list');
     if (route === 'templates') return this.mount(outlet, 'pb-template-picker');
     if (route === 'account')   return this.mount(outlet, 'pb-account-settings');
+    if (route === 'admin' || route.startsWith('admin-') || route.startsWith('admin/')) {
+      const tab = route === 'admin' ? '' : route.replace(/^admin[-/]/, '');
+      return this.mount(outlet, 'pb-admin-page', { initialTab: tab });
+    }
+    if (route === 'help' || route.startsWith('help-') || route.startsWith('help/')) {
+      const anchor = route === 'help' ? '' : route.replace(/^help[-/]/, '');
+      return this.mount(outlet, 'pb-help-page', { anchor });
+    }
     return this.mount(outlet, 'pb-dashboard');
   }
 
@@ -985,8 +1021,8 @@ class EventWorkspace extends PanicElement {
   render() {
     const data = this.data;
     const event = data.event;
-    const tabs = ['overview', 'details', 'tasks', 'lineup', 'schedule', 'guest-list', 'open-items', 'assets', 'activity'];
-    if (can(data, 'manage_invites')) tabs.splice(7, 0, 'invites');
+    const tabs = ['overview', 'details', 'tasks', 'lineup', 'schedule', 'staffing', 'guest-list', 'open-items', 'assets', 'activity'];
+    if (can(data, 'manage_invites')) tabs.splice(8, 0, 'invites');
     if (can(data, 'view_settlement')) tabs.splice(tabs.length - 1, 0, 'settlement');
     this.innerHTML = `<section class="event-top">
       <div><a class="back-link" href="#events">&lt;- Back to Events</a><h1>${esc(event.title)}</h1><p class="subtle">${esc(shortDate(eventDate(event)))} at ${esc(event.venue_name)}</p></div>
@@ -1020,23 +1056,25 @@ class EventWorkspace extends PanicElement {
     </article>
     <article class="next-action"><span class="icon-bubble amber">!</span><span><strong>Next Recommended Action</strong><p>${esc(data.nextAction)}</p></span><button class="secondary small" data-next-action>Refresh</button></article>
     <section id="overview" class="overview-grid">
-      <article class="panel"><div class="section-head padded"><h2>Readiness</h2></div><div class="health-row">${data.readiness.map((item) => `<div class="health-item">${item.ok ? '<span class="check">OK</span>' : '<span class="warn-mark">!</span>'}<span><strong>${esc(item.label)}</strong><br>${esc(item.state)}</span></div>`).join('')}</div></article>
+      <article class="panel"><div class="section-head padded"><h2>Readiness ${helpLink('overview', 'Overview &amp; Readiness')}</h2></div><div class="health-row">${data.readiness.map((item) => `<div class="health-item">${item.ok ? '<span class="check">OK</span>' : '<span class="warn-mark">!</span>'}<span><strong>${esc(item.label)}</strong><br>${esc(item.state)}</span></div>`).join('')}</div></article>
       <article class="panel"><div class="section-head padded"><h2>Internal Notes</h2></div><div class="notes">${esc(event.description_internal || 'No internal notes yet.')}</div></article>
     </section>
     <pb-event-details-form id="details"></pb-event-details-form>
     <pb-task-list id="tasks"></pb-task-list>
     <pb-lineup-editor id="lineup"></pb-lineup-editor>
     <pb-run-sheet id="schedule"></pb-run-sheet>
+    <pb-staffing-manager id="staffing"></pb-staffing-manager>
     <pb-guest-list-manager id="guest-list"></pb-guest-list-manager>
     <pb-open-items id="open-items"></pb-open-items>
     <pb-asset-manager id="assets"></pb-asset-manager>
     ${can(data, 'manage_invites') ? '<pb-invite-manager id="invites"></pb-invite-manager>' : ''}
     ${can(data, 'view_settlement') ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
-    <section id="activity" class="panel"><div class="section-head padded"><h2>Activity</h2></div><ul class="timeline">${data.activity.map((entry) => `<li><strong>${esc(entry.action)}</strong> by ${esc(entry.user_name || 'system')} <span class="muted">${esc(entry.created_at)}</span></li>`).join('')}</ul></section>`;
+    <section id="activity" class="panel"><div class="section-head padded"><h2>Activity ${helpLink('activity', 'Activity Log')}</h2></div><ul class="timeline">${data.activity.map((entry) => `<li><strong>${esc(entry.action)}</strong> by ${esc(entry.user_name || 'system')} <span class="muted">${esc(entry.created_at)}</span></li>`).join('')}</ul></section>`;
     $('pb-event-details-form', this).data = data;
     $('pb-task-list', this).data = data;
     $('pb-lineup-editor', this).data = data;
     $('pb-run-sheet', this).data = data;
+    $('pb-staffing-manager', this).data = data;
     $('pb-guest-list-manager', this).data = data;
     $('pb-open-items', this).data = data;
     $('pb-asset-manager', this).data = data;
@@ -1076,7 +1114,7 @@ class EventDetailsForm extends HTMLElement {
     const event = data.event;
     const editable = can(data, 'edit_event');
     const disabled = editable ? '' : ' disabled';
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Event Details</h2></div><form class="grid-form padded">
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Event Details ${helpLink('details', 'Event Details')}</h2></div><form class="grid-form padded">
       <label>Title <input name="title" required value="${esc(event.title)}"${disabled}></label>
       <label>Date <input type="date" name="date" required value="${esc(event.date)}"${disabled}></label>
       <label>Venue <select name="venue_id"${disabled}>${data.venues.map((venue) => option(venue.id, event.venue_id, venue.name)).join('')}</select></label>
@@ -1113,7 +1151,7 @@ class TaskList extends HTMLElement {
     const tasks = data.tasks || [];
     const editable = can(data, 'manage_tasks');
     const disabled = editable ? '' : ' disabled';
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Tasks</h2></div>${tasks.map((task) => `<form data-api="/events/${data.event.id}/tasks/${task.id}" data-method="PATCH" class="row-form"><label>Task<input name="title" value="${esc(task.title)}"${disabled}></label><label>Status${select('status', ['todo','in_progress','blocked','done','canceled'], task.status).replace('<select ', `<select${disabled} `)}</label><label>Assigned${userSelect(data.users, task.assigned_user_id).replace('<select ', `<select${disabled} `)}</label><label>Due<input type="date" name="due_date" value="${esc(task.due_date || '')}"${disabled}></label><label>Priority${select('priority', ['low','normal','high','urgent'], task.priority).replace('<select ', `<select${disabled} `)}</label><label>Details<input name="description" value="${esc(task.description || '')}"${disabled}></label>${editable ? `<button>Save</button><button type="button" class="secondary" data-complete="${esc(task.id)}">Done</button>` : ''}</form>`).join('') || emptyState('No tasks for this event.')}
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Tasks ${helpLink('tasks', 'Tasks')}</h2></div>${tasks.map((task) => `<form data-api="/events/${data.event.id}/tasks/${task.id}" data-method="PATCH" class="row-form"><label>Task<input name="title" value="${esc(task.title)}"${disabled}></label><label>Status${select('status', ['todo','in_progress','blocked','done','canceled'], task.status).replace('<select ', `<select${disabled} `)}</label><label>Assigned${userSelect(data.users, task.assigned_user_id).replace('<select ', `<select${disabled} `)}</label><label>Due<input type="date" name="due_date" value="${esc(task.due_date || '')}"${disabled}></label><label>Priority${select('priority', ['low','normal','high','urgent'], task.priority).replace('<select ', `<select${disabled} `)}</label><label>Details<input name="description" value="${esc(task.description || '')}"${disabled}></label>${editable ? `<button>Save</button><button type="button" class="secondary" data-complete="${esc(task.id)}">Done</button>` : ''}</form>`).join('') || emptyState('No tasks for this event.')}
     ${editable ? `<form data-api="/events/${data.event.id}/tasks" data-method="POST" class="row-form"><label>Task<input name="title" required placeholder="Confirm door count"></label><label>Assigned${userSelect(data.users)}</label><label>Due<input type="date" name="due_date"></label><label>Priority${select('priority', ['low','normal','high','urgent'], 'normal')}</label><input type="hidden" name="status" value="todo"><input name="description" placeholder="Details"><button>Add task</button></form>` : ''}</section>`;
     if (!editable) return;
     this.bind();
@@ -1143,7 +1181,7 @@ class LineupEditor extends HTMLElement {
     const lineup = data.lineup || [];
     const editable = can(data, 'manage_lineup');
     const disabled = editable ? '' : ' disabled';
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Lineup</h2></div>${lineup.map((item) => `<form data-api="/events/${data.event.id}/lineup/${item.id}" data-method="PATCH" class="row-form"><input name="billing_order" type="number" value="${esc(item.billing_order)}"${disabled}><input name="display_name" value="${esc(item.display_name)}"${disabled}><input name="set_time" type="time" value="${esc(item.set_time || '')}"${disabled}><input name="set_length_minutes" type="number" value="${esc(item.set_length_minutes || '')}"${disabled}>${select('status', ['invited','tentative','confirmed','canceled'], item.status).replace('<select ', `<select${disabled} `)}<input name="payout_terms" value="${esc(item.payout_terms || '')}"${disabled}><input name="notes" value="${esc(item.notes || '')}"${disabled}>${editable ? '<button>Save</button>' : ''}</form>`).join('')}
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Lineup ${helpLink('lineup', 'Lineup &amp; Bands')}</h2></div>${lineup.map((item) => `<form data-api="/events/${data.event.id}/lineup/${item.id}" data-method="PATCH" class="row-form"><input name="billing_order" type="number" value="${esc(item.billing_order)}"${disabled}><input name="display_name" value="${esc(item.display_name)}"${disabled}><input name="set_time" type="time" value="${esc(item.set_time || '')}"${disabled}><input name="set_length_minutes" type="number" value="${esc(item.set_length_minutes || '')}"${disabled}>${select('status', ['invited','tentative','confirmed','canceled'], item.status).replace('<select ', `<select${disabled} `)}<input name="payout_terms" value="${esc(item.payout_terms || '')}"${disabled}><input name="notes" value="${esc(item.notes || '')}"${disabled}>${editable ? '<button>Save</button>' : ''}</form>`).join('')}
     ${editable ? `<form data-api="/events/${data.event.id}/lineup" data-method="POST" class="row-form"><input name="band_name" placeholder="Band/artist"><input name="display_name" placeholder="Display name"><input name="billing_order" type="number" placeholder="Order"><input name="set_time" type="time"><input name="set_length_minutes" type="number" placeholder="Minutes">${select('status', ['invited','tentative','confirmed','canceled'], 'tentative')}<input name="payout_terms" placeholder="Payout"><button>Add lineup</button></form>` : ''}</section>`;
     if (!editable) return;
     this.bind();
@@ -1165,7 +1203,7 @@ class RunSheet extends HTMLElement {
     const schedule = data.schedule || [];
     const editable = can(data, 'manage_schedule');
     const disabled = editable ? '' : ' disabled';
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Run Sheet</h2></div>${schedule.map((item) => `<form data-api="/events/${data.event.id}/schedule/${item.id}" data-method="PATCH" class="row-form"><input name="title" value="${esc(item.title)}"${disabled}>${select('item_type', ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'], item.item_type).replace('<select ', `<select${disabled} `)}<input type="time" name="start_time" value="${esc(item.start_time || '')}"${disabled}><input type="time" name="end_time" value="${esc(item.end_time || '')}"${disabled}><input name="notes" value="${esc(item.notes || '')}"${disabled}>${editable ? '<button>Save</button>' : ''}</form>`).join('')}
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Run Sheet ${helpLink('schedule', 'Schedule &amp; Run Sheet')}</h2></div>${schedule.map((item) => `<form data-api="/events/${data.event.id}/schedule/${item.id}" data-method="PATCH" class="row-form"><input name="title" value="${esc(item.title)}"${disabled}>${select('item_type', ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'], item.item_type).replace('<select ', `<select${disabled} `)}<input type="time" name="start_time" value="${esc(item.start_time || '')}"${disabled}><input type="time" name="end_time" value="${esc(item.end_time || '')}"${disabled}><input name="notes" value="${esc(item.notes || '')}"${disabled}>${editable ? '<button>Save</button>' : ''}</form>`).join('')}
     ${editable ? `<form data-api="/events/${data.event.id}/schedule" data-method="POST" class="row-form"><input name="title" required placeholder="Schedule item">${select('item_type', ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'], 'other')}<input type="time" name="start_time"><input type="time" name="end_time"><input name="notes" placeholder="Notes"><button>Add item</button></form>` : ''}</section>`;
     if (!editable) return;
     this.bind();
@@ -1181,13 +1219,151 @@ class RunSheet extends HTMLElement {
   }
 }
 
+class StaffingManager extends HTMLElement {
+  set data(data) {
+    this.eventData = data;
+    const shifts = data.staffing || [];
+    const roster = data.staffRoster || [];
+    const roles  = data.staffRoles || ['manager','security','bartender','barback','door','sound','lighting','stagehand','runner','cleaner','other'];
+    const statuses = data.staffingStatuses || ['scheduled','confirmed','declined','no_show','completed','canceled'];
+    const editable = can(data, 'manage_staffing');
+    const disabled = editable ? '' : ' disabled';
+
+    const rosterOptions = (selectedId) => `<option value="">— TBD —</option>${roster.map((s) => `<option value="${esc(s.id)}" data-default-role="${esc(s.default_role)}" data-default-rate="${esc(s.hourly_rate || '')}" ${Number(s.id) === Number(selectedId || 0) ? 'selected' : ''}>${esc(s.name)} (${esc(titleCase(s.default_role))})</option>`).join('')}`;
+
+    // Group shifts by role for a tidy night-of-show layout.
+    const grouped = shifts.reduce((map, shift) => {
+      const key = shift.role || 'other';
+      (map[key] = map[key] || []).push(shift);
+      return map;
+    }, {});
+    const roleOrder = ['manager','sound','lighting','security','door','bartender','barback','stagehand','runner','cleaner','other'];
+
+    const totalShifts = shifts.length;
+    const confirmed = shifts.filter((s) => s.status === 'confirmed').length;
+    const tbd = shifts.filter((s) => !s.staff_member_id).length;
+
+    const groupSections = roleOrder
+      .filter((role) => grouped[role])
+      .map((role) => {
+        const rows = grouped[role].map((shift) => `<form data-shift="${esc(shift.id)}" class="row-form staffing-row">
+          <label>Staff <select name="staff_member_id"${disabled}>${rosterOptions(shift.staff_member_id)}</select></label>
+          <label>Role ${select('role', roles, shift.role).replace('<select ', `<select${disabled} `)}</label>
+          <label>Call <input type="time" name="call_time" value="${esc(shift.call_time || '')}"${disabled}></label>
+          <label>End <input type="time" name="end_time" value="${esc(shift.end_time || '')}"${disabled}></label>
+          <label>Rate <input type="number" step="0.01" name="hourly_rate" value="${esc(shift.hourly_rate || '')}" placeholder="$/hr"${disabled}></label>
+          <label>Status ${select('status', statuses, shift.status).replace('<select ', `<select${disabled} `)}</label>
+          <label>Notes <input name="notes" value="${esc(shift.notes || '')}"${disabled}></label>
+          ${editable ? `<button>Save</button><button type="button" class="small danger" data-delete="${esc(shift.id)}">Remove</button>` : ''}
+          ${shift.staff_phone || shift.staff_email ? `<small class="staffing-contact muted">${esc(shift.staff_phone || '')}${shift.staff_phone && shift.staff_email ? ' &middot; ' : ''}${esc(shift.staff_email || '')}</small>` : ''}
+        </form>`).join('');
+        return `<div class="staffing-section">
+          <h3 class="guest-section-head">${esc(titleCase(role))} <span class="muted">${grouped[role].length} shift${grouped[role].length === 1 ? '' : 's'}</span></h3>
+          ${rows}
+        </div>`;
+      }).join('');
+
+    const rosterHint = roster.length
+      ? ''
+      : (editable
+        ? '<p class="muted padded">No active staff in the roster yet. Open <a href="#admin-staff">Admin &rarr; Staff</a> to add bartenders, security, sound, etc.</p>'
+        : '');
+
+    const addForm = editable ? `<form data-form="add" class="row-form staffing-add">
+      <label>Staff <select name="staff_member_id">${rosterOptions(null)}</select></label>
+      <label>Role ${select('role', roles, 'security')}</label>
+      <label>Call <input type="time" name="call_time"></label>
+      <label>End <input type="time" name="end_time"></label>
+      <label>Rate <input type="number" step="0.01" name="hourly_rate" placeholder="$/hr"></label>
+      <label>Status ${select('status', statuses, 'scheduled')}</label>
+      <label>Notes <input name="notes" placeholder="Door area, late call, etc."></label>
+      <button>Add shift</button>
+    </form>` : '';
+
+    this.innerHTML = `<section class="panel">
+      <div class="section-head padded">
+        <h2>Staffing ${helpLink('staffing', 'Staffing')}</h2>
+        <div class="staffing-totals muted">${totalShifts} shift${totalShifts === 1 ? '' : 's'} &middot; ${confirmed} confirmed${tbd ? ` &middot; ${tbd} TBD` : ''}</div>
+      </div>
+      <div class="staffing-body">
+        ${rosterHint}
+        ${shifts.length ? groupSections : emptyState('No shifts assigned yet. Add bartenders, security, sound, door staff, etc. below.')}
+        ${addForm}
+      </div>
+    </section>`;
+    if (!editable) return;
+    this.bind();
+  }
+
+  bind() {
+    const eventId = this.eventData.event.id;
+    const buildBody = (form) => {
+      const body = formData(form);
+      if (body.staff_member_id === '') body.staff_member_id = null;
+      if (body.hourly_rate === '')     body.hourly_rate = null;
+      return body;
+    };
+
+    // When picking a staff member, prefill role + rate if those fields are empty.
+    $$('select[name="staff_member_id"]', this).forEach((select) => select.addEventListener('change', () => {
+      const opt = select.selectedOptions[0];
+      if (!opt || !opt.value) return;
+      const form = select.closest('form');
+      if (!form) return;
+      const defRole = opt.dataset.defaultRole;
+      const defRate = opt.dataset.defaultRate;
+      if (defRole && form.elements.role && !form.elements.role.dataset.touched) {
+        form.elements.role.value = defRole;
+      }
+      if (defRate && form.elements.hourly_rate && !form.elements.hourly_rate.value) {
+        form.elements.hourly_rate.value = defRate;
+      }
+    }));
+    $$('select[name="role"], input[name="hourly_rate"]', this).forEach((el) => el.addEventListener('input', () => { el.dataset.touched = '1'; }));
+
+    $$('form[data-shift]', this).forEach((form) => form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      try {
+        await api(`/events/${eventId}/staffing/${form.dataset.shift}`, { method: 'PATCH', body: JSON.stringify(buildBody(form)) });
+        publish('event.saved', { id: eventId });
+        publish('toast.show', { message: 'Shift saved.' });
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    }));
+
+    $$('[data-delete]', this).forEach((button) => button.addEventListener('click', async () => {
+      if (!confirm('Remove this shift?')) return;
+      try {
+        await api(`/events/${eventId}/staffing/${button.dataset.delete}`, { method: 'DELETE' });
+        publish('event.saved', { id: eventId });
+        publish('toast.show', { message: 'Shift removed.' });
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    }));
+
+    $('[data-form="add"]', this)?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      try {
+        await api(`/events/${eventId}/staffing`, { method: 'POST', body: JSON.stringify(buildBody(event.target)) });
+        publish('event.saved', { id: eventId });
+        publish('toast.show', { message: 'Shift added.' });
+        event.target.reset();
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
+  }
+}
+
 class OpenItems extends HTMLElement {
   set data(data) {
     this.eventData = data;
     const items = data.blockers || [];
     const editable = can(data, 'manage_open_items');
     const disabled = editable ? '' : ' disabled';
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Open Items</h2></div>${items.map((item) => `<form data-api="/events/${data.event.id}/open-items/${item.id}" data-method="PATCH" class="row-form"><label>Item<input name="title" value="${esc(item.title)}"${disabled}></label><label>Status${select('status', ['open','waiting','resolved','canceled'], item.status).replace('<select ', `<select${disabled} `)}</label><label>Due<input type="date" name="due_date" value="${esc(item.due_date || '')}"${disabled}></label><label>Details<input name="description" value="${esc(item.description || '')}"${disabled}></label><input type="hidden" name="owner_user_id" value="${esc(item.owner_user_id || '')}">${editable ? `<button>Save</button><button type="button" class="secondary" data-resolve="${esc(item.id)}">Mark Complete</button>` : ''}</form>`).join('') || emptyState('No open items for this event.')}
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Open Items ${helpLink('open-items', 'Open Items')}</h2></div>${items.map((item) => `<form data-api="/events/${data.event.id}/open-items/${item.id}" data-method="PATCH" class="row-form"><label>Item<input name="title" value="${esc(item.title)}"${disabled}></label><label>Status${select('status', ['open','waiting','resolved','canceled'], item.status).replace('<select ', `<select${disabled} `)}</label><label>Due<input type="date" name="due_date" value="${esc(item.due_date || '')}"${disabled}></label><label>Details<input name="description" value="${esc(item.description || '')}"${disabled}></label><input type="hidden" name="owner_user_id" value="${esc(item.owner_user_id || '')}">${editable ? `<button>Save</button><button type="button" class="secondary" data-resolve="${esc(item.id)}">Mark Complete</button>` : ''}</form>`).join('') || emptyState('No open items for this event.')}
     ${editable ? `<form data-api="/events/${data.event.id}/open-items" data-method="POST" class="row-form"><label>Item<input name="title" required placeholder="Waiting on ticket link"></label><label>Details<input name="description" placeholder="Details"></label><input type="hidden" name="status" value="open"><input type="date" name="due_date"><button>Add open item</button></form>` : ''}</section>`;
     if (!editable) return;
     this.bind();
@@ -1267,7 +1443,7 @@ class GuestListManager extends HTMLElement {
 
     this.innerHTML = `<section class="panel">
       <div class="section-head padded">
-        <h2>Door / Guest List</h2>
+        <h2>Door / Guest List ${helpLink('guest-list', 'Guest List')}</h2>
         <div class="guest-totals muted">${totalEntries} entries &middot; ${totalSeats} seats &middot; ${checkedIn} checked in (${checkedSeats} seats)</div>
       </div>
       <div class="guest-list-body">
@@ -1311,7 +1487,7 @@ class AssetManager extends HTMLElement {
     const assets = data.assets || [];
     const canManage = can(data, 'manage_assets');
     const canUpload = can(data, 'upload_assets');
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets</h2></div><div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img src="${esc(assetUrl(asset.file_path))}" alt="">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(titleCase(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div class="inline-actions"><a class="button small secondary" href="${esc(assetUrl(asset.file_path))}" download>Download</a>${canManage ? `<button class="small" data-approve="${esc(asset.id)}">Approve</button><button class="small secondary" data-reject="${esc(asset.id)}">Reject</button><button class="small danger" data-delete="${esc(asset.id)}">Delete</button>` : ''}</div></article>`).join('') || emptyState('No assets uploaded yet.')}</div>
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets ${helpLink('assets', 'Assets &amp; Flyers')}</h2></div><div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img src="${esc(assetUrl(asset.file_path))}" alt="">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(titleCase(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div class="inline-actions"><a class="button small secondary" href="${esc(assetUrl(asset.file_path))}" download>Download</a>${canManage ? `<button class="small" data-approve="${esc(asset.id)}">Approve</button><button class="small secondary" data-reject="${esc(asset.id)}">Reject</button><button class="small danger" data-delete="${esc(asset.id)}">Delete</button>` : ''}</div></article>`).join('') || emptyState('No assets uploaded yet.')}</div>
     ${canUpload ? `<form id="asset-form" class="row-form"><input name="title" placeholder="Asset title">${select('asset_type', ['flyer','poster','band_photo','logo','social_square','social_story','press_photo','other'], 'flyer')}<input type="file" name="asset" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.pdf" required><input name="notes" placeholder="Notes"><button>Upload asset</button></form>` : ''}</section>`;
     this.bind();
   }
@@ -1355,7 +1531,7 @@ class InviteManager extends HTMLElement {
     this.eventData = data;
     const roles = ['event_owner','promoter','band','artist','designer','staff','viewer'];
     const invites = data.invites || [];
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Invites</h2></div><div class="invite-list">${invites.length ? invites.map((invite) => {
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Invites ${helpLink('invites', 'Invites &amp; Collaborators')}</h2></div><div class="invite-list">${invites.length ? invites.map((invite) => {
       const url = appUrl(`invite.html?token=${invite.token}`);
       return `<article class="invite-row"><span><strong>${esc(invite.email)}</strong><br><small>${esc(titleCase(invite.role))} - ${invite.used_at ? 'Accepted' : `Expires ${esc(invite.expires_at)}`}</small></span><input readonly value="${esc(url)}"><button class="secondary small" data-copy="${esc(url)}">Copy link</button></article>`;
     }).join('') : emptyState('No invites have been created for this event.')}</div>
@@ -1383,7 +1559,7 @@ class SettlementForm extends HTMLElement {
     this.eventData = data;
     const settlement = data.settlement || {};
     const fields = ['gross_ticket_sales','tickets_sold','bar_sales','expenses','band_payouts','promoter_payout','venue_net'];
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Settlement</h2><button class="secondary small" type="button" data-calc>Calculate venue net</button></div><form class="row-form">${fields.map((field) => `<label>${esc(titleCase(field))}<input name="${esc(field)}" type="number" step="0.01" value="${esc(settlement[field] || 0)}"></label>`).join('')}<label class="wide">Notes <textarea name="notes">${esc(settlement.notes || '')}</textarea></label><button>Save settlement</button></form></section>`;
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Settlement ${helpLink('settlement', 'Settlement')}</h2><button class="secondary small" type="button" data-calc>Calculate venue net</button></div><form class="row-form">${fields.map((field) => `<label>${esc(titleCase(field))}<input name="${esc(field)}" type="number" step="0.01" value="${esc(settlement[field] || 0)}"></label>`).join('')}<label class="wide">Notes <textarea name="notes">${esc(settlement.notes || '')}</textarea></label><button>Save settlement</button></form></section>`;
     const form = $('form', this);
     const calculate = () => {
       const values = formData(form);
@@ -1553,6 +1729,1039 @@ class AccountSettings extends PanicElement {
   }
 }
 
+// ── Help page ────────────────────────────────────────────────────────────────
+// Long-form documentation for the backstage app. Sections are anchored so the
+// small "?" icons next to each event section can deep-link via #help-<slug>.
+
+const HELP_SECTIONS = [
+  {
+    group: 'Getting Started',
+    items: [
+      { slug: 'welcome',      title: 'Welcome' },
+      { slug: 'sign-in',      title: 'Signing in' },
+      { slug: 'account',      title: 'Account &amp; passkeys' },
+      { slug: 'roles',        title: 'Roles &amp; permissions' },
+      { slug: 'onboarding',   title: 'Onboarding collaborators' },
+    ],
+  },
+  {
+    group: 'Working with the App',
+    items: [
+      { slug: 'navigation',   title: 'Main navigation' },
+      { slug: 'dashboard',    title: 'Dashboard' },
+      { slug: 'calendar',     title: 'Calendar' },
+      { slug: 'pipeline',     title: 'Pipeline board' },
+      { slug: 'events-list',  title: 'Events list &amp; search' },
+      { slug: 'templates',    title: 'Templates' },
+    ],
+  },
+  {
+    group: 'Running an Event',
+    items: [
+      { slug: 'event-create', title: 'Creating an event' },
+      { slug: 'overview',     title: 'Overview &amp; readiness' },
+      { slug: 'details',      title: 'Event details' },
+      { slug: 'tasks',        title: 'Tasks' },
+      { slug: 'lineup',       title: 'Lineup &amp; bands' },
+      { slug: 'schedule',     title: 'Schedule &amp; run sheet' },
+      { slug: 'staffing',     title: 'Staffing' },
+      { slug: 'open-items',   title: 'Open items' },
+      { slug: 'guest-list',   title: 'Guest list &amp; door' },
+      { slug: 'assets',       title: 'Assets &amp; flyers' },
+      { slug: 'invites',      title: 'Invites &amp; collaborators' },
+      { slug: 'settlement',   title: 'Settlement' },
+      { slug: 'publish',      title: 'Publishing the public page' },
+      { slug: 'print',        title: 'Printable packets' },
+      { slug: 'activity',     title: 'Activity log' },
+    ],
+  },
+  {
+    group: 'Administration',
+    items: [
+      { slug: 'admin',        title: 'Admin overview' },
+      { slug: 'admin-users',  title: 'Managing login accounts' },
+      { slug: 'admin-staff',  title: 'Staff roster' },
+      { slug: 'admin-templates', title: 'Editing event templates' },
+    ],
+  },
+  {
+    group: 'Reference',
+    items: [
+      { slug: 'statuses',     title: 'Event status reference' },
+      { slug: 'workflow',     title: 'End-to-end show workflow' },
+      { slug: 'faq',          title: 'FAQ' },
+      { slug: 'troubleshooting', title: 'Troubleshooting' },
+    ],
+  },
+];
+
+const HELP_CONTENT = {
+  welcome: `
+    <h2>Welcome to Panic Backstage</h2>
+    <p>Panic Backstage helps a venue run a show from the first hold through final settlement. It keeps the lineup, run sheet, flyers, ticketing notes, open items, door list, and money in one place so a small team can hand off cleanly between bookers, promoters, designers, and night-of-show staff.</p>
+    <p>If this is your first visit, start with <a href="#help-sign-in">Signing in</a>, then <a href="#help-navigation">Main navigation</a>, then <a href="#help-event-create">Creating an event</a>. Section "?" icons inside each event open the relevant help page in a new tab so you do not lose your place.</p>
+  `,
+
+  'sign-in': `
+    <h2 id="help-sign-in-h">Signing in</h2>
+    <p>The login page offers three ways to sign in. Use whichever your account has set up:</p>
+    <ul>
+      <li><strong>Passkey.</strong> If you have registered a passkey on this device, click <em>Sign in with passkey</em> and approve with Face ID, Touch ID, Windows Hello, or a hardware key. The email field also supports browser-native passkey autofill when available.</li>
+      <li><strong>Password.</strong> Enter your email and password. New collaborators set their password the first time they accept an invite, or in <em>Account</em> later.</li>
+      <li><strong>Email login link.</strong> Expand <em>Email me a login link instead</em>, enter your email, and click the link in the message. The link expires in 15 minutes.</li>
+    </ul>
+    <p>Sessions persist via access and refresh tokens stored in your browser. If a session expires, the app silently refreshes; if the refresh fails you are bounced to the login page.</p>
+    <p>The default demo admin (when seeded) is <code>admin@mabuhay.local</code> / <code>changeme</code>.</p>
+  `,
+
+  account: `
+    <h2>Account &amp; passkeys</h2>
+    <p>Open <em>Account</em> from the topbar to manage how you sign in.</p>
+    <h3>Passkeys</h3>
+    <p>Click <em>+ Add passkey for this device</em> and approve the prompt. The device name is stored along with the date it was added and the date it was last used. Remove a passkey any time; the next sign-in on that device must fall back to password or email link.</p>
+    <h3>Password</h3>
+    <p>Set or change a password. New passwords must be at least 8 characters. If you already have a password, the current one is required before saving a new one.</p>
+    <p>You can mix and match all three methods on the same account. Most venues recommend a passkey on the daily-driver laptop plus a password as a fallback.</p>
+  `,
+
+  roles: `
+    <h2>Roles &amp; permissions</h2>
+    <p>Authorization is enforced server-side based on your global role plus per-event collaborator rows.</p>
+    <h3>Global roles</h3>
+    <ul>
+      <li><strong>Venue admin.</strong> Full access to every event, template, asset, settlement, invite, and user. Can create events from templates and manage the venue.</li>
+      <li><strong>Staff user.</strong> Sees only events they own or where they appear in <code>event_collaborators</code>.</li>
+    </ul>
+    <h3>Per-event collaborator roles</h3>
+    <ul>
+      <li><strong>Event owner.</strong> Full access to that event except global user/template administration.</li>
+      <li><strong>Promoter.</strong> Read the event, edit lineup, tasks, schedule, and open items, view and copy the public page. <em>Settlement is hidden.</em></li>
+      <li><strong>Band / Artist.</strong> Read the event, upload their own assets, see tasks assigned directly to them.</li>
+      <li><strong>Designer.</strong> Read the event and upload/manage assets. Settlement is hidden.</li>
+      <li><strong>Staff.</strong> Read the event and edit tasks, schedule, and open items.</li>
+      <li><strong>Viewer.</strong> Read-only access.</li>
+    </ul>
+    <p>If a control is greyed out or missing, your role does not have permission for it. Ask the event owner or a venue admin to elevate your role if you need more.</p>
+  `,
+
+  onboarding: `
+    <h2>Onboarding collaborators</h2>
+    <p>Bring a promoter, designer, band, or staffer onto a single event with an invite link.</p>
+    <ol>
+      <li>Open the event and scroll to <a href="#help-invites">Invites</a>.</li>
+      <li>Enter their email, pick the role, and click <em>Create invite link</em>.</li>
+      <li>Copy the generated URL with the <em>Copy link</em> button and share it via your usual channel (email, Slack, SMS). Backstage does not send the email itself.</li>
+      <li>The recipient opens the link, sets a name, and is signed in directly to the event workspace.</li>
+    </ol>
+    <p>Invites are scoped to a single event and role. Create a new invite for each additional event. Existing accounts can also accept a new invite to add a second event to their workspace.</p>
+  `,
+
+  navigation: `
+    <h2>Main navigation</h2>
+    <p>The left sidebar (or bottom bar on mobile) is the primary navigation.</p>
+    <ul>
+      <li><strong>Dashboard</strong> — the next-two-weeks operational view.</li>
+      <li><strong>Calendar</strong> — month grid of confirmed and held dates.</li>
+      <li><strong>Pipeline</strong> — Kanban board grouped by event status.</li>
+      <li><strong>Events</strong> — searchable list of every event you can see.</li>
+      <li><strong>Templates</strong> — venue admins only, used to spawn new events.</li>
+      <li><strong>Help</strong> — this page.</li>
+    </ul>
+    <p>The topbar holds:</p>
+    <ul>
+      <li><strong>Search</strong> — type to filter the Events list by title.</li>
+      <li><strong>Account</strong> — passkey and password management.</li>
+      <li><strong>Logout</strong> — clears tokens and returns to the login page.</li>
+    </ul>
+  `,
+
+  dashboard: `
+    <h2>Dashboard</h2>
+    <p>The dashboard summarises Mabuhay show operations for the next two weeks.</p>
+    <ul>
+      <li><strong>Next Show</strong> — top-of-fold card with doors and show times and current status.</li>
+      <li><strong>Open Items / Empty / Needs Flyer / Unsettled</strong> — counters that link straight to the relevant work.</li>
+      <li><strong>Next 14 Days</strong> — table of upcoming events with main issue and owner.</li>
+      <li><strong>Needs Attention</strong> — events with primary blockers or unapproved flyers.</li>
+    </ul>
+    <p>Click any event row to jump into its workspace. The cards refresh whenever you save changes in any event.</p>
+  `,
+
+  calendar: `
+    <h2>Calendar</h2>
+    <p>The calendar shows a six-week window. Use the <code>&lt;</code> and <code>&gt;</code> buttons to move months, or <em>Today</em> to snap back. Dates without an event show an <em>Available</em> chip; dates with events show a colored status dot and the event title. Click any event to open it.</p>
+    <p>The dashboard, pipeline, and calendar all read from the same <code>/api/events</code> data, so adding or moving a show updates all three.</p>
+  `,
+
+  pipeline: `
+    <h2>Pipeline board</h2>
+    <p>The pipeline groups events by status into columns. To advance an event, choose the new status in its card's inline dropdown and click <em>Move</em>. Open the card to jump into the full event workspace. The pipeline is the fastest way to move several events forward at once.</p>
+    <p>See <a href="#help-statuses">Event status reference</a> for what each column means.</p>
+  `,
+
+  'events-list': `
+    <h2>Events list &amp; search</h2>
+    <p>The Events page shows every event you have access to. Use the topbar search to filter by title. Click any row to open the workspace. Admins see a <em>Create Event</em> button that links to <a href="#help-templates">Templates</a>.</p>
+  `,
+
+  templates: `
+    <h2>Templates</h2>
+    <p>Templates are pre-built event blueprints. Only venue admins see this page. Each template captures the venue, event type, default title, default tasks, default schedule blocks, and standard open items for a kind of show (for example a three-band local show or a swing dancing night).</p>
+    <h3>Creating an event from a template</h3>
+    <ol>
+      <li>Open <em>Templates</em>.</li>
+      <li>On the template card, pick a date and adjust doors/show/title.</li>
+      <li>Click <em>Create event</em>. You are taken straight into the new event.</li>
+    </ol>
+    <p>The event is created with all of the template's seeded tasks, schedule items, and open items already in place, so you only have to fill in lineup-specific details.</p>
+  `,
+
+  'event-create': `
+    <h2>Creating an event</h2>
+    <p>Every show starts from a template. Open <a href="#help-templates">Templates</a>, pick a template that matches the kind of night you are programming, fill in date and doors/show times, and click <em>Create event</em>.</p>
+    <p>From there, work top to bottom in the event workspace:</p>
+    <ol>
+      <li><a href="#help-details">Event details</a> — set venue, type, status, owner, ticket price, capacity, age restriction.</li>
+      <li><a href="#help-lineup">Lineup</a> — add the bands or performers.</li>
+      <li><a href="#help-schedule">Run sheet</a> — set load-in, soundcheck, set times, curfew.</li>
+      <li><a href="#help-tasks">Tasks</a> — assign anything that has to be done before doors.</li>
+      <li><a href="#help-assets">Assets</a> — collect and approve flyers.</li>
+      <li><a href="#help-publish">Publish</a> — flip the public page on when the show is ready to announce.</li>
+      <li><a href="#help-guest-list">Guest list</a> — close to show day, build the door list.</li>
+      <li><a href="#help-settlement">Settlement</a> — after the show, reconcile the numbers.</li>
+    </ol>
+  `,
+
+  overview: `
+    <h2>Overview &amp; readiness</h2>
+    <p>The top of every event workspace shows a flyer thumbnail, the event facts (date, doors, show, status, owner, public-page state), and two counters that link straight to the matching tabs:</p>
+    <ul>
+      <li><strong>Open Items</strong> count — blockers that are still <em>open</em> or <em>waiting</em>.</li>
+      <li><strong>Tasks Left</strong> count — tasks not yet marked <em>done</em> or <em>canceled</em>.</li>
+    </ul>
+    <p>Below that is a <strong>Next Recommended Action</strong> banner suggesting the most important next step (sign the artist, approve the flyer, build the run sheet, etc.). It refreshes when you click <em>Refresh</em> or save something.</p>
+    <p>The <strong>Readiness</strong> panel lists the gates we check before a show is "ready" (lineup confirmed, flyer approved, public page on, run sheet built, settlement filed, and so on) with a clear OK / not-OK mark. The <strong>Internal Notes</strong> panel is the place for anything you do not want on the public page — green-room arrangements, transport, dietary notes, comp commitments.</p>
+  `,
+
+  details: `
+    <h2>Event details</h2>
+    <p>The Event Details form holds the facts of the show. Edits save with the <em>Save details</em> button.</p>
+    <ul>
+      <li><strong>Title</strong> — the marquee name of the show. Used everywhere (dashboard, calendar, public page, print packets).</li>
+      <li><strong>Date</strong> — show date.</li>
+      <li><strong>Venue</strong> — choose from the venues your account can see.</li>
+      <li><strong>Type</strong> — live music, karaoke, open mic, promoter night, DJ night, comedy, private event, or special event.</li>
+      <li><strong>Status</strong> — see <a href="#help-statuses">Event status reference</a>.</li>
+      <li><strong>Owner</strong> — the staff member responsible. Owners get implicit access to the event.</li>
+      <li><strong>Doors / Show / End</strong> — set the public-facing times.</li>
+      <li><strong>Age restriction</strong> — shown on the public page (e.g. 21+, All Ages).</li>
+      <li><strong>Ticket price / Capacity / Ticket URL</strong> — used for ticketing handoff and public page.</li>
+      <li><strong>Public description</strong> — copy that appears on the public event page.</li>
+      <li><strong>Internal notes</strong> — only visible to staff and collaborators.</li>
+      <li><strong>Public page visible</strong> — toggles the publish state from inside the form. The big <em>Publish</em> button at the top of the workspace does the same thing.</li>
+    </ul>
+  `,
+
+  tasks: `
+    <h2>Tasks</h2>
+    <p>Tasks are anything a person has to do before the show. They appear on the dashboard's open-items metric and feed the "Next Recommended Action" hint.</p>
+    <h3>Adding a task</h3>
+    <p>Fill in the form at the bottom of the Tasks panel: a title (required), an assignee, a due date, a priority (low / normal / high / urgent), and details. Click <em>Add task</em>.</p>
+    <h3>Updating a task</h3>
+    <p>Each row is an inline form. Change any field and click <em>Save</em>, or use the <em>Done</em> shortcut to mark it complete in one click. Statuses are <em>todo</em>, <em>in_progress</em>, <em>blocked</em>, <em>done</em>, <em>canceled</em>.</p>
+    <h3>Who sees what</h3>
+    <p>Promoters and staff can edit all tasks. Bands and artists see tasks assigned directly to them. Viewers see tasks but cannot edit them.</p>
+  `,
+
+  lineup: `
+    <h2>Lineup &amp; bands</h2>
+    <p>The lineup captures who is playing the show.</p>
+    <h3>Adding a band or artist</h3>
+    <p>Use the add form at the bottom of the lineup panel:</p>
+    <ul>
+      <li><strong>Band / artist</strong> — internal record name. Bands you re-book are reused across events.</li>
+      <li><strong>Display name</strong> — what appears on the public page and the flyer (e.g. "The Examples ft. Special Guest").</li>
+      <li><strong>Billing order</strong> — 1 is headliner. Schedule defaults are sorted by this number.</li>
+      <li><strong>Set time / Set length minutes</strong> — used to build the run sheet.</li>
+      <li><strong>Status</strong> — <em>invited</em>, <em>tentative</em>, <em>confirmed</em>, <em>canceled</em>.</li>
+      <li><strong>Payout terms</strong> — short text like "$200 guarantee", "70/30 after $400", or "door split". Surfaced in the print packet and settlement.</li>
+      <li><strong>Notes</strong> — backline, hospitality, anything the booker needs to remember.</li>
+    </ul>
+    <h3>Editing</h3>
+    <p>Edit any field inline and click <em>Save</em> on that row. Re-ordering is done by editing the billing order numbers.</p>
+    <h3>Band assets</h3>
+    <p>Press photos, logos, and band-supplied artwork live in <a href="#help-assets">Assets</a>. Bands with their own backstage account can upload assets directly without needing the booker to relay files.</p>
+  `,
+
+  schedule: `
+    <h2>Schedule &amp; run sheet</h2>
+    <p>The run sheet is the minute-by-minute night-of-show plan.</p>
+    <h3>Item types</h3>
+    <ul>
+      <li><strong>load_in</strong> — when crew/bands arrive and gear comes in.</li>
+      <li><strong>soundcheck</strong> — per-band soundcheck blocks.</li>
+      <li><strong>doors</strong> — when the public is admitted. Should match the public doors time on <a href="#help-details">Event details</a>.</li>
+      <li><strong>set</strong> — a performance set. Create one per band; the lineup's billing order suggests the order.</li>
+      <li><strong>changeover</strong> — buffer between sets.</li>
+      <li><strong>curfew</strong> — hard stop time.</li>
+      <li><strong>staff_call</strong> — when each staff member should arrive.</li>
+      <li><strong>other</strong> — anything else (vendor arrival, photographer arrival, VIP arrival).</li>
+    </ul>
+    <h3>Adding items</h3>
+    <p>Use the add form with title, type, start, end, and notes. Save and the row joins the schedule. Edit times inline; save each row when you change it.</p>
+    <h3>Printing</h3>
+    <p>The run-of-show printout (see <a href="#help-print">Printable packets</a>) prints the schedule as a single-sheet timeline that staff and bands can keep on hand night of show.</p>
+  `,
+
+  staffing: `
+    <h2>Staffing</h2>
+    <p>The Staffing tab is where you schedule night-of-show personnel — security, bartenders, barbacks, door staff, sound, lighting, stagehands, runners, cleaners, manager-on-duty, and anyone else assigned a shift. It is separate from the <a href="#help-lineup">Lineup</a> (which is for performers) and from <a href="#help-invites">Invites</a> (which gives someone backstage app access).</p>
+    <h3>Roles</h3>
+    <p>The role dropdown offers a fixed list: <em>Manager, Security, Bartender, Barback, Door, Sound, Lighting, Stagehand, Runner, Cleaner, Other.</em> Use <em>Other</em> for anything unusual and put the specifics in the Notes field.</p>
+    <h3>Adding a shift</h3>
+    <p>Use the form at the bottom of the panel. Pick the staff member from the roster (or leave as TBD), set the role, call time, end time, hourly rate, status, and any notes. The roster is managed under <a href="#help-admin-staff">Admin &rarr; Staff</a>.</p>
+    <p>When you pick a staff member from the dropdown, their default role and hourly rate prefill automatically — you can override either before saving.</p>
+    <h3>Shift statuses</h3>
+    <ul>
+      <li><strong>scheduled</strong> — assigned but not confirmed.</li>
+      <li><strong>confirmed</strong> — staff member has confirmed.</li>
+      <li><strong>declined</strong> — staff member can't make it; reassign or leave as TBD.</li>
+      <li><strong>no_show</strong> — recorded after the fact.</li>
+      <li><strong>completed</strong> — shift finished as scheduled.</li>
+      <li><strong>canceled</strong> — shift no longer needed.</li>
+    </ul>
+    <h3>Night-of-show</h3>
+    <p>Shifts are grouped by role for a clean read at the door. Print the staffing schedule from the <em>Print</em> menu — it lists call times, role, staff name and phone, and shift status, alongside the run sheet's staff_call times for cross-reference.</p>
+    <h3>TBD shifts</h3>
+    <p>You can save a shift without picking a staff member — it appears as <em>TBD</em>. Useful when you know you need (say) two security at 7:30 PM but haven't picked who yet.</p>
+  `,
+
+  'open-items': `
+    <h2>Open items</h2>
+    <p>Open items are external blockers — things waiting on someone or some other system. Examples: "Waiting on ticket link from promoter", "Need signed contract from headliner", "Insurance certificate pending".</p>
+    <h3>Statuses</h3>
+    <ul>
+      <li><strong>open</strong> — actively blocking.</li>
+      <li><strong>waiting</strong> — assigned to someone, ticking down.</li>
+      <li><strong>resolved</strong> — done.</li>
+      <li><strong>canceled</strong> — no longer needed.</li>
+    </ul>
+    <p>Open items contribute to the dashboard's <em>Open Items</em> count and the readiness signal. Use <em>Mark Complete</em> on a row to resolve it in one click.</p>
+    <p>Use <a href="#help-tasks">Tasks</a> for things <em>your team</em> needs to do, and open items for things you are waiting on someone else for. Both feed the same dashboard metric.</p>
+  `,
+
+  'guest-list': `
+    <h2>Guest list &amp; door</h2>
+    <p>The guest list is the door's source of truth — comps, will-call, VIP holds, press, and industry. It is grouped by list type and gives you a live check-in count.</p>
+    <h3>List types</h3>
+    <ul>
+      <li><strong>VIP</strong> — venue or owner VIPs.</li>
+      <li><strong>Press</strong> — reviewers, photographers.</li>
+      <li><strong>Industry</strong> — promoters, agents, label reps.</li>
+      <li><strong>Comp</strong> — free entries the venue is comping.</li>
+      <li><strong>Guest</strong> — band and promoter guests (count against their guest allowance).</li>
+      <li><strong>Will call</strong> — paid tickets to be picked up at door.</li>
+    </ul>
+    <h3>Adding a guest</h3>
+    <p>Use the add form with name, party size (defaults to 1), list type, optional <em>guest of</em> (e.g. "Headliner"), and notes. Save.</p>
+    <h3>Night of show</h3>
+    <p>At the door, click the check-in toggle on each row as guests arrive. The header shows total entries, total seats, checked-in entries, and checked-in seats. The row turns muted when checked in so you can see at a glance who has and has not arrived.</p>
+    <h3>Printing</h3>
+    <p>Use the <em>Print</em> menu at the top of the event to print a door/guest list packet sorted by list type. See <a href="#help-print">Printable packets</a>.</p>
+  `,
+
+  assets: `
+    <h2>Assets &amp; flyers</h2>
+    <p>Assets are flyers, band photos, logos, social cards, and other files attached to the event.</p>
+    <h3>Uploading</h3>
+    <p>Use the form at the bottom of the Assets panel. Give the file a title, pick a type, choose a file (PNG, JPG, GIF, WEBP, or PDF), add notes, and click <em>Upload asset</em>. Uploads go to local disk under <code>storage/uploads/events/&lt;id&gt;</code>.</p>
+    <h3>Asset types</h3>
+    <ul>
+      <li><strong>Flyer</strong> — the primary show flyer. The first approved flyer is shown on the public event page and on print packets.</li>
+      <li><strong>Poster</strong> — print poster for the venue wall.</li>
+      <li><strong>Band photo / Press photo</strong> — used for press kits and social.</li>
+      <li><strong>Logo</strong> — band or sponsor mark.</li>
+      <li><strong>Social square / Social story</strong> — sized for IG feed and IG/FB stories.</li>
+      <li><strong>Other</strong> — anything else.</li>
+    </ul>
+    <h3>Approval flow</h3>
+    <p>Each asset has an approval status: <em>pending</em>, <em>approved</em>, or <em>rejected</em>. Promoters and admins click <em>Approve</em> or <em>Reject</em>. The dashboard's "Needs Flyer" counter watches the count of <em>approved</em> flyers per event.</p>
+    <h3>Bands uploading their own assets</h3>
+    <p>Bands with a backstage account and a band/artist invite on this event can upload their own press photos and stage plot PDFs without round-tripping through the booker.</p>
+  `,
+
+  invites: `
+    <h2>Invites &amp; collaborators</h2>
+    <p>Invites add another person to a single event as a specific role (see <a href="#help-roles">Roles &amp; permissions</a>).</p>
+    <h3>Creating an invite</h3>
+    <ol>
+      <li>Scroll to the Invites panel on the event.</li>
+      <li>Enter the collaborator's email and pick the role.</li>
+      <li>Click <em>Create invite link</em>.</li>
+      <li>Use the <em>Copy link</em> button and share the link via your preferred channel.</li>
+    </ol>
+    <h3>Accepting an invite</h3>
+    <p>When the recipient opens the link they see an acceptance page with the event title and role. They enter their name and are signed straight into the event workspace. If they already have an account, the invite is attached to it.</p>
+    <h3>Expiration</h3>
+    <p>Invite links show their expiry date. Once used they switch to <em>Accepted</em>. Create a fresh invite if a link expires before it is used.</p>
+    <p><strong>Note:</strong> Backstage generates the link only; it does not send email.</p>
+  `,
+
+  settlement: `
+    <h2>Settlement</h2>
+    <p>Settlement is the night-of-show or next-day reconciliation. It is visible to venue admins and event owners and hidden from promoters, designers, bands, and viewers.</p>
+    <h3>Fields</h3>
+    <ul>
+      <li><strong>Gross ticket sales</strong> — total ticket revenue (Stripe export or manual).</li>
+      <li><strong>Tickets sold</strong> — paid tickets, excluding comps.</li>
+      <li><strong>Bar sales</strong> — bar take.</li>
+      <li><strong>Expenses</strong> — production, hospitality, security, etc.</li>
+      <li><strong>Band payouts</strong> — total paid to performers (sum of all lineup payouts).</li>
+      <li><strong>Promoter payout</strong> — paid to outside promoter if applicable.</li>
+      <li><strong>Venue net</strong> — the venue's take. Click <em>Calculate venue net</em> to derive: <code>gross + bar − expenses − band − promoter</code>.</li>
+      <li><strong>Notes</strong> — anything else (cash float, discrepancies, comp count).</li>
+    </ul>
+    <p>Save the form to record the settlement. Once filed, the event drops off the dashboard's <em>Unsettled</em> count.</p>
+  `,
+
+  publish: `
+    <h2>Publishing the public page</h2>
+    <p>Every event has a public-facing page at <code>/event.html?slug=&lt;slug&gt;</code> that shows the title, date, doors/show, age restriction, ticket link, public description, lineup, and the approved flyer.</p>
+    <h3>Toggling publish</h3>
+    <p>Click <em>Publish Public Page</em> at the top of the event workspace to make it live, or <em>Hide Public Page</em> to take it offline. The same toggle exists as a checkbox in <a href="#help-details">Event details</a>.</p>
+    <h3>Previewing</h3>
+    <p>Click <em>Public Page</em> in the event header to open the public page in a new tab. It is fetched anonymously from <code>/api/public/events/&lt;slug&gt;</code>; if the event is hidden the API returns an error.</p>
+  `,
+
+  print: `
+    <h2>Printable packets</h2>
+    <p>The <em>Print</em> menu at the top right of the event opens a self-contained print window with five layouts:</p>
+    <ul>
+      <li><strong>Band Lineup</strong> — billing order, set times, set lengths, payout terms.</li>
+      <li><strong>Staffing Schedule</strong> — staff call times pulled from the run sheet.</li>
+      <li><strong>Run of Show</strong> — full run sheet with timeline.</li>
+      <li><strong>Door / Guest List</strong> — guest list grouped by list type with check-in columns.</li>
+      <li><strong>Master Event Packet</strong> — every section combined into one printable packet for the production binder.</li>
+    </ul>
+    <p>Use Cmd/Ctrl+P or click the <em>Print</em> button inside the new window. Layouts are sized for US Letter with 0.5 inch margins.</p>
+  `,
+
+  activity: `
+    <h2>Activity log</h2>
+    <p>The Activity panel at the bottom of every event lists every meaningful change — who saved what and when. Use it for forensic questions ("when did the doors time change?") and as a hand-off log between bookers and night-of-show staff.</p>
+  `,
+
+  admin: `
+    <h2>Admin overview</h2>
+    <p>The Admin nav item is visible only to venue admins. It groups three management tools as tabs on a single page:</p>
+    <ul>
+      <li><a href="#help-admin-users">Users</a> — create, edit, and delete backstage login accounts; reset passwords; change roles.</li>
+      <li><a href="#help-admin-staff">Staff</a> — keep the roster of bartenders, security, door, sound, etc. used in event staffing.</li>
+      <li><a href="#help-admin-templates">Templates</a> — edit run-sheet and checklist templates used to create new events.</li>
+    </ul>
+    <p>Each tab has a stable deep link: <code>#admin-users</code>, <code>#admin-staff</code>, <code>#admin-templates</code>.</p>
+  `,
+
+  'admin-users': `
+    <h2>Managing login accounts</h2>
+    <p>Admin &rarr; Users lists every account that can log into backstage. The table shows name, email, role, authentication methods (password and registered passkeys), and how many events each user owns or collaborates on.</p>
+    <h3>Creating a user</h3>
+    <p>Use the <em>Create User</em> form. Required: name, email, role. Password is optional — if you leave it blank, the user can still sign in via passkey or by requesting an email login link from the login page.</p>
+    <h3>Editing a user</h3>
+    <p>Click <em>Edit</em> on any row. The dialog lets you change name, email, role, and reset the password. To leave the password unchanged, leave the password field blank. Existing passkeys are listed by count; users remove individual passkeys themselves from their <em>Account</em> page.</p>
+    <h3>Roles</h3>
+    <p>A user's global role determines what they can do across the whole app (admins see every event; others only see what they own or collaborate on). Per-event collaborator roles are managed from each event's <a href="#help-invites">Invites</a> panel. See <a href="#help-roles">Roles &amp; permissions</a> for the full breakdown.</p>
+    <h3>Deleting a user</h3>
+    <p>You cannot delete yourself. You cannot delete a user who currently owns events — reassign their events first (via each event's <em>Owner</em> field). Deleting a user removes their <code>event_collaborators</code> rows; their authored activity-log entries remain but show as orphaned.</p>
+  `,
+
+  'admin-staff': `
+    <h2>Staff roster</h2>
+    <p>The staff roster is the master list of people who work events — security, bartenders, barbacks, door, sound engineers, lighting, stagehands, runners, cleaners, and on-duty managers. It is intentionally separate from the Users table: most night-of-show staff don't need a backstage login.</p>
+    <h3>Adding a staff member</h3>
+    <p>Use the <em>Add Staff</em> form. Required: name and default role. Email, phone, hourly rate, and notes are optional. If the staff member also has a backstage login (e.g. a manager), pick their user account in the <em>Link to login</em> dropdown so the two records stay connected.</p>
+    <h3>Default role and rate</h3>
+    <p>The default role and hourly rate prefill into new shift forms when you pick the staff member, but you can override either per-shift. Useful when (for example) a bartender occasionally picks up a barback shift.</p>
+    <h3>Active vs inactive</h3>
+    <p>Toggle <em>Active</em> off when someone leaves or stops picking up shifts. Inactive staff stop appearing in the event Staffing dropdowns but stay in the roster so historical shifts continue to show their name.</p>
+    <h3>Deleting a staff member</h3>
+    <p>Deleting removes them from the roster permanently. Past shifts they were assigned to remain in the database — the shift's staff_member link is cleared and the shift shows as <em>TBD</em> on the historical record.</p>
+  `,
+
+  'admin-templates': `
+    <h2>Editing event templates</h2>
+    <p>Templates are pre-built event blueprints used by <a href="#help-templates">Templates</a> to spawn new events with pre-loaded tasks and schedule blocks. The Admin &rarr; Templates tab is where you create, edit, and delete them.</p>
+    <h3>Anatomy of a template</h3>
+    <ul>
+      <li><strong>Name</strong> — what staff see when picking a template.</li>
+      <li><strong>Type</strong> — the event type the template produces.</li>
+      <li><strong>Venue</strong> — which venue this template is for.</li>
+      <li><strong>Default title, ticket price, age, public description</strong> — values pre-filled into new events.</li>
+      <li><strong>Checklist</strong> — one task per line. Each line becomes a Task on every new event created from this template.</li>
+      <li><strong>Schedule</strong> — one line per item in the form <code>HH:MM | type | title</code>. The type must be one of <em>load_in, soundcheck, doors, set, changeover, curfew, staff_call, other</em>. Each line becomes a schedule row on the new event's run sheet.</li>
+    </ul>
+    <h3>Editing existing schedules</h3>
+    <p>Open the template, edit the text, save. The new format will be used by future events created from this template; existing events keep their current run sheets unchanged.</p>
+    <h3>Deleting a template</h3>
+    <p>Deletes the template only. Events that were already created from it continue to exist and behave normally.</p>
+  `,
+
+  statuses: `
+    <h2>Event status reference</h2>
+    <p>Events move through these statuses, roughly left to right on the pipeline:</p>
+    <ol>
+      <li><strong>empty</strong> — the date is held but nothing is booked.</li>
+      <li><strong>proposed</strong> — a show idea exists but is not confirmed.</li>
+      <li><strong>hold</strong> — soft hold with a band/promoter.</li>
+      <li><strong>confirmed</strong> — show is on, but assets and announcement are pending.</li>
+      <li><strong>needs_assets</strong> — confirmed, blocked on flyer/social art.</li>
+      <li><strong>ready_to_announce</strong> — flyer approved, ticketing ready; just needs to flip public on.</li>
+      <li><strong>published</strong> — public page is live.</li>
+      <li><strong>advanced</strong> — production advanced; ready for night-of-show.</li>
+      <li><strong>completed</strong> — show happened, waiting on settlement.</li>
+      <li><strong>settled</strong> — books closed.</li>
+      <li><strong>canceled</strong> — show was canceled.</li>
+    </ol>
+    <p>Statuses do not enforce hard transitions — you can move between any of them. They are signals to the rest of the team and to the dashboard.</p>
+  `,
+
+  workflow: `
+    <h2>End-to-end show workflow</h2>
+    <p>A typical Mabuhay show moves through these phases:</p>
+    <ol>
+      <li><strong>Program the night</strong> — pick a template (Templates page), set the date, and create the event.</li>
+      <li><strong>Sign the artists</strong> — add bands to the lineup, capture payout terms, mark them <em>tentative</em> then <em>confirmed</em>.</li>
+      <li><strong>Set the times</strong> — fill in doors, show, set times, and curfew on the run sheet.</li>
+      <li><strong>Collect assets</strong> — invite the band's designer if needed; upload flyers; approve the primary flyer.</li>
+      <li><strong>Announce</strong> — set ticket URL, public description, and flip the public page on. Status becomes <em>published</em>.</li>
+      <li><strong>Advance</strong> — close out open items, confirm hospitality, share run sheet with bands. Status becomes <em>advanced</em>.</li>
+      <li><strong>Night of show</strong> — print the master event packet, use the guest list for door, check guests in.</li>
+      <li><strong>Settle</strong> — file settlement next-day, mark <em>settled</em>.</li>
+    </ol>
+  `,
+
+  faq: `
+    <h2>FAQ</h2>
+    <h3>Why can't I see settlement on this event?</h3>
+    <p>Settlement is hidden from promoter, band/artist, designer, and viewer roles. Only venue admins and event owners see it.</p>
+    <h3>Why is a tab missing on my event?</h3>
+    <p>Tabs are filtered by your capabilities. For example, the <em>Invites</em> tab only appears if you can manage invites for the event.</p>
+    <h3>Why didn't my collaborator get an email?</h3>
+    <p>Backstage generates an invite URL but does not send email. Copy the link and share it via your usual channel.</p>
+    <h3>How do I move a show to a new date?</h3>
+    <p>Open <a href="#help-details">Event details</a> and change the date. Calendar, dashboard, and pipeline all update.</p>
+    <h3>How do I delete an event?</h3>
+    <p>Events are not deleted in the MVP. Move them to <em>canceled</em> instead — they drop off the calendar and active dashboard cards but stay queryable for reporting.</p>
+    <h3>Where are uploaded files stored?</h3>
+    <p>Local disk under <code>storage/uploads/events/&lt;event id&gt;</code>. The web server serves them via the <code>public/uploads</code> symlink.</p>
+  `,
+
+  troubleshooting: `
+    <h2>Troubleshooting</h2>
+    <h3>"Session expired" or you keep getting bounced to login</h3>
+    <p>Your access and refresh tokens both expired. Sign in again. If it happens often, your browser may be clearing local storage; check your privacy settings.</p>
+    <h3>Passkey button does nothing</h3>
+    <p>Your browser may not support WebAuthn, or you have no passkey registered for that hostname. Use password or email-link login and add a passkey from <em>Account</em>.</p>
+    <h3>Public page shows "Something went wrong"</h3>
+    <p>Either the event is hidden (toggle <em>Publish Public Page</em> on) or the slug is wrong. The public page only returns data for events with public visibility enabled.</p>
+    <h3>Upload failed</h3>
+    <p>Check that the file is under the server's <code>upload_max_filesize</code> and is one of the accepted types (PNG, JPG, GIF, WEBP, PDF). The server enforces type by both extension and MIME via <code>finfo</code>.</p>
+    <h3>Asset won't approve</h3>
+    <p>Only promoters and admins can approve assets. Bands and designers can upload but not approve.</p>
+  `,
+};
+
+class HelpPage extends PanicElement {
+  set anchor(value) {
+    this._anchor = value || '';
+    if (this.isConnected) this.afterRender();
+  }
+
+  connect() {
+    this._anchor = this._anchor || '';
+    this.render();
+    this.afterRender();
+  }
+
+  render() {
+    const toc = HELP_SECTIONS.map((group) => `
+      <div class="help-toc-group">
+        <h4>${group.group}</h4>
+        <ul>${group.items.map((item) => `<li><a data-toc href="#help-${esc(item.slug)}">${item.title}</a></li>`).join('')}</ul>
+      </div>
+    `).join('');
+
+    const sections = HELP_SECTIONS.flatMap((g) => g.items).map((item) => {
+      const body = HELP_CONTENT[item.slug] || `<h2>${item.title}</h2><p class="muted">Documentation coming soon.</p>`;
+      return `<section class="help-section" id="help-${esc(item.slug)}">${body}<p class="help-back"><a href="#help-welcome">&uarr; Back to top</a></p></section>`;
+    }).join('');
+
+    this.innerHTML = `
+      <section class="page-head">
+        <div><h1>Backstage Help</h1><p class="subtle">How the app works — onboarding, events, lineup, assets, settlement, and everything in between.</p></div>
+        <a class="button secondary" href="#dashboard">Back to Dashboard</a>
+      </section>
+      <div class="help-layout">
+        <aside class="help-toc" aria-label="Help topics">${toc}</aside>
+        <article class="help-content panel padded">${sections}</article>
+      </div>
+    `;
+
+    $$('[data-toc]', this).forEach((link) => link.addEventListener('click', (event) => {
+      // Let the browser scroll, but also highlight the active TOC item.
+      const slug = (link.getAttribute('href') || '').replace('#help-', '');
+      this.highlight(slug);
+    }));
+  }
+
+  afterRender() {
+    const slug = this._anchor || 'welcome';
+    // Defer to next frame so layout is settled before scrolling.
+    requestAnimationFrame(() => {
+      const target = this.querySelector(`#help-${CSS.escape(slug)}`);
+      if (target) target.scrollIntoView({ behavior: 'auto', block: 'start' });
+      this.highlight(slug);
+    });
+  }
+
+  highlight(slug) {
+    $$('[data-toc]', this).forEach((link) => {
+      link.classList.toggle('active', link.getAttribute('href') === `#help-${slug}`);
+    });
+  }
+}
+
+// ── Admin page ───────────────────────────────────────────────────────────────
+// Three tabs: Users (login accounts), Staff (employee roster), Templates
+// (run-sheet / checklist event templates). Admin-only — sidebar entry is
+// hidden by AppShell.applyCapabilities() when the user lacks admin caps.
+
+const ADMIN_TABS = [
+  { key: 'users',     title: 'Users',     icon: 'fa-user-gear' },
+  { key: 'staff',     title: 'Staff',     icon: 'fa-people-group' },
+  { key: 'templates', title: 'Templates', icon: 'fa-layer-group' },
+];
+
+class AdminPage extends PanicElement {
+  connect() {
+    this.tab = ADMIN_TABS.find((t) => t.key === this.initialTab) ? this.initialTab : 'users';
+    this.render();
+  }
+
+  render() {
+    this.innerHTML = `
+      <section class="page-head">
+        <div><h1>Admin</h1><p class="subtle">Manage login accounts, the staff roster, and event templates.</p></div>
+      </section>
+      <nav class="workspace-tabs tabs admin-tabs">
+        ${ADMIN_TABS.map((t) => `<a data-admin-tab="${esc(t.key)}" href="#admin-${esc(t.key)}" class="${t.key === this.tab ? 'active' : ''}"><i class="fa-solid ${esc(t.icon)}" aria-hidden="true"></i> ${esc(t.title)}</a>`).join('')}
+      </nav>
+      <div class="admin-outlet"></div>
+    `;
+    $$('[data-admin-tab]', this).forEach((link) => link.addEventListener('click', (event) => {
+      event.preventDefault();
+      this.tab = link.dataset.adminTab;
+      this.render();
+    }));
+    const outlet = $('.admin-outlet', this);
+    const tag = { users: 'pb-admin-users', staff: 'pb-admin-staff', templates: 'pb-admin-templates' }[this.tab];
+    outlet.replaceChildren(document.createElement(tag));
+  }
+}
+
+class AdminUsers extends PanicElement {
+  async connect() {
+    this.setLoading('Loading users');
+    try {
+      this.data = await api('/users');
+      this.renderList();
+    } catch (error) {
+      this.showError(error);
+    }
+  }
+
+  renderList() {
+    const users = this.data.users || [];
+    const roles = this.data.roles || [];
+    this.innerHTML = `
+      <article class="panel">
+        <div class="section-head padded"><h2>Login Accounts</h2><span class="muted">${users.length} total</span></div>
+        <table class="data-table admin-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Auth</th><th>Events</th><th></th></tr></thead>
+          <tbody>
+            ${users.map((u) => `<tr>
+              <td>${esc(u.name)}</td>
+              <td>${esc(u.email)}</td>
+              <td><span class="badge">${esc(titleCase(u.role))}</span></td>
+              <td>${Number(u.has_password) ? '<span class="muted">Password</span>' : '<span class="muted">—</span>'}${Number(u.passkey_count) ? ` &middot; ${esc(u.passkey_count)} passkey${Number(u.passkey_count) === 1 ? '' : 's'}` : ''}</td>
+              <td>${esc(u.owned_event_count || 0)} owned &middot; ${esc(u.collaborator_event_count || 0)} collab</td>
+              <td class="row-actions">
+                <button class="small secondary" data-edit="${esc(u.id)}">Edit</button>
+                <button class="small danger" data-delete="${esc(u.id)}" data-name="${esc(u.name)}">Delete</button>
+              </td>
+            </tr>`).join('') || '<tr><td colspan="6"><div class="empty-state">No users yet.</div></td></tr>'}
+          </tbody>
+        </table>
+      </article>
+      <article class="panel">
+        <div class="section-head padded"><h2>Create User</h2></div>
+        <form data-form="create" class="grid-form padded">
+          <label>Name <input name="name" required placeholder="Full name"></label>
+          <label>Email <input type="email" name="email" required placeholder="user@example.com"></label>
+          <label>Role ${select('role', roles, 'viewer')}</label>
+          <label>Password <input type="password" name="password" placeholder="Optional — they can also use email link"></label>
+          <button>Create user</button>
+        </form>
+      </article>
+    `;
+    $('[data-form="create"]', this).addEventListener('submit', (event) => this.create(event));
+    $$('[data-edit]', this).forEach((b) => b.addEventListener('click', () => this.openEdit(Number(b.dataset.edit))));
+    $$('[data-delete]', this).forEach((b) => b.addEventListener('click', () => this.delete(Number(b.dataset.delete), b.dataset.name)));
+  }
+
+  async create(event) {
+    event.preventDefault();
+    const body = formData(event.target);
+    try {
+      await api('/users', { method: 'POST', body: JSON.stringify(body) });
+      publish('toast.show', { message: `User ${body.name} created.` });
+      this.connect();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
+  }
+
+  openEdit(id) {
+    const user = (this.data.users || []).find((u) => Number(u.id) === id);
+    if (!user) return;
+    const roles = this.data.roles || [];
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-backdrop';
+    dialog.innerHTML = `<div class="modal-card">
+      <div class="section-head padded"><h2>Edit user</h2><button class="small secondary" data-close>Close</button></div>
+      <form class="grid-form padded" data-form="edit">
+        <label>Name <input name="name" required value="${esc(user.name)}"></label>
+        <label>Email <input type="email" name="email" required value="${esc(user.email)}"></label>
+        <label>Role ${select('role', roles, user.role)}</label>
+        <label>Reset password <input type="password" name="password" placeholder="Leave blank to keep current"></label>
+        <p class="muted">${Number(user.has_password) ? 'Password is set.' : 'No password set — user can sign in via passkey or email link.'} ${Number(user.passkey_count)} passkey${Number(user.passkey_count) === 1 ? '' : 's'} registered.</p>
+        <button>Save</button>
+      </form>
+    </div>`;
+    document.body.appendChild(dialog);
+    const close = () => dialog.remove();
+    $('[data-close]', dialog).addEventListener('click', close);
+    dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
+    $('[data-form="edit"]', dialog).addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const body = formData(event.target);
+      try {
+        await api(`/users/${user.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        publish('toast.show', { message: 'User updated.' });
+        close();
+        this.connect();
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
+  }
+
+  async delete(id, name) {
+    if (!confirm(`Delete user ${name}? This cannot be undone.`)) return;
+    try {
+      await api(`/users/${id}`, { method: 'DELETE' });
+      publish('toast.show', { message: `${name} deleted.` });
+      this.connect();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
+  }
+}
+
+class AdminStaff extends PanicElement {
+  async connect() {
+    this.setLoading('Loading staff roster');
+    try {
+      this.data = await api('/staff-members');
+      this.render();
+    } catch (error) {
+      this.showError(error);
+    }
+  }
+
+  render() {
+    const staff = this.data.staff || [];
+    const roles = this.data.roles || [];
+    const users = this.data.users || [];
+    const userOpts = `<option value="">— No login linked —</option>${users.map((u) => `<option value="${esc(u.id)}">${esc(u.name)} (${esc(u.email)})</option>`).join('')}`;
+    this.innerHTML = `
+      <article class="panel">
+        <div class="section-head padded"><h2>Staff Roster</h2><span class="muted">${staff.filter((s) => Number(s.active)).length} active &middot; ${staff.length} total</span></div>
+        <table class="data-table admin-table">
+          <thead><tr><th>Name</th><th>Default role</th><th>Contact</th><th>Rate</th><th>Login</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${staff.map((s) => `<tr class="${Number(s.active) ? '' : 'muted-row'}">
+              <td><strong>${esc(s.name)}</strong>${s.notes ? `<br><small class="muted">${esc(s.notes)}</small>` : ''}</td>
+              <td><span class="badge">${esc(titleCase(s.default_role))}</span></td>
+              <td>${s.email ? esc(s.email) : ''}${s.email && s.phone ? '<br>' : ''}${s.phone ? esc(s.phone) : ''}</td>
+              <td>${s.hourly_rate ? `$${esc(Number(s.hourly_rate).toFixed(2))}/hr` : '—'}</td>
+              <td>${s.user_name ? esc(s.user_name) : '<span class="muted">—</span>'}</td>
+              <td>${Number(s.active) ? '<span class="badge status-confirmed">Active</span>' : '<span class="badge status-canceled">Inactive</span>'}</td>
+              <td class="row-actions">
+                <button class="small secondary" data-edit="${esc(s.id)}">Edit</button>
+                <button class="small danger" data-delete="${esc(s.id)}" data-name="${esc(s.name)}">Delete</button>
+              </td>
+            </tr>`).join('') || '<tr><td colspan="7"><div class="empty-state">No staff yet — add your first crew member below.</div></td></tr>'}
+          </tbody>
+        </table>
+      </article>
+      <article class="panel">
+        <div class="section-head padded"><h2>Add Staff</h2></div>
+        <form data-form="create" class="grid-form padded">
+          <label>Name <input name="name" required placeholder="Full name"></label>
+          <label>Default role ${select('default_role', roles, 'security')}</label>
+          <label>Email <input type="email" name="email" placeholder="Optional"></label>
+          <label>Phone <input name="phone" placeholder="Optional"></label>
+          <label>Hourly rate <input type="number" step="0.01" name="hourly_rate" placeholder="Optional"></label>
+          <label>Link to login <select name="user_id">${userOpts}</select></label>
+          <label class="wide">Notes <input name="notes" placeholder="Allergies, certifications, availability"></label>
+          <input type="hidden" name="active" value="1">
+          <button>Add staff member</button>
+        </form>
+      </article>
+    `;
+    $('[data-form="create"]', this).addEventListener('submit', (event) => this.create(event));
+    $$('[data-edit]', this).forEach((b) => b.addEventListener('click', () => this.openEdit(Number(b.dataset.edit))));
+    $$('[data-delete]', this).forEach((b) => b.addEventListener('click', () => this.delete(Number(b.dataset.delete), b.dataset.name)));
+  }
+
+  async create(event) {
+    event.preventDefault();
+    const body = formData(event.target);
+    try {
+      await api('/staff-members', { method: 'POST', body: JSON.stringify(body) });
+      publish('toast.show', { message: `${body.name} added.` });
+      this.connect();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
+  }
+
+  openEdit(id) {
+    const s = (this.data.staff || []).find((row) => Number(row.id) === id);
+    if (!s) return;
+    const roles = this.data.roles || [];
+    const users = this.data.users || [];
+    const userOpts = `<option value="">— No login linked —</option>${users.map((u) => `<option value="${esc(u.id)}" ${Number(s.user_id) === Number(u.id) ? 'selected' : ''}>${esc(u.name)} (${esc(u.email)})</option>`).join('')}`;
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-backdrop';
+    dialog.innerHTML = `<div class="modal-card">
+      <div class="section-head padded"><h2>Edit staff member</h2><button class="small secondary" data-close>Close</button></div>
+      <form class="grid-form padded" data-form="edit">
+        <label>Name <input name="name" required value="${esc(s.name)}"></label>
+        <label>Default role ${select('default_role', roles, s.default_role)}</label>
+        <label>Email <input type="email" name="email" value="${esc(s.email || '')}"></label>
+        <label>Phone <input name="phone" value="${esc(s.phone || '')}"></label>
+        <label>Hourly rate <input type="number" step="0.01" name="hourly_rate" value="${esc(s.hourly_rate || '')}"></label>
+        <label>Link to login <select name="user_id">${userOpts}</select></label>
+        <label class="wide">Notes <input name="notes" value="${esc(s.notes || '')}"></label>
+        <label class="check-label"><input type="checkbox" name="active" value="1" ${Number(s.active) ? 'checked' : ''}> Active</label>
+        <button>Save</button>
+      </form>
+    </div>`;
+    document.body.appendChild(dialog);
+    const close = () => dialog.remove();
+    $('[data-close]', dialog).addEventListener('click', close);
+    dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
+    $('[data-form="edit"]', dialog).addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const body = formData(event.target);
+      body.active = event.target.active.checked ? 1 : 0;
+      try {
+        await api(`/staff-members/${s.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        publish('toast.show', { message: 'Staff member updated.' });
+        close();
+        this.connect();
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
+  }
+
+  async delete(id, name) {
+    if (!confirm(`Remove ${name} from the roster? Past shifts are kept as "TBD" assignments.`)) return;
+    try {
+      await api(`/staff-members/${id}`, { method: 'DELETE' });
+      publish('toast.show', { message: `${name} removed.` });
+      this.connect();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
+  }
+}
+
+class AdminTemplates extends PanicElement {
+  async connect() {
+    this.setLoading('Loading templates');
+    try {
+      this.data = await api('/templates');
+      this.render();
+    } catch (error) {
+      this.showError(error);
+    }
+  }
+
+  render() {
+    const templates = this.data.templates || [];
+    const types = this.data.types || ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'];
+    const venues = this.data.venues || [];
+    const venueOpts = venues.map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join('');
+    this.innerHTML = `
+      <article class="panel">
+        <div class="section-head padded"><h2>Event Templates</h2><span class="muted">${templates.length} total</span></div>
+        <table class="data-table admin-table">
+          <thead><tr><th>Name</th><th>Type</th><th>Venue</th><th>Default title</th><th>Checklist / Schedule</th><th></th></tr></thead>
+          <tbody>
+            ${templates.map((t) => {
+              const checklist = (() => { try { return JSON.parse(t.checklist_json || '[]'); } catch { return []; } })();
+              const schedule  = (() => { try { return JSON.parse(t.schedule_json  || '[]'); } catch { return []; } })();
+              return `<tr>
+                <td><strong>${esc(t.name)}</strong></td>
+                <td>${esc(titleCase(t.event_type))}</td>
+                <td>${esc(t.venue_name)}</td>
+                <td>${esc(t.default_title || '—')}</td>
+                <td>${checklist.length} task${checklist.length === 1 ? '' : 's'} &middot; ${schedule.length} schedule item${schedule.length === 1 ? '' : 's'}</td>
+                <td class="row-actions">
+                  <button class="small secondary" data-edit="${esc(t.id)}">Edit</button>
+                  <button class="small danger" data-delete="${esc(t.id)}" data-name="${esc(t.name)}">Delete</button>
+                </td>
+              </tr>`;
+            }).join('') || '<tr><td colspan="6"><div class="empty-state">No templates yet — create one below to start programming nights.</div></td></tr>'}
+          </tbody>
+        </table>
+      </article>
+      <article class="panel">
+        <div class="section-head padded"><h2>Create Template</h2></div>
+        <form data-form="create" class="grid-form padded">
+          <label>Name <input name="name" required placeholder="e.g. Three-Band Local Show"></label>
+          <label>Type ${select('event_type', types, 'live_music')}</label>
+          <label>Venue <select name="venue_id" required>${venueOpts}</select></label>
+          <label>Default title <input name="default_title" placeholder="Used when creating events"></label>
+          <label>Default ticket price <input type="number" step="0.01" name="default_ticket_price" value="0"></label>
+          <label>Default age <input name="default_age_restriction" placeholder="21+ / All Ages"></label>
+          <label class="wide">Public description <textarea name="default_description_public" rows="2"></textarea></label>
+          <label class="wide">Checklist <small class="muted">One task per line. Pre-populates the Tasks list of new events.</small><textarea name="_checklist" rows="5" placeholder="Confirm headliner\nApprove flyer\nPublish event page"></textarea></label>
+          <label class="wide">Schedule <small class="muted">One per line as <code>HH:MM | type | title</code>. Types: load_in, soundcheck, doors, set, changeover, curfew, staff_call, other.</small><textarea name="_schedule" rows="5" placeholder="17:00 | load_in | Load-in\n18:00 | soundcheck | Soundcheck\n20:00 | doors | Doors\n20:30 | set | Opener"></textarea></label>
+          <button>Create template</button>
+        </form>
+      </article>
+    `;
+    $('[data-form="create"]', this).addEventListener('submit', (event) => this.create(event));
+    $$('[data-edit]', this).forEach((b) => b.addEventListener('click', () => this.openEdit(Number(b.dataset.edit))));
+    $$('[data-delete]', this).forEach((b) => b.addEventListener('click', () => this.delete(Number(b.dataset.delete), b.dataset.name)));
+  }
+
+  parseChecklist(value) {
+    return String(value || '').split('\n').map((l) => l.trim()).filter(Boolean).map((title) => ({ title }));
+  }
+
+  parseSchedule(value) {
+    const validTypes = new Set(['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other']);
+    return String(value || '').split('\n').map((l) => l.trim()).filter(Boolean).map((line) => {
+      const parts = line.split('|').map((p) => p.trim());
+      const time = parts[0] || null;
+      const type = validTypes.has((parts[1] || '').toLowerCase()) ? parts[1].toLowerCase() : 'other';
+      const title = parts.slice(2).join(' | ') || (parts[1] || 'Schedule item');
+      return { start_time: time, item_type: type, title };
+    });
+  }
+
+  serializeChecklist(json) {
+    try {
+      const arr = JSON.parse(json || '[]');
+      return (arr || []).map((row) => typeof row === 'string' ? row : row.title).filter(Boolean).join('\n');
+    } catch { return ''; }
+  }
+
+  serializeSchedule(json) {
+    try {
+      const arr = JSON.parse(json || '[]');
+      return (arr || []).map((row) => `${row.start_time || ''} | ${row.item_type || 'other'} | ${row.title || ''}`).join('\n');
+    } catch { return ''; }
+  }
+
+  buildBody(form) {
+    const body = formData(form);
+    body.checklist_json = JSON.stringify(this.parseChecklist(body._checklist));
+    body.schedule_json  = JSON.stringify(this.parseSchedule(body._schedule));
+    delete body._checklist;
+    delete body._schedule;
+    return body;
+  }
+
+  async create(event) {
+    event.preventDefault();
+    try {
+      await api('/templates', { method: 'POST', body: JSON.stringify(this.buildBody(event.target)) });
+      publish('toast.show', { message: 'Template created.' });
+      this.connect();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
+  }
+
+  openEdit(id) {
+    const t = (this.data.templates || []).find((row) => Number(row.id) === id);
+    if (!t) return;
+    const types = this.data.types || [];
+    const venues = this.data.venues || [];
+    const venueOpts = venues.map((v) => `<option value="${esc(v.id)}" ${Number(v.id) === Number(t.venue_id) ? 'selected' : ''}>${esc(v.name)}</option>`).join('');
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-backdrop';
+    dialog.innerHTML = `<div class="modal-card wide">
+      <div class="section-head padded"><h2>Edit template</h2><button class="small secondary" data-close>Close</button></div>
+      <form class="grid-form padded" data-form="edit">
+        <label>Name <input name="name" required value="${esc(t.name)}"></label>
+        <label>Type ${select('event_type', types, t.event_type)}</label>
+        <label>Venue <select name="venue_id" required>${venueOpts}</select></label>
+        <label>Default title <input name="default_title" value="${esc(t.default_title || '')}"></label>
+        <label>Default ticket price <input type="number" step="0.01" name="default_ticket_price" value="${esc(t.default_ticket_price || 0)}"></label>
+        <label>Default age <input name="default_age_restriction" value="${esc(t.default_age_restriction || '')}"></label>
+        <label class="wide">Public description <textarea name="default_description_public" rows="2">${esc(t.default_description_public || '')}</textarea></label>
+        <label class="wide">Checklist <small class="muted">One task per line.</small><textarea name="_checklist" rows="7">${esc(this.serializeChecklist(t.checklist_json))}</textarea></label>
+        <label class="wide">Schedule <small class="muted">HH:MM | type | title  (types: load_in, soundcheck, doors, set, changeover, curfew, staff_call, other)</small><textarea name="_schedule" rows="7">${esc(this.serializeSchedule(t.schedule_json))}</textarea></label>
+        <button>Save template</button>
+      </form>
+    </div>`;
+    document.body.appendChild(dialog);
+    const close = () => dialog.remove();
+    $('[data-close]', dialog).addEventListener('click', close);
+    dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
+    $('[data-form="edit"]', dialog).addEventListener('submit', async (event) => {
+      event.preventDefault();
+      try {
+        await api(`/templates/${t.id}`, { method: 'PATCH', body: JSON.stringify(this.buildBody(event.target)) });
+        publish('toast.show', { message: 'Template saved.' });
+        close();
+        this.connect();
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
+  }
+
+  async delete(id, name) {
+    if (!confirm(`Delete the ${name} template? Existing events created from it are not affected.`)) return;
+    try {
+      await api(`/templates/${id}`, { method: 'DELETE' });
+      publish('toast.show', { message: 'Template deleted.' });
+      this.connect();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
+  }
+}
+
 customElements.define('pb-loading-state', LoadingState);
 customElements.define('pb-toast-stack', ToastStack);
 customElements.define('pb-login-page', LoginPage);
@@ -1568,6 +2777,7 @@ customElements.define('pb-event-details-form', EventDetailsForm);
 customElements.define('pb-task-list', TaskList);
 customElements.define('pb-lineup-editor', LineupEditor);
 customElements.define('pb-run-sheet', RunSheet);
+customElements.define('pb-staffing-manager', StaffingManager);
 customElements.define('pb-open-items', OpenItems);
 customElements.define('pb-guest-list-manager', GuestListManager);
 customElements.define('pb-asset-manager', AssetManager);
@@ -1575,3 +2785,8 @@ customElements.define('pb-invite-manager', InviteManager);
 customElements.define('pb-settlement-form', SettlementForm);
 customElements.define('pb-public-event-page', PublicEventPage);
 customElements.define('pb-invite-acceptance', InviteAcceptance);
+customElements.define('pb-help-page', HelpPage);
+customElements.define('pb-admin-page', AdminPage);
+customElements.define('pb-admin-users', AdminUsers);
+customElements.define('pb-admin-staff', AdminStaff);
+customElements.define('pb-admin-templates', AdminTemplates);

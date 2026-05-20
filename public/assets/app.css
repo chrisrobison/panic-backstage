@@ -1136,3 +1136,181 @@ h3 { margin-bottom: 8px; font-size: 15px; }
 @media (max-width: 860px) {
   .tonight-page[aria-hidden="true"] { display: none !important; }
 }
+
+/* ── Admin pages ──────────────────────────────────────────────────────── */
+.admin-tabs { margin-bottom: 22px; }
+.admin-tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.admin-tabs i { font-size: 14px; }
+.admin-table th, .admin-table td { vertical-align: top; }
+.admin-table tr.muted-row td { color: var(--muted, #5a606b); }
+.admin-table .row-actions {
+  white-space: nowrap;
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.admin-table small.muted { font-size: 12px; }
+
+/* Lightweight modal for edit dialogs (Users / Staff / Templates) */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(15, 17, 22, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 5vh 18px;
+  overflow-y: auto;
+}
+.modal-card {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  width: min(640px, 100%);
+  overflow: hidden;
+}
+.modal-card.wide { width: min(820px, 100%); }
+.modal-card .section-head { background: #f7f8fb; border-bottom: 1px solid var(--line, #e3e4e8); }
+.modal-card form { padding: 18px 22px 22px; }
+.modal-card textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+
+/* ── Event staffing ───────────────────────────────────────────────────── */
+.staffing-body { padding: 12px 18px 18px; }
+.staffing-section + .staffing-section { margin-top: 14px; }
+.staffing-row {
+  align-items: center;
+  position: relative;
+  padding-bottom: 14px;
+}
+.staffing-row .staffing-contact {
+  flex-basis: 100%;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.staffing-add {
+  background: #fafafa;
+  border-top: 1px dashed var(--line, #e3e4e8);
+  margin-top: 14px;
+  padding-top: 12px;
+}
+.staffing-totals { font-size: 13px; }
+
+/* ── Help page ─────────────────────────────────────────────────────────── */
+.help-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 8px;
+  border-radius: 50%;
+  color: var(--muted, #5a606b);
+  text-decoration: none;
+  font-size: 14px;
+  line-height: 1;
+  vertical-align: middle;
+  transition: background-color .12s ease, color .12s ease;
+}
+.help-link:hover,
+.help-link:focus-visible {
+  background: rgba(0,0,0,.06);
+  color: var(--red, #c0392b);
+  outline: none;
+}
+.help-link i { font-size: 14px; }
+
+.help-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+.help-toc {
+  position: sticky;
+  top: 18px;
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--line, #e3e4e8);
+  border-radius: 8px;
+  padding: 14px 12px;
+  font-size: 14px;
+}
+.help-toc-group + .help-toc-group { margin-top: 14px; }
+.help-toc-group h4 {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0 0 6px;
+  color: var(--muted, #5a606b);
+}
+.help-toc ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; }
+.help-toc a {
+  display: block;
+  padding: 5px 8px;
+  border-radius: 4px;
+  color: #1f2230;
+  text-decoration: none;
+  line-height: 1.3;
+}
+.help-toc a:hover { background: rgba(0,0,0,.04); }
+.help-toc a.active {
+  background: rgba(192,57,43,.08);
+  color: var(--red, #c0392b);
+  font-weight: 700;
+}
+
+.help-content { padding: 22px 28px; }
+.help-section {
+  scroll-margin-top: 90px;
+  padding-bottom: 22px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--line, #e3e4e8);
+}
+.help-section:last-child { border-bottom: 0; margin-bottom: 0; }
+.help-section h2 {
+  font-size: 24px;
+  margin: 0 0 12px;
+  line-height: 1.25;
+}
+.help-section h3 {
+  font-size: 16px;
+  margin: 18px 0 8px;
+  letter-spacing: 0.01em;
+}
+.help-section p,
+.help-section li { line-height: 1.55; }
+.help-section ul,
+.help-section ol { margin: 8px 0 12px 22px; padding: 0; }
+.help-section li { margin-bottom: 4px; }
+.help-section code {
+  background: #f4f5f8;
+  border: 1px solid var(--line, #e3e4e8);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 90%;
+}
+.help-section a { color: var(--red, #c0392b); text-decoration: underline; }
+.help-section .help-back {
+  margin-top: 14px;
+  font-size: 13px;
+}
+.help-section .help-back a {
+  color: var(--muted, #5a606b);
+  text-decoration: none;
+}
+.help-section .help-back a:hover { color: var(--red, #c0392b); }
+
+@media (max-width: 1100px) {
+  .help-layout { grid-template-columns: 1fr; }
+  .help-toc {
+    position: static;
+    max-height: none;
+  }
+}
+

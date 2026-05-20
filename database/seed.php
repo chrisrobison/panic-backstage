@@ -29,7 +29,7 @@ $pdo = new PDO("mysql:host=$host;port=$port;dbname=$dbName;charset=utf8mb4", $us
 ]);
 
 $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
-foreach (['event_activity_log','event_invites','event_settlements','event_schedule_items','event_assets','event_blockers','event_tasks','event_lineup','bands','event_collaborators','events','event_templates','venues','users'] as $table) {
+foreach (['event_activity_log','event_invites','event_settlements','event_schedule_items','event_staffing','event_assets','event_blockers','event_tasks','event_lineup','bands','event_collaborators','events','event_templates','staff_members','venues','users'] as $table) {
     $pdo->exec("TRUNCATE TABLE $table");
 }
 $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
@@ -100,5 +100,40 @@ file_put_contents($assetDir . '/' . $flyerName, '<svg xmlns="http://www.w3.org/2
 $pdo->prepare('INSERT INTO event_assets (event_id, asset_type, title, filename, original_filename, file_path, uploaded_by_user_id, approval_status, notes) VALUES (?, "flyer", "Local Band Showcase flyer", ?, ?, ?, ?, "needs_review", "Demo flyer ready for approval.")')->execute([$eventIds[1], $flyerName, $flyerName, 'uploads/events/' . $eventIds[1] . '/' . $flyerName, $adminId]);
 $pdo->prepare('INSERT INTO event_settlements (event_id, gross_ticket_sales, tickets_sold, bar_sales, expenses, band_payouts, promoter_payout, venue_net, notes, settled_by_user_id) VALUES (?, 2750, 110, 1840, 420, 1300, 250, 2620, "Benefit night settled after merch and door count reconciliation.", ?)')->execute([$eventIds[4], $adminId]);
 $pdo->prepare('INSERT INTO event_activity_log (event_id, user_id, action, details_json) VALUES (?, ?, "demo data seeded", ?), (?, ?, "settlement saved", ?)')->execute([$eventIds[1], $adminId, json_encode(['story' => 'Resolve open items, approve flyer, publish page']), $eventIds[4], $adminId, json_encode(['tickets_sold' => 110])]);
+
+// Sample staff roster — most night-of-show staff have no backstage login.
+$staff = [
+    ['Sam Reyes',     'sam@mabuhay.local',    '415-555-0101', 'manager',   45.00],
+    ['Dee Cruz',      null,                   '415-555-0102', 'security',  28.00],
+    ['Jordan Park',   null,                   '415-555-0103', 'security',  28.00],
+    ['Aly Tan',       'aly@mabuhay.local',    '415-555-0104', 'bartender', 22.00],
+    ['Mo Sandoval',   null,                   '415-555-0105', 'barback',   18.00],
+    ['Riley Quinn',   null,                   '415-555-0106', 'door',      20.00],
+    ['Casey Lopez',   'casey@mabuhay.local',  '415-555-0107', 'sound',     35.00],
+    ['Robin Vega',    null,                   '415-555-0108', 'lighting',  30.00],
+    ['Pat Nakamura',  null,                   '415-555-0109', 'stagehand', 22.00],
+];
+$staffStmt = $pdo->prepare('INSERT INTO staff_members (name, email, phone, default_role, hourly_rate) VALUES (?, ?, ?, ?, ?)');
+$staffIds = [];
+foreach ($staff as $row) {
+    $staffStmt->execute($row);
+    $staffIds[] = (int) $pdo->lastInsertId();
+}
+
+// Pre-staff the Local Band Showcase as a demo.
+$staffingStmt = $pdo->prepare('INSERT INTO event_staffing (event_id, staff_member_id, role, call_time, end_time, hourly_rate, status) VALUES (?, ?, ?, ?, ?, ?, ?)');
+$staffingShifts = [
+    [$staffIds[0], 'manager',   '17:00', '00:00', 45.00, 'confirmed'],
+    [$staffIds[6], 'sound',     '17:00', '23:30', 35.00, 'confirmed'],
+    [$staffIds[7], 'lighting',  '17:00', '23:30', 30.00, 'scheduled'],
+    [$staffIds[1], 'security',  '19:30', '00:00', 28.00, 'confirmed'],
+    [$staffIds[2], 'security',  '19:30', '00:00', 28.00, 'scheduled'],
+    [$staffIds[3], 'bartender', '19:00', '00:00', 22.00, 'confirmed'],
+    [$staffIds[4], 'barback',   '19:00', '00:00', 18.00, 'scheduled'],
+    [$staffIds[5], 'door',      '19:30', '23:00', 20.00, 'confirmed'],
+];
+foreach ($staffingShifts as $shift) {
+    $staffingStmt->execute([$eventIds[1], $shift[0], $shift[1], $shift[2], $shift[3], $shift[4], $shift[5]]);
+}
 
 echo "Seed complete. Login: admin@mabuhay.local / changeme\n";
