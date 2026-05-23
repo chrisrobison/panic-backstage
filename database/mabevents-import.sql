@@ -1,7 +1,7 @@
 -- =============================================================
 -- MabEvents.xlsx import (idempotent UPSERT)
 -- Run AFTER: schema.sql, migration 001, migration 002
--- Events: 147  |  Staff: 9
+-- Events: 152  |  Staff: 9
 --
 -- Idempotency keys:
 --   users  : email (UNIQUE)            — name refreshed; role/password preserved
@@ -507,8 +507,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'SF Fashion Week FAHRENHEIT', 'sf-fashion-week-fahrenheit-2025-11-26', 'live_music', 'hold', 'Memorial for prominent Bay Area Punk figure Missie Mae.
-Ticket system: Door', '2025-11-26', NULL, NULL, NULL, 1, @owner_id, 'EVT-1002', 'Tom Watson', NULL, 'downstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'SF Fashion Week FAHRENHEIT', 'sf-fashion-week-fahrenheit-2025-11-26', 'live_music', 'hold', 'Ticket system: Door', '2025-11-26', NULL, NULL, NULL, 1, @owner_id, 'EVT-1002', 'Tom Watson', NULL, 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -565,8 +564,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'TBA - NYE Celebration', 'tba-nye-celebration-2025-12-31', 'live_music', 'hold', '$15 presale and $20 day of
-Ticket system: TIXR
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'TBA - NYE Celebration', 'tba-nye-celebration-2025-12-31', 'live_music', 'hold', 'Ticket system: TIXR
 Contract: text group', '2025-12-31', NULL, NULL, NULL, 1, @owner_id, NULL, 'Howard Whitehouse', NULL, NULL)
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
@@ -834,8 +832,7 @@ Contract: Contract', '2026-02-14', NULL, NULL, NULL, 1, @owner_id, 'EVT-1031', '
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Dance', 'dance-2026-02-15', 'live_music', 'hold', 'KZ in contract review with Gary Holts manager.
-Ticket system: TIXR
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Dance', 'dance-2026-02-15', 'live_music', 'hold', 'Ticket system: TIXR
 Contract: Contract', '2026-02-15', '18:00:00', '00:00:00', NULL, 1, @owner_id, NULL, 'Tom Watson', 'Bachata - dance class', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
@@ -990,7 +987,7 @@ SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
 INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Load-in', 'load_in', '00:00:00');
 INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Lock-up / Curfew', 'curfew', '00:00:00');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'https://luma.com/8u07vkhv', 'https-luma-com-8u07vkhv-2026-03-07', 'live_music', 'hold', '3/16 have not yet heard back from the SG team', '2026-03-07', NULL, NULL, NULL, 1, @owner_id, NULL, 'Bobby Fishkin/ Tom Watson/Andres Acosta', 'Solarpunkification', 'both')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'https://luma.com/8u07vkhv', 'https-luma-com-8u07vkhv-2026-03-07', 'live_music', 'hold', NULL, '2026-03-07', NULL, NULL, NULL, 1, @owner_id, NULL, 'Bobby Fishkin/ Tom Watson/Andres Acosta', 'Solarpunkification', 'both')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1123,8 +1120,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Taurus Bash - Punk Spacewalk events', 'taurus-bash-punk-spacewalk-events-2026-03-20', 'live_music', 'confirmed', 'Buy out
-Contract: contract document linked, signed PDF with Tom', '2026-03-20', NULL, NULL, NULL, 1, @owner_id, NULL, 'Katrina', 'KAT', 'downstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Taurus Bash - Punk Spacewalk events', 'taurus-bash-punk-spacewalk-events-2026-03-20', 'live_music', 'confirmed', 'Contract: contract document linked, signed PDF with Tom', '2026-03-20', NULL, NULL, NULL, 1, @owner_id, NULL, 'Katrina', 'KAT', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1390,7 +1386,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Bang The Bay', 'bang-the-bay-2026-04-08', 'private_event', 'confirmed', 'Load in and Load out - erik@erikkatz.com', '2026-04-08', '19:00:00', '23:45:00', 100, 0, @owner_id, NULL, 'Lee Hoffman', 'Lee Hoffman', 'downstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Bang The Bay', 'bang-the-bay-2026-04-08', 'private_event', 'confirmed', NULL, '2026-04-08', '19:00:00', '23:45:00', 100, 0, @owner_id, NULL, 'Lee Hoffman', 'Lee Hoffman', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1428,7 +1424,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'DJ', 'dj-2026-04-11', 'live_music', 'confirmed', '! sec, 1 Bartender, DJ sound support - tables being rented by CL', '2026-04-11', '07:30:00', '01:00:00', 1, 1, @owner_id, NULL, 'Sasha & Katrina', 'Jake + DJ Kevvy kev', 'downstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'DJ', 'dj-2026-04-11', 'live_music', 'confirmed', NULL, '2026-04-11', '07:30:00', '01:00:00', 1, 1, @owner_id, NULL, 'Sasha & Katrina', 'Jake + DJ Kevvy kev', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1448,7 +1444,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
 INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Lock-up / Curfew', 'curfew', '01:30:00');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'DJ', 'dj-2026-04-11-2', 'live_music', 'proposed', 'Need to get deail', '2026-04-11', '07:30:00', '01:00:00', 1, 0, @owner_id, NULL, 'Sasha & Katrina', 'Jake + DJ Kevvy kev', 'downstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'DJ', 'dj-2026-04-11-2', 'live_music', 'proposed', NULL, '2026-04-11', '07:30:00', '01:00:00', 1, 0, @owner_id, NULL, 'Sasha & Katrina', 'Jake + DJ Kevvy kev', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1468,7 +1464,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
 INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Lock-up / Curfew', 'curfew', '01:30:00');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Swing Lessons + Live Band', 'swing-lessons-live-band-2026-04-15', 'special_event', 'hold', '$3000 from 2 source, not prepaid, rev share tickets, + bar minium variable,', '2026-04-15', NULL, NULL, 100, 1, @owner_id, NULL, 'Matias', 'Cats Corner', 'upstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Swing Lessons + Live Band', 'swing-lessons-live-band-2026-04-15', 'special_event', 'hold', NULL, '2026-04-15', NULL, NULL, 100, 1, @owner_id, NULL, 'Matias', 'Cats Corner', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1601,8 +1597,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Mad Kingdom', 'mad-kingdom-2026-05-02', 'live_music', 'confirmed', 'Carmen Caruso  415 874 8623 for sound, no bar needed. Sasha is Floor Managing/Prodcer from Venue
-Potential revenue: $4,500
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Mad Kingdom', 'mad-kingdom-2026-05-02', 'live_music', 'confirmed', 'Potential revenue: $4,500
 Contract: link to contract document, PDF sent to Tom for counter sig and deposit paid', '2026-05-02', '12:00:00', '00:00:00', NULL, 1, @owner_id, NULL, 'Katrina, Bobby', 'Andrew', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
@@ -1622,8 +1617,7 @@ Contract: link to contract document, PDF sent to Tom for counter sig and deposit
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Swing Lessons + Live Band', 'swing-lessons-live-band-2026-05-06', 'special_event', 'confirmed', '$500 Min, + Bar - reveneue
-Contract: Verbal MGMT, Matias & Kat working on', '2026-05-06', NULL, NULL, NULL, 1, @owner_id, NULL, 'Matias', 'Cats Corner', 'upstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Swing Lessons + Live Band', 'swing-lessons-live-band-2026-05-06', 'special_event', 'confirmed', 'Contract: Verbal MGMT, Matias & Kat working on', '2026-05-06', NULL, NULL, NULL, 1, @owner_id, NULL, 'Matias', 'Cats Corner', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1642,7 +1636,7 @@ Contract: Verbal MGMT, Matias & Kat working on', '2026-05-06', NULL, NULL, NULL,
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Private Fundraiser', 'private-fundraiser-2026-05-07', 'live_music', 'hold', 'Case Newcomb Sound 718 715 5227', '2026-05-07', NULL, NULL, NULL, 1, @owner_id, NULL, 'Bobby / Katrina', 'Private', 'upstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Private Fundraiser', 'private-fundraiser-2026-05-07', 'live_music', 'hold', NULL, '2026-05-07', NULL, NULL, NULL, 1, @owner_id, NULL, 'Bobby / Katrina', 'Private', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1661,7 +1655,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Elizabeth', 'elizabeth-2026-05-09', 'live_music', 'confirmed', 'DeAnne $175 415 613 7113', '2026-05-09', NULL, NULL, NULL, 1, @owner_id, NULL, 'Bobby', 'Elizabeth', NULL)
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Elizabeth', 'elizabeth-2026-05-09', 'live_music', 'confirmed', NULL, '2026-05-09', NULL, NULL, NULL, 1, @owner_id, NULL, 'Bobby', 'Elizabeth', NULL)
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1699,8 +1693,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Swing Lessons + Live Band', 'swing-lessons-live-band-2026-05-13', 'special_event', 'hold', 'Justin Vangegas Sound 925.699.8701
-Potential revenue: 500+700', '2026-05-13', NULL, NULL, NULL, 1, @owner_id, NULL, 'Matias', 'Cats Corner', 'upstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Swing Lessons + Live Band', 'swing-lessons-live-band-2026-05-13', 'special_event', 'hold', 'Potential revenue: 500+700', '2026-05-13', NULL, NULL, NULL, 1, @owner_id, NULL, 'Matias', 'Cats Corner', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1738,8 +1731,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'She\'s Geeky', 'she-s-geeky-2026-05-15', 'live_music', 'confirmed', 'approx 50 attendees, catered event from mona lisa
-Potential revenue: $2,000', '2026-05-15', '09:00:00', '17:00:00', NULL, 1, @owner_id, NULL, 'Katrina    Bobby', 'Tracey', 'both')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'She\'s Geeky', 'she-s-geeky-2026-05-15', 'live_music', 'confirmed', 'Potential revenue: $2,000', '2026-05-15', '09:00:00', '17:00:00', NULL, 1, @owner_id, NULL, 'Katrina    Bobby', 'Tracey', 'both')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1777,7 +1769,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Memorial', 'memorial-2026-05-16', 'live_music', 'canceled', 'Needs staffing plan, and schedule cleaning prior to event', '2026-05-16', NULL, NULL, NULL, 1, @owner_id, NULL, 'Katrina', 'Kat Hotrod', 'downstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Memorial', 'memorial-2026-05-16', 'live_music', 'canceled', NULL, '2026-05-16', NULL, NULL, NULL, 1, @owner_id, NULL, 'Katrina', 'Kat Hotrod', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1817,8 +1809,7 @@ SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
 INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Load-in', 'load_in', '16:00:00');
 INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Lock-up / Curfew', 'curfew', '00:00:00');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Karaoke', 'karaoke-2026-05-17', 'karaoke', 'confirmed', 'Needs staffing plan, and schedule cleaning prior to event
-Potential revenue: $500', '2026-05-17', '18:00:00', '23:00:00', NULL, 0, @owner_id, NULL, 'Kat', 'House', 'downstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Karaoke', 'karaoke-2026-05-17', 'karaoke', 'confirmed', 'Potential revenue: $500', '2026-05-17', '18:00:00', '23:00:00', NULL, 0, @owner_id, NULL, 'Kat', 'House', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1837,8 +1828,7 @@ Potential revenue: $500', '2026-05-17', '18:00:00', '23:00:00', NULL, 0, @owner_
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Swing Lessons + Live Band', 'swing-lessons-live-band-2026-05-20', 'special_event', 'confirmed', 'Will on bar,
-Potential revenue: 500+700', '2026-05-20', '19:00:00', '12:00:00', NULL, 0, @owner_id, NULL, 'Matias', 'Cats Corner', 'upstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Swing Lessons + Live Band', 'swing-lessons-live-band-2026-05-20', 'special_event', 'confirmed', 'Potential revenue: 500+700', '2026-05-20', '19:00:00', '12:00:00', NULL, 0, @owner_id, NULL, 'Matias', 'Cats Corner', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1857,9 +1847,8 @@ Potential revenue: 500+700', '2026-05-20', '19:00:00', '12:00:00', NULL, 0, @own
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Major Accident UK + Monsters Squad', 'major-accident-uk-monsters-squad-2026-05-26', 'live_music', 'confirmed', 'Need staffing
-Ticket system: EB, Venmo & Door
-Potential revenue: 3000 -4000', '2026-05-26', '19:00:00', '12:00:00', NULL, 0, @owner_id, NULL, 'Daniel + Kat', 'D + K', 'upstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Major Accident UK + Monsters Squad', 'major-accident-uk-monsters-squad-2026-05-26', 'live_music', 'confirmed', 'Ticket system: EB, Venmo & Door
+Potential revenue: 3000 -4000', '2026-05-26', '19:00:00', '00:00:00', NULL, 0, @owner_id, NULL, 'Daniel + Kat', 'D + K', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1897,7 +1886,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Metal', 'metal-2026-05-30', 'live_music', 'confirmed', 'Bar, Security, Door, Floor manager, need gear list - need cleaning', '2026-05-30', NULL, NULL, 250, 0, @owner_id, NULL, 'Katrina', 'Dylan + Holt', 'downstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Metal', 'metal-2026-05-30', 'live_music', 'confirmed', NULL, '2026-05-30', NULL, NULL, 250, 0, @owner_id, NULL, 'Katrina', 'Dylan + Holt', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -1954,8 +1943,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Stanford design party', 'stanford-design-party-2026-06-05', 'private_event', 'confirmed', 'staffing 1 bar + 1 security
-Potential revenue: $2,000
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Stanford design party', 'stanford-design-party-2026-06-05', 'private_event', 'confirmed', 'Potential revenue: $2,000
 Contract: EVT-1051 Stanford design - Google Docs', '2026-06-05', NULL, NULL, 50, 0, @owner_id, NULL, 'Tom', 'Anastasia', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
@@ -1994,8 +1982,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Bang The Bay', 'bang-the-bay-2026-06-10', 'live_music', 'confirmed', 'staffing 1 sec + 1 bar
-Potential revenue: need a security person', '2026-06-10', NULL, NULL, NULL, 1, @owner_id, NULL, 'Tom', 'Lee Hoffman', 'downstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Bang The Bay', 'bang-the-bay-2026-06-10', 'live_music', 'confirmed', 'Potential revenue: need a security person', '2026-06-10', NULL, NULL, NULL, 1, @owner_id, NULL, 'Tom', 'Lee Hoffman', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -2015,7 +2002,7 @@ Potential revenue: need a security person', '2026-06-10', NULL, NULL, NULL, 1, @
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
 INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Anna Jae & Friends Live Recording and Music Release', 'anna-jae-friends-live-recording-and-music-release-2026-06-11', 'live_music', 'hold', 'Ticket system: TIXR
-Contract: Tickets- 70/30', '2026-06-11', NULL, NULL, NULL, 1, @owner_id, NULL, 'Stefanie + Sasha', 'Stefanie', 'upstairs')
+Contract: ANNA JAE & FRIENDS — LIVE RECORDING + MUSIC RELEASE - Google Docs', '2026-06-11', '19:00:00', NULL, NULL, 1, @owner_id, NULL, 'Stefanie + Sasha', 'Stefanie', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -2034,29 +2021,10 @@ Contract: Tickets- 70/30', '2026-06-11', NULL, NULL, NULL, 1, @owner_id, NULL, '
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Load-in', 'load_in', '18:00:00');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'DJ collab - Matthew Holt', 'dj-collab-matthew-holt-2026-06-11', 'live_music', 'proposed', 'Contract: MATT HOLT DJ NIGHT — EVENT ONE SHEET - Google Docs', '2026-06-11', '22:00:00', '02:00:00', NULL, 1, @owner_id, NULL, 'Sasha', 'Matt Holt', 'downstairs')
-  ON DUPLICATE KEY UPDATE
-    id = LAST_INSERT_ID(id),
-    venue_id = VALUES(venue_id),
-    title = VALUES(title),
-    event_type = VALUES(event_type),
-    description_internal = VALUES(description_internal),
-    date = VALUES(date),
-    doors_time = VALUES(doors_time),
-    end_time = VALUES(end_time),
-    capacity = VALUES(capacity),
-    public_visibility = VALUES(public_visibility),
-    owner_user_id = VALUES(owner_user_id),
-    external_id = VALUES(external_id),
-    referral_source = VALUES(referral_source),
-    promoter_name = VALUES(promoter_name),
-    room = VALUES(room);
-SET @eid = LAST_INSERT_ID();
-DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
+INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Load-in', 'load_in', '16:00:00');
 INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Day Party DJ', 'day-party-dj-2026-06-13', 'live_music', 'proposed', 'Ticket system: TIXR
-Potential revenue: $6,500
-Contract: DJ DAY PARTY — EVENT ONE SHEET - Google Docs', '2026-06-13', NULL, NULL, NULL, 1, @owner_id, NULL, 'Sasha', 'Conjunction.co', 'upstairs')
+Potential revenue: $7,000
+Contract: DJ DAY PARTY — EVENT ONE SHEET - Google Docs', '2026-06-13', '12:00:00', '17:00:00', NULL, 1, @owner_id, NULL, 'Sasha', 'Conjunction.co', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -2099,7 +2067,7 @@ Contract: 50% revenue share with producers and promoters', '2026-06-15', NULL, N
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Swing Lessons + Live Band', 'swing-lessons-live-band-2026-06-17', 'special_event', 'canceled', 'Will', '2026-06-17', NULL, NULL, NULL, 0, @owner_id, NULL, 'Matias', 'Cats Corner', 'upstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Swing Lessons + Live Band', 'swing-lessons-live-band-2026-06-17', 'special_event', 'canceled', NULL, '2026-06-17', NULL, NULL, NULL, 0, @owner_id, NULL, 'Matias', 'Cats Corner', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -2137,8 +2105,27 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Fentanyl, SPY, POS, Detergent', 'fentanyl-spy-pos-detergent-2026-06-19', 'live_music', 'proposed', 'need staffing
-Potential revenue: $6,000', '2026-06-19', '19:00:00', NULL, 450, 1, @owner_id, NULL, 'Katrina & Daniel', 'RNRG - ACE', 'upstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Fentanyl, SPY, POS, Detergent', 'fentanyl-spy-pos-detergent-2026-06-19', 'live_music', 'proposed', 'Potential revenue: $6,000', '2026-06-19', '19:00:00', NULL, 450, 1, @owner_id, NULL, 'Katrina & Daniel', 'RNRG - ACE', 'upstairs')
+  ON DUPLICATE KEY UPDATE
+    id = LAST_INSERT_ID(id),
+    venue_id = VALUES(venue_id),
+    title = VALUES(title),
+    event_type = VALUES(event_type),
+    description_internal = VALUES(description_internal),
+    date = VALUES(date),
+    doors_time = VALUES(doors_time),
+    end_time = VALUES(end_time),
+    capacity = VALUES(capacity),
+    public_visibility = VALUES(public_visibility),
+    owner_user_id = VALUES(owner_user_id),
+    external_id = VALUES(external_id),
+    referral_source = VALUES(referral_source),
+    promoter_name = VALUES(promoter_name),
+    room = VALUES(room);
+SET @eid = LAST_INSERT_ID();
+DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'DJ collab - Matthew Holt', 'dj-collab-matthew-holt-2026-06-19', 'live_music', 'hold', 'Potential revenue: $1,000
+Contract: MATT HOLT DJ NIGHT — EVENT ONE SHEET - Google Docs', '2026-06-19', '22:00:00', '02:00:00', NULL, 1, @owner_id, NULL, 'Sasha', 'Matt Holt', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -2216,7 +2203,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Community | Clothing Swap', 'community-clothing-swap-2026-06-21', 'live_music', 'proposed', 'Rescheduling', '2026-06-21', NULL, NULL, NULL, 1, @owner_id, NULL, 'Andres', 'Suzanne Agasi', 'downstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Community | Clothing Swap', 'community-clothing-swap-2026-06-21', 'live_music', 'proposed', NULL, '2026-06-21', NULL, NULL, NULL, 1, @owner_id, NULL, 'Andres', 'Suzanne Agasi', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -2254,7 +2241,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'AI vs. Human Rap Battle', 'ai-vs-human-rap-battle-2026-06-26', 'live_music', 'proposed', 'Ticket system: TIXR
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'AI vs. Human Rap Battle', 'ai-vs-human-rap-battle-2026-06-26', 'live_music', 'hold', 'Ticket system: TIXR
 Potential revenue: $1,500
 Contract: Harmon - AI vs Human - Google Docs', '2026-06-26', '20:00:00', '22:00:00', NULL, 1, @owner_id, NULL, 'Sasha', 'Harmon Leon', 'downstairs')
   ON DUPLICATE KEY UPDATE
@@ -2358,7 +2345,7 @@ SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
 INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Load-in', 'load_in', '16:00:00');
 INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Lock-up / Curfew', 'curfew', '22:30:00');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Sapphic Fronted Bands', 'sapphic-fronted-bands-2026-06-27', 'live_music', 'proposed', 'Potential revenue: $1,500
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Sapphic Fronted Bands', 'sapphic-fronted-bands-2026-06-27', 'live_music', 'hold', 'Potential revenue: $1,500
 Contract: Mayday Mae! 6/27 Contract - Google Docs', '2026-06-27', '19:00:00', '22:00:00', NULL, 1, @owner_id, NULL, 'Sasha', 'Mayday Mae', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
@@ -2397,7 +2384,9 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'resiliant LLc.', 'resiliant-llc-2026-07-11', 'live_music', 'hold', NULL, '2026-07-11', NULL, NULL, NULL, 1, @owner_id, NULL, 'Sasha & Katrina', 'Kevin, Jake, Chi', 'upstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'resiliant LLc.', 'resiliant-llc-2026-07-11', 'live_music', 'hold', 'Ticket system: TIXR
+Potential revenue: 3000+
+Contract: Resilient, Del the Funky Homosapien - Google Docs', '2026-07-11', NULL, NULL, NULL, 1, @owner_id, NULL, 'Sasha & Katrina', 'Jake', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -2416,7 +2405,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'I am Snail (Clown show)', 'i-am-snail-clown-show-2026-07-11', 'comedy', 'hold', NULL, '2026-07-11', NULL, NULL, NULL, 1, @owner_id, NULL, 'Collen/Erik', 'Alt Comedy Society', 'downstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'I am Snail (Clown show)', 'i-am-snail-clown-show-2026-07-11', 'comedy', 'hold', NULL, '2026-07-11', '19:30:00', NULL, NULL, 1, @owner_id, NULL, 'Collen/Erik', 'This That Comedy', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -2435,7 +2424,8 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Kommunity FK, Altar De Fey, Nervous Gender', 'kommunity-fk-altar-de-fey-nervous-gender-2026-07-11', 'live_music', 'confirmed', NULL, '2026-07-11', NULL, NULL, NULL, 1, @owner_id, NULL, 'Daniel', 'Assisted Living', 'downstairs')
+INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Lock-up / Curfew', 'curfew', '09:30:00');
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Kommunity FK, Altar De Fey, Nervous Gender', 'kommunity-fk-altar-de-fey-nervous-gender-2026-07-11', 'live_music', 'canceled', NULL, '2026-07-11', NULL, NULL, NULL, 1, @owner_id, NULL, 'Daniel', 'Assisted Living', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -2591,7 +2581,28 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Close To Carl (Clown show + worksop)', 'close-to-carl-clown-show-worksop-2026-08-08', 'comedy', 'hold', NULL, '2026-08-08', '13:00:00', '20:00:00', NULL, 1, @owner_id, NULL, 'Collen/Erik', 'Alt Comedy Society', 'downstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Close To Carl (Clown show + worksop)', 'close-to-carl-clown-show-worksop-2026-08-08', 'comedy', 'hold', NULL, '2026-08-08', '13:00:00', '20:00:00', NULL, 1, @owner_id, NULL, 'Collen/Erik', 'This That Comedy', 'downstairs')
+  ON DUPLICATE KEY UPDATE
+    id = LAST_INSERT_ID(id),
+    venue_id = VALUES(venue_id),
+    title = VALUES(title),
+    event_type = VALUES(event_type),
+    description_internal = VALUES(description_internal),
+    date = VALUES(date),
+    doors_time = VALUES(doors_time),
+    end_time = VALUES(end_time),
+    capacity = VALUES(capacity),
+    public_visibility = VALUES(public_visibility),
+    owner_user_id = VALUES(owner_user_id),
+    external_id = VALUES(external_id),
+    referral_source = VALUES(referral_source),
+    promoter_name = VALUES(promoter_name),
+    room = VALUES(room);
+SET @eid = LAST_INSERT_ID();
+DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
+INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Load-in', 'load_in', '17:00:00');
+INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Lock-up / Curfew', 'curfew', '21:00:00');
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Close to Carl Workshop', 'close-to-carl-workshop-2026-08-09', 'live_music', 'proposed', NULL, '2026-08-09', '13:00:00', NULL, NULL, 0, @owner_id, NULL, 'Colleen', 'This That Comedy', NULL)
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -2611,7 +2622,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
 INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Load-in', 'load_in', '12:00:00');
-INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Lock-up / Curfew', 'curfew', '21:00:00');
+INSERT INTO event_schedule_items (event_id, title, item_type, start_time) VALUES (@eid, 'Lock-up / Curfew', 'curfew', '16:00:00');
 INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'I Hate Records', 'i-hate-records-2026-08-08', 'live_music', 'hold', NULL, '2026-08-08', NULL, NULL, NULL, 0, @owner_id, NULL, 'Daniel + Kat', 'I Hate Records', 'upstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
@@ -2631,7 +2642,27 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
     room = VALUES(room);
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
-INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Zanni', 'zanni-2026-08-30', 'live_music', 'proposed', 'Contract: ZANNI CAMPISI PRESENTS: FOUR BAND THRASH / METAL SHOW - Google Docs', '2026-08-30', NULL, NULL, NULL, 0, @owner_id, NULL, 'Sasha, Katrina, Daniel', 'Zanni', 'upstairs')
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Zanni', 'zanni-2026-08-30', 'live_music', 'proposed', 'Contract: ZANNI CAMPISI PRESENTS: FOUR BAND THRASH / METAL SHOW - Google Docs', '2026-08-30', NULL, NULL, NULL, 0, @owner_id, NULL, 'Sasha, Katrina', 'Zanni', 'upstairs')
+  ON DUPLICATE KEY UPDATE
+    id = LAST_INSERT_ID(id),
+    venue_id = VALUES(venue_id),
+    title = VALUES(title),
+    event_type = VALUES(event_type),
+    description_internal = VALUES(description_internal),
+    date = VALUES(date),
+    doors_time = VALUES(doors_time),
+    end_time = VALUES(end_time),
+    capacity = VALUES(capacity),
+    public_visibility = VALUES(public_visibility),
+    owner_user_id = VALUES(owner_user_id),
+    external_id = VALUES(external_id),
+    referral_source = VALUES(referral_source),
+    promoter_name = VALUES(promoter_name),
+    room = VALUES(room);
+SET @eid = LAST_INSERT_ID();
+DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'State Line Empire', 'state-line-empire-2026-09-05', 'live_music', 'proposed', 'Ticket system: TIXR
+Contract: STATE LINE EMPIRE — EVENT / BOOKING ONE SHEET - Google Docs', '2026-09-05', NULL, NULL, NULL, 1, @owner_id, NULL, 'Sasha, Katrina', 'Scott Proctor', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -2651,6 +2682,26 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
 INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Brazilian memorial', 'brazilian-memorial-2026-09-11', 'live_music', 'proposed', NULL, '2026-09-11', NULL, NULL, NULL, 0, @owner_id, NULL, 'Daniel + Michael Rosenberg', 'Vic Doublelongo', NULL)
+  ON DUPLICATE KEY UPDATE
+    id = LAST_INSERT_ID(id),
+    venue_id = VALUES(venue_id),
+    title = VALUES(title),
+    event_type = VALUES(event_type),
+    description_internal = VALUES(description_internal),
+    date = VALUES(date),
+    doors_time = VALUES(doors_time),
+    end_time = VALUES(end_time),
+    capacity = VALUES(capacity),
+    public_visibility = VALUES(public_visibility),
+    owner_user_id = VALUES(owner_user_id),
+    external_id = VALUES(external_id),
+    referral_source = VALUES(referral_source),
+    promoter_name = VALUES(promoter_name),
+    room = VALUES(room);
+SET @eid = LAST_INSERT_ID();
+DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Rock', 'rock-2026-09-12', 'live_music', 'proposed', 'Ticket system: TIXR
+Contract: Lady Starbeast with Modern Monsters - Google Docs', '2026-09-12', '21:00:00', '01:30:00', NULL, 1, @owner_id, NULL, 'Sasha', 'Lady Starbeast and Modern Monsters +1', 'downstairs')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -2708,6 +2759,25 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
 INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, '25th marriage anniversary', '25th-marriage-anniversary-2026-09-19', 'live_music', 'hold', 'Potential revenue: $4,000', '2026-09-19', '20:00:00', '01:00:00', 150, 1, @owner_id, NULL, 'Tatiana V', NULL, NULL)
+  ON DUPLICATE KEY UPDATE
+    id = LAST_INSERT_ID(id),
+    venue_id = VALUES(venue_id),
+    title = VALUES(title),
+    event_type = VALUES(event_type),
+    description_internal = VALUES(description_internal),
+    date = VALUES(date),
+    doors_time = VALUES(doors_time),
+    end_time = VALUES(end_time),
+    capacity = VALUES(capacity),
+    public_visibility = VALUES(public_visibility),
+    owner_user_id = VALUES(owner_user_id),
+    external_id = VALUES(external_id),
+    referral_source = VALUES(referral_source),
+    promoter_name = VALUES(promoter_name),
+    room = VALUES(room);
+SET @eid = LAST_INSERT_ID();
+DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Standup Comedy', 'standup-comedy-2026-09-26', 'comedy', 'proposed', NULL, '2026-09-26', NULL, NULL, NULL, 0, @owner_id, NULL, 'Colleen', 'This That Comedy', NULL)
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
@@ -2803,6 +2873,25 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_inter
 SET @eid = LAST_INSERT_ID();
 DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
 INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Scorpio', 'scorpio-2026-11-15', 'live_music', 'proposed', NULL, '2026-11-15', NULL, NULL, NULL, 0, @owner_id, NULL, 'Prom Committee', NULL, NULL)
+  ON DUPLICATE KEY UPDATE
+    id = LAST_INSERT_ID(id),
+    venue_id = VALUES(venue_id),
+    title = VALUES(title),
+    event_type = VALUES(event_type),
+    description_internal = VALUES(description_internal),
+    date = VALUES(date),
+    doors_time = VALUES(doors_time),
+    end_time = VALUES(end_time),
+    capacity = VALUES(capacity),
+    public_visibility = VALUES(public_visibility),
+    owner_user_id = VALUES(owner_user_id),
+    external_id = VALUES(external_id),
+    referral_source = VALUES(referral_source),
+    promoter_name = VALUES(promoter_name),
+    room = VALUES(room);
+SET @eid = LAST_INSERT_ID();
+DELETE FROM event_schedule_items WHERE event_id = @eid AND item_type IN ('load_in','curfew');
+INSERT INTO events (venue_id, title, slug, event_type, status, description_internal, date, doors_time, end_time, capacity, public_visibility, owner_user_id, external_id, referral_source, promoter_name, room) VALUES (@venue_id, 'Punk Rock Christmas Party', 'punk-rock-christmas-party-2026-12-12', 'live_music', 'hold', NULL, '2026-12-12', NULL, NULL, NULL, 0, @owner_id, NULL, 'Daniel + Katrina', 'Steve De Pace', 'both')
   ON DUPLICATE KEY UPDATE
     id = LAST_INSERT_ID(id),
     venue_id = VALUES(venue_id),
