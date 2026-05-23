@@ -71,13 +71,15 @@ final class StaffMembers extends BaseEndpoint
         [$payload, $error] = $this->payload($request, isCreate: true);
         if ($error) return $error;
         $id = $this->db->insert(
-            'INSERT INTO staff_members (name, email, phone, default_role, hourly_rate, notes, active, user_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO staff_members (name, email, phone, pronoun, default_role, position, hourly_rate, notes, active, user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $payload['name'],
                 $payload['email'],
                 $payload['phone'],
+                $payload['pronoun'],
                 $payload['default_role'],
+                $payload['position'],
                 $payload['hourly_rate'],
                 $payload['notes'],
                 $payload['active'],
@@ -95,12 +97,14 @@ final class StaffMembers extends BaseEndpoint
         [$payload, $error] = $this->payload($request, isCreate: false);
         if ($error) return $error;
         $this->db->run(
-            'UPDATE staff_members SET name=?, email=?, phone=?, default_role=?, hourly_rate=?, notes=?, active=?, user_id=? WHERE id=?',
+            'UPDATE staff_members SET name=?, email=?, phone=?, pronoun=?, default_role=?, position=?, hourly_rate=?, notes=?, active=?, user_id=? WHERE id=?',
             [
                 $payload['name'],
                 $payload['email'],
                 $payload['phone'],
+                $payload['pronoun'],
                 $payload['default_role'],
+                $payload['position'],
                 $payload['hourly_rate'],
                 $payload['notes'],
                 $payload['active'],
@@ -144,7 +148,9 @@ final class StaffMembers extends BaseEndpoint
             'name'         => $name,
             'email'        => $email !== '' ? strtolower($email) : null,
             'phone'        => trim((string) $request->body('phone', '')) ?: null,
+            'pronoun'      => trim((string) $request->body('pronoun', '')) ?: null,
             'default_role' => $role,
+            'position'     => trim((string) $request->body('position', '')) ?: null,
             'hourly_rate'  => $rate,
             'notes'        => trim((string) $request->body('notes', '')) ?: null,
             'active'       => boolish($request->body('active', $isCreate ? 1 : 0)),

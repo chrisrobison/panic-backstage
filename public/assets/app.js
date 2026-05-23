@@ -1575,8 +1575,12 @@ class EventDetailsForm extends HTMLElement {
       <label>Age <input name="age_restriction" value="${esc(event.age_restriction || '')}"${disabled}></label>
       <label>Ticket price <input type="number" step="0.01" name="ticket_price" value="${esc(event.ticket_price || 0)}"${disabled}></label>
       <label>Paid deposit <input type="number" step="0.01" min="0" name="deposit_amount" value="${esc(event.deposit_amount ?? '')}" placeholder="0.00"${disabled}></label>
+      <label>Potential revenue <input type="number" step="0.01" min="0" name="potential_revenue" value="${esc(event.potential_revenue ?? '')}" placeholder="0.00"${disabled}></label>
       <label>Capacity <input type="number" name="capacity" value="${esc(event.capacity || '')}"${disabled}></label>
+      <label>Ticket system <input name="ticket_system" value="${esc(event.ticket_system || '')}" placeholder="TIXR / Eventbrite / Door"${disabled}></label>
       <label class="wide">Ticket URL <input type="url" name="ticket_url" value="${esc(event.ticket_url || '')}"${disabled}></label>
+      <label class="wide">Contract link <input name="contract_url" value="${esc(event.contract_url || '')}" placeholder="URL or note (e.g. 'Verbal contract')"${disabled}></label>
+      <label class="check-label"><input type="checkbox" name="walkthrough_done" value="1" ${Number(event.walkthrough_done) ? 'checked' : ''}${disabled}> Walk-through happened</label>
       <label class="wide">Public description <textarea name="description_public"${disabled}>${esc(event.description_public || '')}</textarea></label>
       <label class="wide">Internal notes <textarea name="description_internal"${disabled}>${esc(event.description_internal || '')}</textarea></label>
       <label class="check-label"><input type="checkbox" name="public_visibility" value="1" ${Number(event.public_visibility) ? 'checked' : ''}${disabled}> Public page visible</label>
@@ -1587,6 +1591,7 @@ class EventDetailsForm extends HTMLElement {
       submitEvent.preventDefault();
       const body = formData(submitEvent.target);
       body.public_visibility = submitEvent.target.public_visibility.checked ? 1 : 0;
+      body.walkthrough_done  = submitEvent.target.walkthrough_done.checked ? 1 : 0;
       await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       publish('event.saved', { id: event.id });
       publish('toast.show', { message: 'Event details saved.' });
@@ -2061,9 +2066,18 @@ class SettlementForm extends HTMLElement {
   set data(data) {
     this.eventData = data;
     const settlement = data.settlement || {};
+    const event = data.event || {};
     const fields = ['gross_ticket_sales','tickets_sold','bar_sales','expenses','band_payouts','promoter_payout','venue_net'];
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Settlement ${helpLink('settlement', 'Settlement')}</h2><button class="secondary small" type="button" data-calc>Calculate venue net</button></div><form class="row-form">${fields.map((field) => `<label>${esc(titleCase(field))}<input name="${esc(field)}" type="number" step="0.01" value="${esc(settlement[field] || 0)}"></label>`).join('')}<label class="wide">Notes <textarea name="notes">${esc(settlement.notes || '')}</textarea></label><button>Save settlement</button></form></section>`;
-    const form = $('form', this);
+    const docUrl = event.settlement_doc_url || '';
+    const docLink = docUrl && /^https?:/i.test(docUrl)
+      ? `<a class="button small secondary" href="${esc(docUrl)}" target="_blank" rel="noopener noreferrer">Open settlement doc &nearr;</a>`
+      : '';
+    this.innerHTML = `<section class="panel">
+      <div class="section-head padded"><h2>Settlement ${helpLink('settlement', 'Settlement')}</h2><div class="inline-actions">${docLink}<button class="secondary small" type="button" data-calc>Calculate venue net</button></div></div>
+      <form class="row-form" data-form="doc"><label class="wide">Settlement document <input name="settlement_doc_url" value="${esc(docUrl)}" placeholder="URL or note pointing to the night-of settlement sheet"></label><button class="small">Save link</button></form>
+      <form class="row-form" data-form="settlement">${fields.map((field) => `<label>${esc(titleCase(field))}<input name="${esc(field)}" type="number" step="0.01" value="${esc(settlement[field] || 0)}"></label>`).join('')}<label class="wide">Notes <textarea name="notes">${esc(settlement.notes || '')}</textarea></label><button>Save settlement</button></form>
+    </section>`;
+    const form = $('form[data-form="settlement"]', this);
     const calculate = () => {
       const values = formData(form);
       const venueNet = Number(values.gross_ticket_sales || 0) + Number(values.bar_sales || 0) - Number(values.expenses || 0) - Number(values.band_payouts || 0) - Number(values.promoter_payout || 0);
@@ -2071,11 +2085,17 @@ class SettlementForm extends HTMLElement {
     };
     $('[data-calc]', this).addEventListener('click', calculate);
     ['gross_ticket_sales','bar_sales','expenses','band_payouts','promoter_payout'].forEach((name) => form.elements[name].addEventListener('input', calculate));
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      await api(`/events/${this.eventData.event.id}/settlement`, { method: 'POST', body: JSON.stringify(formData(event.target)) });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await api(`/events/${this.eventData.event.id}/settlement`, { method: 'POST', body: JSON.stringify(formData(e.target)) });
       publish('event.saved', { id: this.eventData.event.id });
       publish('toast.show', { message: 'Settlement saved.' });
+    });
+    $('form[data-form="doc"]', this).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await api(`/events/${this.eventData.event.id}`, { method: 'PATCH', body: JSON.stringify({ settlement_doc_url: formData(e.target).settlement_doc_url }) });
+      publish('event.saved', { id: this.eventData.event.id });
+      publish('toast.show', { message: 'Settlement doc link saved.' });
     });
   }
 }
@@ -3041,7 +3061,7 @@ class AdminStaff extends PanicElement {
           <thead><tr><th>Name</th><th>Default role</th><th>Contact</th><th>Rate</th><th>Login</th><th>Status</th><th></th></tr></thead>
           <tbody>
             ${staff.map((s) => `<tr class="${Number(s.active) ? '' : 'muted-row'}">
-              <td><strong>${esc(s.name)}</strong>${s.notes ? `<br><small class="muted">${esc(s.notes)}</small>` : ''}</td>
+              <td><strong>${esc(s.name)}</strong>${s.pronoun ? ` <small class="muted">(${esc(s.pronoun)})</small>` : ''}${s.position ? `<br><small>${esc(s.position)}</small>` : ''}${s.notes ? `<br><small class="muted">${esc(s.notes)}</small>` : ''}</td>
               <td><span class="badge">${esc(titleCase(s.default_role))}</span></td>
               <td>${s.email ? esc(s.email) : ''}${s.email && s.phone ? '<br>' : ''}${s.phone ? esc(s.phone) : ''}</td>
               <td>${s.hourly_rate ? `$${esc(Number(s.hourly_rate).toFixed(2))}/hr` : '—'}</td>
@@ -3059,7 +3079,9 @@ class AdminStaff extends PanicElement {
         <div class="section-head padded"><h2>Add Staff</h2></div>
         <form data-form="create" class="grid-form padded">
           <label>Name <input name="name" required placeholder="Full name"></label>
+          <label>Pronoun <input name="pronoun" placeholder="they/them, she/her, …"></label>
           <label>Default role ${select('default_role', roles, 'security')}</label>
+          <label>Position <input name="position" placeholder="Lead bartender, Head of Security, …"></label>
           <label>Email <input type="email" name="email" placeholder="Optional"></label>
           <label>Phone <input name="phone" placeholder="Optional"></label>
           <label>Hourly rate <input type="number" step="0.01" name="hourly_rate" placeholder="Optional"></label>
@@ -3099,7 +3121,9 @@ class AdminStaff extends PanicElement {
       <div class="section-head padded"><h2>Edit staff member</h2><button class="small secondary" data-close>Close</button></div>
       <form class="grid-form padded" data-form="edit">
         <label>Name <input name="name" required value="${esc(s.name)}"></label>
+        <label>Pronoun <input name="pronoun" value="${esc(s.pronoun || '')}" placeholder="they/them, she/her, …"></label>
         <label>Default role ${select('default_role', roles, s.default_role)}</label>
+        <label>Position <input name="position" value="${esc(s.position || '')}" placeholder="Lead bartender, Head of Security, …"></label>
         <label>Email <input type="email" name="email" value="${esc(s.email || '')}"></label>
         <label>Phone <input name="phone" value="${esc(s.phone || '')}"></label>
         <label>Hourly rate <input type="number" step="0.01" name="hourly_rate" value="${esc(s.hourly_rate || '')}"></label>

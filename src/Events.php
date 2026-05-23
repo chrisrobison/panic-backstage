@@ -168,9 +168,9 @@ final class Events extends BaseEndpoint
         }
         $slug = $this->uniqueSlug($body['title'] . '-' . $body['date']);
         $id = $this->db->insert(
-            'INSERT INTO events (venue_id, title, slug, event_type, status, description_public, description_internal, date, doors_time, show_time, end_time, age_restriction, ticket_price, deposit_amount, ticket_url, capacity, public_visibility, owner_user_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $body['status'] ?? 'proposed', $body['description_public'] ?? null, $body['description_internal'] ?? null, $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), $body['age_restriction'] ?? null, (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), $body['ticket_url'] ?? null, $body['capacity'] ?: null, boolish($body['public_visibility'] ?? false), $body['owner_user_id'] ?: $this->userId()]
+            'INSERT INTO events (venue_id, title, slug, event_type, status, description_public, description_internal, date, doors_time, show_time, end_time, age_restriction, ticket_price, deposit_amount, potential_revenue, ticket_url, ticket_system, contract_url, walkthrough_done, settlement_doc_url, capacity, public_visibility, owner_user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $body['status'] ?? 'proposed', $body['description_public'] ?? null, $body['description_internal'] ?? null, $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), $body['age_restriction'] ?? null, (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), self::nullableString($body['ticket_url'] ?? null), self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), $body['capacity'] ?: null, boolish($body['public_visibility'] ?? false), $body['owner_user_id'] ?: $this->userId()]
         );
         log_activity($this->db, $id, $this->userId(), 'event created', ['title' => $body['title']]);
         return $this->ok(['id' => $id]);
@@ -190,6 +190,28 @@ final class Events extends BaseEndpoint
             log_activity($this->db, $id, $this->userId(), 'status changed', ['status' => $body['status']]);
             return $this->ok(['ok' => true]);
         }
+        // Allowlist of single-field partial updates so the UI can PATCH a single
+        // detail (settlement doc link, walkthrough flag, etc.) without re-sending
+        // every required field. Anything outside this list falls through to the
+        // full-row UPDATE below.
+        $partialAllowlist = [
+            'settlement_doc_url' => fn ($v) => self::nullableString($v),
+            'contract_url'       => fn ($v) => self::nullableString($v),
+            'ticket_url'         => fn ($v) => self::nullableString($v),
+            'ticket_system'      => fn ($v) => self::nullableString($v),
+            'walkthrough_done'   => fn ($v) => boolish($v) ? 1 : 0,
+            'deposit_amount'     => fn ($v) => self::nullableDecimal($v),
+            'potential_revenue'  => fn ($v) => self::nullableDecimal($v),
+        ];
+        if (count($body) === 1) {
+            $key = array_key_first($body);
+            if (isset($partialAllowlist[$key])) {
+                $coerced = $partialAllowlist[$key]($body[$key]);
+                $this->db->run("UPDATE events SET {$key} = ? WHERE id = ?", [$coerced, $id]);
+                log_activity($this->db, $id, $this->userId(), "field updated: {$key}");
+                return $this->ok(['ok' => true]);
+            }
+        }
         $old = $this->db->one('SELECT * FROM events WHERE id = ?', [$id]);
         if (!$old) {
             return $this->notFound();
@@ -198,8 +220,8 @@ final class Events extends BaseEndpoint
             ? $this->uniqueSlug(($body['title'] ?? $old['title']) . '-' . ($body['date'] ?? $old['date']), $id)
             : $old['slug'];
         $this->db->run(
-            'UPDATE events SET venue_id=?, title=?, slug=?, event_type=?, status=?, description_public=?, description_internal=?, date=?, doors_time=?, show_time=?, end_time=?, age_restriction=?, ticket_price=?, deposit_amount=?, ticket_url=?, capacity=?, public_visibility=?, owner_user_id=? WHERE id=?',
-            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $body['status'], $body['description_public'] ?? null, $body['description_internal'] ?? null, $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), $body['age_restriction'] ?? null, (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), $body['ticket_url'] ?? null, $body['capacity'] ?: null, boolish($body['public_visibility'] ?? false), $body['owner_user_id'] ?: null, $id]
+            'UPDATE events SET venue_id=?, title=?, slug=?, event_type=?, status=?, description_public=?, description_internal=?, date=?, doors_time=?, show_time=?, end_time=?, age_restriction=?, ticket_price=?, deposit_amount=?, potential_revenue=?, ticket_url=?, ticket_system=?, contract_url=?, walkthrough_done=?, settlement_doc_url=?, capacity=?, public_visibility=?, owner_user_id=? WHERE id=?',
+            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $body['status'], $body['description_public'] ?? null, $body['description_internal'] ?? null, $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), $body['age_restriction'] ?? null, (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), self::nullableString($body['ticket_url'] ?? null), self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), $body['capacity'] ?: null, boolish($body['public_visibility'] ?? false), $body['owner_user_id'] ?: null, $id]
         );
         log_activity($this->db, $id, $this->userId(), 'event updated');
         return $this->ok(['id' => $id]);
@@ -306,5 +328,13 @@ final class Events extends BaseEndpoint
         if ($value === null) return null;
         if (is_string($value) && trim($value) === '') return null;
         return (float) $value;
+    }
+
+    /** Trim and return null for empty/whitespace strings; otherwise the trimmed string. */
+    private static function nullableString($value): ?string
+    {
+        if ($value === null) return null;
+        $s = trim((string) $value);
+        return $s === '' ? null : $s;
     }
 }

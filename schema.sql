@@ -43,7 +43,12 @@ CREATE TABLE IF NOT EXISTS events (
   age_restriction VARCHAR(80),
   ticket_price DECIMAL(10,2) DEFAULT 0,
   deposit_amount DECIMAL(10,2) DEFAULT NULL,     -- artist/promoter deposit on file (sheet's "Paid Deposit")
+  potential_revenue DECIMAL(10,2) DEFAULT NULL,  -- sheet col 6
   ticket_url VARCHAR(500),
+  ticket_system VARCHAR(40) DEFAULT NULL,        -- sheet col 15 (TIXR / Eventbrite / Door / …)
+  contract_url VARCHAR(500) DEFAULT NULL,        -- sheet col 16
+  walkthrough_done TINYINT(1) NOT NULL DEFAULT 0,-- sheet col 17 "Walk Through Happened?"
+  settlement_doc_url VARCHAR(500) DEFAULT NULL,  -- sheet col 19
   capacity INT,
   room ENUM('upstairs','downstairs','both') DEFAULT NULL,  -- room / floor at multi-space venues
   public_visibility TINYINT(1) NOT NULL DEFAULT 0,
@@ -270,10 +275,12 @@ CREATE TABLE IF NOT EXISTS staff_members (
   name         VARCHAR(255) NOT NULL,
   email        VARCHAR(255) DEFAULT NULL,
   phone        VARCHAR(64)  DEFAULT NULL,
+  pronoun      VARCHAR(40)  DEFAULT NULL,  -- sheet col 4
   default_role ENUM(
     'manager','security','bartender','barback','door',
     'sound','lighting','stagehand','runner','cleaner','other'
   ) NOT NULL DEFAULT 'other',
+  position     VARCHAR(120) DEFAULT NULL,  -- sheet col 8 — free-text job title, more specific than default_role
   hourly_rate  DECIMAL(10,2) DEFAULT NULL,
   notes        TEXT DEFAULT NULL,
   active       TINYINT(1) NOT NULL DEFAULT 1,

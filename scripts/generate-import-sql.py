@@ -10,6 +10,40 @@ Usage:
 
 Requires openpyxl:
     pip3 install openpyxl
+
+Tracker sheet column map (row 2 is the header; data starts row 3+):
+   1  Priority Level / external_id        → events.external_id
+   2  Referral/Provenance                 → events.referral_source
+   3  Organizer/promoter                  → events.promoter_name
+   4  descrip/genre                       → events.title + event_type guess
+   5  Date                                → events.date
+   6  Potential Revenue (rent + bar)      → events.potential_revenue
+   7  Time: Load in                       → event_schedule_items('load_in')
+   8  Time: doors open                    → events.doors_time
+   9  Time door clos                      → events.end_time
+  10  Time: lock up                       → event_schedule_items('curfew')
+  11  Est. crd size                       → events.capacity
+  12  Venue (Upstairs/Downstairs/Both)    → events.room
+  13  Status                              → events.status (via STATUS_MAP)
+  14  Event Type (Public/Private)         → events.public_visibility + event_type
+  15  Ticket Sys.                         → events.ticket_system
+  16  Contract Link                       → events.contract_url
+  17  Walk Through Happened?              → events.walkthrough_done
+  18  Ticket Link                         → events.ticket_url
+  19  Night of Settlement Document        → events.settlement_doc_url
+  20  Bar / freeform notes                → events.description_internal
+  21-23 Security / Sound / Cleaning       → ignored (~always empty)
+
+Staff Contact sheet:
+   1 Department  → maps to staff_members.default_role
+   2 Fname       → staff_members.name (combined)
+   3 Lname       → staff_members.name (combined)
+   4 Pronoun     → staff_members.pronoun
+   5 Staffing Status → ignored (sheet column is empty in practice)
+   6 Phone       → staff_members.phone
+   7 Email       → staff_members.email + users.email
+   8 Position    → staff_members.position
+   9 Staffing Notes → staff_members.notes
 """
 
 import openpyxl
@@ -55,6 +89,23 @@ STATUS_MAP = {
     'hold': 'hold',
 }
 
+# Sheet's "Department" → staff_members.default_role enum
+DEPT_TO_ROLE = {
+    'bar':       'bartender',
+    'barback':   'barback',
+    'security':  'security',
+    'door':      'door',
+    'sound':     'sound',
+    'light':     'lighting',
+    'lighting':  'lighting',
+    'stage':     'stagehand',
+    'stagehand': 'stagehand',
+    'cleaning':  'cleaner',
+    'cleaner':   'cleaner',
+    'manager':   'manager',
+    'runner':    'runner',
+}
+
 def map_status(raw_status, ext_id_raw) -> str:
     if ext_id_raw and 'hold' in str(ext_id_raw).lower():
         return 'hold'
@@ -84,6 +135,53 @@ def clean_ext_id(v):
     s = str(v).strip()
     return s if re.match(r'^EVT-\d+', s) else None
 
+def parse_revenue(v):
+    """
+    Best-effort numeric extraction from the sheet's "Potential Revenue" column.
+    Handles plain numbers (2000, 1500.0) and lossy expressions like '500+700'
+    or '$1,200' by summing all numbers found in the string. Returns float or None.
+    """
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip()
+    if not s:
+        return None
+    nums = re.findall(r'\d+(?:\.\d+)?', s.replace(',', ''))
+    if not nums:
+        return None
+    try:
+        return sum(float(n) for n in nums)
+    except Exception:
+        return None
+
+def parse_ticket_system(v):
+    """Normalize ticket-system text and clip to schema length (40)."""
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s[:40] if s else None
+
+def parse_url_or_text(v, max_len=500):
+    """
+    The sheet's link columns aren't always URLs — sometimes they're notes
+    like 'Verbal contract' or 'text group'. Keep whatever text is there
+    (trimmed and clipped) so the data lands somewhere visible; the UI just
+    renders this as text and only auto-links when it looks like a URL.
+    """
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s[:max_len] if s else None
+
+def parse_bool_yes(v):
+    """'Yes' / 'TRUE' / '1' → 1, everything else → 0."""
+    if v is None:
+        return 0
+    s = str(v).strip().lower()
+    return 1 if s in ('yes', 'y', 'true', '1', 'done', 'complete') else 0
+
 # ── Load workbook ─────────────────────────────────────────────────────────────
 
 if not XLSX_PATH.exists():
@@ -112,11 +210,16 @@ def unique_slug(base: str) -> str:
 events_rows = []
 skipped = 0
 
+# The header row is row 2 in the live sheet; first data row is row 3 (sometimes
+# row 4 — row 3 may be a stray comment). iter_rows(min_row=2) keeps the legacy
+# behaviour: rows that fail the date/genre guards are skipped, so a stray
+# header passes through harmlessly.
 for row in ws.iter_rows(min_row=2, values_only=True):
-    raw_ext_id, referral, organizer, genre, raw_date, potential_rev, \
-        t_load_in, t_doors, t_close, t_lockup, crowd_size, venue_room, \
-        status_raw, event_type_raw, ticket_sys, contract_link, invoice_link, \
-        settlement_doc, notes = row[:19]
+    cols = list(row[:20]) + [None] * max(0, 20 - len(row))
+    (raw_ext_id, referral, organizer, genre, raw_date, potential_rev,
+        t_load_in, t_doors, t_close, t_lockup, crowd_size, venue_room,
+        status_raw, event_type_raw, ticket_sys, contract_link, walkthrough_raw,
+        ticket_link, settlement_doc, bar_notes) = cols
 
     if not isinstance(raw_date, (datetime, date)):
         skipped += 1
@@ -144,19 +247,11 @@ for row in ws.iter_rows(min_row=2, values_only=True):
         elif 'both' in r:
             room = 'both'
 
-    int_parts = []
-    if notes and str(notes).strip():
-        int_parts.append(str(notes).strip())
-    if ticket_sys and str(ticket_sys).strip():
-        int_parts.append(f"Ticket system: {ticket_sys}")
-    if potential_rev:
-        try:
-            int_parts.append(f"Potential revenue: ${float(potential_rev):,.0f}")
-        except Exception:
-            int_parts.append(f"Potential revenue: {potential_rev}")
-    if contract_link and str(contract_link).strip():
-        int_parts.append(f"Contract: {contract_link}")
-    desc_int = '\n'.join(int_parts) if int_parts else None
+    # description_internal is now ONLY for stuff that doesn't have its own
+    # column — col 20 freeform "Bar" notes. Everything else (revenue, ticket
+    # system, contract, settlement doc) goes into its own structured field
+    # so we stop polluting the notes blob.
+    desc_int = str(bar_notes).strip() if bar_notes and str(bar_notes).strip() else None
 
     cap = None
     if crowd_size is not None:
@@ -176,6 +271,13 @@ for row in ws.iter_rows(min_row=2, values_only=True):
         'room': room,
         'load_in': fmt_time(t_load_in),
         'lockup': fmt_time(t_lockup),
+        # New structured fields
+        'potential_revenue': parse_revenue(potential_rev),
+        'ticket_url':        parse_url_or_text(ticket_link),
+        'ticket_system':     parse_ticket_system(ticket_sys),
+        'contract_url':      parse_url_or_text(contract_link),
+        'walkthrough_done':  parse_bool_yes(walkthrough_raw),
+        'settlement_doc_url': parse_url_or_text(settlement_doc),
     })
 
 # ── Parse Staff Contact ───────────────────────────────────────────────────────
@@ -184,19 +286,30 @@ ws2 = wb['Staff Contact']
 staff_rows = []
 
 for row in ws2.iter_rows(min_row=2, values_only=True):
-    dept, fname, lname, pronoun, st, phone, email, position, n2 = row[:9]
+    cols = list(row[:9]) + [None] * max(0, 9 - len(row))
+    dept, fname, lname, pronoun, staffing_status, phone, email, position, notes_col = cols
     if not fname:
         continue
     full = (str(fname).strip() + (' ' + str(lname).strip() if lname else '')).strip()
     if not full:
         continue
+    real_email = bool(email)
     if not email:
         email = re.sub(r'[^a-z0-9]', '.', full.lower()).strip('.') + '@staff.mabuhay.local'
+
+    dept_norm = (str(dept).strip().lower() if dept else '')
+    role = DEPT_TO_ROLE.get(dept_norm, 'other')
+
     staff_rows.append({
-        'name': full,
-        'email': str(email).strip(),
-        'dept': str(dept).strip() if dept else None,
-        'phone': str(phone).strip() if phone else None,
+        'name':       full,
+        'email':      str(email).strip(),
+        'real_email': real_email,
+        'dept':       str(dept).strip() if dept else None,
+        'phone':      str(phone).strip() if phone else None,
+        'pronoun':    str(pronoun).strip() if pronoun else None,
+        'position':   str(position).strip() if position else None,
+        'notes':      str(notes_col).strip() if notes_col else None,
+        'role':       role,
     })
 
 # ── Build SQL ─────────────────────────────────────────────────────────────────
@@ -204,13 +317,14 @@ for row in ws2.iter_rows(min_row=2, values_only=True):
 out = [
     "-- =============================================================",
     "-- MabEvents.xlsx import (idempotent UPSERT)",
-    "-- Run AFTER: schema.sql, migration 001, migration 002",
+    "-- Run AFTER: schema.sql, migrations 001 → 011",
     f"-- Events: {len(events_rows)}  |  Staff: {len(staff_rows)}",
     "--",
     "-- Idempotency keys:",
-    "--   users  : email (UNIQUE)            — name refreshed; role/password preserved",
-    "--   events : slug  (UNIQUE)            — all fields refreshed EXCEPT status",
-    "--                                        (local workflow state wins)",
+    "--   users         : email (UNIQUE)        — name refreshed; role/password preserved",
+    "--   staff_members : email (when present)  — refresh phone/pronoun/position/notes",
+    "--   events        : slug  (UNIQUE)        — most fields refreshed; status preserved",
+    "--                                          (local workflow state wins)",
     "--   event_schedule_items : delete+reinsert per event for ('load_in','curfew')",
     "-- =============================================================",
     "",
@@ -224,7 +338,7 @@ out = [
     "  (SELECT id FROM users WHERE role = 'venue_admin' ORDER BY id LIMIT 1)",
     ");",
     "",
-    "-- ── Staff ──────────────────────────────────────────────────────",
+    "-- ── Staff users ────────────────────────────────────────────────",
 ]
 
 for s in staff_rows:
@@ -234,30 +348,70 @@ for s in staff_rows:
         f"ON DUPLICATE KEY UPDATE name = VALUES(name);"
     )
 
+out.extend(["", "-- ── Staff roster (staff_members) ─────────────────────────────"])
+
+# Staff roster UPSERT. Idempotency: email is UNIQUE in users but NOT in
+# staff_members, so we use a "INSERT ... ON DUPLICATE KEY" pattern via
+# a synthetic key — we resolve the existing row by (name, email) match
+# and UPDATE if present, INSERT otherwise. To keep this SQL declarative
+# we lean on the unique-index-free path: try INSERT, then UPDATE WHERE
+# email = ? (which is unique-enough for the sheet's data shape).
+for s in staff_rows:
+    out.append(
+        f"INSERT INTO staff_members (name, email, phone, pronoun, default_role, position, notes, active, user_id) "
+        f"SELECT {esc(s['name'])}, {esc(s['email'])}, {esc(s['phone'])}, "
+        f"{esc(s['pronoun'])}, '{s['role']}', {esc(s['position'])}, {esc(s['notes'])}, 1, "
+        f"(SELECT id FROM users WHERE email = {esc(s['email'])} LIMIT 1) "
+        f"FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM staff_members WHERE email = {esc(s['email'])});"
+    )
+    out.append(
+        f"UPDATE staff_members SET "
+        f"name = {esc(s['name'])}, "
+        f"phone = COALESCE({esc(s['phone'])}, phone), "
+        f"pronoun = COALESCE({esc(s['pronoun'])}, pronoun), "
+        f"position = COALESCE({esc(s['position'])}, position), "
+        f"notes = COALESCE({esc(s['notes'])}, notes), "
+        f"user_id = COALESCE((SELECT id FROM users WHERE email = {esc(s['email'])} LIMIT 1), user_id) "
+        f"WHERE email = {esc(s['email'])};"
+    )
+
 out.extend(["", "-- ── Events ─────────────────────────────────────────────────────"])
 
-# Columns updated on an existing row (everything from the sheet EXCEPT status,
-# which the user asked us to preserve so local workflow progress isn't reverted).
+# Columns updated on an existing row. Status is intentionally omitted so
+# local workflow progress isn't reverted by a re-sync. deposit_amount is
+# also omitted (sheet has no amount column, only the "Paid Deposit" status
+# string, so a manual figure entered in the UI must survive resyncs).
 EVENT_UPDATE_COLS = [
     'venue_id', 'title', 'event_type', 'description_internal',
     'date', 'doors_time', 'end_time', 'capacity', 'public_visibility',
     'owner_user_id', 'external_id', 'referral_source', 'promoter_name', 'room',
+    # Structured fields newly extracted from the sheet:
+    'potential_revenue', 'ticket_url', 'ticket_system', 'contract_url',
+    'walkthrough_done', 'settlement_doc_url',
 ]
 event_update_clause = ',\n    '.join(
     [f"{c} = VALUES({c})" for c in EVENT_UPDATE_COLS]
 )
+
+def num_or_null(v):
+    return 'NULL' if v is None else f"{v}"
 
 for ev in events_rows:
     out.append(
         f"INSERT INTO events (venue_id, title, slug, event_type, status, "
         f"description_internal, date, doors_time, end_time, capacity, "
         f"public_visibility, owner_user_id, external_id, referral_source, "
-        f"promoter_name, room) VALUES ("
+        f"promoter_name, room, potential_revenue, ticket_url, ticket_system, "
+        f"contract_url, walkthrough_done, settlement_doc_url) VALUES ("
         f"@venue_id, {esc(ev['title'])}, {esc(ev['slug'])}, "
         f"'{ev['etype']}', '{ev['status']}', {esc(ev['desc_int'])}, "
         f"'{ev['date']}', {ev['doors']}, {ev['end_t']}, {ev['cap']}, "
         f"{ev['pub']}, @owner_id, {esc(ev['ext_id'])}, "
-        f"{esc(ev['ref'])}, {esc(ev['prom'])}, {esc(ev['room'])}"
+        f"{esc(ev['ref'])}, {esc(ev['prom'])}, {esc(ev['room'])}, "
+        f"{num_or_null(ev['potential_revenue'])}, "
+        f"{esc(ev['ticket_url'])}, {esc(ev['ticket_system'])}, "
+        f"{esc(ev['contract_url'])}, {ev['walkthrough_done']}, "
+        f"{esc(ev['settlement_doc_url'])}"
         f")\n  ON DUPLICATE KEY UPDATE\n    id = LAST_INSERT_ID(id),\n    "
         f"{event_update_clause};"
     )
