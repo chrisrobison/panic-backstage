@@ -140,16 +140,33 @@ function statusTone(status) {
   return 'gray';
 }
 
+// Sheet-derived display labels for the event-status enum. The MabEvents
+// Google Sheet's "Status" column is the source of truth for vocabulary, so
+// pipeline columns and badges read in the same language as the sheet.
+// Statuses with no sheet counterpart fall through to titleCase().
+const STATUS_LABELS = {
+  proposed:  'Prospect',
+  hold:      'In Negotiations',
+  confirmed: 'Booked',
+  canceled:  'Cancelled',
+  completed: 'Archived',
+};
+
+function statusLabel(status) {
+  return STATUS_LABELS[status] || titleCase(status);
+}
+
 function badge(status) {
-  return `<span class="badge status-${esc(status)}">${esc(titleCase(status))}</span>`;
+  return `<span class="badge status-${esc(status)}">${esc(statusLabel(status))}</span>`;
 }
 
-function option(value, selected, label = value) {
-  return `<option value="${esc(value)}" ${String(value) === String(selected ?? '') ? 'selected' : ''}>${esc(titleCase(label))}</option>`;
+function option(value, selected, label = value, labelFn) {
+  const display = labelFn ? labelFn(value) : titleCase(label);
+  return `<option value="${esc(value)}" ${String(value) === String(selected ?? '') ? 'selected' : ''}>${esc(display)}</option>`;
 }
 
-function select(name, values, selected) {
-  return `<select name="${esc(name)}">${values.map((value) => option(value, selected)).join('')}</select>`;
+function select(name, values, selected, labelFn) {
+  return `<select name="${esc(name)}">${values.map((value) => option(value, selected, value, labelFn)).join('')}</select>`;
 }
 
 function userSelect(users = [], selected = '') {
@@ -471,7 +488,7 @@ function renderEventFactsSection(data) {
     ['Ticket', event.ticket_price ? money(event.ticket_price) : 'Free'],
     ['Promoter', event.promoter_name || '—'],
     ['Owner', event.owner_name || 'Unassigned'],
-    ['Status', titleCase(event.status)],
+    ['Status', statusLabel(event.status)],
   ];
   const notes = event.description_internal ? `<h3 class="subsection">Internal Notes</h3><div class="notes-block">${esc(event.description_internal)}</div>` : '';
   return `<h2 class="section">Event Overview</h2>
@@ -1363,9 +1380,9 @@ class PipelineBoard extends PanicElement {
       <div class="page-head"><div><h1>Pipeline</h1><p class="subtle">Move events from holds to settlement.</p></div></div>
       <section class="pipeline-board">${statuses.slice(0, 10).map((status) => {
         const items = events.filter((event) => event.status === status);
-        return `<article class="pipe-col"><h3>${esc(titleCase(status))} <span class="pipe-count">${items.length}</span></h3>${items.map((event) => {
+        return `<article class="pipe-col"><h3>${esc(statusLabel(status))} <span class="pipe-count">${items.length}</span></h3>${items.map((event) => {
           const editable = Boolean(event.capabilities?.edit_event);
-          return `<article class="pipe-card"><strong>${esc(event.title)}</strong><span>${esc(shortDate(eventDate(event)))}</span><small>${esc(event.owner_name || 'Unassigned')}</small><small>${esc(event.open_items || 0)} open items / ${esc(event.incomplete_tasks || 0)} tasks</small>${editable ? `<form data-event="${esc(event.id)}" class="inline-status">${select('status', statuses, event.status)}<button class="small">Move</button><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></form>` : `<div class="inline-status"><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></div>`}</article>`;
+          return `<article class="pipe-card"><strong>${esc(event.title)}</strong><span>${esc(shortDate(eventDate(event)))}</span><small>${esc(event.owner_name || 'Unassigned')}</small><small>${esc(event.open_items || 0)} open items / ${esc(event.incomplete_tasks || 0)} tasks</small>${editable ? `<form data-event="${esc(event.id)}" class="inline-status">${select('status', statuses, event.status, statusLabel)}<button class="small">Move</button><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></form>` : `<div class="inline-status"><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></div>`}</article>`;
         }).join('') || '<small>No events</small>'}</article>`;
       }).join('')}</section>
     </section>`;
@@ -1550,13 +1567,14 @@ class EventDetailsForm extends HTMLElement {
       <label>Date <input type="date" name="date" required value="${esc(event.date)}"${disabled}></label>
       <label>Venue <select name="venue_id"${disabled}>${data.venues.map((venue) => option(venue.id, event.venue_id, venue.name)).join('')}</select></label>
       <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
-      <label>Status ${select('status', statuses, event.status).replace('<select ', `<select${disabled} `)}</label>
+      <label>Status ${select('status', statuses, event.status, statusLabel).replace('<select ', `<select${disabled} `)}</label>
       <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
       <label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>
       <label>Show <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
       <label>End <input type="time" name="end_time" value="${esc(event.end_time || '')}"${disabled}></label>
       <label>Age <input name="age_restriction" value="${esc(event.age_restriction || '')}"${disabled}></label>
       <label>Ticket price <input type="number" step="0.01" name="ticket_price" value="${esc(event.ticket_price || 0)}"${disabled}></label>
+      <label>Paid deposit <input type="number" step="0.01" min="0" name="deposit_amount" value="${esc(event.deposit_amount ?? '')}" placeholder="0.00"${disabled}></label>
       <label>Capacity <input type="number" name="capacity" value="${esc(event.capacity || '')}"${disabled}></label>
       <label class="wide">Ticket URL <input type="url" name="ticket_url" value="${esc(event.ticket_url || '')}"${disabled}></label>
       <label class="wide">Public description <textarea name="description_public"${disabled}>${esc(event.description_public || '')}</textarea></label>
@@ -2730,19 +2748,19 @@ const HELP_CONTENT = {
 
   statuses: `
     <h2>Event status reference</h2>
-    <p>Events move through these statuses, roughly left to right on the pipeline:</p>
+    <p>Events move through these statuses, roughly left to right on the pipeline. Labels match the MabEvents Google Sheet so the vocabulary is consistent across both tools:</p>
     <ol>
-      <li><strong>empty</strong> — the date is held but nothing is booked.</li>
-      <li><strong>proposed</strong> — a show idea exists but is not confirmed.</li>
-      <li><strong>hold</strong> — soft hold with a band/promoter.</li>
-      <li><strong>confirmed</strong> — show is on, but assets and announcement are pending.</li>
-      <li><strong>needs_assets</strong> — confirmed, blocked on flyer/social art.</li>
-      <li><strong>ready_to_announce</strong> — flyer approved, ticketing ready; just needs to flip public on.</li>
-      <li><strong>published</strong> — public page is live.</li>
-      <li><strong>advanced</strong> — production advanced; ready for night-of-show.</li>
-      <li><strong>completed</strong> — show happened, waiting on settlement.</li>
-      <li><strong>settled</strong> — books closed.</li>
-      <li><strong>canceled</strong> — show was canceled.</li>
+      <li><strong>Empty</strong> — the date is held but nothing is booked.</li>
+      <li><strong>Prospect</strong> — a show idea exists but is not confirmed.</li>
+      <li><strong>In Negotiations</strong> — soft hold with a band/promoter; terms still being worked out.</li>
+      <li><strong>Booked</strong> — show is on (includes deposits paid), but assets and announcement are pending.</li>
+      <li><strong>Needs Assets</strong> — booked, blocked on flyer/social art.</li>
+      <li><strong>Ready To Announce</strong> — flyer approved, ticketing ready; just needs to flip public on.</li>
+      <li><strong>Published</strong> — public page is live.</li>
+      <li><strong>Advanced</strong> — production advanced; ready for night-of-show.</li>
+      <li><strong>Archived</strong> — show happened, waiting on settlement.</li>
+      <li><strong>Settled</strong> — books closed.</li>
+      <li><strong>Cancelled</strong> — show was cancelled.</li>
     </ol>
     <p>Statuses do not enforce hard transitions — you can move between any of them. They are signals to the rest of the team and to the dashboard.</p>
   `,

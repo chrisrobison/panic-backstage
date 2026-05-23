@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS events (
   end_time TIME,
   age_restriction VARCHAR(80),
   ticket_price DECIMAL(10,2) DEFAULT 0,
+  deposit_amount DECIMAL(10,2) DEFAULT NULL,     -- artist/promoter deposit on file (sheet's "Paid Deposit")
   ticket_url VARCHAR(500),
   capacity INT,
   room ENUM('upstairs','downstairs','both') DEFAULT NULL,  -- room / floor at multi-space venues
