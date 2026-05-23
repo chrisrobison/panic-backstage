@@ -2362,24 +2362,52 @@ const HELP_CONTENT = {
 
   'sign-in': `
     <h2 id="help-sign-in-h">Signing in</h2>
-    <p>The login page offers three ways to sign in. Use whichever your account has set up:</p>
+    <p>The login page is <strong>email-first</strong>: enter your email and Backstage shows only the sign-in methods your account actually has. No more guessing which option to click.</p>
+
+    <h3>Step 1 — Enter your email</h3>
+    <p>Type your address and click <em>Continue</em>. Backstage looks up what's on file and takes you to step 2 with only the options that apply to you.</p>
+    <p>If your browser has a passkey saved for any Backstage account, it may offer to fill the email field for you — accept the suggestion and you'll skip straight past steps 1 and 2.</p>
+    <p>On the same screen you can also click <em>Sign in with passkey</em> as a shortcut. This works without typing an email when the passkey is already registered to this device.</p>
+
+    <h3>Step 2 — Pick a method</h3>
+    <p>The page now shows your name and the methods available on your account:</p>
     <ul>
-      <li><strong>Passkey.</strong> If you have registered a passkey on this device, click <em>Sign in with passkey</em> and approve with Face ID, Touch ID, Windows Hello, or a hardware key. The email field also supports browser-native passkey autofill when available.</li>
-      <li><strong>Password.</strong> Enter your email and password. New collaborators set their password the first time they accept an invite, or in <em>Account</em> later.</li>
-      <li><strong>Email login link.</strong> Expand <em>Email me a login link instead</em>, enter your email, and click the link in the message. The link expires in 15 minutes.</li>
+      <li><strong>Passkey.</strong> Click <em>Sign in with passkey</em> and approve with Face ID, Touch ID, Windows Hello, or a hardware key.</li>
+      <li><strong>Password.</strong> Type your password and submit.</li>
+      <li><strong>Email me a login link.</strong> Always offered as a fallback. We send a one-time link to your address that's valid for <strong>24 hours</strong>. For brand-new accounts (no passkey, no password) this is the primary path and the button is highlighted.</li>
     </ul>
-    <p>Sessions persist via access and refresh tokens stored in your browser. If a session expires, the app silently refreshes; if the refresh fails you are bounced to the login page.</p>
-    <p>The default demo admin (when seeded) is <code>admin@mabuhay.local</code> / <code>changeme</code>.</p>
+    <p>If you landed on the wrong account, click <em>change</em> next to your name to go back to step 1.</p>
+
+    <h3>Using a magic-link email</h3>
+    <p>When you click the link in the email, Backstage shows a <em>Continue to your account</em> screen before signing you in. This is intentional: message previewers in iMessage, SMS, Slack, and corporate scanners often "click" links in the background, and we don't want them to burn your one-time token before you ever see it. The token is only consumed when you actually click the button.</p>
+    <p>If the link is invalid or already used, you'll see an error with a quick path to request a fresh one.</p>
+
+    <h3>After a first sign-in</h3>
+    <p>If you signed in via an email link and your account has no passkey or password yet, Backstage offers a one-time <em>Make future sign-ins faster</em> modal:</p>
+    <ul>
+      <li><em>Add a passkey for this device</em> — fastest. Stored in your OS / password manager and unlocked with biometrics.</li>
+      <li><em>Set a password</em> — works everywhere. At least 8 characters.</li>
+      <li><em>Skip for now</em> — dismiss once. You'll see the prompt again next time.</li>
+      <li><em>Don't show this again</em> — opt out permanently. You can still set up either method later from <a href="#help-account">Account</a>.</li>
+    </ul>
+
+    <h3>Sessions</h3>
+    <p>Sessions persist via access + refresh tokens stored in your browser. If a session expires mid-use, the app silently refreshes; if the refresh fails you're bounced back to the login page with your email pre-filled.</p>
+
+    <p class="muted small">Demo admin (when seeded): <code>admin@mabuhay.local</code> / <code>changeme</code>.</p>
   `,
 
   account: `
     <h2>Account &amp; passkeys</h2>
-    <p>Open <em>Account</em> from the topbar to manage how you sign in.</p>
+    <p>Open <em>Account</em> from the topbar to manage how you sign in. Anything you set up here is the same set of options the login page's <a href="#help-sign-in">email-first flow</a> will offer next time you (or anyone signing into your address) authenticates.</p>
     <h3>Passkeys</h3>
-    <p>Click <em>+ Add passkey for this device</em> and approve the prompt. The device name is stored along with the date it was added and the date it was last used. Remove a passkey any time; the next sign-in on that device must fall back to password or email link.</p>
+    <p>Click <em>+ Add passkey for this device</em> and approve the prompt with Face ID, Touch ID, Windows Hello, or a hardware key. The device name is stored along with the date added and last-used date so you can spot stale devices. Remove a passkey any time; the next sign-in on that device falls back to password or email link.</p>
+    <p>Passkeys are scoped to the device that created them, but a passkey in a synced password manager (1Password, iCloud Keychain, Google Password Manager) will follow you across devices automatically.</p>
     <h3>Password</h3>
     <p>Set or change a password. New passwords must be at least 8 characters. If you already have a password, the current one is required before saving a new one.</p>
-    <p>You can mix and match all three methods on the same account. Most venues recommend a passkey on the daily-driver laptop plus a password as a fallback.</p>
+    <h3>The "Make future sign-ins faster" prompt</h3>
+    <p>If you logged in via email link and have no credentials on file, Backstage shows a one-time setup modal right after sign-in (see <a href="#help-sign-in">Signing in</a>). If you ticked <em>Don't show this again</em> there and changed your mind, just come to this page and set up a passkey or password manually — the prompt won't reappear, but Account always works.</p>
+    <p>You can mix and match all three methods on the same account. Most venues recommend a passkey on the daily-driver laptop plus a password as a fallback for new devices.</p>
   `,
 
   roles: `
@@ -2807,7 +2835,9 @@ const HELP_CONTENT = {
     <h3>Why is a tab missing on my event?</h3>
     <p>Tabs are filtered by your capabilities. For example, the <em>Invites</em> tab only appears if you can manage invites for the event.</p>
     <h3>Why didn't my collaborator get an email?</h3>
-    <p>Backstage generates an invite URL but does not send email. Copy the link and share it via your usual channel.</p>
+    <p>Backstage generates an invite URL but does not send the invite email itself. Copy the link and share it via your usual channel.</p>
+    <h3>Someone's login-link email never arrived</h3>
+    <p>Login links <em>are</em> sent by Backstage via the configured mail relay, but Gmail and other providers occasionally swallow them silently (especially for new addresses). If a user can't find their link in spam/promotions either, a venue admin can mint a fresh single-use link directly from the database and hand it over out-of-band. The link format is <code>/backstage/login.html?token=&lt;hex&gt;</code> and the token row goes into <code>magic_link_tokens</code>.</p>
     <h3>How do I move a show to a new date?</h3>
     <p>Open <a href="#help-details">Event details</a> and change the date. Calendar, dashboard, and pipeline all update.</p>
     <h3>How do I delete an event?</h3>
@@ -2822,6 +2852,8 @@ const HELP_CONTENT = {
     <p>Your access and refresh tokens both expired. Sign in again. If it happens often, your browser may be clearing local storage; check your privacy settings.</p>
     <h3>Passkey button does nothing</h3>
     <p>Your browser may not support WebAuthn, or you have no passkey registered for that hostname. Use password or email-link login and add a passkey from <em>Account</em>.</p>
+    <h3>"This login link is invalid or has already been used"</h3>
+    <p>Login links are single-use and expire after 24 hours. The most common cause of a "fresh" link appearing burned is a message previewer (iMessage, Slack, corporate URL scanners) silently visiting the link to render a preview — which used to consume the token. Backstage now shows a <em>Continue to your account</em> interstitial that only burns the token on a real click, so previewers should no longer be a problem; but if you've already followed an older-flow link, just request a new one from the login page.</p>
     <h3>Public page shows "Something went wrong"</h3>
     <p>Either the event is hidden (toggle <em>Publish Public Page</em> on) or the slug is wrong. The public page only returns data for events with public visibility enabled.</p>
     <h3>Upload failed</h3>
