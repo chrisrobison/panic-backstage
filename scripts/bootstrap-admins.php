@@ -2,9 +2,11 @@
 declare(strict_types=1);
 
 /**
- * One-time admin bootstrap.
+ * Admin bootstrap.
  *
- *   php scripts/bootstrap-admins.php
+ * Usage:
+ *   php scripts/bootstrap-admins.php                    # process the seed list below
+ *   php scripts/bootstrap-admins.php "Alan" foo@bar.com # process just one admin
  *
  * For each (name, email) tuple:
  *   1. Insert the user with role = venue_admin, or upgrade an existing
@@ -37,17 +39,21 @@ if ($appUrl === '') {
     exit(1);
 }
 
-$admins = [
+$seedAdmins = [
     ['name' => 'Tom',           'email' => 'tom@themab.org'],
     ['name' => 'Dre',           'email' => 'dre@themab.org'],
     ['name' => 'Bobby Fishkin', 'email' => 'Bobby.fishkin@gmail.com'],
     ['name' => 'Erik Katz',     'email' => 'erik@erikkatz.com'],
     ['name' => 'Sasha Josephs', 'email' => 'sashajosephs@gmail.com'],
+    ['name' => 'Alan',          'email' => 'alfonzo10@gmail.com'],
 ];
 
-foreach ($admins as $admin) {
-    $email = trim(strtolower($admin['email']));
-    $name  = $admin['name'];
+/**
+ * Bootstrap a single admin: create/upgrade in DB, mint magic-link, send email.
+ */
+$bootstrap = function (string $name, string $email) use ($db, $auth, $mailer, $appUrl): void {
+    $email = trim(strtolower($email));
+    $name  = trim($name);
 
     $existing = $db->one('SELECT id, name, role FROM users WHERE email = ? LIMIT 1', [$email]);
     if ($existing) {
@@ -89,6 +95,36 @@ foreach ($admins as $admin) {
 
     $mailer->send($email, 'Welcome to Backstage — your admin login link', $body);
     printf("  ↳ emailed login link (7-day TTL) to %s\n", $email);
+};
+
+// ---- CLI arg parsing ------------------------------------------------------
+// Usage:
+//   php scripts/bootstrap-admins.php                    # process the seed list
+//   php scripts/bootstrap-admins.php "Alan" foo@bar.com # process one admin only
+$args = array_slice($argv, 1);
+
+if (count($args) === 0) {
+    $targets = $seedAdmins;
+} elseif (count($args) === 2) {
+    [$argName, $argEmail] = $args;
+    if (!filter_var($argEmail, FILTER_VALIDATE_EMAIL)) {
+        fwrite(STDERR, "Invalid email address: {$argEmail}\n");
+        exit(1);
+    }
+    if (trim($argName) === '') {
+        fwrite(STDERR, "Name cannot be empty.\n");
+        exit(1);
+    }
+    $targets = [['name' => $argName, 'email' => $argEmail]];
+} else {
+    fwrite(STDERR, "Usage:\n");
+    fwrite(STDERR, "  php scripts/bootstrap-admins.php                       # process the seed list\n");
+    fwrite(STDERR, "  php scripts/bootstrap-admins.php \"<name>\" <email>      # process one admin only\n");
+    exit(1);
+}
+
+foreach ($targets as $admin) {
+    $bootstrap($admin['name'], $admin['email']);
 }
 
 echo "\nDone.\n";
