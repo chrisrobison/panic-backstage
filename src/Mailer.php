@@ -17,16 +17,38 @@ final class Mailer
     private string $logDir;
     private string $fromAddress;
     private string $fromName;
+    /** @var string[] Extra envelope-only recipients (blind copies). */
+    private array $bcc;
 
     public function __construct(string $root)
     {
         $this->logDir      = $root . '/storage/mail';
         $this->fromAddress = getenv('MAIL_FROM_ADDRESS') ?: ('noreply@' . (getenv('APP_HOST') ?: 'localhost'));
         $this->fromName    = getenv('MAIL_FROM_NAME') ?: 'Backstage';
+        $this->bcc         = $this->parseBcc(getenv('MAIL_BCC') ?: '');
 
         if (!is_dir($this->logDir)) {
             mkdir($this->logDir, 0755, true);
         }
+    }
+
+    /**
+     * Parse a comma/semicolon-separated MAIL_BCC list into validated addresses.
+     * These are delivered as envelope recipients only (no Bcc: header is added),
+     * so the primary recipient never sees them.
+     *
+     * @return string[]
+     */
+    private function parseBcc(string $raw): array
+    {
+        $out = [];
+        foreach (preg_split('/[,;]+/', $raw) ?: [] as $addr) {
+            $addr = trim($addr);
+            if ($addr !== '' && filter_var($addr, FILTER_VALIDATE_EMAIL)) {
+                $out[] = $addr;
+            }
+        }
+        return $out;
     }
 
     public function send(string $to, string $subject, string $body): void
@@ -76,14 +98,22 @@ final class Mailer
 
         // -i  : do not treat a line containing only "." as end of input
         // -f  : envelope sender (SMTP MAIL FROM) — aligns with From: for SPF/DMARC
-        // --  : end of options; recipient follows as a positional arg
-        $cmd = [
-            self::SENDMAIL,
-            '-i',
-            '-f', $this->fromAddress,
-            '--',
-            $to,
-        ];
+        // --  : end of options; recipients follow as positional args
+        //
+        // MAIL_BCC addresses are appended here as envelope recipients only.
+        // They are NOT added as a Bcc: header: this path does not use sendmail
+        // -t, so a Bcc: header would be transmitted verbatim and become visible
+        // to the primary recipient. As envelope args they receive a blind copy.
+        $cmd = array_merge(
+            [
+                self::SENDMAIL,
+                '-i',
+                '-f', $this->fromAddress,
+                '--',
+                $to,
+            ],
+            $this->bcc
+        );
 
         $descriptors = [
             0 => ['pipe', 'r'],
