@@ -227,6 +227,17 @@ Staging checklist:
 - The server can reach `https://cdn.jsdelivr.net/npm/@larcjs/core@3.0.1/pan.mjs`, or LARC should be vendored in a future offline-demo pass.
 - Run `php database/seed.php` only when resetting demo data is acceptable.
 
+## Google Sheet Sync
+
+Events stay in sync with the MabEvents Tracker Google Sheet in both directions:
+an inbound cron imports the sheet every 5 minutes, and app edits are pushed back
+up to the sheet in real time (with a cron-based retry fallback). Outbound writes
+authenticate as a Google service account.
+
+See [`docs/google-sheet-sync.md`](docs/google-sheet-sync.md) for setup
+(service-account key, sharing, permissions), the field/column mapping, and
+troubleshooting.
+
 ## Core Workflow
 
 - `/` shows the staff dashboard after login.
