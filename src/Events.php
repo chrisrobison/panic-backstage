@@ -188,6 +188,7 @@ final class Events extends BaseEndpoint
         if (isset($body['status']) && count($body) === 1) {
             $this->db->run('UPDATE events SET status = ? WHERE id = ?', [$body['status'], $id]);
             log_activity($this->db, $id, $this->userId(), 'status changed', ['status' => $body['status']]);
+            $this->pushToSheet($id);
             return $this->ok(['ok' => true]);
         }
         // Allowlist of single-field partial updates so the UI can PATCH a single
@@ -209,6 +210,7 @@ final class Events extends BaseEndpoint
                 $coerced = $partialAllowlist[$key]($body[$key]);
                 $this->db->run("UPDATE events SET {$key} = ? WHERE id = ?", [$coerced, $id]);
                 log_activity($this->db, $id, $this->userId(), "field updated: {$key}");
+                $this->pushToSheet($id);
                 return $this->ok(['ok' => true]);
             }
         }
@@ -224,7 +226,67 @@ final class Events extends BaseEndpoint
             [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $body['status'], $body['description_public'] ?? null, $body['description_internal'] ?? null, $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), $body['age_restriction'] ?? null, (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), self::nullableString($body['ticket_url'] ?? null), self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), $body['capacity'] ?: null, boolish($body['public_visibility'] ?? false), $body['owner_user_id'] ?: null, $id]
         );
         log_activity($this->db, $id, $this->userId(), 'event updated');
+        $this->pushToSheet($id);
         return $this->ok(['id' => $id]);
+    }
+
+    /**
+     * Two-way sync: enqueue this event for write-back to the Google Sheet and
+     * attempt an immediate push. Best-effort and non-blocking — any failure is
+     * recorded as a pending row in sheet_sync_queue for the cron to retry, and
+     * never affects the HTTP response (mirrors the Mailer's never-throw rule).
+     */
+    private function pushToSheet(int $id): void
+    {
+        try {
+            // One pending outbox row per event; repeated edits collapse into it.
+            $this->db->run(
+                'INSERT INTO sheet_sync_queue (event_id, status, attempts)
+                 VALUES (?, \'pending\', 0)
+                 ON DUPLICATE KEY UPDATE status = \'pending\', updated_at = NOW()',
+                [$id]
+            );
+
+            $ev = $this->db->one(
+                'SELECT external_id, status, potential_revenue, ticket_system,
+                        contract_url, walkthrough_done, ticket_url, settlement_doc_url
+                 FROM events WHERE id = ? LIMIT 1',
+                [$id]
+            );
+            // App-native events (created in-app, no sheet row) have no external_id.
+            // Leave them queued-as-pending for visibility but don't try to push.
+            if (!$ev || trim((string) ($ev['external_id'] ?? '')) === '') {
+                return;
+            }
+
+            $sheets = new GoogleSheets($this->root);
+            if (!$sheets->isConfigured()) {
+                return; // not set up yet — the cron sweep retries once the key lands
+            }
+
+            $fields = [];
+            foreach (array_keys(GoogleSheets::FIELD_COLUMN) as $f) {
+                if (array_key_exists($f, $ev)) {
+                    $fields[$f] = $ev[$f];
+                }
+            }
+
+            if ($sheets->pushEvent((string) $ev['external_id'], $fields)) {
+                $this->db->run(
+                    'UPDATE sheet_sync_queue
+                     SET status = \'done\', attempts = attempts + 1, last_error = NULL, pushed_at = NOW()
+                     WHERE event_id = ?',
+                    [$id]
+                );
+            } else {
+                $this->db->run(
+                    'UPDATE sheet_sync_queue SET attempts = attempts + 1 WHERE event_id = ?',
+                    [$id]
+                );
+            }
+        } catch (\Throwable $e) {
+            @error_log('sheet push failed for event ' . $id . ': ' . $e->getMessage());
+        }
     }
 
     private function delete(int $id): Response

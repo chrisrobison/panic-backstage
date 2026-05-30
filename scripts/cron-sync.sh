@@ -48,5 +48,12 @@ fi
   else
     echo "[$(ts)] sync FAILED with exit $rc"
   fi
+
+  # Two-way write-back: retry any app edits that didn't push to the sheet in
+  # real time. Best-effort — a write-back problem never fails the inbound tick.
+  echo "[$(ts)] write-back start"
+  php "$SCRIPT_DIR/push-sheet-queue.php" || echo "[$(ts)] write-back step errored (non-fatal)"
+  echo "[$(ts)] write-back done"
+
   exit $rc
 } >> "$LOG_FILE" 2>&1
