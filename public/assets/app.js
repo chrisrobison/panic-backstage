@@ -101,6 +101,17 @@ function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
+// Re-render a single event-workspace section in place from fresh server data.
+// Used instead of publishing `event.saved` (which re-mounts the whole event
+// workspace and scrolls the page back to the top). Re-assigning `.data`
+// re-runs just this component's render + bind, so the page keeps its scroll
+// position, active tab, and sibling sections untouched.
+async function refreshSection(component) {
+  const id = component?.eventData?.event?.id;
+  if (!id) return;
+  component.data = await api(`/events/${id}`);
+}
+
 function eventDate(event) {
   const date = event?.date ? new Date(`${event.date}T12:00:00`) : null;
   return Number.isNaN(date?.getTime()) ? null : date;
@@ -1914,18 +1925,32 @@ class EventDetailsForm extends HTMLElement {
       <label class="wide">Public description <textarea name="description_public"${disabled}>${esc(event.description_public || '')}</textarea></label>
       <label class="wide">Internal notes <textarea name="description_internal"${disabled}>${esc(event.description_internal || '')}</textarea></label>
       <label class="check-label"><input type="checkbox" name="public_visibility" value="1" ${Number(event.public_visibility) ? 'checked' : ''}${disabled}> Public page visible</label>
-      ${editable ? '<button>Save details</button>' : ''}
+      ${editable ? '<p class="save-status wide" data-save-status data-state="saved" aria-live="polite">All changes saved</p>' : ''}
     </form></section>`;
     if (!editable) return;
-    $('form', this).addEventListener('submit', async (submitEvent) => {
-      submitEvent.preventDefault();
-      const body = formData(submitEvent.target);
-      body.public_visibility = submitEvent.target.public_visibility.checked ? 1 : 0;
-      body.walkthrough_done  = submitEvent.target.walkthrough_done.checked ? 1 : 0;
-      await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-      publish('event.saved', { id: event.id });
-      publish('toast.show', { message: 'Event details saved.' });
-    });
+    const form = $('form', this);
+    const statusEl = $('[data-save-status]', this);
+    const setStatus = (state, text) => { if (statusEl) { statusEl.dataset.state = state; statusEl.textContent = text; } };
+    // Autosave: PATCH the whole detail form whenever a field changes. Text and
+    // number inputs fire `change` on blur; checkboxes and selects fire
+    // immediately. We deliberately do NOT publish `event.saved` here, so the
+    // section is never torn down/reloaded while the user is working in it.
+    const save = async () => {
+      const body = formData(form);
+      body.public_visibility = form.public_visibility.checked ? 1 : 0;
+      body.walkthrough_done  = form.walkthrough_done.checked ? 1 : 0;
+      setStatus('saving', 'Saving…');
+      try {
+        await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        setStatus('saved', 'All changes saved');
+      } catch (err) {
+        setStatus('error', err.message || 'Save failed — change a field to retry');
+        publish('toast.show', { message: err.message || 'Save failed.', tone: 'error' });
+      }
+    };
+    $$('input, select, textarea', form).forEach((field) => field.addEventListener('change', save));
+    // Pressing Enter in a field still saves, but never reloads the page.
+    form.addEventListener('submit', (submitEvent) => { submitEvent.preventDefault(); save(); });
   }
 }
 
@@ -1945,7 +1970,7 @@ class TaskList extends HTMLElement {
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Task saved.' });
     }));
     $$('[data-complete]', this).forEach((button) => button.addEventListener('click', async () => {
@@ -1953,7 +1978,7 @@ class TaskList extends HTMLElement {
       const body = formData(form);
       body.status = 'done';
       await api(form.dataset.api, { method: 'PATCH', body: JSON.stringify(body) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Task completed.' });
     }));
   }
@@ -1975,7 +2000,7 @@ class LineupEditor extends HTMLElement {
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Lineup saved.' });
     }));
   }
@@ -1997,7 +2022,7 @@ class RunSheet extends HTMLElement {
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Run sheet saved.' });
     }));
   }
@@ -2109,7 +2134,7 @@ class StaffingManager extends HTMLElement {
       event.preventDefault();
       try {
         await api(`/events/${eventId}/staffing/${form.dataset.shift}`, { method: 'PATCH', body: JSON.stringify(buildBody(form)) });
-        publish('event.saved', { id: eventId });
+        await refreshSection(this);
         publish('toast.show', { message: 'Shift saved.' });
       } catch (err) {
         publish('toast.show', { message: err.message, tone: 'error' });
@@ -2120,7 +2145,7 @@ class StaffingManager extends HTMLElement {
       if (!confirm('Remove this shift?')) return;
       try {
         await api(`/events/${eventId}/staffing/${button.dataset.delete}`, { method: 'DELETE' });
-        publish('event.saved', { id: eventId });
+        await refreshSection(this);
         publish('toast.show', { message: 'Shift removed.' });
       } catch (err) {
         publish('toast.show', { message: err.message, tone: 'error' });
@@ -2131,9 +2156,8 @@ class StaffingManager extends HTMLElement {
       event.preventDefault();
       try {
         await api(`/events/${eventId}/staffing`, { method: 'POST', body: JSON.stringify(buildBody(event.target)) });
-        publish('event.saved', { id: eventId });
         publish('toast.show', { message: 'Shift added.' });
-        event.target.reset();
+        await refreshSection(this);
       } catch (err) {
         publish('toast.show', { message: err.message, tone: 'error' });
       }
@@ -2157,7 +2181,7 @@ class OpenItems extends HTMLElement {
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Open item saved.' });
     }));
     $$('[data-resolve]', this).forEach((button) => button.addEventListener('click', async () => {
@@ -2165,7 +2189,7 @@ class OpenItems extends HTMLElement {
       const body = formData(form);
       body.status = 'resolved';
       await api(form.dataset.api, { method: 'PATCH', body: JSON.stringify(body) });
-      publish('event.openItemResolved', { id: this.eventData.event.id, itemId: button.dataset.resolve });
+      await refreshSection(this);
       publish('toast.show', { message: 'Open item completed.' });
     }));
   }
@@ -2243,7 +2267,7 @@ class GuestListManager extends HTMLElement {
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Guest list saved.' });
     }));
     $$('[data-checkin]', this).forEach((checkbox) => checkbox.addEventListener('change', async () => {
@@ -2252,14 +2276,14 @@ class GuestListManager extends HTMLElement {
         method: 'PATCH',
         body: JSON.stringify({ checked_in: checkbox.checked ? 1 : 0 }),
       });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: checkbox.checked ? 'Checked in.' : 'Check-in cleared.' });
     }));
     $$('[data-delete]', this).forEach((button) => button.addEventListener('click', async () => {
       const id = button.dataset.delete;
       if (!confirm('Remove this guest from the list?')) return;
       await api(`/events/${this.eventData.event.id}/guest-list/${id}`, { method: 'DELETE' });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Guest removed.' });
     }));
   }
@@ -2281,9 +2305,8 @@ class AssetManager extends HTMLElement {
       event.preventDefault();
       try {
         await api(`/events/${this.eventData.event.id}/assets`, { method: 'POST', body: new FormData(event.target) });
-        publish('event.assetUploaded', { id: this.eventData.event.id });
         publish('toast.show', { message: 'Asset uploaded.' });
-        event.target.reset();
+        await refreshSection(this);
       } catch (err) {
         publish('toast.show', { message: err.message || 'Upload failed.', tone: 'error' });
       }
@@ -2292,7 +2315,7 @@ class AssetManager extends HTMLElement {
       const status = button.dataset.approve ? 'approved' : 'rejected';
       try {
         await api(`/events/${this.eventData.event.id}/assets/${button.dataset.approve || button.dataset.reject}`, { method: 'PATCH', body: JSON.stringify({ approval_status: status }) });
-        publish('event.assetUploaded', { id: this.eventData.event.id });
+        await refreshSection(this);
         publish('toast.show', { message: `Asset ${status}.` });
       } catch (err) {
         publish('toast.show', { message: err.message || 'Action failed.', tone: 'error' });
@@ -2301,7 +2324,7 @@ class AssetManager extends HTMLElement {
     $$('[data-delete]', this).forEach((button) => button.addEventListener('click', async () => {
       try {
         await api(`/events/${this.eventData.event.id}/assets/${button.dataset.delete}`, { method: 'DELETE' });
-        publish('event.assetUploaded', { id: this.eventData.event.id });
+        await refreshSection(this);
         publish('toast.show', { message: 'Asset deleted.' });
       } catch (err) {
         publish('toast.show', { message: err.message || 'Delete failed.', tone: 'error' });
@@ -2350,14 +2373,12 @@ class InviteManager extends HTMLElement {
       body.send_email = event.target.send_email.checked;
       try {
         const result = await api(`/events/${eventId}/invites`, { method: 'POST', body: JSON.stringify(body) });
-        publish('event.saved', { id: eventId });
         publish('toast.show', {
           message: result.emailed
             ? `Invite emailed to ${body.email}.`
             : `Invite link created: ${appUrl(result.url)}`,
         });
-        event.target.reset();
-        event.target.send_email.checked = true;
+        await refreshSection(this);
       } catch (err) {
         publish('toast.show', { message: err.message, tone: 'error' });
       }
@@ -2418,13 +2439,13 @@ class SettlementForm extends HTMLElement {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       await api(`/events/${this.eventData.event.id}/settlement`, { method: 'POST', body: JSON.stringify(formData(e.target)) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Settlement saved.' });
     });
     $('form[data-form="doc"]', this).addEventListener('submit', async (e) => {
       e.preventDefault();
       await api(`/events/${this.eventData.event.id}`, { method: 'PATCH', body: JSON.stringify({ settlement_doc_url: formData(e.target).settlement_doc_url }) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Settlement doc link saved.' });
     });
   }

@@ -731,6 +731,11 @@ h3 { margin-bottom: 8px; font-size: 15px; }
 }
 .check-label input { width: auto; }
 .wide { grid-column: 1 / -1; }
+.save-status { margin: 4px 0 0; font-size: 14px; color: var(--muted); transition: color .2s ease; }
+.save-status[data-state="saving"] { color: var(--muted); opacity: 0.85; }
+.save-status[data-state="saved"] { color: #2fa84f; }
+.save-status[data-state="saved"]::before { content: "\2713\00a0"; font-weight: 700; }
+.save-status[data-state="error"] { color: #ef4338; }
 .row-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
