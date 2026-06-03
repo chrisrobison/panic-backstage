@@ -1,3 +1,7 @@
+.event-code { font: 600 0.82em/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); letter-spacing: 0.02em; text-decoration: none; white-space: nowrap; }
+a.event-code:hover { text-decoration: underline; }
+h1 .event-code { font-size: 0.5em; vertical-align: middle; margin-left: 0.45em; }
+
 :root {
   --ink: #101318;
   --muted: #6f7582;

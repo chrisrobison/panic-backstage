@@ -194,6 +194,7 @@ function can(data, capability) {
 function eventRow(event) {
   const issue = event.primary_blocker || (Number(event.approved_flyers) ? 'Flyer approved' : 'Flyer needs review');
   return `<tr>
+    <td data-label="ID"><a href="#event-${esc(event.id)}" class="event-code">${esc(event.external_id || '—')}</a></td>
     <td data-label="Date">${esc(shortDate(eventDate(event)))}</td>
     <td data-label="Event"><a href="#event-${esc(event.id)}">${esc(event.title)}</a></td>
     <td data-label="Status">${badge(event.status)}</td>
@@ -205,6 +206,7 @@ function eventRow(event) {
 // Column metadata for the events table. `sortBy` returns a comparable value for
 // each event; `type` picks the comparator (dates/strings) used by sortEvents().
 const EVENT_COLUMNS = [
+  { key: 'code',   label: 'ID',         type: 'string', sortBy: (e) => String(e.external_id || '') },
   { key: 'date',   label: 'Date',       type: 'date',   sortBy: (e) => `${e.date || ''} ${e.show_time || ''}` },
   { key: 'title',  label: 'Event',      type: 'string', sortBy: (e) => String(e.title || '') },
   { key: 'status', label: 'Status',     type: 'string', sortBy: (e) => statusLabel(e.status) },
@@ -403,7 +405,7 @@ function printHeader(data, subtitle) {
   const venueLine = [event.venue_name, event.venue_city, event.venue_state].filter(Boolean).join(', ');
   return `<header class="event-head">
     <div>
-      <h1>${esc(event.title)}</h1>
+      <h1>${esc(event.title)}${event.external_id ? ` <span class="event-code">${esc(event.external_id)}</span>` : ''}</h1>
       <div class="meta">${esc(venueLine || 'Venue TBA')}${event.venue_address ? ' &middot; ' + esc(event.venue_address) : ''}</div>
       <div class="meta">${esc(printDateRange(event))}</div>
     </div>
