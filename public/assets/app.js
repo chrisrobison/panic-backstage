@@ -101,15 +101,25 @@ function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
+// Broadcast a fresh, full event payload on the page bus. Any component that
+// derives from event data (e.g. the workspace summary counts/facts) can
+// subscribe to `event.changed` and update itself without a page reload.
+function broadcastEventData(data) {
+  if (data?.event) publish('event.changed', { data });
+}
+
 // Re-render a single event-workspace section in place from fresh server data.
 // Used instead of publishing `event.saved` (which re-mounts the whole event
 // workspace and scrolls the page back to the top). Re-assigning `.data`
 // re-runs just this component's render + bind, so the page keeps its scroll
-// position, active tab, and sibling sections untouched.
+// position, active tab, and sibling sections untouched. The same fresh payload
+// is broadcast on the bus so summary listeners stay in sync.
 async function refreshSection(component) {
   const id = component?.eventData?.event?.id;
   if (!id) return;
-  component.data = await api(`/events/${id}`);
+  const data = await api(`/events/${id}`);
+  component.data = data;
+  broadcastEventData(data);
 }
 
 function eventDate(event) {
@@ -1450,10 +1460,10 @@ class AppShell extends PanicElement {
   async connect() {
     this.classList.add('app-shell');
     this.renderShell();
+    // Full workspace re-mount only for create/navigation flows. In-section
+    // edits/adds now update their own section + the summary in place via the
+    // `event.changed` bus (see refreshSection / broadcastEventData).
     subscribe('event.saved', () => this.refreshCurrent(), this.abort.signal);
-    subscribe('event.assetUploaded', () => this.refreshCurrent(), this.abort.signal);
-    subscribe('event.openItemResolved', () => this.refreshCurrent(), this.abort.signal);
-    subscribe('event.publicationChanged', () => this.refreshCurrent(), this.abort.signal);
     window.addEventListener('hashchange', () => this.route(), { signal: this.abort.signal });
     try {
       const me = await api('/me');
@@ -1789,6 +1799,53 @@ class TemplatePicker extends PanicElement {
   }
 }
 
+function factCell(label, value) {
+  return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
+}
+
+// At-a-glance facts + live counts for an event. Self-contained on the page bus:
+// it renders from whatever event payload it last received (via `.data` from the
+// workspace, or an `event.changed` broadcast), so section edits, autosaves, and
+// adds keep the counts/facts current without re-mounting the whole workspace.
+class EventSummary extends PanicElement {
+  connect() {
+    subscribe('event.changed', ({ data }) => { this.data = data; }, this.abort.signal);
+    if (this._data) this.render();
+  }
+
+  set data(value) {
+    this._data = value;
+    if (this.abort) this.render();
+  }
+
+  get data() {
+    return this._data;
+  }
+
+  render() {
+    const data = this._data;
+    if (!data?.event) return;
+    const event = data.event;
+    const openItems = (data.blockers || []).filter((item) => ['open', 'waiting'].includes(item.status)).length;
+    const tasksLeft = (data.tasks || []).filter((task) => !['done', 'canceled'].includes(task.status)).length;
+    this.innerHTML = `<article class="event-summary">
+      <div class="flyer">${esc(event.title)}</div>
+      <div class="facts-grid">
+        ${factCell('Date', shortDate(eventDate(event)))}
+        ${factCell('Doors', timeLabel(event.doors_time))}
+        ${factCell('Show', timeLabel(event.show_time))}
+        ${factCell('Status', badge(event.status))}
+        ${factCell('Owner', esc(event.owner_name || 'Unassigned'))}
+        ${factCell('Public Page', Number(event.public_visibility) ? 'Live' : 'Hidden')}
+      </div>
+      <div class="event-stats">
+        <div class="event-stat">Open Items<strong>${openItems}</strong><a href="#open-items">View</a></div>
+        <div class="event-stat">Tasks Left<strong>${tasksLeft}</strong><a href="#tasks">View</a></div>
+      </div>
+    </article>`;
+  }
+}
+
 class EventWorkspace extends PanicElement {
   async connect() {
     await this.load();
@@ -1831,18 +1888,7 @@ class EventWorkspace extends PanicElement {
       </div>
     </section>
     <nav class="workspace-tabs tabs">${tabs.map((tab, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${tab}">${esc(titleCase(tab))}</a>`).join('')}</nav>
-    <article class="event-summary">
-      <div class="flyer">${esc(event.title)}</div>
-      <div class="facts-grid">
-        ${this.fact('Date', shortDate(eventDate(event)))}
-        ${this.fact('Doors', timeLabel(event.doors_time))}
-        ${this.fact('Show', timeLabel(event.show_time))}
-        ${this.fact('Status', badge(event.status))}
-        ${this.fact('Owner', event.owner_name || 'Unassigned')}
-        ${this.fact('Public Page', Number(event.public_visibility) ? 'Live' : 'Hidden')}
-      </div>
-      <div class="event-stats"><div class="event-stat">Open Items<strong>${data.blockers.filter((item) => ['open','waiting'].includes(item.status)).length}</strong><a href="#open-items">View</a></div><div class="event-stat">Tasks Left<strong>${data.tasks.filter((task) => !['done','canceled'].includes(task.status)).length}</strong><a href="#tasks">View</a></div></div>
-    </article>
+    <pb-event-summary></pb-event-summary>
     <article class="next-action"><span class="icon-bubble amber">!</span><span><strong>Next Recommended Action</strong><p>${esc(data.nextAction)}</p></span><button class="secondary small" data-next-action>Refresh</button></article>
     <section id="overview" class="overview-grid">
       <article class="panel"><div class="section-head padded"><h2>Readiness ${helpLink('overview', 'Overview &amp; Readiness')}</h2></div><div class="health-row">${data.readiness.map((item) => `<div class="health-item">${item.ok ? '<span class="check">OK</span>' : '<span class="warn-mark">!</span>'}<span><strong>${esc(item.label)}</strong><br>${esc(item.state)}</span></div>`).join('')}</div></article>
@@ -1859,6 +1905,7 @@ class EventWorkspace extends PanicElement {
     ${can(data, 'manage_invites') ? '<pb-invite-manager id="invites"></pb-invite-manager>' : ''}
     ${can(data, 'view_settlement') ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
     <section id="activity" class="panel"><div class="section-head padded"><h2>Activity ${helpLink('activity', 'Activity Log')}</h2></div><ul class="timeline">${data.activity.map((entry) => `<li><strong>${esc(entry.action)}</strong> by ${esc(entry.user_name || 'system')} <span class="muted">${esc(entry.created_at)}</span></li>`).join('')}</ul></section>`;
+    $('pb-event-summary', this).data = data;
     $('pb-event-details-form', this).data = data;
     $('pb-task-list', this).data = data;
     $('pb-lineup-editor', this).data = data;
@@ -1884,15 +1931,15 @@ class EventWorkspace extends PanicElement {
     }));
   }
 
-  fact(label, value) {
-    return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
-  }
-
   async togglePublic() {
     const event = this.data.event;
     const body = { ...event, public_visibility: Number(event.public_visibility) ? 0 : 1 };
     await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-    publish('event.publicationChanged', { id: event.id, public_visibility: body.public_visibility });
+    // Update in place via the bus instead of re-mounting the workspace.
+    this.data.event.public_visibility = body.public_visibility;
+    const publishButton = $('[data-publish]', this);
+    if (publishButton) publishButton.textContent = body.public_visibility ? 'Hide Public Page' : 'Publish Public Page';
+    broadcastEventData(this.data);
     publish('toast.show', { message: body.public_visibility ? 'Public page is live.' : 'Public page hidden.' });
   }
 }
@@ -1935,7 +1982,11 @@ class EventDetailsForm extends HTMLElement {
     // number inputs fire `change` on blur; checkboxes and selects fire
     // immediately. We deliberately do NOT publish `event.saved` here, so the
     // section is never torn down/reloaded while the user is working in it.
-    const save = async () => {
+    // Fields mirrored in the workspace summary (pb-event-summary). When one of
+    // these changes we re-broadcast fresh event data on the bus so the summary
+    // facts update live; other fields skip the extra round-trip.
+    const summaryFields = new Set(['title', 'date', 'doors_time', 'show_time', 'status', 'owner_user_id', 'public_visibility']);
+    const save = async (changedName) => {
       const body = formData(form);
       body.public_visibility = form.public_visibility.checked ? 1 : 0;
       body.walkthrough_done  = form.walkthrough_done.checked ? 1 : 0;
@@ -1943,12 +1994,15 @@ class EventDetailsForm extends HTMLElement {
       try {
         await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
         setStatus('saved', 'All changes saved');
+        if (!changedName || summaryFields.has(changedName)) {
+          broadcastEventData(await api(`/events/${event.id}`));
+        }
       } catch (err) {
         setStatus('error', err.message || 'Save failed — change a field to retry');
         publish('toast.show', { message: err.message || 'Save failed.', tone: 'error' });
       }
     };
-    $$('input, select, textarea', form).forEach((field) => field.addEventListener('change', save));
+    $$('input, select, textarea', form).forEach((field) => field.addEventListener('change', () => save(field.name)));
     // Pressing Enter in a field still saves, but never reloads the page.
     form.addEventListener('submit', (submitEvent) => { submitEvent.preventDefault(); save(); });
   }
@@ -3720,6 +3774,7 @@ customElements.define('pb-pipeline-board', PipelineBoard);
 customElements.define('pb-events-list', EventsList);
 customElements.define('pb-template-picker', TemplatePicker);
 customElements.define('pb-event-workspace', EventWorkspace);
+customElements.define('pb-event-summary', EventSummary);
 customElements.define('pb-event-details-form', EventDetailsForm);
 customElements.define('pb-task-list', TaskList);
 customElements.define('pb-lineup-editor', LineupEditor);
