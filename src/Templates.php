@@ -6,7 +6,7 @@ namespace Panic;
 /**
  * Event template CRUD.
  *
- *   GET    /api/templates              list (any caller with manage_templates)
+ *   GET    /api/templates              list (any authenticated user)
  *   POST   /api/templates              create
  *   PATCH  /api/templates/{id}         update (name, copy, price, age, checklist, schedule)
  *   DELETE /api/templates/{id}         delete
@@ -23,11 +23,14 @@ final class Templates extends BaseEndpoint
 
     public function handle(Request $request): Response
     {
-        if ($denied = $this->requireGlobalCapability('manage_templates')) {
+        $method = $request->method();
+        // Reads are available to any authenticated user — the event quick-create
+        // dialog needs to list templates. Writes still require manage_templates.
+        if ($method !== 'GET' && ($denied = $this->requireGlobalCapability('manage_templates'))) {
             return $denied;
         }
         $id = $this->params['templateId'] ?? null;
-        return match ($request->method()) {
+        return match ($method) {
             'GET'    => $id ? $this->show((int) $id) : $this->index(),
             'POST'   => $this->create($request),
             'PATCH'  => $this->update($request, (int) $id),

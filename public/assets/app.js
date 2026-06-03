@@ -1289,17 +1289,19 @@ async function openEventQuickCreate({ date = null } = {}) {
     if (e.key === 'Escape') { document.removeEventListener('keydown', onEsc); close(); }
   });
 
-  let data;
+  let templates, venues, types;
   try {
-    data = await api('/templates');
+    const data = (await api('/templates')) || {};
+    templates = data.templates || [];
+    venues    = data.venues    || [];
+    types     = data.types     || ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'];
   } catch (err) {
-    dialog.querySelector('.modal-card .padded').innerHTML = `<p class="error-text">${esc(err.message || 'Could not load templates.')}</p>`;
+    // The dialog may have been closed while the request was in flight.
+    const padded = dialog.querySelector('.modal-card .padded');
+    if (padded) padded.innerHTML = `<p class="error-text">${esc(err.message || 'Could not load templates.')}</p>`;
     return;
   }
 
-  const templates = data.templates || [];
-  const venues    = data.venues    || [];
-  const types     = data.types     || ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'];
   // Default to "General Event" if it exists, else the first template.
   const defaultTemplate = templates.find((t) => t.name === 'General Event') || templates[0];
 
