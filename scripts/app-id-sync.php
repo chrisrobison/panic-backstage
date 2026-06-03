@@ -245,8 +245,43 @@ switch ($cmd) {
         break;
     }
 
+    case 'push-codes': {
+        // Populate the visible "Event ID" column A with each event's EVT-N code,
+        // and relabel its header. Rows are located via the hidden App ID column.
+        $cols = $sheets->batchGetColumns(['A', GoogleSheets::APP_ID_COLUMN]);
+        if ($cols === null) { fwrite(STDERR, "FAIL: could not read sheet columns\n"); exit(1); }
+        $colA = $cols['A'] ?? [];
+        $appCol = $cols[GoogleSheets::APP_ID_COLUMN] ?? [];
+
+        // id -> EVT code
+        $code = [];
+        foreach ($db->all("SELECT id, external_id FROM events WHERE external_id IS NOT NULL") as $r) {
+            $code[(int) $r['id']] = (string) $r['external_id'];
+        }
+
+        $rowToCode = [];
+        foreach ($appCol as $i => $cell) {
+            $row = $i + 1;
+            $id  = trim((string) $cell);
+            if ($id === '' || !ctype_digit($id)) continue;
+            $want = $code[(int) $id] ?? null;
+            if ($want === null) continue;
+            $have = trim((string) ($colA[$i] ?? ''));
+            if ($have !== $want) $rowToCode[$row] = $want;
+        }
+
+        // Relabel the header cell A{HEADER_ROW} -> "Event ID".
+        $sheets->writeColumn('A', [GoogleSheets::HEADER_ROW => 'Event ID']);
+
+        if (!$rowToCode) { echo "ok: all event codes already current in column A\n"; break; }
+        $n = $sheets->writeColumn('A', $rowToCode);
+        if ($n < 0) { fwrite(STDERR, "FAIL: write codes (see sheet-sync.log)\n"); exit(1); }
+        echo "ok: wrote {$n} EVT codes into column A (header relabeled 'Event ID')\n";
+        break;
+    }
+
     default:
         fwrite(STDERR, "unknown command: {$cmd}\n");
-        fwrite(STDERR, "commands: inspect | ensure-column | backfill [--dry-run] | push <id>...\n");
+        fwrite(STDERR, "commands: inspect | ensure-column | backfill [--dry-run] | push-codes | push <id>...\n");
         exit(1);
 }

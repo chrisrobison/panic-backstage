@@ -172,6 +172,20 @@ final class Events extends BaseEndpoint
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $body['status'] ?? 'proposed', $body['description_public'] ?? null, $body['description_internal'] ?? null, $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), $body['age_restriction'] ?? null, (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), self::nullableString($body['ticket_url'] ?? null), self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), $body['capacity'] ?: null, boolish($body['public_visibility'] ?? false), $body['owner_user_id'] ?: $this->userId()]
         );
+        // Assign the next sequential human-facing code (EVT-N). Retried so the
+        // unique-index race between concurrent creates can't collide silently.
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            $row  = $this->db->one("SELECT COALESCE(MAX(CAST(SUBSTRING(external_id, 5) AS UNSIGNED)), 0) AS m FROM events WHERE external_id LIKE 'EVT-%'");
+            $code = 'EVT-' . (((int) ($row['m'] ?? 0)) + 1);
+            try {
+                $this->db->run('UPDATE events SET external_id = ? WHERE id = ?', [$code, $id]);
+                break;
+            } catch (\Throwable $e) {
+                if ($attempt === 4) {
+                    @error_log('event code assignment failed for event ' . $id . ': ' . $e->getMessage());
+                }
+            }
+        }
         log_activity($this->db, $id, $this->userId(), 'event created', ['title' => $body['title']]);
         return $this->ok(['id' => $id]);
     }

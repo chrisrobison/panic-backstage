@@ -127,9 +127,10 @@ DEPT_TO_ROLE = {
     'runner':    'runner',
 }
 
-def map_status(raw_status, ext_id_raw) -> str:
-    if ext_id_raw and 'hold' in str(ext_id_raw).lower():
-        return 'hold'
+def map_status(raw_status, ext_id_raw=None) -> str:
+    # Status comes from the Status column. (Column A used to be "Priority Level"
+    # and could say "hold"; it now holds the EVT-N code, so that heuristic is
+    # retired — the Status column is authoritative.)
     if raw_status is None:
         return 'proposed'
     return STATUS_MAP.get(str(raw_status).strip().lower(), 'proposed')
@@ -415,7 +416,7 @@ out.extend(["", "-- ── Events ───────────────�
 EVENT_UPDATE_COLS = [
     'venue_id', 'title', 'event_type', 'status', 'description_internal',
     'date', 'doors_time', 'end_time', 'capacity', 'public_visibility',
-    'owner_user_id', 'external_id', 'referral_source', 'promoter_name', 'room',
+    'owner_user_id', 'referral_source', 'promoter_name', 'room',
     'potential_revenue', 'ticket_url', 'ticket_system', 'contract_url',
     'walkthrough_done', 'settlement_doc_url',
 ]
@@ -450,7 +451,8 @@ def field_specs(ev):
         ('end_time',            frag_clean(ev['end_t']),      ev['end_t']),
         ('capacity',            frag_clean(ev['cap']),        ev['cap']),
         ('public_visibility',   str(ev['pub']),               str(ev['pub'])),
-        ('external_id',         s(ev['ext_id']),              esc(ev['ext_id'])),
+        # external_id (the EVT-N code) is app-owned and pushed app->sheet; never
+        # imported, so a sheet edit to column A can't change an event's code.
         ('referral_source',     s(ev['ref']),                 esc(ev['ref'])),
         ('promoter_name',       s(ev['prom']),                esc(ev['prom'])),
         ('room',                s(ev['room']),                esc(ev['room'])),

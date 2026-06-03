@@ -54,6 +54,10 @@ final class GoogleSheets
      * `deposit_amount` has no sheet column and cannot be pushed.
      */
     public const FIELD_COLUMN = [
+        // external_id holds the human-facing event code ("EVT-12"). It is
+        // app-owned and pushed into the sheet's visible id column A; the import
+        // never reads it back, so the code is stable against sheet edits.
+        'external_id'        => 'A',
         'status'             => 'M',
         'potential_revenue'  => 'F',
         'ticket_system'      => 'O',
@@ -334,7 +338,16 @@ final class GoogleSheets
      */
     public function writeAppIds(array $rowToId): int
     {
-        if (!$rowToId) {
+        return $this->writeColumn(self::APP_ID_COLUMN, $rowToId);
+    }
+
+    /**
+     * Batch-write values into one column: [rowNumber => value, ...] in a single
+     * API call (RAW). Returns the number written, or -1 on error.
+     */
+    public function writeColumn(string $col, array $rowToValue): int
+    {
+        if (!$rowToValue) {
             return 0;
         }
         $token = $this->accessToken();
@@ -342,10 +355,10 @@ final class GoogleSheets
             return -1;
         }
         $data = [];
-        foreach ($rowToId as $row => $appId) {
+        foreach ($rowToValue as $row => $val) {
             $data[] = [
-                'range'  => self::APP_ID_COLUMN . (int) $row,
-                'values' => [[(string) (int) $appId]],
+                'range'  => "{$this->tab}!{$col}" . (int) $row,
+                'values' => [[(string) $val]],
             ];
         }
         [$code, $resp] = $this->http(
@@ -355,10 +368,10 @@ final class GoogleSheets
             ['valueInputOption' => 'RAW', 'data' => $data]
         );
         if ($code >= 200 && $code < 300) {
-            $this->log('ok: backfilled ' . count($data) . ' app ids into column ' . self::APP_ID_COLUMN);
+            $this->log('ok: wrote ' . count($data) . ' cells into column ' . $col);
             return count($data);
         }
-        $this->log("FAIL: backfill app ids -> HTTP {$code} {$resp}");
+        $this->log("FAIL: write column {$col} -> HTTP {$code} {$resp}");
         return -1;
     }
 
