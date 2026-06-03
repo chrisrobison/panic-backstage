@@ -368,6 +368,24 @@ h3 { margin-bottom: 8px; font-size: 15px; }
   vertical-align: middle;
 }
 .data-table th { color: var(--muted); font-size: 13px; font-weight: 760; }
+.data-table th.sorted { color: var(--ink); }
+.data-table th .th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+.data-table th .th-sort:hover { color: var(--ink); }
+.data-table th .sort-arrow { font-size: 11px; line-height: 1; }
 .status-dot {
   width: 8px;
   height: 8px;

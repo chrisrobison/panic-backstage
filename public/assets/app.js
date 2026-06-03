@@ -202,10 +202,45 @@ function eventRow(event) {
   </tr>`;
 }
 
-function table(events) {
+// Column metadata for the events table. `sortBy` returns a comparable value for
+// each event; `type` picks the comparator (dates/strings) used by sortEvents().
+const EVENT_COLUMNS = [
+  { key: 'date',   label: 'Date',       type: 'date',   sortBy: (e) => `${e.date || ''} ${e.show_time || ''}` },
+  { key: 'title',  label: 'Event',      type: 'string', sortBy: (e) => String(e.title || '') },
+  { key: 'status', label: 'Status',     type: 'string', sortBy: (e) => statusLabel(e.status) },
+  { key: 'issue',  label: 'Main Issue', type: 'string', sortBy: (e) => String(e.primary_blocker || '') },
+  { key: 'owner',  label: 'Owner',      type: 'string', sortBy: (e) => String(e.owner_name || '') },
+];
+
+function sortEvents(events, sort) {
+  const col = sort && EVENT_COLUMNS.find((c) => c.key === sort.key);
+  if (!col) return events;
+  const dir = sort.dir === 'asc' ? 1 : -1;
+  return events.slice().sort((a, b) => {
+    const av = col.sortBy(a);
+    const bv = col.sortBy(b);
+    const cmp = col.type === 'string'
+      ? String(av).localeCompare(String(bv), undefined, { sensitivity: 'base', numeric: true })
+      : (av < bv ? -1 : av > bv ? 1 : 0);
+    return cmp * dir;
+  });
+}
+
+// When `sort` is provided the column headers become sortable buttons and rows
+// are ordered accordingly; without it the table renders static headers (used by
+// the dashboard preview). Default Events-page sort is reverse date.
+function table(events, sort) {
+  const sortable = Boolean(sort);
+  const rows = (sortable ? sortEvents(events, sort) : events).map(eventRow).join('');
+  const head = EVENT_COLUMNS.map((col) => {
+    if (!sortable) return `<th>${esc(col.label)}</th>`;
+    const active = sort.key === col.key;
+    const arrow = active ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+    return `<th class="${active ? 'sorted' : ''}"><button type="button" class="th-sort" data-sort-key="${esc(col.key)}" aria-sort="${active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}">${esc(col.label)}<span class="sort-arrow">${arrow}</span></button></th>`;
+  }).join('');
   return `<table class="data-table">
-    <thead><tr><th>Date</th><th>Event</th><th>Status</th><th>Main Issue</th><th>Owner</th></tr></thead>
-    <tbody>${events.map(eventRow).join('')}</tbody>
+    <thead><tr>${head}</tr></thead>
+    <tbody>${rows}</tbody>
   </table>`;
 }
 
@@ -267,6 +302,8 @@ const PRINT_TITLES = {
   'run-of-show': 'Run of Show',
   'guest-list': 'Door / Guest List',
   master: 'Master Event Packet',
+  'one-sheet': 'One Sheet',
+  contract: 'Contract',
 };
 
 const PRINT_CSS = `
@@ -302,6 +339,35 @@ const PRINT_CSS = `
   .pill.invited { background: #d1ecf1; color: #0c5460; }
   footer.sheet-foot { margin-top: 24px; padding-top: 8px; border-top: 1px solid #ccc; font-size: 8.5pt; color: #777; display: flex; justify-content: space-between; }
   .page-break { page-break-before: always; break-before: page; }
+
+  /* One Sheet — mirrors the artist/event one-sheet PDF layout. */
+  .onesheet { font-size: 11pt; line-height: 1.45; color: #111; }
+  .onesheet h1.os-title { font-size: 23pt; font-weight: 700; line-height: 1.15; margin: 0 0 14px; text-transform: uppercase; }
+  .onesheet .os-meta { margin: 0 0 3px; }
+  .onesheet .os-meta strong { font-weight: 700; }
+  .onesheet .os-note { margin: 12px 0 4px; }
+  .onesheet h2.os-section { font-size: 15pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; margin: 24px 0 8px; }
+  .onesheet p.os-para { margin: 0 0 10px; }
+  .onesheet p.os-para strong { font-weight: 700; }
+  .onesheet ul.os-list { margin: 4px 0 10px; padding-left: 24px; list-style: disc; }
+  .onesheet ul.os-list li { margin: 3px 0; }
+  .onesheet a { color: #1155cc; text-decoration: underline; word-break: break-word; }
+
+  /* Contract — mirrors the venue event-agreement PDF layout. */
+  .contract { font-size: 11pt; line-height: 1.5; color: #111; }
+  .contract h1.k-brand { font-size: 21pt; font-weight: 700; text-transform: uppercase; line-height: 1.15; margin: 0 0 4px; }
+  .contract h1.k-title { font-size: 18pt; font-weight: 700; text-transform: uppercase; margin: 0 0 16px; }
+  .contract .k-meta { margin: 0 0 3px; }
+  .contract .k-meta strong { font-weight: 700; }
+  .contract h2.k-section { font-size: 14pt; font-weight: 700; text-transform: uppercase; margin: 24px 0 8px; }
+  .contract h3.k-sub { font-size: 11pt; font-weight: 700; margin: 14px 0 5px; }
+  .contract p.k-para { margin: 0 0 10px; }
+  .contract ul.k-list { margin: 4px 0 10px; padding-left: 24px; list-style: disc; }
+  .contract ul.k-list li { margin: 3px 0; }
+  .contract .k-party { font-weight: 700; margin: 18px 0 8px; }
+  .contract .k-sign-line { margin: 14px 0 4px; }
+  .contract .k-fill { display: inline-block; min-width: 260px; border-bottom: 1px solid #111; }
+  .contract .k-fill.short { min-width: 200px; }
 
   @media print {
     body { background: #fff; padding: 0; }
@@ -496,8 +562,254 @@ function renderEventFactsSection(data) {
     ${notes}`;
 }
 
+// One Sheet — a single-column promotional / overview sheet that mirrors the
+// formatting of the artist one-sheet PDF: a large title, bold-labeled contact
+// meta, then uppercase section headings with round-bullet lists or prose.
+// Sections with no underlying data are omitted so the sheet stays clean.
+function renderOneSheet(data) {
+  const event = data.event;
+  const blocks = [];
+
+  // Title.
+  blocks.push(`<h1 class="os-title">${esc(event.title)}</h1>`);
+
+  // Contact meta — Date, Primary Contact, Emails, Venue. Bold label + value.
+  const contacts = (data.collaborators || []).filter((c) => ['event_owner', 'promoter', 'venue_admin'].includes(c.event_role));
+  const contactNames = contacts.length
+    ? contacts.map((c) => esc(c.name)).filter(Boolean).join(' and ')
+    : esc(event.owner_name || 'TBD');
+  const emails = [...new Set(contacts.map((c) => c.email).filter(Boolean))];
+  const venueLine = [event.venue_name, event.venue_address, event.venue_city, event.venue_state].filter(Boolean).join(', ');
+
+  const meta = [];
+  meta.push(['Date', esc(printDateRange(event))]);
+  if (contactNames) meta.push(['Primary Contact', contactNames]);
+  if (emails.length) meta.push(['Emails', emails.map((e) => `<a href="mailto:${esc(e)}">${esc(e)}</a>`).join(' | ')]);
+  if (venueLine) meta.push(['Venue', esc(venueLine)]);
+  blocks.push(meta.map(([label, value]) => `<p class="os-meta"><strong>${esc(label)}:</strong> ${value}</p>`).join(''));
+
+  if (Number(event.walkthrough_done)) blocks.push(`<p class="os-note">Walk through completed.</p>`);
+
+  // EVENT OVERVIEW — public description prose.
+  if (event.description_public) {
+    blocks.push(`<h2 class="os-section">Event Overview</h2>${esc(event.description_public).split(/\n{2,}/).map((p) => `<p class="os-para">${p.replace(/\n/g, '<br>')}</p>`).join('')}`);
+  }
+
+  // FEATURED MUSICIANS — lineup acts as bullets.
+  const lineup = data.lineup || [];
+  if (lineup.length) {
+    const items = lineup.map((item) => {
+      const name = esc(item.display_name || item.band_name || 'Untitled');
+      const time = item.set_time ? ` &mdash; ${esc(timeLabel(item.set_time))}` : '';
+      return `<li>${name}${time}</li>`;
+    }).join('');
+    blocks.push(`<h2 class="os-section">Featured Musicians</h2><ul class="os-list">${items}</ul>`);
+  }
+
+  // TICKETING — price, ticketing system, link, age.
+  const ticketing = [];
+  if (Number(event.ticket_price) > 0) ticketing.push(`${money(event.ticket_price)} ${event.ticket_system ? esc(event.ticket_system) : 'advance'}`);
+  else if (event.ticket_price !== undefined && event.ticket_price !== null) ticketing.push('Free / door');
+  if (event.ticket_system && !(Number(event.ticket_price) > 0)) ticketing.push(`${esc(event.ticket_system)} ticketing`);
+  if (event.ticket_url) ticketing.push(`Tickets: <a href="${esc(event.ticket_url)}">${esc(event.ticket_url)}</a>`);
+  if (event.age_restriction) ticketing.push(esc(event.age_restriction));
+  if (ticketing.length) {
+    blocks.push(`<h2 class="os-section">Ticketing</h2><ul class="os-list">${ticketing.map((t) => `<li>${t}</li>`).join('')}</ul>`);
+  }
+
+  // PRODUCTION — schedule of doors/show/end, room, capacity, staffing roles.
+  const production = [];
+  const times = [
+    event.doors_time ? `Doors ${esc(timeLabel(event.doors_time))}` : '',
+    event.show_time ? `Show ${esc(timeLabel(event.show_time))}` : '',
+    event.end_time ? `End ${esc(timeLabel(event.end_time))}` : '',
+  ].filter(Boolean).join(' &middot; ');
+  if (times) production.push(times);
+  if (event.room) production.push(`${esc(titleCase(event.room))} room`);
+  if (Number(event.capacity) > 0) production.push(`Capacity ${esc(event.capacity)}`);
+  const staffRoles = [...new Set((data.staffing || []).map((s) => s.role).filter(Boolean))];
+  if (staffRoles.length) production.push(`Staffing: ${staffRoles.map((r) => esc(titleCase(r))).join(', ')}`);
+  if (event.contract_url) production.push(`Contract: ${/^https?:\/\//i.test(event.contract_url) ? `<a href="${esc(event.contract_url)}">${esc(event.contract_url)}</a>` : esc(event.contract_url)}`);
+  if (production.length) {
+    blocks.push(`<h2 class="os-section">Production</h2><ul class="os-list">${production.map((p) => `<li>${p}</li>`).join('')}</ul>`);
+  }
+
+  return `<div class="onesheet">${blocks.join('')}</div>`;
+}
+
+// Contract — a fill-and-sign venue event agreement that mirrors the formatting
+// of the event-agreement PDF: a venue brand title, a bold-labeled party/meta
+// block, then numbered uppercase sections. Event-specific fields (name, date,
+// venue, lineup, ticketing, open items, signatories) are merged from the loaded
+// event; the standard legal clauses are boilerplate template text. Blank merge
+// fields fall back to a rule the parties can fill in by hand.
+function renderContract(data) {
+  const event = data.event;
+  const blank = '<span class="k-fill"></span>';
+  const list = (items) => `<ul class="k-list">${items.map((i) => `<li>${i}</li>`).join('')}</ul>`;
+  const sub = (title) => `<h3 class="k-sub">${esc(title)}</h3>`;
+
+  const collaborators = data.collaborators || [];
+  const byRole = (role) => collaborators.filter((c) => c.event_role === role).map((c) => esc(c.name)).filter(Boolean);
+  const promoterNames = byRole('promoter').concat(byRole('event_owner'));
+  const promoter = promoterNames.length ? promoterNames.join(' and ') : esc(event.owner_name || event.promoter_name || '');
+  const venueReps = byRole('venue_admin');
+  const venueRep = venueReps.length ? venueReps.join(', ') : '';
+  const location = [event.venue_address, event.venue_city, event.venue_state].filter(Boolean).join(', ');
+
+  const blocks = [];
+
+  // Brand title + agreement heading.
+  blocks.push(`<h1 class="k-brand">${esc(event.venue_name || 'Venue')}</h1>`);
+  blocks.push(`<h1 class="k-title">Event Agreement</h1>`);
+
+  // Party / event meta block.
+  const meta = [
+    ['Event Name', esc(event.title)],
+    ['Event Date', esc(printDateRange(event))],
+    ['Venue Name', esc(event.venue_name || '')],
+    ['Location', esc(location) || blank],
+    ['Age Restriction', esc(event.age_restriction || 'All Ages')],
+    ['Maximum Capacity', event.capacity ? `${esc(event.capacity)} persons (hard cap)` : blank],
+    ['Promoter / Organizer', promoter || blank],
+    ['Venue Representative', venueRep || blank],
+  ];
+  blocks.push(meta.map(([label, value]) => `<p class="k-meta"><strong>${esc(label)}:</strong> ${value}</p>`).join(''));
+
+  // 1. EVENT OVERVIEW
+  const overview = event.description_public
+    ? esc(event.description_public).split(/\n{2,}/).map((p) => `<p class="k-para">${p.replace(/\n/g, '<br>')}</p>`).join('')
+    : `<p class="k-para">${blank}</p>`;
+  blocks.push(`<h2 class="k-section">1. Event Overview</h2>${overview}`);
+
+  // 2. EVENT DETAILS
+  const schedule = (data.schedule || []).slice().sort((a, b) => (a.start_time || '99').localeCompare(b.start_time || '99'));
+  const scheduleItems = schedule.length
+    ? schedule.map((s) => `${esc(s.title)}: ${esc(timeLabel(s.start_time))}${s.end_time ? ` &ndash; ${esc(timeLabel(s.end_time))}` : ''}`)
+    : [
+        `Load-In / Setup: ${blank}`,
+        `Soundcheck: ${blank}`,
+        `Doors: ${esc(timeLabel(event.doors_time))}`,
+        `Show Start: ${esc(timeLabel(event.show_time))}`,
+        `Event End: ${esc(timeLabel(event.end_time))}`,
+        'Strike Complete: Within one (1) hour after event end unless otherwise approved by Venue',
+      ];
+  blocks.push(`<h2 class="k-section">2. Event Details</h2>
+    ${sub('Space Requested')}${list([event.room ? esc(titleCase(event.room)) : blank])}
+    ${sub('Event Classification')}${list(['Public Event', 'Public Ticketed Show'])}
+    ${sub('Estimated Attendance')}${list([event.capacity ? `Approximately ${esc(event.capacity)} attendees` : blank])}
+    ${sub('Tentative Schedule')}${list(scheduleItems)}
+    <p class="k-para">Final schedule and Run of Show shall be provided by Organizer no later than fourteen (14) days prior to the event.</p>`);
+
+  // 3. PROGRAMMING & LINEUP
+  const lineup = data.lineup || [];
+  const lineupItems = lineup.length
+    ? lineup.map((i) => `${esc(i.display_name || i.band_name || 'Untitled')}${i.notes ? ` (${esc(i.notes)})` : ''}`)
+    : [blank];
+  blocks.push(`<h2 class="k-section">3. Programming &amp; Lineup</h2>
+    ${sub('Current Lineup')}${list(lineupItems)}
+    ${sub('Program Elements')}${list([
+      'Recording/sound team provided by Organizer',
+      'Multi-band live sound setup required',
+      '1 bar/security per 100 people',
+      `${esc(event.ticket_system || 'Approved ticketing platform')} for public ticketed events`,
+      '70/30 ticket split after production costs and house to take the bar',
+    ])}`);
+
+  // 4. TICKETING & REVENUE
+  const ticketItems = [];
+  if (Number(event.ticket_price) > 0) ticketItems.push(`${money(event.ticket_price)} Advance / Early Bird`);
+  ticketItems.push(Number(event.ticket_price) > 0 ? `${money(Number(event.ticket_price) + 5)} Door` : `${blank} Door`);
+  blocks.push(`<h2 class="k-section">4. Ticketing &amp; Revenue</h2>
+    ${sub('Ticketing')}${list(ticketItems)}
+    ${sub('Revenue Structure')}
+    <p class="k-para">Ticket revenue shall be split as follows:</p>
+    ${list(['Promoter / Organizer: 70%', 'Venue: 30%'])}
+    <p class="k-para">Approved ticketing fees, processing fees, and production costs including staff, shall be deducted prior to revenue split calculations.</p>
+    <p class="k-para">Venue bar revenue shall remain with Venue unless otherwise agreed in writing.</p>`);
+
+  // 5. PRODUCTION & STAFFING
+  const staffRoles = [...new Set((data.staffing || []).map((s) => s.role).filter(Boolean))];
+  const staffItems = staffRoles.length
+    ? staffRoles.map((r) => esc(titleCase(r)))
+    : [
+        'Sound Engineer &ndash; estimated (1) one',
+        'Security Personnel &ndash; estimated (1) one',
+        'House Manager &ndash; estimated (1) one',
+        'Bartenders &ndash; estimated (2) two',
+        'Door Staff / Ticketing &ndash; estimated (1) one',
+      ];
+  blocks.push(`<h2 class="k-section">5. Production &amp; Staffing</h2>
+    ${sub('Technical Requirements')}${list([
+      'Full live band sound setup for multi-band bill',
+      'Standard microphones for bands and MC',
+      'Standard venue lighting package',
+      'Live sound engineering support',
+    ])}
+    ${sub('Staffing May Include')}${list(staffItems)}
+    <p class="k-para">Any extraordinary production requests beyond standard venue capabilities must be approved in writing and may incur additional charges.</p>`);
+
+  // 6. BAR & HOSPITALITY
+  blocks.push(`<h2 class="k-section">6. Bar &amp; Hospitality</h2>
+    <p class="k-para">Venue may offer themed drink specials at its discretion. Hospitality needs for performers, crew, or hosts shall be coordinated separately if requested.</p>`);
+
+  // 7. PROMOTION & MARKETING
+  blocks.push(`<h2 class="k-section">7. Promotion &amp; Marketing</h2>
+    <p class="k-para">Organizer shall be primarily responsible for event promotion.</p>
+    ${sub('Promotion Channels')}${list(['Instagram', 'TikTok', 'Reels / Social Media Campaigns', 'Community promotion networks', 'News outlets'])}`);
+
+  // 8. AGE POLICY
+  blocks.push(`<h2 class="k-section">8. Age Policy</h2>
+    <p class="k-para">Final event age classification (All Ages vs. 21+) must be confirmed in writing prior to public announcement and ticket launch.</p>`);
+
+  // 9. MUTUAL INDEMNIFICATION
+  blocks.push(`<h2 class="k-section">9. Mutual Indemnification</h2>
+    <p class="k-para">Each party agrees to indemnify, defend, and hold harmless the other party, including its officers, employees, contractors, and agents, from and against third-party claims, damages, liabilities, losses, costs, and reasonable attorneys&rsquo; fees arising from:</p>
+    ${list(['Breach of this Agreement', 'Negligence or willful misconduct', 'Violation of applicable laws or regulations'])}`);
+
+  // 10. GENERAL TERMS
+  blocks.push(`<h2 class="k-section">10. General Terms</h2>
+    ${list([
+      'Venue reserves the right to remove any attendee behaving in a dangerous, illegal, or disruptive manner.',
+      'Organizer agrees not to exceed legal occupancy limits.',
+      'Outside vendors, decorators, and contractors require prior Venue approval.',
+      'Written terms in this Agreement are binding over any verbal agreements or understandings.',
+      'Any amendments to this Agreement must be made in writing and signed by both parties.',
+    ])}`);
+
+  // 11. NEXT STEPS / OPEN ITEMS
+  const openBlockers = (data.blockers || []).filter((b) => ['open', 'waiting'].includes(b.status)).map((b) => esc(b.title));
+  const openItems = openBlockers.length ? openBlockers : [
+    'Final show timing and Run of Show',
+    'Full band lineup',
+    'All-ages vs. 21+ designation',
+    'Backline requirements',
+    'Staffing and security needs',
+    'Production schedule and changeover timing',
+    'Marketing assets and promotional rollout',
+  ];
+  blocks.push(`<h2 class="k-section">11. Next Steps / Open Items</h2>
+    <p class="k-para">The following items remain subject to confirmation:</p>
+    ${list(openItems)}`);
+
+  // 12. SIGNATURES
+  blocks.push(`<h2 class="k-section">12. Signatures</h2>
+    <div class="k-party">For ${esc(event.venue_name || 'Venue')}</div>
+    <p class="k-sign-line">Name: ${venueRep || blank}</p>
+    <p class="k-sign-line">Signature: ${blank}</p>
+    <p class="k-sign-line">Date: <span class="k-fill short"></span></p>
+    <div class="k-party">For Organizer / Promoter</div>
+    <p class="k-sign-line">Name: ${promoter || blank}</p>
+    <p class="k-sign-line">Signature: ${blank}</p>
+    <p class="k-sign-line">Date: <span class="k-fill short"></span></p>`);
+
+  return `<div class="contract">${blocks.join('')}</div>`;
+}
+
 function renderPrintBody(type, data) {
   switch (type) {
+    case 'one-sheet':    return renderOneSheet(data);
+    case 'contract':     return renderContract(data);
     case 'lineup':       return renderLineupSection(data);
     case 'staffing':     return renderStaffingSection(data);
     case 'run-of-show':  return renderRunOfShowSection(data);
@@ -536,7 +848,7 @@ function openPrintWindow(type, data) {
     <button type="button" onclick="window.close()">Close</button>
   </div>
   <article class="sheet">
-    ${printHeader(data, title)}
+    ${type === 'one-sheet' || type === 'contract' ? '' : printHeader(data, title)}
     ${body}
     ${printFooter(data)}
   </article>
@@ -1399,6 +1711,7 @@ class PipelineBoard extends PanicElement {
 class EventsList extends PanicElement {
   async connect() {
     this.query = '';
+    this.sort = { key: 'date', dir: 'desc' };
     subscribe('events.search', ({ query }) => { this.query = query.toLowerCase(); this.render(this.data); }, this.abort.signal);
     this.setLoading('Loading events');
     try {
@@ -1409,10 +1722,21 @@ class EventsList extends PanicElement {
     }
   }
 
+  toggleSort(key) {
+    if (this.sort.key === key) {
+      this.sort = { key, dir: this.sort.dir === 'asc' ? 'desc' : 'asc' };
+    } else {
+      // New column: dates start newest-first, everything else A→Z.
+      this.sort = { key, dir: key === 'date' ? 'desc' : 'asc' };
+    }
+    this.render(this.data);
+  }
+
   render(data) {
     if (!data) return;
     const events = (data.events || []).filter((event) => !this.query || String(event.title).toLowerCase().includes(this.query));
-    this.innerHTML = `<div class="page-head"><div><h1>Events</h1><p class="subtle">Search, open, and advance every show.</p></div>${data.capabilities?.manage_templates ? '<a class="button" href="#templates">Create Event</a>' : ''}</div><article class="panel">${table(events)}</article>`;
+    this.innerHTML = `<div class="page-head"><div><h1>Events</h1><p class="subtle">Search, open, and advance every show.</p></div>${data.capabilities?.manage_templates ? '<a class="button" href="#templates">Create Event</a>' : ''}</div><article class="panel">${table(events, this.sort)}</article>`;
+    $$('[data-sort-key]', this).forEach((button) => button.addEventListener('click', () => this.toggleSort(button.dataset.sortKey)));
   }
 }
 
@@ -1483,6 +1807,8 @@ class EventWorkspace extends PanicElement {
             <button type="button" data-print="staffing">Staffing Schedule</button>
             <button type="button" data-print="run-of-show">Run of Show</button>
             <button type="button" data-print="guest-list">Door / Guest List</button>
+            <button type="button" data-print="one-sheet">One Sheet</button>
+            <button type="button" data-print="contract">Contract</button>
             <button type="button" data-print="master">Master Event Packet</button>
           </div>
         </details>` : ''}
