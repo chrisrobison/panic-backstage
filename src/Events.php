@@ -248,14 +248,12 @@ final class Events extends BaseEndpoint
             );
 
             $ev = $this->db->one(
-                'SELECT external_id, status, potential_revenue, ticket_system,
+                'SELECT status, potential_revenue, ticket_system,
                         contract_url, walkthrough_done, ticket_url, settlement_doc_url
                  FROM events WHERE id = ? LIMIT 1',
                 [$id]
             );
-            // App-native events (created in-app, no sheet row) have no external_id.
-            // Leave them queued-as-pending for visibility but don't try to push.
-            if (!$ev || trim((string) ($ev['external_id'] ?? '')) === '') {
+            if (!$ev) {
                 return;
             }
 
@@ -271,7 +269,11 @@ final class Events extends BaseEndpoint
                 }
             }
 
-            if ($sheets->pushEvent((string) $ev['external_id'], $fields)) {
+            // Locate the sheet row by the immutable app id (App ID column). This
+            // works for every event whose row has been linked, regardless of
+            // whether it has an external_id. Rows that aren't linked yet stay
+            // 'pending' for the cron sweep / backfill to handle.
+            if ($sheets->pushEventByAppId($id, $fields)) {
                 $this->db->run(
                     'UPDATE sheet_sync_queue
                      SET status = \'done\', attempts = attempts + 1, last_error = NULL, pushed_at = NOW()

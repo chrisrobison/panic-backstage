@@ -43,6 +43,8 @@ PROJECT_ROOT = BACKSTAGE.parent
 XLSX_PATH    = PROJECT_ROOT / 'MabEvents.xlsx'
 GENERATE_PY  = SCRIPT_DIR / 'generate-import-sql.py'
 IMPORT_PHP   = SCRIPT_DIR / 'import-mabevents.php'
+DUMP_PHP     = SCRIPT_DIR / 'dump-sheet-shadow.php'
+APPID_PHP    = SCRIPT_DIR / 'app-id-sync.php'
 
 # ── Default sheet ─────────────────────────────────────────────────────────────
 # Source of truth: the shared "MabEvents" Google Sheet.
@@ -86,11 +88,25 @@ def download(url: str, dest: Path) -> None:
     size_kb = dest.stat().st_size / 1024
     print(f"    ok   ({size_kb:,.1f} KB)")
 
+def dump_shadow() -> None:
+    print(f"→ Dumping sheet-shadow baseline via {DUMP_PHP.name} …")
+    result = subprocess.run(['php', str(DUMP_PHP)])
+    if result.returncode != 0:
+        sys.exit(f"ERROR: {DUMP_PHP.name} exited {result.returncode}")
+
 def generate_sql() -> None:
     print(f"→ Regenerating SQL via {GENERATE_PY.name} …")
     result = subprocess.run([sys.executable, str(GENERATE_PY)])
     if result.returncode != 0:
         sys.exit(f"ERROR: {GENERATE_PY.name} exited {result.returncode}")
+
+def backfill_app_ids() -> None:
+    # Links any newly-inserted events back to their sheet rows (writes the App ID
+    # column). Best-effort: a failure here doesn't invalidate the import.
+    print(f"→ Backfilling App IDs via {APPID_PHP.name} …")
+    result = subprocess.run(['php', str(APPID_PHP), 'backfill'])
+    if result.returncode != 0:
+        print(f"  WARNING: {APPID_PHP.name} backfill exited {result.returncode} (non-fatal)")
 
 def apply_sql() -> None:
     print(f"→ Applying SQL via {IMPORT_PHP.name} …")
@@ -120,6 +136,7 @@ def main() -> None:
             sys.exit(f"ERROR: --no-download given but {XLSX_PATH} does not exist")
         print(f"→ Skipping download; using existing {XLSX_PATH}")
 
+    dump_shadow()
     generate_sql()
 
     if args.dry_run:
@@ -128,6 +145,7 @@ def main() -> None:
         return
 
     apply_sql()
+    backfill_app_ids()
     print("✓ Sync complete.")
 
 if __name__ == '__main__':

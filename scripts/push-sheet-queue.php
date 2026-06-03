@@ -56,15 +56,6 @@ $ok = 0; $fail = 0; $skip = 0;
 
 foreach ($rows as $r) {
     $eventId = (int) $r['event_id'];
-    $extId   = trim((string) ($r['external_id'] ?? ''));
-
-    if ($extId === '') {
-        // App-native event with no sheet row: nothing to push. Mark done so it
-        // stops being swept; a future export/append feature can revisit these.
-        $db->run("UPDATE sheet_sync_queue SET status = 'done', pushed_at = NOW() WHERE event_id = ?", [$eventId]);
-        $skip++;
-        continue;
-    }
 
     $fields = [];
     foreach ($pushable as $f) {
@@ -73,7 +64,11 @@ foreach ($rows as $r) {
         }
     }
 
-    if ($sheets->pushEvent($extId, $fields)) {
+    // Locate the row by the immutable app id (App ID column). An event whose
+    // row hasn't been linked yet (no App ID written) returns false and stays
+    // pending — it is NOT marked done, so the silent-success bug is gone and the
+    // failure is visible in last_error for inspection / backfill.
+    if ($sheets->pushEventByAppId($eventId, $fields)) {
         $db->run(
             "UPDATE sheet_sync_queue
              SET status = 'done', attempts = attempts + 1, last_error = NULL, pushed_at = NOW()
@@ -81,18 +76,18 @@ foreach ($rows as $r) {
             [$eventId]
         );
         $ok++;
-        if ($verbose) echo "  ✓ {$extId} (event #{$eventId})\n";
+        if ($verbose) echo "  ✓ event #{$eventId}\n";
     } else {
         $db->run(
             "UPDATE sheet_sync_queue
              SET attempts = attempts + 1,
                  status = IF(attempts + 1 >= ?, 'failed', 'pending'),
-                 last_error = 'push returned false (see storage/logs/sheet-sync.log)'
+                 last_error = 'row not linked or push failed (see storage/logs/sheet-sync.log)'
              WHERE event_id = ?",
             [MAX_ATTEMPTS, $eventId]
         );
         $fail++;
-        if ($verbose) echo "  ✗ {$extId} (event #{$eventId})\n";
+        if ($verbose) echo "  ✗ event #{$eventId}\n";
     }
 }
 

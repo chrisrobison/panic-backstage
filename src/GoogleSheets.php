@@ -30,9 +30,15 @@ namespace Panic;
  * problem never breaks an auth/edit flow. The retry outbox (sheet_sync_queue)
  * picks up anything that returned false.
  *
- * Row matching: events carry an `external_id` (e.g. "EVT-1050") which lives in
- * column A of the Tracker tab. We locate the row by scanning column A, then
- * write only the app-owned columns for that row.
+ * Row matching: the preferred key is the immutable app event id, written into a
+ * dedicated, hidden "App ID" column (APP_ID_COLUMN) and located via
+ * findRowByAppId(). This survives in-app title/date edits. A legacy path still
+ * locates rows by `external_id` (e.g. "EVT-1050") in column A. Backfill/admin of
+ * the App ID column lives in scripts/app-id-sync.php.
+ *
+ * NOTE: FIELD_COLUMN letters assume the Tracker layout where Status=M, Ticket
+ * Sys.=O, Contract=P, etc. If a column is inserted/removed in the sheet, these
+ * mappings (and the importer's positional unpack) shift — keep them in sync.
  */
 final class GoogleSheets
 {
@@ -56,6 +62,19 @@ final class GoogleSheets
         'ticket_url'         => 'R',
         'settlement_doc_url' => 'S',
     ];
+
+    /**
+     * Dedicated, immutable link key: the app's events.id is written into this
+     * sheet column so write-back can locate a row even after its title/date
+     * (and therefore its slug) is edited in-app. The column is hidden in the
+     * sheet UI (see ensureAppIdColumn) but remains fully readable/writable via
+     * the API. Kept well clear of the importer's data columns (A–W, 1–23).
+     */
+    public const APP_ID_COLUMN = 'Z';
+    public const APP_ID_HEADER = 'App ID (system — do not edit)';
+
+    /** Header row in the Tracker tab; data starts the row after. */
+    public const HEADER_ROW = 2;
 
     /**
      * App status slug -> human label written into the sheet's Status column.
@@ -134,6 +153,46 @@ final class GoogleSheets
             return false;
         }
 
+        return $this->writeFields($row, $fields, "EVT {$externalId}");
+    }
+
+    /**
+     * Push the app-owned fields of one event located by its immutable app id.
+     *
+     * This is the preferred write-back path: the app id never changes (unlike
+     * title/date-derived slugs or hand-typed external codes), so the row stays
+     * findable even after the title is edited in-app. Requires the App ID
+     * column to have been backfilled for this event's row (see ensureAppIdColumn
+     * + writeAppId, or scripts/app-id-sync.php backfill).
+     *
+     * @param int                 $appId  events.id (lives in APP_ID_COLUMN)
+     * @param array<string,mixed> $fields subset of FIELD_COLUMN keys -> values
+     */
+    public function pushEventByAppId(int $appId, array $fields): bool
+    {
+        if (!$this->isConfigured()) {
+            $this->log("skip: not configured (app id {$appId})");
+            return false;
+        }
+        $row = $this->findRowByAppId($appId);
+        if ($row === null) {
+            $this->log('skip: app id ' . $appId . ' not found in sheet column ' . self::APP_ID_COLUMN
+                . ' (row not linked — backfill or append needed)');
+            return false;
+        }
+
+        return $this->writeFields($row, $fields, "app id {$appId}");
+    }
+
+    /**
+     * Batched write of the app-owned subset of $fields into one sheet row.
+     *
+     * @param int                 $row    1-based sheet row
+     * @param array<string,mixed> $fields field => value (non-pushable keys skipped)
+     * @param string              $label  used in log lines to identify the event
+     */
+    private function writeFields(int $row, array $fields, string $label): bool
+    {
         // Build batched cell updates for the app-owned fields only.
         $data = [];
         foreach ($fields as $field => $value) {
@@ -147,7 +206,7 @@ final class GoogleSheets
             ];
         }
         if (!$data) {
-            $this->log("skip: no pushable fields for {$externalId}");
+            $this->log("skip: no pushable fields for {$label}");
             return false;
         }
 
@@ -164,10 +223,10 @@ final class GoogleSheets
         );
 
         if ($code >= 200 && $code < 300) {
-            $this->log("ok: pushed {$externalId} row {$row} (" . implode(',', array_keys($fields)) . ')');
+            $this->log("ok: pushed {$label} row {$row} (" . implode(',', array_keys($fields)) . ')');
             return true;
         }
-        $this->log("FAIL: push {$externalId} row {$row} -> HTTP {$code} {$resp}");
+        $this->log("FAIL: push {$label} row {$row} -> HTTP {$code} {$resp}");
         return false;
     }
 
@@ -200,6 +259,319 @@ final class GoogleSheets
             }
         }
         return null;
+    }
+
+    /** Scan the App ID column and return the 1-based row whose value == $appId. */
+    public function findRowByAppId(int $appId): ?int
+    {
+        $col = self::APP_ID_COLUMN;
+        $values = $this->readColumn($col);
+        if ($values === null) {
+            return null;
+        }
+        foreach ($values as $i => $cells) {
+            $cell = isset($cells[0]) ? trim((string) $cells[0]) : '';
+            if ($cell !== '' && ctype_digit($cell) && (int) $cell === $appId) {
+                return $i + 1; // values are 0-indexed from row 1
+            }
+        }
+        return null;
+    }
+
+    /** GET a single column's values (rows from row 1). Returns null on API error. */
+    private function readColumn(string $col): ?array
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return null;
+        }
+        [$code, $resp] = $this->http(
+            'GET',
+            self::API_BASE . '/' . rawurlencode($this->sheetId)
+                . '/values/' . rawurlencode("{$this->tab}!{$col}:{$col}"),
+            $token,
+            null
+        );
+        if ($code < 200 || $code >= 300) {
+            $this->log("FAIL: read column {$col} -> HTTP {$code} {$resp}");
+            return null;
+        }
+        $json = json_decode($resp, true);
+        return $json['values'] ?? [];
+    }
+
+    // ─── App ID column management (backfill / linking) ───────────────────────────
+
+    /**
+     * Write the immutable app id into the App ID column for a given row.
+     * Used by the backfill to link existing sheet rows to app events.
+     */
+    public function writeAppId(int $row, int $appId): bool
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return false;
+        }
+        $range = self::APP_ID_COLUMN . $row;
+        [$code, $resp] = $this->http(
+            'PUT',
+            self::API_BASE . '/' . rawurlencode($this->sheetId)
+                . '/values/' . rawurlencode("{$this->tab}!{$range}")
+                . '?valueInputOption=RAW',
+            $token,
+            ['values' => [[(string) $appId]]]
+        );
+        if ($code >= 200 && $code < 300) {
+            return true;
+        }
+        $this->log("FAIL: write app id {$appId} -> {$range} -> HTTP {$code} {$resp}");
+        return false;
+    }
+
+    /**
+     * Batch-write app ids: [rowNumber => appId, ...] in a single API call.
+     * Returns [okCount, false-on-error]. Used by the backfill.
+     */
+    public function writeAppIds(array $rowToId): int
+    {
+        if (!$rowToId) {
+            return 0;
+        }
+        $token = $this->accessToken();
+        if ($token === null) {
+            return -1;
+        }
+        $data = [];
+        foreach ($rowToId as $row => $appId) {
+            $data[] = [
+                'range'  => self::APP_ID_COLUMN . (int) $row,
+                'values' => [[(string) (int) $appId]],
+            ];
+        }
+        [$code, $resp] = $this->http(
+            'POST',
+            self::API_BASE . '/' . rawurlencode($this->sheetId) . '/values:batchUpdate',
+            $token,
+            ['valueInputOption' => 'RAW', 'data' => $data]
+        );
+        if ($code >= 200 && $code < 300) {
+            $this->log('ok: backfilled ' . count($data) . ' app ids into column ' . self::APP_ID_COLUMN);
+            return count($data);
+        }
+        $this->log("FAIL: backfill app ids -> HTTP {$code} {$resp}");
+        return -1;
+    }
+
+    /** Delete one whole column (0-based index) from the configured tab. */
+    public function deleteColumn(int $index0): bool
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return false;
+        }
+        $gid = $this->tabSheetId();
+        if ($gid === null) {
+            return false;
+        }
+        [$code, $resp] = $this->http(
+            'POST',
+            self::API_BASE . '/' . rawurlencode($this->sheetId) . ':batchUpdate',
+            $token,
+            ['requests' => [[
+                'deleteDimension' => [
+                    'range' => [
+                        'sheetId'    => $gid,
+                        'dimension'  => 'COLUMNS',
+                        'startIndex' => $index0,
+                        'endIndex'   => $index0 + 1,
+                    ],
+                ],
+            ]]]
+        );
+        if ($code >= 200 && $code < 300) {
+            $this->log('ok: deleted column index ' . $index0);
+            return true;
+        }
+        $this->log("FAIL: delete column {$index0} -> HTTP {$code} {$resp}");
+        return false;
+    }
+
+    /** Clear the given A1 ranges (values only). */
+    public function clearRanges(array $a1Ranges): bool
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return false;
+        }
+        $ranges = array_map(fn ($r) => "{$this->tab}!{$r}", $a1Ranges);
+        [$code, $resp] = $this->http(
+            'POST',
+            self::API_BASE . '/' . rawurlencode($this->sheetId) . '/values:batchClear',
+            $token,
+            ['ranges' => $ranges]
+        );
+        if ($code >= 200 && $code < 300) {
+            $this->log('ok: cleared ' . implode(',', $a1Ranges));
+            return true;
+        }
+        $this->log("FAIL: clear ranges -> HTTP {$code} {$resp}");
+        return false;
+    }
+
+    /**
+     * Batch-read several whole columns at once (UNFORMATTED so dates come back as
+     * serial numbers, immune to locale display formatting). Returns
+     * [colLetter => array<rowIndex0, value>] or null on error.
+     */
+    public function batchGetColumns(array $cols): ?array
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return null;
+        }
+        $qs = 'valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER';
+        foreach ($cols as $c) {
+            $qs .= '&ranges=' . rawurlencode("{$this->tab}!{$c}:{$c}");
+        }
+        [$code, $resp] = $this->http(
+            'GET',
+            self::API_BASE . '/' . rawurlencode($this->sheetId) . '/values:batchGet?' . $qs,
+            $token,
+            null
+        );
+        if ($code < 200 || $code >= 300) {
+            $this->log("FAIL: batchGet columns -> HTTP {$code} {$resp}");
+            return null;
+        }
+        $json = json_decode($resp, true);
+        $out = [];
+        foreach (($json['valueRanges'] ?? []) as $i => $vr) {
+            $col = $cols[$i] ?? (string) $i;
+            $flat = [];
+            foreach (($vr['values'] ?? []) as $rowCells) {
+                $flat[] = $rowCells[0] ?? null;
+            }
+            $out[$col] = $flat;
+        }
+        return $out;
+    }
+
+    /**
+     * Ensure the App ID column has its header and is hidden in the sheet UI.
+     * Idempotent: safe to run repeatedly. Returns true on success.
+     */
+    public function ensureAppIdColumn(): bool
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return false;
+        }
+
+        // 1. Write the header label (idempotent — RAW overwrite).
+        $hdrRange = self::APP_ID_COLUMN . self::HEADER_ROW;
+        [$code, $resp] = $this->http(
+            'PUT',
+            self::API_BASE . '/' . rawurlencode($this->sheetId)
+                . '/values/' . rawurlencode("{$this->tab}!{$hdrRange}")
+                . '?valueInputOption=RAW',
+            $token,
+            ['values' => [[self::APP_ID_HEADER]]]
+        );
+        if ($code < 200 || $code >= 300) {
+            $this->log("FAIL: write App ID header -> HTTP {$code} {$resp}");
+            return false;
+        }
+
+        // 2. Hide the column (structural batchUpdate; needs the tab's numeric id).
+        $gid = $this->tabSheetId();
+        if ($gid === null) {
+            return false;
+        }
+        $colIndex = self::colIndex(self::APP_ID_COLUMN); // 0-based
+        [$code, $resp] = $this->http(
+            'POST',
+            self::API_BASE . '/' . rawurlencode($this->sheetId) . ':batchUpdate',
+            $token,
+            ['requests' => [[
+                'updateDimensionProperties' => [
+                    'range' => [
+                        'sheetId'    => $gid,
+                        'dimension'  => 'COLUMNS',
+                        'startIndex' => $colIndex,
+                        'endIndex'   => $colIndex + 1,
+                    ],
+                    'properties' => ['hiddenByUser' => true],
+                    'fields'     => 'hiddenByUser',
+                ],
+            ]]]
+        );
+        if ($code < 200 || $code >= 300) {
+            $this->log("FAIL: hide App ID column -> HTTP {$code} {$resp}");
+            return false;
+        }
+        $this->log('ok: ensured + hid App ID column ' . self::APP_ID_COLUMN);
+        return true;
+    }
+
+    /** Numeric sheetId (gid) of the configured tab, or null on error. */
+    public function tabSheetId(): ?int
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return null;
+        }
+        [$code, $resp] = $this->http(
+            'GET',
+            self::API_BASE . '/' . rawurlencode($this->sheetId)
+                . '?fields=' . rawurlencode('sheets(properties(sheetId,title,gridProperties/columnCount))'),
+            $token,
+            null
+        );
+        if ($code < 200 || $code >= 300) {
+            $this->log("FAIL: read spreadsheet metadata -> HTTP {$code} {$resp}");
+            return null;
+        }
+        $json = json_decode($resp, true);
+        foreach (($json['sheets'] ?? []) as $sheet) {
+            $props = $sheet['properties'] ?? [];
+            if (($props['title'] ?? '') === $this->tab) {
+                return (int) ($props['sheetId'] ?? 0);
+            }
+        }
+        $this->log("FAIL: tab '{$this->tab}' not found in spreadsheet");
+        return null;
+    }
+
+    /** Raw spreadsheet metadata (sheets + properties), for inspection/tooling. */
+    public function spreadsheetMeta(): ?array
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return null;
+        }
+        [$code, $resp] = $this->http(
+            'GET',
+            self::API_BASE . '/' . rawurlencode($this->sheetId)
+                . '?fields=' . rawurlencode('sheets(properties(sheetId,title,gridProperties))'),
+            $token,
+            null
+        );
+        if ($code < 200 || $code >= 300) {
+            $this->log("FAIL: read spreadsheet metadata -> HTTP {$code} {$resp}");
+            return null;
+        }
+        return json_decode($resp, true);
+    }
+
+    /** 0-based column index for an A1 column letter (A->0, Z->25, AA->26). */
+    public static function colIndex(string $col): int
+    {
+        $col = strtoupper($col);
+        $n = 0;
+        for ($i = 0, $len = strlen($col); $i < $len; $i++) {
+            $n = $n * 26 + (ord($col[$i]) - 64);
+        }
+        return $n - 1;
     }
 
     // ─── Value coercion ──────────────────────────────────────────────────────────

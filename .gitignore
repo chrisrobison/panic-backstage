@@ -7,3 +7,7 @@ storage/mail/*
 !storage/mail/.gitkeep
 .DS_Store
 tests/.state
+scripts/__pycache__/
+storage/tmp/
+storage/backups/
+dns.log

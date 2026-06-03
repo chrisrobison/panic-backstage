@@ -47,6 +47,8 @@ Staff Contact sheet:
 """
 
 import openpyxl
+import json
+import os
 import re
 import sys
 from datetime import datetime, date, time
@@ -57,6 +59,25 @@ BACKSTAGE    = SCRIPT_DIR.parent
 PROJECT_ROOT = BACKSTAGE.parent
 XLSX_PATH    = PROJECT_ROOT / 'MabEvents.xlsx'
 OUTPUT_SQL   = BACKSTAGE / 'database' / 'mabevents-import.sql'
+
+# Hidden "App ID" column in the sheet (Tracker!Z) carries the immutable app
+# event id — the stable link key used to match a sheet row to its event,
+# immune to in-app title/date edits. 0-based index 25.
+APP_ID_COL_INDEX = 25
+
+# Baseline of last-synced sheet values per event, written by dump-sheet-shadow.php.
+# Used for field-level change detection: a field is only pushed into the DB when
+# its sheet value changed since the last sync (sheet wins); otherwise the app's
+# value is preserved. Empty/missing on first run -> existing linked events are
+# "seeded" (shadow recorded, app data untouched).
+SHADOW_JSON_PATH = os.environ.get(
+    'SHEET_SHADOW_JSON', str(BACKSTAGE / 'storage' / 'tmp' / 'sheet-shadow.json')
+)
+try:
+    with open(SHADOW_JSON_PATH, 'r') as _fh:
+        SHADOW_BASELINE = json.load(_fh) or {}
+except (FileNotFoundError, json.JSONDecodeError):
+    SHADOW_BASELINE = {}
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -221,6 +242,15 @@ for row in ws.iter_rows(min_row=2, values_only=True):
         status_raw, event_type_raw, ticket_sys, contract_link, walkthrough_raw,
         ticket_link, settlement_doc, bar_notes) = cols
 
+    # Hidden App ID column (immutable link key); absent for brand-new sheet rows.
+    app_id_cell = row[APP_ID_COL_INDEX] if len(row) > APP_ID_COL_INDEX else None
+    app_id = None
+    if app_id_cell is not None and str(app_id_cell).strip() != '':
+        try:
+            app_id = int(float(str(app_id_cell).strip()))
+        except (ValueError, TypeError):
+            app_id = None
+
     if not isinstance(raw_date, (datetime, date)):
         skipped += 1
         continue
@@ -261,6 +291,7 @@ for row in ws.iter_rows(min_row=2, values_only=True):
             pass
 
     events_rows.append({
+        'app_id': app_id,
         'title': title, 'slug': slug, 'etype': etype, 'status': status,
         'desc_int': desc_int, 'date': date_str,
         'doors': fmt_time(t_doors), 'end_t': fmt_time(t_close),
@@ -377,15 +408,14 @@ for s in staff_rows:
 
 out.extend(["", "-- ── Events ─────────────────────────────────────────────────────"])
 
-# Columns updated on an existing row. Status is intentionally omitted so
-# local workflow progress isn't reverted by a re-sync. deposit_amount is
-# also omitted (sheet has no amount column, only the "Paid Deposit" status
-# string, so a manual figure entered in the UI must survive resyncs).
+# Columns refreshed on the slug-keyed INSERT path, used ONLY for brand-new sheet
+# rows that don't carry an App ID yet. Existing, App-ID-linked rows go through
+# the field-level merge below instead (which decides per field whether the sheet
+# changed). deposit_amount is omitted (no sheet column).
 EVENT_UPDATE_COLS = [
-    'venue_id', 'title', 'event_type', 'description_internal',
+    'venue_id', 'title', 'event_type', 'status', 'description_internal',
     'date', 'doors_time', 'end_time', 'capacity', 'public_visibility',
     'owner_user_id', 'external_id', 'referral_source', 'promoter_name', 'room',
-    # Structured fields newly extracted from the sheet:
     'potential_revenue', 'ticket_url', 'ticket_system', 'contract_url',
     'walkthrough_done', 'settlement_doc_url',
 ]
@@ -396,42 +426,139 @@ event_update_clause = ',\n    '.join(
 def num_or_null(v):
     return 'NULL' if v is None else f"{v}"
 
+def frag_clean(frag):
+    """Canonical compare-string for a SQL value fragment ('NULL'->'', strip quotes)."""
+    if frag is None:
+        return ''
+    f = str(frag)
+    if f == 'NULL':
+        return ''
+    return f.strip().strip("'")
+
+def field_specs(ev):
+    """[(db_col, compare_str, sql_expr)] for the sheet-owned event-table fields."""
+    def s(x):
+        return '' if x is None else str(x).strip()
+    rev = num_or_null(ev['potential_revenue'])
+    return [
+        ('title',               s(ev['title']),               esc(ev['title'])),
+        ('event_type',          s(ev['etype']),               f"'{ev['etype']}'"),
+        ('status',              s(ev['status']),              f"'{ev['status']}'"),
+        ('description_internal', s(ev['desc_int']),           esc(ev['desc_int'])),
+        ('date',                s(ev['date']),                f"'{ev['date']}'"),
+        ('doors_time',          frag_clean(ev['doors']),      ev['doors']),
+        ('end_time',            frag_clean(ev['end_t']),      ev['end_t']),
+        ('capacity',            frag_clean(ev['cap']),        ev['cap']),
+        ('public_visibility',   str(ev['pub']),               str(ev['pub'])),
+        ('external_id',         s(ev['ext_id']),              esc(ev['ext_id'])),
+        ('referral_source',     s(ev['ref']),                 esc(ev['ref'])),
+        ('promoter_name',       s(ev['prom']),                esc(ev['prom'])),
+        ('room',                s(ev['room']),                esc(ev['room'])),
+        ('potential_revenue',   frag_clean(rev),              rev),
+        ('ticket_url',          s(ev['ticket_url']),          esc(ev['ticket_url'])),
+        ('ticket_system',       s(ev['ticket_system']),       esc(ev['ticket_system'])),
+        ('contract_url',        s(ev['contract_url']),        esc(ev['contract_url'])),
+        ('walkthrough_done',    str(ev['walkthrough_done']),  str(ev['walkthrough_done'])),
+        ('settlement_doc_url',  s(ev['settlement_doc_url']),  esc(ev['settlement_doc_url'])),
+    ]
+
+# By default, unlinked sheet rows (no App ID) are reported but NOT inserted.
+# Auto-inserting on slug-drift is what historically spawned duplicate events,
+# and during the migration new events should be created in the app. Set
+# SHEET_INSERT_NEW=1 to restore the old auto-insert behaviour.
+INSERT_NEW = os.environ.get('SHEET_INSERT_NEW', '0') == '1'
+
+stat = {'inserted': 0, 'updated': 0, 'unchanged': 0, 'seeded': 0, 'unlinked': 0}
+unlinked_rows = []
+
 for ev in events_rows:
-    out.append(
-        f"INSERT INTO events (venue_id, title, slug, event_type, status, "
-        f"description_internal, date, doors_time, end_time, capacity, "
-        f"public_visibility, owner_user_id, external_id, referral_source, "
-        f"promoter_name, room, potential_revenue, ticket_url, ticket_system, "
-        f"contract_url, walkthrough_done, settlement_doc_url) VALUES ("
-        f"@venue_id, {esc(ev['title'])}, {esc(ev['slug'])}, "
-        f"'{ev['etype']}', '{ev['status']}', {esc(ev['desc_int'])}, "
-        f"'{ev['date']}', {ev['doors']}, {ev['end_t']}, {ev['cap']}, "
-        f"{ev['pub']}, @owner_id, {esc(ev['ext_id'])}, "
-        f"{esc(ev['ref'])}, {esc(ev['prom'])}, {esc(ev['room'])}, "
-        f"{num_or_null(ev['potential_revenue'])}, "
-        f"{esc(ev['ticket_url'])}, {esc(ev['ticket_system'])}, "
-        f"{esc(ev['contract_url'])}, {ev['walkthrough_done']}, "
-        f"{esc(ev['settlement_doc_url'])}"
-        f")\n  ON DUPLICATE KEY UPDATE\n    id = LAST_INSERT_ID(id),\n    "
-        f"{event_update_clause};"
-    )
-    # Always resolve the event id (works whether inserted or updated thanks to LAST_INSERT_ID(id) trick).
-    out.append("SET @eid = LAST_INSERT_ID();")
-    # Wipe prior load_in/curfew rows for this event so removed times in the sheet propagate.
-    out.append(
-        "DELETE FROM event_schedule_items "
-        "WHERE event_id = @eid AND item_type IN ('load_in','curfew');"
-    )
-    if ev['load_in'] != 'NULL':
+    specs = field_specs(ev)
+    shadow_now = {col: comp for (col, comp, _sql) in specs}
+    shadow_now['load_in'] = frag_clean(ev['load_in'])
+    shadow_now['curfew']  = frag_clean(ev['lockup'])
+    app_id = ev['app_id']
+    sched_changed = False
+
+    if app_id is not None:
+        base = SHADOW_BASELINE.get(str(app_id))
+        if base is None:
+            # SEED: linked event with no baseline yet. Record the shadow but do
+            # NOT touch the row — the app/DB value is authoritative.
+            out.append(f"SET @eid = {app_id};")
+            stat['seeded'] += 1
+        else:
+            changed = [(col, sql) for (col, comp, sql) in specs
+                       if col in base and comp != base[col]]
+            sched_changed = any(
+                k in base and shadow_now[k] != base[k] for k in ('load_in', 'curfew')
+            )
+            if changed:
+                set_parts = [f"{col} = {sql}" for col, sql in changed]
+                names = {col for col, _ in changed}
+                if 'title' in names or 'date' in names:
+                    set_parts.append(f"slug = {esc(ev['slug'])}")
+                out.append(f"UPDATE events SET {', '.join(set_parts)} WHERE id = {app_id};")
+                stat['updated'] += 1
+            else:
+                stat['unchanged'] += 1
+            out.append(f"SET @eid = {app_id};")
+    elif not INSERT_NEW:
+        # Unlinked sheet row: report it, don't insert (prevents duplicate-on-drift).
+        unlinked_rows.append(f"{ev['title']} ({ev['date']})")
+        out.append(f"-- unlinked sheet row (not imported): {ev['title']} ({ev['date']})")
+        stat['unlinked'] += 1
+        continue
+    else:
+        # Brand-new sheet row (no App ID): full slug-keyed upsert. The post-sync
+        # App ID backfill writes its id back to the sheet so it links next time.
         out.append(
-            f"INSERT INTO event_schedule_items (event_id, title, item_type, start_time) "
-            f"VALUES (@eid, 'Load-in', 'load_in', {ev['load_in']});"
+            f"INSERT INTO events (venue_id, title, slug, event_type, status, "
+            f"description_internal, date, doors_time, end_time, capacity, "
+            f"public_visibility, owner_user_id, external_id, referral_source, "
+            f"promoter_name, room, potential_revenue, ticket_url, ticket_system, "
+            f"contract_url, walkthrough_done, settlement_doc_url) VALUES ("
+            f"@venue_id, {esc(ev['title'])}, {esc(ev['slug'])}, "
+            f"'{ev['etype']}', '{ev['status']}', {esc(ev['desc_int'])}, "
+            f"'{ev['date']}', {ev['doors']}, {ev['end_t']}, {ev['cap']}, "
+            f"{ev['pub']}, @owner_id, {esc(ev['ext_id'])}, "
+            f"{esc(ev['ref'])}, {esc(ev['prom'])}, {esc(ev['room'])}, "
+            f"{num_or_null(ev['potential_revenue'])}, "
+            f"{esc(ev['ticket_url'])}, {esc(ev['ticket_system'])}, "
+            f"{esc(ev['contract_url'])}, {ev['walkthrough_done']}, "
+            f"{esc(ev['settlement_doc_url'])}"
+            f")\n  ON DUPLICATE KEY UPDATE\n    id = LAST_INSERT_ID(id),\n    "
+            f"{event_update_clause};"
         )
-    if ev['lockup'] != 'NULL':
+        out.append("SET @eid = LAST_INSERT_ID();")
+        sched_changed = True
+        stat['inserted'] += 1
+
+    # Schedule items (load_in / curfew): only rewrite when they changed in the
+    # sheet (or it's a new row), so app-edited schedules aren't reverted.
+    if sched_changed:
         out.append(
-            f"INSERT INTO event_schedule_items (event_id, title, item_type, start_time) "
-            f"VALUES (@eid, 'Lock-up / Curfew', 'curfew', {ev['lockup']});"
+            "DELETE FROM event_schedule_items "
+            "WHERE event_id = @eid AND item_type IN ('load_in','curfew');"
         )
+        if ev['load_in'] != 'NULL':
+            out.append(
+                f"INSERT INTO event_schedule_items (event_id, title, item_type, start_time) "
+                f"VALUES (@eid, 'Load-in', 'load_in', {ev['load_in']});"
+            )
+        if ev['lockup'] != 'NULL':
+            out.append(
+                f"INSERT INTO event_schedule_items (event_id, title, item_type, start_time) "
+                f"VALUES (@eid, 'Lock-up / Curfew', 'curfew', {ev['lockup']});"
+            )
+
+    # Record/refresh this event's shadow (keyed by the resolved @eid) so the
+    # next sync can tell which sheet fields changed.
+    shadow_json = json.dumps(shadow_now, ensure_ascii=True, sort_keys=True)
+    out.append(
+        f"INSERT INTO event_sheet_shadow (event_id, raw_json, synced_at) "
+        f"VALUES (@eid, {esc(shadow_json)}, NOW()) "
+        f"ON DUPLICATE KEY UPDATE raw_json = VALUES(raw_json), synced_at = VALUES(synced_at);"
+    )
 
 out.extend(["", "COMMIT;"])
 
@@ -440,4 +567,11 @@ OUTPUT_SQL.write_text(sql)
 
 print(f"Written: {OUTPUT_SQL}")
 print(f"Events:  {len(events_rows)}  (skipped {skipped} rows without a parseable date)")
+print(f"Merge:   {stat['updated']} updated, {stat['unchanged']} unchanged, "
+      f"{stat['inserted']} new, {stat['seeded']} seeded, {stat['unlinked']} unlinked "
+      f"(baseline: {len(SHADOW_BASELINE)} events)")
+if unlinked_rows:
+    print(f"Unlinked sheet rows (reported, not imported — set SHEET_INSERT_NEW=1 to import):")
+    for r in unlinked_rows:
+        print(f"   • {r}")
 print(f"Staff:   {len(staff_rows)}")
