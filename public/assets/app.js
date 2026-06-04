@@ -1304,7 +1304,7 @@ async function openEventQuickCreate({ date = null } = {}) {
   dialog.setAttribute('data-event-quick-create-modal', '');
   dialog.innerHTML = `<div class="modal-card">
     <div class="section-head padded"><h2>New event</h2><button class="small secondary" data-close type="button">Close</button></div>
-    <div class="padded"><pb-loading-state label="Loading templates"></pb-loading-state></div>
+    <div class="padded" data-qc-body><pb-loading-state label="Loading templates"></pb-loading-state></div>
   </div>`;
   document.body.appendChild(dialog);
 
@@ -1323,7 +1323,7 @@ async function openEventQuickCreate({ date = null } = {}) {
     types     = data.types     || ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'];
   } catch (err) {
     // The dialog may have been closed while the request was in flight.
-    const padded = dialog.querySelector('.modal-card .padded');
+    const padded = dialog.querySelector('[data-qc-body]');
     if (padded) padded.innerHTML = `<p class="error-text">${esc(err.message || 'Could not load templates.')}</p>`;
     return;
   }
@@ -1331,7 +1331,7 @@ async function openEventQuickCreate({ date = null } = {}) {
   // Default to "General Event" if it exists, else the first template.
   const defaultTemplate = templates.find((t) => t.name === 'General Event') || templates[0];
 
-  const body = dialog.querySelector('.modal-card .padded');
+  const body = dialog.querySelector('[data-qc-body]');
   body.innerHTML = `<form class="grid-form" data-form="quick-create">
     <label class="wide">Template
       <select name="template_id">
