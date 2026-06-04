@@ -1521,6 +1521,7 @@ class AppShell extends PanicElement {
       <p class="copyright">&copy; 2026 Panic Backstage</p>
     </aside>
     <header class="topbar">
+      <button class="nav-toggle" data-nav-toggle type="button" aria-label="Toggle navigation" aria-expanded="true" title="Toggle navigation"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
       <a class="mobile-brand" href="#dashboard"><span class="brand-mark"></span><span>Panic Backstage</span></a>
       <label class="search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input data-search placeholder="Search events..." aria-label="Search events"></label>
       <button class="topbar-create" data-action="new-event" type="button" title="Create event" aria-label="Create event"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>New event</span></button>
@@ -1550,6 +1551,27 @@ class AppShell extends PanicElement {
     });
     $('[data-search]', this).addEventListener('input', (event) => publish('events.search', { query: event.target.value }));
     $('[data-action="new-event"]', this).addEventListener('click', () => openEventQuickCreate());
+    this.setupNavCollapse();
+  }
+
+  // Desktop collapsible sidebar. Toggles an icon-only rail and remembers the
+  // choice in localStorage. Mobile uses the bottom tab bar and ignores this.
+  setupNavCollapse() {
+    const toggle = $('[data-nav-toggle]', this);
+    if (!toggle) return;
+    const KEY = 'pb.navCollapsed';
+    const apply = (collapsed) => {
+      this.classList.toggle('nav-collapsed', collapsed);
+      toggle.setAttribute('aria-expanded', String(!collapsed));
+    };
+    let stored = false;
+    try { stored = localStorage.getItem(KEY) === '1'; } catch { /* storage blocked */ }
+    apply(stored);
+    toggle.addEventListener('click', () => {
+      const collapsed = !this.classList.contains('nav-collapsed');
+      apply(collapsed);
+      try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch { /* storage blocked */ }
+    });
   }
 
   applyCapabilities() {
