@@ -101,6 +101,27 @@ function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
+// Broadcast a fresh, full event payload on the page bus. Any component that
+// derives from event data (e.g. the workspace summary counts/facts) can
+// subscribe to `event.changed` and update itself without a page reload.
+function broadcastEventData(data) {
+  if (data?.event) publish('event.changed', { data });
+}
+
+// Re-render a single event-workspace section in place from fresh server data.
+// Used instead of publishing `event.saved` (which re-mounts the whole event
+// workspace and scrolls the page back to the top). Re-assigning `.data`
+// re-runs just this component's render + bind, so the page keeps its scroll
+// position, active tab, and sibling sections untouched. The same fresh payload
+// is broadcast on the bus so summary listeners stay in sync.
+async function refreshSection(component) {
+  const id = component?.eventData?.event?.id;
+  if (!id) return;
+  const data = await api(`/events/${id}`);
+  component.data = data;
+  broadcastEventData(data);
+}
+
 function eventDate(event) {
   const date = event?.date ? new Date(`${event.date}T12:00:00`) : null;
   return Number.isNaN(date?.getTime()) ? null : date;
@@ -1439,10 +1460,10 @@ class AppShell extends PanicElement {
   async connect() {
     this.classList.add('app-shell');
     this.renderShell();
+    // Full workspace re-mount only for create/navigation flows. In-section
+    // edits/adds now update their own section + the summary in place via the
+    // `event.changed` bus (see refreshSection / broadcastEventData).
     subscribe('event.saved', () => this.refreshCurrent(), this.abort.signal);
-    subscribe('event.assetUploaded', () => this.refreshCurrent(), this.abort.signal);
-    subscribe('event.openItemResolved', () => this.refreshCurrent(), this.abort.signal);
-    subscribe('event.publicationChanged', () => this.refreshCurrent(), this.abort.signal);
     window.addEventListener('hashchange', () => this.route(), { signal: this.abort.signal });
     try {
       const me = await api('/me');
@@ -1778,6 +1799,84 @@ class TemplatePicker extends PanicElement {
   }
 }
 
+function factCell(label, value) {
+  return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
+}
+
+// Base for read-only workspace cards that re-render whenever fresh event data
+// arrives — pushed via `.data` from the workspace on first render, or broadcast
+// on the page bus as `event.changed` after any in-section edit/add/autosave.
+// Subclasses implement render(); the host uses `display: contents` so its inner
+// markup lays out exactly where the card sits.
+class EventBusCard extends PanicElement {
+  connect() {
+    subscribe('event.changed', ({ data }) => { this.data = data; }, this.abort.signal);
+    if (this._data) this.render();
+  }
+
+  set data(value) {
+    this._data = value;
+    if (this.abort) this.render();
+  }
+
+  get data() {
+    return this._data;
+  }
+}
+
+// At-a-glance facts + live counts for an event.
+class EventSummary extends EventBusCard {
+  render() {
+    const data = this._data;
+    if (!data?.event) return;
+    const event = data.event;
+    const openItems = (data.blockers || []).filter((item) => ['open', 'waiting'].includes(item.status)).length;
+    const tasksLeft = (data.tasks || []).filter((task) => !['done', 'canceled'].includes(task.status)).length;
+    this.innerHTML = `<article class="event-summary">
+      <div class="flyer">${esc(event.title)}</div>
+      <div class="facts-grid">
+        ${factCell('Date', shortDate(eventDate(event)))}
+        ${factCell('Doors', timeLabel(event.doors_time))}
+        ${factCell('Show', timeLabel(event.show_time))}
+        ${factCell('Status', badge(event.status))}
+        ${factCell('Owner', esc(event.owner_name || 'Unassigned'))}
+        ${factCell('Public Page', Number(event.public_visibility) ? 'Live' : 'Hidden')}
+      </div>
+      <div class="event-stats">
+        <div class="event-stat">Open Items<strong>${openItems}</strong><a href="#open-items">View</a></div>
+        <div class="event-stat">Tasks Left<strong>${tasksLeft}</strong><a href="#tasks">View</a></div>
+      </div>
+    </article>`;
+  }
+}
+
+// Readiness checklist (derived server-side from tasks, assets, blockers, …).
+class EventReadiness extends EventBusCard {
+  render() {
+    const data = this._data;
+    if (!data) return;
+    const readiness = data.readiness || [];
+    this.innerHTML = `<article class="panel"><div class="section-head padded"><h2>Readiness ${helpLink('overview', 'Overview &amp; Readiness')}</h2></div><div class="health-row">${readiness.map((item) => `<div class="health-item">${item.ok ? '<span class="check">OK</span>' : '<span class="warn-mark">!</span>'}<span><strong>${esc(item.label)}</strong><br>${esc(item.state)}</span></div>`).join('')}</div></article>`;
+  }
+}
+
+// "Next Recommended Action" card. Its Refresh button re-broadcasts fresh data
+// (recomputing this card, readiness, and the summary) without a page reload.
+class EventNextAction extends EventBusCard {
+  render() {
+    const data = this._data;
+    if (!data) return;
+    this.innerHTML = `<article class="next-action"><span class="icon-bubble amber">!</span><span><strong>Next Recommended Action</strong><p>${esc(data.nextAction)}</p></span><button class="secondary small" data-next-action>Refresh</button></article>`;
+    $('[data-next-action]', this).addEventListener('click', () => this.refresh());
+  }
+
+  async refresh() {
+    const id = this._data?.event?.id;
+    if (!id) return;
+    broadcastEventData(await api(`/events/${id}`));
+  }
+}
+
 class EventWorkspace extends PanicElement {
   async connect() {
     await this.load();
@@ -1820,21 +1919,10 @@ class EventWorkspace extends PanicElement {
       </div>
     </section>
     <nav class="workspace-tabs tabs">${tabs.map((tab, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${tab}">${esc(titleCase(tab))}</a>`).join('')}</nav>
-    <article class="event-summary">
-      <div class="flyer">${esc(event.title)}</div>
-      <div class="facts-grid">
-        ${this.fact('Date', shortDate(eventDate(event)))}
-        ${this.fact('Doors', timeLabel(event.doors_time))}
-        ${this.fact('Show', timeLabel(event.show_time))}
-        ${this.fact('Status', badge(event.status))}
-        ${this.fact('Owner', event.owner_name || 'Unassigned')}
-        ${this.fact('Public Page', Number(event.public_visibility) ? 'Live' : 'Hidden')}
-      </div>
-      <div class="event-stats"><div class="event-stat">Open Items<strong>${data.blockers.filter((item) => ['open','waiting'].includes(item.status)).length}</strong><a href="#open-items">View</a></div><div class="event-stat">Tasks Left<strong>${data.tasks.filter((task) => !['done','canceled'].includes(task.status)).length}</strong><a href="#tasks">View</a></div></div>
-    </article>
-    <article class="next-action"><span class="icon-bubble amber">!</span><span><strong>Next Recommended Action</strong><p>${esc(data.nextAction)}</p></span><button class="secondary small" data-next-action>Refresh</button></article>
+    <pb-event-summary></pb-event-summary>
+    <pb-event-next-action></pb-event-next-action>
     <section id="overview" class="overview-grid">
-      <article class="panel"><div class="section-head padded"><h2>Readiness ${helpLink('overview', 'Overview &amp; Readiness')}</h2></div><div class="health-row">${data.readiness.map((item) => `<div class="health-item">${item.ok ? '<span class="check">OK</span>' : '<span class="warn-mark">!</span>'}<span><strong>${esc(item.label)}</strong><br>${esc(item.state)}</span></div>`).join('')}</div></article>
+      <pb-event-readiness></pb-event-readiness>
       <article class="panel"><div class="section-head padded"><h2>Internal Notes</h2></div><div class="notes">${esc(event.description_internal || 'No internal notes yet.')}</div></article>
     </section>
     <pb-event-details-form id="details"></pb-event-details-form>
@@ -1848,6 +1936,9 @@ class EventWorkspace extends PanicElement {
     ${can(data, 'manage_invites') ? '<pb-invite-manager id="invites"></pb-invite-manager>' : ''}
     ${can(data, 'view_settlement') ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
     <section id="activity" class="panel"><div class="section-head padded"><h2>Activity ${helpLink('activity', 'Activity Log')}</h2></div><ul class="timeline">${data.activity.map((entry) => `<li><strong>${esc(entry.action)}</strong> by ${esc(entry.user_name || 'system')} <span class="muted">${esc(entry.created_at)}</span></li>`).join('')}</ul></section>`;
+    $('pb-event-summary', this).data = data;
+    $('pb-event-next-action', this).data = data;
+    $('pb-event-readiness', this).data = data;
     $('pb-event-details-form', this).data = data;
     $('pb-task-list', this).data = data;
     $('pb-lineup-editor', this).data = data;
@@ -1859,7 +1950,6 @@ class EventWorkspace extends PanicElement {
     if ($('pb-invite-manager', this)) $('pb-invite-manager', this).data = data;
     if ($('pb-settlement-form', this)) $('pb-settlement-form', this).data = data;
     $('[data-publish]', this)?.addEventListener('click', () => this.togglePublic());
-    $('[data-next-action]', this).addEventListener('click', () => this.load());
     $$('[data-print]', this).forEach((button) => button.addEventListener('click', () => {
       $('details.print-menu', this)?.removeAttribute('open');
       openPrintWindow(button.dataset.print, this.data);
@@ -1873,15 +1963,15 @@ class EventWorkspace extends PanicElement {
     }));
   }
 
-  fact(label, value) {
-    return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
-  }
-
   async togglePublic() {
     const event = this.data.event;
     const body = { ...event, public_visibility: Number(event.public_visibility) ? 0 : 1 };
     await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-    publish('event.publicationChanged', { id: event.id, public_visibility: body.public_visibility });
+    // Update in place via the bus instead of re-mounting the workspace.
+    this.data.event.public_visibility = body.public_visibility;
+    const publishButton = $('[data-publish]', this);
+    if (publishButton) publishButton.textContent = body.public_visibility ? 'Hide Public Page' : 'Publish Public Page';
+    broadcastEventData(this.data);
     publish('toast.show', { message: body.public_visibility ? 'Public page is live.' : 'Public page hidden.' });
   }
 }
@@ -1914,18 +2004,39 @@ class EventDetailsForm extends HTMLElement {
       <label class="wide">Public description <textarea name="description_public"${disabled}>${esc(event.description_public || '')}</textarea></label>
       <label class="wide">Internal notes <textarea name="description_internal"${disabled}>${esc(event.description_internal || '')}</textarea></label>
       <label class="check-label"><input type="checkbox" name="public_visibility" value="1" ${Number(event.public_visibility) ? 'checked' : ''}${disabled}> Public page visible</label>
-      ${editable ? '<button>Save details</button>' : ''}
+      ${editable ? '<p class="save-status wide" data-save-status data-state="saved" aria-live="polite">All changes saved</p>' : ''}
     </form></section>`;
     if (!editable) return;
-    $('form', this).addEventListener('submit', async (submitEvent) => {
-      submitEvent.preventDefault();
-      const body = formData(submitEvent.target);
-      body.public_visibility = submitEvent.target.public_visibility.checked ? 1 : 0;
-      body.walkthrough_done  = submitEvent.target.walkthrough_done.checked ? 1 : 0;
-      await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-      publish('event.saved', { id: event.id });
-      publish('toast.show', { message: 'Event details saved.' });
-    });
+    const form = $('form', this);
+    const statusEl = $('[data-save-status]', this);
+    const setStatus = (state, text) => { if (statusEl) { statusEl.dataset.state = state; statusEl.textContent = text; } };
+    // Autosave: PATCH the whole detail form whenever a field changes. Text and
+    // number inputs fire `change` on blur; checkboxes and selects fire
+    // immediately. We deliberately do NOT publish `event.saved` here, so the
+    // section is never torn down/reloaded while the user is working in it.
+    // Fields mirrored in the workspace summary (pb-event-summary). When one of
+    // these changes we re-broadcast fresh event data on the bus so the summary
+    // facts update live; other fields skip the extra round-trip.
+    const summaryFields = new Set(['title', 'date', 'doors_time', 'show_time', 'status', 'owner_user_id', 'public_visibility']);
+    const save = async (changedName) => {
+      const body = formData(form);
+      body.public_visibility = form.public_visibility.checked ? 1 : 0;
+      body.walkthrough_done  = form.walkthrough_done.checked ? 1 : 0;
+      setStatus('saving', 'Saving…');
+      try {
+        await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        setStatus('saved', 'All changes saved');
+        if (!changedName || summaryFields.has(changedName)) {
+          broadcastEventData(await api(`/events/${event.id}`));
+        }
+      } catch (err) {
+        setStatus('error', err.message || 'Save failed — change a field to retry');
+        publish('toast.show', { message: err.message || 'Save failed.', tone: 'error' });
+      }
+    };
+    $$('input, select, textarea', form).forEach((field) => field.addEventListener('change', () => save(field.name)));
+    // Pressing Enter in a field still saves, but never reloads the page.
+    form.addEventListener('submit', (submitEvent) => { submitEvent.preventDefault(); save(); });
   }
 }
 
@@ -1945,7 +2056,7 @@ class TaskList extends HTMLElement {
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Task saved.' });
     }));
     $$('[data-complete]', this).forEach((button) => button.addEventListener('click', async () => {
@@ -1953,7 +2064,7 @@ class TaskList extends HTMLElement {
       const body = formData(form);
       body.status = 'done';
       await api(form.dataset.api, { method: 'PATCH', body: JSON.stringify(body) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Task completed.' });
     }));
   }
@@ -1975,7 +2086,7 @@ class LineupEditor extends HTMLElement {
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Lineup saved.' });
     }));
   }
@@ -1997,7 +2108,7 @@ class RunSheet extends HTMLElement {
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Run sheet saved.' });
     }));
   }
@@ -2109,7 +2220,7 @@ class StaffingManager extends HTMLElement {
       event.preventDefault();
       try {
         await api(`/events/${eventId}/staffing/${form.dataset.shift}`, { method: 'PATCH', body: JSON.stringify(buildBody(form)) });
-        publish('event.saved', { id: eventId });
+        await refreshSection(this);
         publish('toast.show', { message: 'Shift saved.' });
       } catch (err) {
         publish('toast.show', { message: err.message, tone: 'error' });
@@ -2120,7 +2231,7 @@ class StaffingManager extends HTMLElement {
       if (!confirm('Remove this shift?')) return;
       try {
         await api(`/events/${eventId}/staffing/${button.dataset.delete}`, { method: 'DELETE' });
-        publish('event.saved', { id: eventId });
+        await refreshSection(this);
         publish('toast.show', { message: 'Shift removed.' });
       } catch (err) {
         publish('toast.show', { message: err.message, tone: 'error' });
@@ -2131,9 +2242,8 @@ class StaffingManager extends HTMLElement {
       event.preventDefault();
       try {
         await api(`/events/${eventId}/staffing`, { method: 'POST', body: JSON.stringify(buildBody(event.target)) });
-        publish('event.saved', { id: eventId });
         publish('toast.show', { message: 'Shift added.' });
-        event.target.reset();
+        await refreshSection(this);
       } catch (err) {
         publish('toast.show', { message: err.message, tone: 'error' });
       }
@@ -2157,7 +2267,7 @@ class OpenItems extends HTMLElement {
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Open item saved.' });
     }));
     $$('[data-resolve]', this).forEach((button) => button.addEventListener('click', async () => {
@@ -2165,7 +2275,7 @@ class OpenItems extends HTMLElement {
       const body = formData(form);
       body.status = 'resolved';
       await api(form.dataset.api, { method: 'PATCH', body: JSON.stringify(body) });
-      publish('event.openItemResolved', { id: this.eventData.event.id, itemId: button.dataset.resolve });
+      await refreshSection(this);
       publish('toast.show', { message: 'Open item completed.' });
     }));
   }
@@ -2243,7 +2353,7 @@ class GuestListManager extends HTMLElement {
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Guest list saved.' });
     }));
     $$('[data-checkin]', this).forEach((checkbox) => checkbox.addEventListener('change', async () => {
@@ -2252,14 +2362,14 @@ class GuestListManager extends HTMLElement {
         method: 'PATCH',
         body: JSON.stringify({ checked_in: checkbox.checked ? 1 : 0 }),
       });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: checkbox.checked ? 'Checked in.' : 'Check-in cleared.' });
     }));
     $$('[data-delete]', this).forEach((button) => button.addEventListener('click', async () => {
       const id = button.dataset.delete;
       if (!confirm('Remove this guest from the list?')) return;
       await api(`/events/${this.eventData.event.id}/guest-list/${id}`, { method: 'DELETE' });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Guest removed.' });
     }));
   }
@@ -2281,9 +2391,8 @@ class AssetManager extends HTMLElement {
       event.preventDefault();
       try {
         await api(`/events/${this.eventData.event.id}/assets`, { method: 'POST', body: new FormData(event.target) });
-        publish('event.assetUploaded', { id: this.eventData.event.id });
         publish('toast.show', { message: 'Asset uploaded.' });
-        event.target.reset();
+        await refreshSection(this);
       } catch (err) {
         publish('toast.show', { message: err.message || 'Upload failed.', tone: 'error' });
       }
@@ -2292,7 +2401,7 @@ class AssetManager extends HTMLElement {
       const status = button.dataset.approve ? 'approved' : 'rejected';
       try {
         await api(`/events/${this.eventData.event.id}/assets/${button.dataset.approve || button.dataset.reject}`, { method: 'PATCH', body: JSON.stringify({ approval_status: status }) });
-        publish('event.assetUploaded', { id: this.eventData.event.id });
+        await refreshSection(this);
         publish('toast.show', { message: `Asset ${status}.` });
       } catch (err) {
         publish('toast.show', { message: err.message || 'Action failed.', tone: 'error' });
@@ -2301,7 +2410,7 @@ class AssetManager extends HTMLElement {
     $$('[data-delete]', this).forEach((button) => button.addEventListener('click', async () => {
       try {
         await api(`/events/${this.eventData.event.id}/assets/${button.dataset.delete}`, { method: 'DELETE' });
-        publish('event.assetUploaded', { id: this.eventData.event.id });
+        await refreshSection(this);
         publish('toast.show', { message: 'Asset deleted.' });
       } catch (err) {
         publish('toast.show', { message: err.message || 'Delete failed.', tone: 'error' });
@@ -2350,14 +2459,12 @@ class InviteManager extends HTMLElement {
       body.send_email = event.target.send_email.checked;
       try {
         const result = await api(`/events/${eventId}/invites`, { method: 'POST', body: JSON.stringify(body) });
-        publish('event.saved', { id: eventId });
         publish('toast.show', {
           message: result.emailed
             ? `Invite emailed to ${body.email}.`
             : `Invite link created: ${appUrl(result.url)}`,
         });
-        event.target.reset();
-        event.target.send_email.checked = true;
+        await refreshSection(this);
       } catch (err) {
         publish('toast.show', { message: err.message, tone: 'error' });
       }
@@ -2418,13 +2525,13 @@ class SettlementForm extends HTMLElement {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       await api(`/events/${this.eventData.event.id}/settlement`, { method: 'POST', body: JSON.stringify(formData(e.target)) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Settlement saved.' });
     });
     $('form[data-form="doc"]', this).addEventListener('submit', async (e) => {
       e.preventDefault();
       await api(`/events/${this.eventData.event.id}`, { method: 'PATCH', body: JSON.stringify({ settlement_doc_url: formData(e.target).settlement_doc_url }) });
-      publish('event.saved', { id: this.eventData.event.id });
+      await refreshSection(this);
       publish('toast.show', { message: 'Settlement doc link saved.' });
     });
   }
@@ -3699,6 +3806,9 @@ customElements.define('pb-pipeline-board', PipelineBoard);
 customElements.define('pb-events-list', EventsList);
 customElements.define('pb-template-picker', TemplatePicker);
 customElements.define('pb-event-workspace', EventWorkspace);
+customElements.define('pb-event-summary', EventSummary);
+customElements.define('pb-event-readiness', EventReadiness);
+customElements.define('pb-event-next-action', EventNextAction);
 customElements.define('pb-event-details-form', EventDetailsForm);
 customElements.define('pb-task-list', TaskList);
 customElements.define('pb-lineup-editor', LineupEditor);
