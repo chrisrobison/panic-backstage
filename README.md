@@ -207,7 +207,7 @@ Endpoint smoke test against a running local or staging server:
 php scripts/endpoint-smoke.php http://localhost:8000
 ```
 
-The smoke script logs in as admin, loads dashboard data, creates an event from a template, updates an open item, creates and accepts a viewer invite, verifies collaborator event access, verifies unrelated event access and viewer mutation are blocked, saves settlement data, publishes the event, and verifies the public event API. It does not send email and does not exercise multipart asset upload.
+The smoke script logs in as admin, loads dashboard data, creates an event from a template, updates an open item, creates and accepts a viewer invite, verifies collaborator event access, verifies unrelated event access and viewer mutation are blocked, saves settlement data, publishes the event, and verifies the public event API. It triggers real invite and magic-link emails through the Mailer (each written to `storage/mail/` and piped to the system MTA); it does not exercise multipart asset upload.
 
 ## Deployment Notes
 
@@ -238,6 +238,38 @@ See [`docs/google-sheet-sync.md`](docs/google-sheet-sync.md) for setup
 (service-account key, sharing, permissions), the field/column mapping, and
 troubleshooting.
 
+## Email
+
+Transactional email is handled by `src/Mailer.php`. It builds an RFC 5322
+message and pipes it to the system `/usr/sbin/sendmail` interface (the
+sendmail-compatible front end to the host MTA, e.g. Exim). Every message is
+also written to `storage/mail/*.eml` for local inspection, and any delivery
+failure is appended to `storage/mail/_delivery-errors.log` rather than thrown,
+so a mail problem never breaks an auth or invite flow.
+
+Email is sent for:
+
+- Collaborator invites (with a per-invite resend action).
+- Login / magic links and the admin welcome link.
+
+Relevant environment variables:
+
+```text
+APP_URL=https://panicbooking.com/backstage   # base used to build invite/login links
+MAIL_FROM_ADDRESS=support@panicbooking.com
+MAIL_FROM_NAME=Backstage
+MAIL_BCC=                                     # optional, comma/semicolon-separated blind copies
+```
+
+Creating an invite sends the email by default. The Invites form exposes a
+**Send invitation email** checkbox (checked by default); unchecking it generates
+the invite link without sending, so an admin can copy and share it manually. The
+`POST /api/events/{id}/invites` endpoint mirrors this with a `send_email` flag.
+
+Deliverability to external inboxes depends on the host MTA plus SPF/DKIM/DMARC
+for the sending domain. Inspect `storage/mail/` and the host MTA log to confirm
+a given message was generated and accepted.
+
 ## Core Workflow
 
 - `/` shows the staff dashboard after login.
@@ -260,15 +292,17 @@ Event collaborator roles:
 - `staff`: read the collaborating event and edit tasks, schedule, and open items.
 - `viewer`: read-only access to the collaborating event.
 
-Invite links still only create copyable links in the UI. They do not send email.
+Creating an invite emails the recipient an accept link by default, and each
+pending invite can be re-sent. The link is also shown in the UI to copy and
+share manually (see [Email](#email)).
 
 ## Collaborator Demo Flow
 
 After logging in as the seeded admin:
 
 1. Open an event workspace and select the Invites tab.
-2. Create a viewer, staff, designer, promoter, artist, or band invite link.
-3. Copy the generated invite link and open it in a separate browser session or private window.
+2. Create a viewer, staff, designer, promoter, artist, or band invite. Leave **Send invitation email** checked to email the link, or uncheck it to just generate a copyable link.
+3. Use the emailed link, or copy the generated invite link, and open it in a separate browser session or private window.
 4. Accept the invite with a name and password.
 5. Confirm the collaborator can open that event from the dashboard or direct event URL.
 6. Confirm unrelated events are not listed and direct access to unrelated event IDs is rejected.
@@ -292,6 +326,6 @@ php scripts/endpoint-smoke.php http://localhost:8000
 ## MVP Limitations
 
 - Stripe is represented by ticket fields only.
-- Invite links create collaborator-scoped access but still do not send email.
+- Email delivery relies on the host MTA via `/usr/sbin/sendmail`; there is no queue, retry, or bounce handling beyond what the MTA provides.
 - Uploads use local disk storage under `storage/uploads/events/:eventId`.
 - The frontend is intentionally browser-native Web Components, optimized for hackability over framework features.
