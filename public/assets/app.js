@@ -2375,18 +2375,44 @@ class GuestListManager extends HTMLElement {
   }
 }
 
+// Full-page image viewer. Shows the image contained at the largest size that
+// preserves its aspect ratio; tap/click anywhere or press Escape to dismiss.
+function openImageLightbox(src, alt = '') {
+  if (!src) return;
+  const dialog = document.createElement('div');
+  dialog.className = 'lightbox-backdrop';
+  dialog.innerHTML = `<button class="lightbox-close" type="button" aria-label="Close">&times;</button><img class="lightbox-img" src="${esc(src)}" alt="${esc(alt)}">`;
+  document.body.appendChild(dialog);
+  document.body.classList.add('lightbox-open');
+  const close = () => {
+    dialog.remove();
+    document.body.classList.remove('lightbox-open');
+    document.removeEventListener('keydown', onEsc);
+  };
+  function onEsc(e) { if (e.key === 'Escape') close(); }
+  dialog.addEventListener('click', close);
+  document.addEventListener('keydown', onEsc);
+}
+
 class AssetManager extends HTMLElement {
   set data(data) {
     this.eventData = data;
     const assets = data.assets || [];
     const canManage = can(data, 'manage_assets');
     const canUpload = can(data, 'upload_assets');
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets ${helpLink('assets', 'Assets &amp; Flyers')}</h2></div><div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img src="${esc(assetUrl(asset.file_path))}" alt="">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(titleCase(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div class="inline-actions"><a class="button small secondary" href="${esc(assetUrl(asset.file_path))}" download>Download</a>${canManage ? `<button class="small" data-approve="${esc(asset.id)}">Approve</button><button class="small secondary" data-reject="${esc(asset.id)}">Reject</button><button class="small danger" data-delete="${esc(asset.id)}">Delete</button>` : ''}</div></article>`).join('') || emptyState('No assets uploaded yet.')}</div>
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets ${helpLink('assets', 'Assets &amp; Flyers')}</h2></div><div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img class="asset-image" src="${esc(assetUrl(asset.file_path))}" alt="${esc(asset.title)}" tabindex="0" role="button" aria-label="View ${esc(asset.title)} full size">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(titleCase(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div class="inline-actions"><a class="button small secondary" href="${esc(assetUrl(asset.file_path))}" download>Download</a>${canManage ? `<button class="small" data-approve="${esc(asset.id)}">Approve</button><button class="small secondary" data-reject="${esc(asset.id)}">Reject</button><button class="small danger" data-delete="${esc(asset.id)}">Delete</button>` : ''}</div></article>`).join('') || emptyState('No assets uploaded yet.')}</div>
     ${canUpload ? `<form id="asset-form" class="row-form"><input name="title" placeholder="Asset title">${select('asset_type', ['flyer','poster','band_photo','logo','social_square','social_story','press_photo','other'], 'flyer')}<input type="file" name="asset" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.pdf" required><input name="notes" placeholder="Notes"><button>Upload asset</button></form>` : ''}</section>`;
     this.bind();
   }
 
   bind() {
+    $$('img.asset-image', this).forEach((img) => {
+      const open = () => openImageLightbox(img.src, img.alt);
+      img.addEventListener('click', open);
+      img.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+      });
+    });
     $('#asset-form', this)?.addEventListener('submit', async (event) => {
       event.preventDefault();
       try {
