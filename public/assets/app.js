@@ -131,6 +131,11 @@ function shortDate(date) {
   return date ? date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : 'TBA';
 }
 
+// Full date including year — used for tooltips so multi-year lists are legible.
+function longDate(date) {
+  return date ? date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Date TBA';
+}
+
 function isoDate(date) {
   return date.toISOString().slice(0, 10);
 }
@@ -216,7 +221,7 @@ function eventRow(event) {
   const issue = event.primary_blocker || (Number(event.approved_flyers) ? 'Flyer approved' : 'Flyer needs review');
   return `<tr>
     <td data-label="ID"><a href="#event-${esc(event.id)}" class="event-code">${esc(event.external_id || '—')}</a></td>
-    <td data-label="Date">${esc(shortDate(eventDate(event)))}</td>
+    <td data-label="Date" title="${esc(longDate(eventDate(event)))}">${esc(shortDate(eventDate(event)))}</td>
     <td data-label="Event"><a href="#event-${esc(event.id)}">${esc(event.title)}</a></td>
     <td data-label="Status">${badge(event.status)}</td>
     <td data-label="Main Issue"><span class="status-dot ${esc(event.primary_blocker ? 'red' : statusTone(event.status))}"></span>${esc(issue)}</td>
@@ -1736,6 +1741,7 @@ class PipelineBoard extends PanicElement {
 class EventsList extends PanicElement {
   async connect() {
     this.query = '';
+    this.showPast = false;
     this.sort = { key: 'date', dir: 'desc' };
     subscribe('events.search', ({ query }) => { this.query = query.toLowerCase(); this.render(this.data); }, this.abort.signal);
     this.setLoading('Loading events');
@@ -1759,9 +1765,17 @@ class EventsList extends PanicElement {
 
   render(data) {
     if (!data) return;
-    const events = (data.events || []).filter((event) => !this.query || String(event.title).toLowerCase().includes(this.query));
-    this.innerHTML = `<div class="page-head"><div><h1>Events</h1><p class="subtle">Search, open, and advance every show.</p></div>${data.capabilities?.manage_templates ? '<a class="button" href="#templates">Create Event</a>' : ''}</div><article class="panel">${table(events, this.sort)}</article>`;
+    // Default view hides shows more than two weeks in the past. Undated (TBA)
+    // events are always kept since they have no date to fall behind the cutoff.
+    const cutoff = isoDate(addDays(new Date(), -14));
+    const all = data.events || [];
+    const events = all
+      .filter((event) => !this.query || String(event.title).toLowerCase().includes(this.query))
+      .filter((event) => this.showPast || !event.date || event.date >= cutoff);
+    const hiddenPast = all.filter((event) => event.date && event.date < cutoff).length;
+    this.innerHTML = `<div class="page-head"><div><h1>Events</h1><p class="subtle">Search, open, and advance every show.</p></div>${data.capabilities?.manage_templates ? '<a class="button" href="#templates">Create Event</a>' : ''}</div><article class="panel"><div class="list-controls"><label class="checkbox-inline"><input type="checkbox" data-show-past ${this.showPast ? 'checked' : ''}> Show past events${hiddenPast && !this.showPast ? ` <span class="muted">(${hiddenPast} hidden)</span>` : ''}</label></div>${table(events, this.sort)}</article>`;
     $$('[data-sort-key]', this).forEach((button) => button.addEventListener('click', () => this.toggleSort(button.dataset.sortKey)));
+    $('[data-show-past]', this)?.addEventListener('change', (event) => { this.showPast = event.target.checked; this.render(this.data); });
   }
 }
 
