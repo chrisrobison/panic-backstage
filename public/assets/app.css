@@ -673,6 +673,10 @@ h3 { margin-bottom: 8px; font-size: 15px; }
   align-items: center;
   margin-bottom: 18px;
 }
+/* Workspace summary/readiness/next-action cards are web components; make the
+   custom-element hosts layout-transparent so their inner markup sits exactly
+   where the old inline markup did (block flow or overview-grid grid items). */
+pb-event-summary, pb-event-readiness, pb-event-next-action { display: contents; }
 .overview-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(330px, .75fr);

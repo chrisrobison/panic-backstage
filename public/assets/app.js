@@ -1803,11 +1803,12 @@ function factCell(label, value) {
   return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
 }
 
-// At-a-glance facts + live counts for an event. Self-contained on the page bus:
-// it renders from whatever event payload it last received (via `.data` from the
-// workspace, or an `event.changed` broadcast), so section edits, autosaves, and
-// adds keep the counts/facts current without re-mounting the whole workspace.
-class EventSummary extends PanicElement {
+// Base for read-only workspace cards that re-render whenever fresh event data
+// arrives — pushed via `.data` from the workspace on first render, or broadcast
+// on the page bus as `event.changed` after any in-section edit/add/autosave.
+// Subclasses implement render(); the host uses `display: contents` so its inner
+// markup lays out exactly where the card sits.
+class EventBusCard extends PanicElement {
   connect() {
     subscribe('event.changed', ({ data }) => { this.data = data; }, this.abort.signal);
     if (this._data) this.render();
@@ -1821,7 +1822,10 @@ class EventSummary extends PanicElement {
   get data() {
     return this._data;
   }
+}
 
+// At-a-glance facts + live counts for an event.
+class EventSummary extends EventBusCard {
   render() {
     const data = this._data;
     if (!data?.event) return;
@@ -1843,6 +1847,33 @@ class EventSummary extends PanicElement {
         <div class="event-stat">Tasks Left<strong>${tasksLeft}</strong><a href="#tasks">View</a></div>
       </div>
     </article>`;
+  }
+}
+
+// Readiness checklist (derived server-side from tasks, assets, blockers, …).
+class EventReadiness extends EventBusCard {
+  render() {
+    const data = this._data;
+    if (!data) return;
+    const readiness = data.readiness || [];
+    this.innerHTML = `<article class="panel"><div class="section-head padded"><h2>Readiness ${helpLink('overview', 'Overview &amp; Readiness')}</h2></div><div class="health-row">${readiness.map((item) => `<div class="health-item">${item.ok ? '<span class="check">OK</span>' : '<span class="warn-mark">!</span>'}<span><strong>${esc(item.label)}</strong><br>${esc(item.state)}</span></div>`).join('')}</div></article>`;
+  }
+}
+
+// "Next Recommended Action" card. Its Refresh button re-broadcasts fresh data
+// (recomputing this card, readiness, and the summary) without a page reload.
+class EventNextAction extends EventBusCard {
+  render() {
+    const data = this._data;
+    if (!data) return;
+    this.innerHTML = `<article class="next-action"><span class="icon-bubble amber">!</span><span><strong>Next Recommended Action</strong><p>${esc(data.nextAction)}</p></span><button class="secondary small" data-next-action>Refresh</button></article>`;
+    $('[data-next-action]', this).addEventListener('click', () => this.refresh());
+  }
+
+  async refresh() {
+    const id = this._data?.event?.id;
+    if (!id) return;
+    broadcastEventData(await api(`/events/${id}`));
   }
 }
 
@@ -1889,9 +1920,9 @@ class EventWorkspace extends PanicElement {
     </section>
     <nav class="workspace-tabs tabs">${tabs.map((tab, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${tab}">${esc(titleCase(tab))}</a>`).join('')}</nav>
     <pb-event-summary></pb-event-summary>
-    <article class="next-action"><span class="icon-bubble amber">!</span><span><strong>Next Recommended Action</strong><p>${esc(data.nextAction)}</p></span><button class="secondary small" data-next-action>Refresh</button></article>
+    <pb-event-next-action></pb-event-next-action>
     <section id="overview" class="overview-grid">
-      <article class="panel"><div class="section-head padded"><h2>Readiness ${helpLink('overview', 'Overview &amp; Readiness')}</h2></div><div class="health-row">${data.readiness.map((item) => `<div class="health-item">${item.ok ? '<span class="check">OK</span>' : '<span class="warn-mark">!</span>'}<span><strong>${esc(item.label)}</strong><br>${esc(item.state)}</span></div>`).join('')}</div></article>
+      <pb-event-readiness></pb-event-readiness>
       <article class="panel"><div class="section-head padded"><h2>Internal Notes</h2></div><div class="notes">${esc(event.description_internal || 'No internal notes yet.')}</div></article>
     </section>
     <pb-event-details-form id="details"></pb-event-details-form>
@@ -1906,6 +1937,8 @@ class EventWorkspace extends PanicElement {
     ${can(data, 'view_settlement') ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
     <section id="activity" class="panel"><div class="section-head padded"><h2>Activity ${helpLink('activity', 'Activity Log')}</h2></div><ul class="timeline">${data.activity.map((entry) => `<li><strong>${esc(entry.action)}</strong> by ${esc(entry.user_name || 'system')} <span class="muted">${esc(entry.created_at)}</span></li>`).join('')}</ul></section>`;
     $('pb-event-summary', this).data = data;
+    $('pb-event-next-action', this).data = data;
+    $('pb-event-readiness', this).data = data;
     $('pb-event-details-form', this).data = data;
     $('pb-task-list', this).data = data;
     $('pb-lineup-editor', this).data = data;
@@ -1917,7 +1950,6 @@ class EventWorkspace extends PanicElement {
     if ($('pb-invite-manager', this)) $('pb-invite-manager', this).data = data;
     if ($('pb-settlement-form', this)) $('pb-settlement-form', this).data = data;
     $('[data-publish]', this)?.addEventListener('click', () => this.togglePublic());
-    $('[data-next-action]', this).addEventListener('click', () => this.load());
     $$('[data-print]', this).forEach((button) => button.addEventListener('click', () => {
       $('details.print-menu', this)?.removeAttribute('open');
       openPrintWindow(button.dataset.print, this.data);
@@ -3775,6 +3807,8 @@ customElements.define('pb-events-list', EventsList);
 customElements.define('pb-template-picker', TemplatePicker);
 customElements.define('pb-event-workspace', EventWorkspace);
 customElements.define('pb-event-summary', EventSummary);
+customElements.define('pb-event-readiness', EventReadiness);
+customElements.define('pb-event-next-action', EventNextAction);
 customElements.define('pb-event-details-form', EventDetailsForm);
 customElements.define('pb-task-list', TaskList);
 customElements.define('pb-lineup-editor', LineupEditor);
