@@ -1,6 +1,16 @@
 Options -Indexes
 RewriteEngine On
 
+# Never let the browser hold a stale HTML shell. The shell references its JS/CSS
+# with ?v= cache-busting query strings, so if index.html itself is cached the
+# version bump never reaches the client and they run old code. Force HTML to
+# revalidate on every load; the versioned assets can still cache normally.
+<IfModule mod_headers.c>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
 RewriteRule ^$ public/index.html [L]
 RewriteRule ^(assets|uploads)/(.*)$ public/$1/$2 [L]
 RewriteRule ^api(?:/(.*))?$ public/api/index.php [L,QSA]
