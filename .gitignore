@@ -11,3 +11,4 @@ scripts/__pycache__/
 storage/tmp/
 storage/backups/
 dns.log
+database/mabevents-import.sql
