@@ -1764,7 +1764,7 @@ class EventsList extends PanicElement {
   async connect() {
     this.query = '';
     this.showPast = false;
-    this.sort = { key: 'date', dir: 'desc' };
+    this.sort = { key: 'date', dir: 'asc' };
     subscribe('events.search', ({ query }) => { this.query = query.toLowerCase(); this.render(this.data); }, this.abort.signal);
     this.setLoading('Loading events');
     try {
