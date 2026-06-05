@@ -29,7 +29,13 @@ final class Webauthn
         $parsed        = parse_url($url);
         $this->rpId    = (string) ($parsed['host'] ?? 'localhost');
         $this->rpName  = (string) (getenv('WEBAUTHN_RP_NAME') ?: 'Panic Backstage');
-        $this->origin  = $url;
+        // The WebAuthn origin the browser reports in clientDataJSON is scheme +
+        // host + optional port — never the path. APP_URL may carry a base path
+        // (e.g. https://panicbooking.com/backstage) for routing, so rebuild the
+        // origin from its components rather than reusing the full URL.
+        $scheme        = (string) ($parsed['scheme'] ?? 'https');
+        $port          = isset($parsed['port']) ? ':' . $parsed['port'] : '';
+        $this->origin  = $scheme . '://' . $this->rpId . $port;
     }
 
     public function getRpId(): string   { return $this->rpId; }
