@@ -85,6 +85,21 @@ function seed_contract_library(\PDO $pdo): void
         ['governing_law', 'Governing Law', 'legal', 'low', 1, [],
             'This Agreement shall be governed by the laws of the State of {{venue_state}}, without regard to its conflict-of-laws principles. Any dispute shall be resolved in the courts located in {{venue_city}}, {{venue_state}}.'],
 
+        ['advance_settlement', 'Advance / Same-Night Settlement', 'financial', 'medium', 0, [],
+            'Settlement shall be completed in full on the night of the event, immediately following the performance, in cash or other agreed instrument. The Venue shall present a written settlement statement itemizing gross sales, approved expenses, and the final payout.'],
+
+        ['high_draw_controls', 'High-Draw Event Controls', 'risk', 'high', 0, [],
+            'Given the anticipated demand for this event, the following enhanced controls apply: a strict no re-entry policy; crowd-control staffing sized to expected attendance; a dedicated venue manager on duty for the duration of the event; an advance ticket cap as agreed; and coordinated load-in, security sweep, and guest-list cutoff times communicated in advance.'],
+
+        ['radius_clause', 'Radius Clause', 'legal', 'medium', 0, ['radius_miles', 'radius_days'],
+            'The Artist agrees not to perform at any other venue within {{radius_miles}} miles of the Venue for {{radius_days}} days before and after the event date, without the Venue'."'".'s prior written consent.'],
+
+        ['guest_list_cap', 'Guest List Cap', 'operational', 'low', 0, ['guest_list_cap'],
+            'The Counterparty'."'".'s complimentary guest list shall not exceed {{guest_list_cap}} names. Guest-list names must be submitted no later than noon on the day of the event. Additional comps require Venue approval.'],
+
+        ['fundraiser_terms', 'Fundraiser / Beneficiary Terms', 'financial', 'medium', 0, ['beneficiary', 'fundraiser_split'],
+            'This event is produced as a fundraiser benefiting {{beneficiary}}. {{fundraiser_split}} of net event proceeds shall be remitted to the beneficiary within fourteen (14) days of the event, accompanied by an itemized accounting. The Counterparty is responsible for any required charitable-solicitation registrations and for the handling and tax treatment of donations, raffles, or auctions conducted at the event.'],
+
         ['signatures', 'Signatures', 'base', 'none', 0, [],
             "The parties execute this Agreement as of the dates written below.\n\nFor the Venue ({{venue_name}}):\nName: ____________________   Signature: ____________________   Date: __________\n\nFor the Counterparty ({{counterparty_display}}):\nName: ____________________   Signature: ____________________   Date: __________"],
     ];
@@ -117,6 +132,7 @@ function seed_contract_library(\PDO $pdo): void
     $venueTix    = ['all' => [['field' => 'venue_controls_tickets', 'op' => 'truthy']]];
     $hasGuarantee= ['all' => [['field' => 'guarantee_amount', 'op' => 'gt', 'value' => 0]]];
     $hasDoorSplit= ['all' => [['field' => 'door_split_artist', 'op' => 'gt', 'value' => 0]]];
+    $hasRental   = ['all' => [['field' => 'rental_fee', 'op' => 'gt', 'value' => 0]]];
 
     // name, description, contract_type, intro_text, [ [module_key, is_required, condition|null], ... ]
     // is_required modules are always included; a null condition means "on by
@@ -190,6 +206,69 @@ function seed_contract_library(\PDO $pdo): void
                 ['marketing', 0, null],
                 ['recording_photo', 0, null],
                 ['all_ages', 0, $allAges],
+                ['cancellation', 1, null],
+                ['indemnification', 1, null],
+                ['governing_law', 1, null],
+                ['signatures', 1, null],
+            ]],
+
+        ['Famous / High-Draw Artist', 'High-demand headliner: guarantee, advance settlement, enhanced security/control, radius and guest-list limits.', 'artist_performance',
+            'This Performance Agreement governs a high-demand engagement and includes enhanced control and settlement terms.',
+            [
+                ['base_parties', 1, null],
+                ['guarantee', 1, null],
+                ['advance_settlement', 1, null],
+                ['high_draw_controls', 1, null],
+                ['security', 1, null],
+                ['guest_list_cap', 0, null],
+                ['radius_clause', 0, null],
+                ['production', 0, null],
+                ['hospitality', 0, null],
+                ['merch', 0, $merch],
+                ['ticketing', 0, $venueTix],
+                ['all_ages', 0, $allAges],
+                ['recording_photo', 0, null],
+                ['cancellation', 1, null],
+                ['insurance', 0, $insurance],
+                ['indemnification', 1, null],
+                ['force_majeure', 1, null],
+                ['governing_law', 1, null],
+                ['signatures', 1, null],
+            ]],
+
+        ['Fundraiser / Charity Event', 'Benefit event: beneficiary split, optional room rental or bar minimum, with security and insurance as needed.', 'fundraiser',
+            'This Agreement governs a charitable fundraiser produced at the Venue.',
+            [
+                ['base_parties', 1, null],
+                ['fundraiser_terms', 1, null],
+                ['flat_rental', 0, $hasRental],
+                ['bar_minimum', 0, $hasBarMin],
+                ['marketing', 0, null],
+                ['security', 0, $bigOrAllAge],
+                ['all_ages', 0, $allAges],
+                ['production', 0, null],
+                ['recording_photo', 0, null],
+                ['cancellation', 1, null],
+                ['insurance', 0, $insurance],
+                ['indemnification', 1, null],
+                ['governing_law', 1, null],
+                ['signatures', 1, null],
+            ]],
+
+        ['House-Produced Show', 'Venue produces the show and books the talent directly; guarantee or door deal with lighter counterparty terms.', 'house_show',
+            'This Agreement covers a show produced by the Venue, booking the named performer(s).',
+            [
+                ['base_parties', 1, null],
+                ['guarantee', 0, $hasGuarantee],
+                ['door_split', 0, $hasDoorSplit],
+                ['hospitality', 0, null],
+                ['production', 0, null],
+                ['ticketing', 0, $venueTix],
+                ['marketing', 0, null],
+                ['merch', 0, $merch],
+                ['security', 0, $bigOrAllAge],
+                ['all_ages', 0, $allAges],
+                ['recording_photo', 0, null],
                 ['cancellation', 1, null],
                 ['indemnification', 1, null],
                 ['governing_law', 1, null],
