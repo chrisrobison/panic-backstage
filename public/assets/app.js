@@ -1821,18 +1821,54 @@ class EventCalendar extends PanicElement {
 
 class PipelineBoard extends PanicElement {
   async connect() {
+    // Default to a focused "next two weeks" window so the board reflects what
+    // is actually coming up instead of every far-future hold ever created.
+    this.showAll = false;
+    this.start = isoDate(new Date());
+    this.end = isoDate(addDays(new Date(), 14));
     this.setLoading('Loading pipeline');
     try {
-      const data = await api('/events');
-      this.render(data.events || []);
+      await this.reload();
     } catch (error) {
       this.showError(error);
     }
   }
 
-  render(events) {
+  async reload() {
+    const data = await api('/events');
+    this.events = data.events || [];
+    this.render();
+  }
+
+  // Apply the date-range filter (unless "show all" is on) and sort each
+  // column's cards by date ascending. Undated (TBA) events only appear in the
+  // "show all" view and sort to the bottom.
+  visibleEvents() {
+    return (this.events || [])
+      .filter((event) => {
+        if (this.showAll) return true;
+        if (!event.date) return false;
+        return (!this.start || event.date >= this.start) && (!this.end || event.date <= this.end);
+      })
+      .sort((a, b) => {
+        if (a.date === b.date) return 0;
+        if (!a.date) return 1;
+        if (!b.date) return -1;
+        return a.date < b.date ? -1 : 1;
+      });
+  }
+
+  render() {
+    const events = this.visibleEvents();
+    const hidden = (this.events || []).length - events.length;
+    const controls = `<div class="list-controls pipeline-controls">
+      <label class="checkbox-inline"><input type="checkbox" data-show-all ${this.showAll ? 'checked' : ''}> Show all events${hidden > 0 && !this.showAll ? ` <span class="muted">(${hidden} hidden)</span>` : ''}</label>
+      <label class="date-field">From <input type="date" data-start value="${esc(this.start)}" ${this.showAll ? 'disabled' : ''}></label>
+      <label class="date-field">To <input type="date" data-end value="${esc(this.end)}" ${this.showAll ? 'disabled' : ''}></label>
+    </div>`;
     this.innerHTML = `<section class="calendar-page">
       <div class="page-head"><div><h1>Pipeline</h1><p class="subtle">Move events from holds to settlement.</p></div></div>
+      ${controls}
       <section class="pipeline-board">${statuses.slice(0, 10).map((status) => {
         const items = events.filter((event) => event.status === status);
         return `<article class="pipe-col"><h3>${esc(statusLabel(status))} <span class="pipe-count">${items.length}</span></h3>${items.map((event) => {
@@ -1841,12 +1877,15 @@ class PipelineBoard extends PanicElement {
         }).join('') || '<small>No events</small>'}</article>`;
       }).join('')}</section>
     </section>`;
+    $('[data-show-all]', this)?.addEventListener('change', (event) => { this.showAll = event.target.checked; this.render(); });
+    $('[data-start]', this)?.addEventListener('change', (event) => { this.start = event.target.value; this.render(); });
+    $('[data-end]', this)?.addEventListener('change', (event) => { this.end = event.target.value; this.render(); });
     $$('form[data-event]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(`/events/${form.dataset.event}`, { method: 'PATCH', body: JSON.stringify({ status: formData(form).status }) });
       publish('event.saved', { id: form.dataset.event });
       publish('toast.show', { message: 'Event status updated.' });
-      this.connect();
+      await this.reload();
     }));
   }
 }
