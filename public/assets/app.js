@@ -3704,12 +3704,15 @@ class AdminStaff extends PanicElement {
 
   render() {
     const staff = this.data.staff || [];
-    const roles = this.data.roles || [];
-    const users = this.data.users || [];
-    const userOpts = `<option value="">— No login linked —</option>${users.map((u) => `<option value="${esc(u.id)}">${esc(u.name)} (${esc(u.email)})</option>`).join('')}`;
     this.innerHTML = `
       <article class="panel">
-        <div class="section-head padded"><h2>Staff Roster</h2><span class="muted">${staff.filter((s) => Number(s.active)).length} active &middot; ${staff.length} total</span></div>
+        <div class="section-head padded">
+          <h2>Staff Roster</h2>
+          <div class="section-head-actions">
+            <span class="muted">${staff.filter((s) => Number(s.active)).length} active &middot; ${staff.length} total</span>
+            ${addToggle('Add staff member', true)}
+          </div>
+        </div>
         <table class="data-table admin-table">
           <thead><tr><th>Name</th><th>Default role</th><th>Contact</th><th>Rate</th><th>Login</th><th>Status</th><th></th></tr></thead>
           <tbody>
@@ -3724,79 +3727,62 @@ class AdminStaff extends PanicElement {
                 <button class="small secondary" data-edit="${esc(s.id)}">Edit</button>
                 <button class="small danger" data-delete="${esc(s.id)}" data-name="${esc(s.name)}">Delete</button>
               </td>
-            </tr>`).join('') || '<tr><td colspan="7"><div class="empty-state">No staff yet — add your first crew member below.</div></td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="7"><div class="empty-state">No staff yet — use the + above to add your first crew member.</div></td></tr>'}
           </tbody>
         </table>
       </article>
-      <article class="panel">
-        <div class="section-head padded"><h2>Add Staff</h2></div>
-        <form data-form="create" class="grid-form padded">
-          <label>Name <input name="name" required placeholder="Full name"></label>
-          <label>Pronoun <input name="pronoun" placeholder="they/them, she/her, …"></label>
-          <label>Default role ${select('default_role', roles, 'security')}</label>
-          <label>Position <input name="position" placeholder="Lead bartender, Head of Security, …"></label>
-          <label>Email <input type="email" name="email" placeholder="Optional"></label>
-          <label>Phone <input name="phone" placeholder="Optional"></label>
-          <label>Hourly rate <input type="number" step="0.01" name="hourly_rate" placeholder="Optional"></label>
-          <label>Link to login <select name="user_id">${userOpts}</select></label>
-          <label class="wide">Notes <input name="notes" placeholder="Allergies, certifications, availability"></label>
-          <input type="hidden" name="active" value="1">
-          <button>Add staff member</button>
-        </form>
-      </article>
     `;
-    $('[data-form="create"]', this).addEventListener('submit', (event) => this.create(event));
-    $$('[data-edit]', this).forEach((b) => b.addEventListener('click', () => this.openEdit(Number(b.dataset.edit))));
+    $('[data-add]', this)?.addEventListener('click', () => this.openStaffModal(null));
+    $$('[data-edit]', this).forEach((b) => b.addEventListener('click', () => this.openStaffModal((this.data.staff || []).find((row) => Number(row.id) === Number(b.dataset.edit)))));
     $$('[data-delete]', this).forEach((b) => b.addEventListener('click', () => this.delete(Number(b.dataset.delete), b.dataset.name)));
   }
 
-  async create(event) {
-    event.preventDefault();
-    const body = formData(event.target);
-    try {
-      await api('/staff-members', { method: 'POST', body: JSON.stringify(body) });
-      publish('toast.show', { message: `${body.name} added.` });
-      this.connect();
-    } catch (err) {
-      publish('toast.show', { message: err.message, tone: 'error' });
-    }
-  }
-
-  openEdit(id) {
-    const s = (this.data.staff || []).find((row) => Number(row.id) === id);
-    if (!s) return;
+  // Add (staff === null) and edit share one modal. New crew members default to
+  // Active; submitting POSTs or PATCHes then reloads the roster.
+  openStaffModal(staff = null) {
+    const isEdit = Boolean(staff && staff.id);
+    const s = staff || {};
     const roles = this.data.roles || [];
     const users = this.data.users || [];
+    const active = isEdit ? Number(s.active) : 1;
     const userOpts = `<option value="">— No login linked —</option>${users.map((u) => `<option value="${esc(u.id)}" ${Number(s.user_id) === Number(u.id) ? 'selected' : ''}>${esc(u.name)} (${esc(u.email)})</option>`).join('')}`;
     const dialog = document.createElement('div');
     dialog.className = 'modal-backdrop';
     dialog.innerHTML = `<div class="modal-card">
-      <div class="section-head padded"><h2>Edit staff member</h2><button class="small secondary" data-close>Close</button></div>
-      <form class="grid-form padded" data-form="edit">
-        <label>Name <input name="name" required value="${esc(s.name)}"></label>
+      <div class="section-head padded"><h2>${isEdit ? 'Edit staff member' : 'Add staff member'}</h2><button class="small secondary" data-close>Close</button></div>
+      <form class="grid-form padded" data-form="staff">
+        <label>Name <input name="name" required value="${esc(s.name || '')}" placeholder="Full name"></label>
         <label>Pronoun <input name="pronoun" value="${esc(s.pronoun || '')}" placeholder="they/them, she/her, …"></label>
-        <label>Default role ${select('default_role', roles, s.default_role)}</label>
+        <label>Default role ${select('default_role', roles, s.default_role || 'security')}</label>
         <label>Position <input name="position" value="${esc(s.position || '')}" placeholder="Lead bartender, Head of Security, …"></label>
-        <label>Email <input type="email" name="email" value="${esc(s.email || '')}"></label>
-        <label>Phone <input name="phone" value="${esc(s.phone || '')}"></label>
-        <label>Hourly rate <input type="number" step="0.01" name="hourly_rate" value="${esc(s.hourly_rate || '')}"></label>
+        <label>Email <input type="email" name="email" value="${esc(s.email || '')}" placeholder="Optional"></label>
+        <label>Phone <input name="phone" value="${esc(s.phone || '')}" placeholder="Optional"></label>
+        <label>Hourly rate <input type="number" step="0.01" name="hourly_rate" value="${esc(s.hourly_rate || '')}" placeholder="Optional"></label>
         <label>Link to login <select name="user_id">${userOpts}</select></label>
-        <label class="wide">Notes <input name="notes" value="${esc(s.notes || '')}"></label>
-        <label class="check-label"><input type="checkbox" name="active" value="1" ${Number(s.active) ? 'checked' : ''}> Active</label>
-        <button>Save</button>
+        <label class="wide">Notes <input name="notes" value="${esc(s.notes || '')}" placeholder="Allergies, certifications, availability"></label>
+        <label class="check-label"><input type="checkbox" name="active" value="1" ${active ? 'checked' : ''}> Active</label>
+        <button>${isEdit ? 'Save' : 'Add staff member'}</button>
       </form>
     </div>`;
     document.body.appendChild(dialog);
-    const close = () => dialog.remove();
+    const close = () => { dialog.remove(); document.removeEventListener('keydown', onEsc); };
+    function onEsc(event) { if (event.key === 'Escape') close(); }
+    document.addEventListener('keydown', onEsc);
     $('[data-close]', dialog).addEventListener('click', close);
-    dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
-    $('[data-form="edit"]', dialog).addEventListener('submit', async (event) => {
+    dialog.addEventListener('click', (event) => { if (event.target === dialog) close(); });
+    $('input[name="name"]', dialog)?.focus();
+    $('[data-form="staff"]', dialog).addEventListener('submit', async (event) => {
       event.preventDefault();
       const body = formData(event.target);
       body.active = event.target.active.checked ? 1 : 0;
       try {
-        await api(`/staff-members/${s.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-        publish('toast.show', { message: 'Staff member updated.' });
+        if (isEdit) {
+          await api(`/staff-members/${s.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+          publish('toast.show', { message: 'Staff member updated.' });
+        } else {
+          await api('/staff-members', { method: 'POST', body: JSON.stringify(body) });
+          publish('toast.show', { message: `${body.name} added.` });
+        }
         close();
         this.connect();
       } catch (err) {
