@@ -29,7 +29,8 @@ namespace Panic;
  * POST /api/auth/passkeys                List user's passkeys       [auth required]
  * POST /api/auth/remove-passkey          Delete a passkey           [auth required]
  *
- * ── Preferences ─────────────────────────────────────────────────
+ * ── Profile + preferences ────────────────────────────────────────
+ * POST /api/auth/profile                 Update own name/email/phone [auth required]
  * POST /api/auth/preferences             Update per-user UI prefs   [auth required]
  *
  * ── Session ─────────────────────────────────────────────────────
@@ -60,7 +61,8 @@ final class AuthEndpoint extends BaseEndpoint
             'passkey-login-complete'   => $this->passkeyLoginComplete($request),
             'passkeys'                 => $this->listPasskeys($request),
             'remove-passkey'           => $this->removePasskey($request),
-            // Preferences
+            // Profile + preferences
+            'profile'                  => $this->updateProfile($request),
             'preferences'              => $this->updatePreferences($request),
             // Session
             'refresh'                  => $this->refresh($request),
@@ -539,7 +541,50 @@ final class AuthEndpoint extends BaseEndpoint
         return $this->ok(['ok' => true]);
     }
 
+    // ─── Self-service profile ─────────────────────────────────────────────────
+
+    /**
+     * Let a signed-in user edit their own name, email, and phone. Unlike the
+     * admin Users endpoint this is self-scoped and never touches role.
+     */
+    private function updateProfile(Request $request): Response
+    {
+        $currentUser = $this->auth->user();
+        if (!$currentUser) {
+            return Response::json(['error' => 'Authentication required'], 401);
+        }
+        $id = (int) $currentUser['id'];
+
+        $name  = trim((string) $request->body('name', ''));
+        $email = strtolower(trim((string) $request->body('email', '')));
+        $phone = trim((string) $request->body('phone', ''));
+
+        if ($name === '' || $email === '') {
+            return Response::json(['error' => 'name and email are required'], 422);
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return Response::json(['error' => 'Invalid email'], 422);
+        }
+        $clash = $this->db->one('SELECT id FROM users WHERE email = ? AND id != ?', [$email, $id]);
+        if ($clash) {
+            return Response::json(['error' => 'Another user already uses that email'], 409);
+        }
+
+        $this->db->run(
+            'UPDATE users SET name = ?, email = ?, phone = ? WHERE id = ?',
+            [$name, $email, ($phone !== '' ? $phone : null), $id]
+        );
+
+        return $this->ok([
+            'ok'   => true,
+            'user' => ['id' => $id, 'name' => $name, 'email' => $email, 'phone' => ($phone !== '' ? $phone : null)],
+        ]);
+    }
+
     // ─── Per-user preferences ─────────────────────────────────────────────────
+
+    /** Route keys allowed as a default landing page. */
+    private const LANDING_ROUTES = ['dashboard', 'calendar', 'pipeline', 'events', 'templates'];
 
     private function updatePreferences(Request $request): Response
     {
@@ -555,6 +600,29 @@ final class AuthEndpoint extends BaseEndpoint
         if (array_key_exists('hide_credential_setup_prompt', $body)) {
             $updates[] = 'hide_credential_setup_prompt = ?';
             $params[]  = $body['hide_credential_setup_prompt'] ? 1 : 0;
+        }
+
+        if (array_key_exists('default_landing', $body)) {
+            $landing = (string) $body['default_landing'];
+            if ($landing !== '' && !in_array($landing, self::LANDING_ROUTES, true)) {
+                return Response::json(['error' => 'Invalid default_landing'], 422);
+            }
+            $updates[] = 'default_landing = ?';
+            $params[]  = ($landing !== '' ? $landing : null);
+        }
+
+        if (array_key_exists('nav_collapsed', $body)) {
+            $updates[] = 'nav_collapsed = ?';
+            $params[]  = $body['nav_collapsed'] ? 1 : 0;
+        }
+
+        if (array_key_exists('events_sort', $body)) {
+            $sort = (string) $body['events_sort'];
+            if ($sort !== '' && !in_array($sort, ['asc', 'desc'], true)) {
+                return Response::json(['error' => 'Invalid events_sort'], 422);
+            }
+            $updates[] = 'events_sort = ?';
+            $params[]  = ($sort !== '' ? $sort : null);
         }
 
         if (!$updates) {

@@ -33,6 +33,13 @@ function assetUrl(path = '') {
   return /^(?:[a-z]+:|#)/i.test(value) ? value : appUrl(value);
 }
 
+// Module-level cache of the signed-in user (incl. UI preferences from /me).
+// Set by AppShell once /me resolves; read by views that honor preferences
+// (e.g. EventsList default sort) without issuing another request.
+let _appUser = null;
+function getAppUser() { return _appUser; }
+function setAppUser(user) { _appUser = user || null; }
+
 function publish(topic, payload = {}) {
   document.dispatchEvent(new CustomEvent(topic, { detail: payload }));
   document.dispatchEvent(new CustomEvent('pan:publish', { detail: { topic, payload } }));
@@ -1474,12 +1481,14 @@ class AppShell extends PanicElement {
       const me = await api('/me');
       this.user = me.user;
       this.capabilities = me.capabilities || {};
+      setAppUser(me.user);
       publish('auth.changed', me);
       if (!this.user) {
         location.href = appUrl('login.html');
         return;
       }
       this.applyCapabilities();
+      this.applyUserPrefs();
       await this.route();
       this.maybeShowCredentialSetup();
     } catch {
@@ -1509,11 +1518,31 @@ class AppShell extends PanicElement {
       <a class="brand" href="#dashboard" aria-label="Panic Backstage home"><span class="brand-mark" aria-hidden="true"></span><span>Panic Backstage</span></a>
       <nav class="side-nav" aria-label="Main navigation">
         <a data-nav="dashboard" href="#dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
-        <a data-nav="calendar" href="#calendar"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Calendar</a>
-        <a data-nav="pipeline" href="#pipeline"><i class="fa-solid fa-table-columns" aria-hidden="true"></i>Pipeline</a>
-        <a data-nav="events" href="#events"><i class="fa-solid fa-ticket" aria-hidden="true"></i>Events</a>
-        <a data-nav="templates" href="#templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
-        <a data-nav="admin" href="#admin"><i class="fa-solid fa-user-shield" aria-hidden="true"></i>Admin</a>
+        <div class="nav-group" data-group="events">
+          <button class="nav-parent" type="button" data-group-toggle="events" aria-expanded="false"><i class="fa-solid fa-ticket" aria-hidden="true"></i><span class="nav-parent-label">Events</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+          <div class="nav-children">
+            <a data-nav="events" href="#events"><i class="fa-solid fa-list" aria-hidden="true"></i>List</a>
+            <a data-nav="calendar" href="#calendar"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Calendar</a>
+            <a data-nav="pipeline" href="#pipeline"><i class="fa-solid fa-table-columns" aria-hidden="true"></i>Pipeline</a>
+          </div>
+        </div>
+        <div class="nav-group" data-group="settings">
+          <button class="nav-parent" type="button" data-group-toggle="settings" aria-expanded="false"><i class="fa-solid fa-gear" aria-hidden="true"></i><span class="nav-parent-label">Settings</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+          <div class="nav-children">
+            <a data-nav="account" href="#account"><i class="fa-solid fa-user" aria-hidden="true"></i>Account</a>
+            <a data-nav="templates" href="#templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
+            <a data-nav="preferences" href="#preferences"><i class="fa-solid fa-sliders" aria-hidden="true"></i>Preferences</a>
+          </div>
+        </div>
+        <div class="nav-group" data-group="admin" data-nav-admin>
+          <button class="nav-parent" type="button" data-group-toggle="admin" aria-expanded="false"><i class="fa-solid fa-user-shield" aria-hidden="true"></i><span class="nav-parent-label">Admin</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+          <div class="nav-children">
+            <a data-nav="admin-users" href="#admin-users"><i class="fa-solid fa-user-gear" aria-hidden="true"></i>Users</a>
+            <a data-nav="admin-staff" href="#admin-staff"><i class="fa-solid fa-people-group" aria-hidden="true"></i>Staff</a>
+            <a data-nav="admin-templates" href="#admin-templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
+            <a data-nav="admin-contracts" href="#admin-contracts"><i class="fa-solid fa-file-signature" aria-hidden="true"></i>Contracts</a>
+          </div>
+        </div>
         <a data-nav="help" href="#help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i>Help</a>
       </nav>
       <div class="side-card"><span class="bolt"></span><strong>Good shows.<br><span>No surprises.</span></strong></div>
@@ -1536,8 +1565,7 @@ class AppShell extends PanicElement {
       <a data-nav="calendar" href="#calendar"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Calendar</a>
       <a data-nav="pipeline" href="#pipeline"><i class="fa-solid fa-table-columns" aria-hidden="true"></i>Pipeline</a>
       <a data-nav="events" href="#events"><i class="fa-solid fa-ticket" aria-hidden="true"></i>Events</a>
-      <a data-nav="templates" href="#templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
-      <a data-nav="admin" href="#admin"><i class="fa-solid fa-user-shield" aria-hidden="true"></i>Admin</a>
+      <a data-nav="admin-users" href="#admin-users" data-nav-admin><i class="fa-solid fa-user-shield" aria-hidden="true"></i>Admin</a>
       <a data-nav="help" href="#help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i>Help</a>
     </nav>
     <pb-toast-stack></pb-toast-stack>`;
@@ -1552,6 +1580,45 @@ class AppShell extends PanicElement {
     $('[data-search]', this).addEventListener('input', (event) => publish('events.search', { query: event.target.value }));
     $('[data-action="new-event"]', this).addEventListener('click', () => openEventQuickCreate());
     this.setupNavCollapse();
+    this.setupNavGroups();
+  }
+
+  // Collapsible parent nav groups (Events / Settings / Admin). Each parent
+  // button toggles its group open/closed; the choice is remembered per group
+  // in localStorage. The group containing the active route is auto-opened on
+  // every route() so deep links land expanded.
+  setupNavGroups() {
+    const KEY = 'pb.navGroups';
+    let state = {};
+    try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { state = {}; }
+    const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage blocked */ } };
+
+    $$('[data-group-toggle]', this).forEach((btn) => {
+      const key = btn.dataset.groupToggle;
+      const group = btn.closest('.nav-group');
+      const open = state[key] !== false; // default open unless explicitly collapsed
+      group.classList.toggle('open', open);
+      btn.setAttribute('aria-expanded', String(open));
+      btn.addEventListener('click', () => {
+        const nowOpen = !group.classList.contains('open');
+        group.classList.toggle('open', nowOpen);
+        btn.setAttribute('aria-expanded', String(nowOpen));
+        state[key] = nowOpen;
+        persist();
+      });
+    });
+  }
+
+  // Apply server-side UI preferences that the shell owns. Sidebar-collapsed
+  // default only applies when the user has not made a local choice yet.
+  applyUserPrefs() {
+    const u = this.user || {};
+    try {
+      if (localStorage.getItem('pb.navCollapsed') === null && u.nav_collapsed) {
+        this.classList.add('nav-collapsed');
+        $('[data-nav-toggle]', this)?.setAttribute('aria-expanded', 'false');
+      }
+    } catch { /* storage blocked */ }
   }
 
   // Desktop collapsible sidebar. Toggles an icon-only rail and remembers the
@@ -1582,23 +1649,46 @@ class AppShell extends PanicElement {
       $$('[data-action="new-event"]', this).forEach((btn) => btn.remove());
     }
     if (!this.capabilities?.manage_users && !this.capabilities?.manage_staff_roster && !this.capabilities?.manage_templates) {
-      $$('[data-nav="admin"]', this).forEach((link) => link.remove());
+      $$('[data-nav-admin]', this).forEach((el) => el.remove());
     }
     const pill = $('[data-user-pill]', this);
     if (pill && this.user) pill.textContent = this.user.name || this.user.email || 'Account';
   }
 
+  // Resolve the hash into the leaf nav key used for active-state matching.
+  // Event-workspace deep links (event-<id>) light up the Events ▸ List leaf.
+  navKeyForRoute(route) {
+    if (route.startsWith('event-')) return 'events';
+    if (route === 'admin' || route.startsWith('admin-') || route.startsWith('admin/')) {
+      const tab = route === 'admin' ? 'users' : route.replace(/^admin[-/]/, '');
+      return `admin-${tab}`;
+    }
+    if (route.startsWith('help')) return 'help';
+    return route;
+  }
+
   async route() {
-    const route = location.hash.replace(/^#/, '') || 'dashboard';
+    const route = location.hash.replace(/^#/, '') || this.user?.default_landing || 'dashboard';
     publish('app.route.changed', { route });
-    $$('[data-nav]', this).forEach((link) => link.classList.toggle('active', route.startsWith(link.dataset.nav) || (route.startsWith('event-') && link.dataset.nav === 'events')));
+    const activeKey = this.navKeyForRoute(route);
+    $$('[data-nav]', this).forEach((link) => link.classList.toggle('active', link.dataset.nav === activeKey));
+    // Mark + auto-open the group that owns the active leaf.
+    $$('.nav-group', this).forEach((group) => {
+      const owns = !!$(`[data-nav="${activeKey}"]`, group);
+      group.classList.toggle('active', owns);
+      if (owns) {
+        group.classList.add('open');
+        $('[data-group-toggle]', group)?.setAttribute('aria-expanded', 'true');
+      }
+    });
     const outlet = $('#app', this);
     if (route.startsWith('event-')) return this.mount(outlet, 'pb-event-workspace', { eventId: Number(route.slice(6)) });
-    if (route === 'calendar')  return this.mount(outlet, 'pb-event-calendar');
-    if (route === 'pipeline')  return this.mount(outlet, 'pb-pipeline-board');
-    if (route === 'events')    return this.mount(outlet, 'pb-events-list');
-    if (route === 'templates') return this.mount(outlet, 'pb-template-picker');
-    if (route === 'account')   return this.mount(outlet, 'pb-account-settings');
+    if (route === 'calendar')    return this.mount(outlet, 'pb-event-calendar');
+    if (route === 'pipeline')    return this.mount(outlet, 'pb-pipeline-board');
+    if (route === 'events')      return this.mount(outlet, 'pb-events-list');
+    if (route === 'templates')   return this.mount(outlet, 'pb-template-picker');
+    if (route === 'account')     return this.mount(outlet, 'pb-account-settings');
+    if (route === 'preferences') return this.mount(outlet, 'pb-preferences');
     if (route === 'admin' || route.startsWith('admin-') || route.startsWith('admin/')) {
       const tab = route === 'admin' ? '' : route.replace(/^admin[-/]/, '');
       return this.mount(outlet, 'pb-admin-page', { initialTab: tab });
@@ -1764,7 +1854,8 @@ class EventsList extends PanicElement {
   async connect() {
     this.query = '';
     this.showPast = false;
-    this.sort = { key: 'date', dir: 'asc' };
+    const sortPref = getAppUser()?.events_sort;
+    this.sort = { key: 'date', dir: (sortPref === 'asc' || sortPref === 'desc') ? sortPref : 'asc' };
     subscribe('events.search', ({ query }) => { this.query = query.toLowerCase(); this.render(this.data); }, this.abort.signal);
     this.setLoading('Loading events');
     try {
@@ -2764,7 +2855,11 @@ class AccountSettings extends PanicElement {
       ]);
       this.passkeys           = data.passkeys || [];
       this.hasPassword        = Boolean(data.has_password);
-      this.hideCredentialNudge = Boolean(me?.user?.hide_credential_setup_prompt);
+      this.profile            = {
+        name:  me?.user?.name  || '',
+        email: me?.user?.email || '',
+        phone: me?.user?.phone || '',
+      };
       this.render();
     } catch (err) {
       this.showError(err);
@@ -2774,9 +2869,21 @@ class AccountSettings extends PanicElement {
   render() {
     const passkeySupported = Boolean(window.PublicKeyCredential);
     this.innerHTML = `<section class="page-head">
-      <div><h1>Account Settings</h1><p class="subtle">Manage your login methods.</p></div>
+      <div><h1>Account Settings</h1><p class="subtle">Manage your profile and login methods.</p></div>
     </section>
     <div class="panel padded" style="max-width: 560px">
+
+      <div class="account-section">
+        <h2>Profile</h2>
+        <p class="muted">Your name, email, and phone. Email is also your sign-in address.</p>
+        <form class="stack" data-form="profile" style="margin-top:14px">
+          <label>Name <input type="text" name="name" required autocomplete="name" value="${esc(this.profile.name)}" placeholder="Full name"></label>
+          <label>Email <input type="email" name="email" required autocomplete="email" value="${esc(this.profile.email)}" placeholder="you@example.com"></label>
+          <label>Phone <input type="tel" name="phone" autocomplete="tel" value="${esc(this.profile.phone)}" placeholder="Optional"></label>
+          <button type="submit">Save profile</button>
+          <p class="error-text" data-profile-error></p>
+        </form>
+      </div>
 
       <div class="account-section">
         <h2>Passkeys (biometric login)</h2>
@@ -2808,17 +2915,9 @@ class AccountSettings extends PanicElement {
         </form>
       </div>
 
-      <div class="account-section">
-        <h2>Sign-in nudges</h2>
-        <label class="checkbox-row">
-          <input type="checkbox" data-pref-nudge ${this.hideCredentialNudge ? '' : 'checked'}>
-          <span>Remind me to set up a passkey or password when I don't have one</span>
-        </label>
-        <p class="muted small">When this is on and your account has neither a passkey nor a password, a small modal appears after each sign-in to help you set one up. Turn it off if you prefer email-link sign-ins.</p>
-      </div>
-
     </div>`;
 
+    $('[data-form="profile"]', this)?.addEventListener('submit', (e) => this.saveProfile(e));
     $$('[data-remove]', this).forEach((btn) => {
       btn.addEventListener('click', () => {
         if (confirm('Remove this passkey? You will no longer be able to sign in with it.')) {
@@ -2828,27 +2927,28 @@ class AccountSettings extends PanicElement {
     });
     $('[data-action="add-passkey"]', this)?.addEventListener('click', () => this.addPasskey());
     $('[data-form="password"]', this)?.addEventListener('submit', (e) => this.setPassword(e));
-    $('[data-pref-nudge]', this)?.addEventListener('change', (e) => this.setNudgePref(e.target.checked));
   }
 
-  async setNudgePref(remind) {
-    // UI shows "remind me" — DB stores the inverse (hide_credential_setup_prompt).
-    const hide = !remind;
+  async saveProfile(event) {
+    event.preventDefault();
+    const fd = formData(event.target);
+    const btn = $('button[type="submit"]', event.target);
+    const errEl = $('[data-profile-error]', this);
+    errEl.textContent = '';
+    btn.disabled = true;
     try {
-      await api('/auth/preferences', {
-        method: 'POST',
-        body: JSON.stringify({ hide_credential_setup_prompt: hide }),
-      });
-      this.hideCredentialNudge = hide;
-      publish('toast.show', {
-        message: remind ? 'Reminders enabled.' : 'Reminders off — you can re-enable from this page.',
-        tone: 'info',
-      });
+      const res = await api('/auth/profile', { method: 'POST', body: JSON.stringify(fd) });
+      this.profile = { name: res.user.name, email: res.user.email, phone: res.user.phone || '' };
+      // Keep the shared user + header pill in sync.
+      const current = getAppUser() || {};
+      setAppUser({ ...current, name: res.user.name, email: res.user.email, phone: res.user.phone });
+      const pill = document.querySelector('pb-app-shell [data-user-pill]');
+      if (pill) pill.textContent = res.user.name || res.user.email || 'Account';
+      publish('toast.show', { message: 'Profile saved.', tone: 'success' });
+      btn.disabled = false;
     } catch (err) {
-      publish('toast.show', { message: err.message || 'Could not save preference', tone: 'error' });
-      // Roll the checkbox back
-      const cb = $('[data-pref-nudge]', this);
-      if (cb) cb.checked = !remind;
+      errEl.textContent = err.message || 'Could not save profile';
+      btn.disabled = false;
     }
   }
 
@@ -2905,6 +3005,136 @@ class AccountSettings extends PanicElement {
       $('[data-pw-error]', this).textContent = err.message;
       btn.disabled = false;
     }
+  }
+}
+
+// ── Preferences page ──────────────────────────────────────────────────────────
+// UI preferences stored as columns on the user (see /api/auth/preferences):
+// default landing page, sidebar-collapsed default, events default sort, and the
+// credential-setup nudge (formerly on the Account page).
+const LANDING_OPTIONS = [
+  { value: '',          label: 'Dashboard (default)' },
+  { value: 'calendar',  label: 'Calendar' },
+  { value: 'pipeline',  label: 'Pipeline' },
+  { value: 'events',    label: 'Events list' },
+  { value: 'templates', label: 'Templates' },
+];
+
+class Preferences extends PanicElement {
+  async connect() {
+    this.setLoading('Loading preferences');
+    try {
+      let user = getAppUser();
+      if (!user) user = (await api('/me'))?.user || {};
+      this.prefs = {
+        default_landing: user.default_landing || '',
+        nav_collapsed:   Boolean(user.nav_collapsed),
+        events_sort:     user.events_sort || '',
+        hide_credential_setup_prompt: Boolean(user.hide_credential_setup_prompt),
+      };
+      this.render();
+    } catch (err) {
+      this.showError(err);
+    }
+  }
+
+  render() {
+    const landing = this.prefs.default_landing;
+    const sort = this.prefs.events_sort;
+    this.innerHTML = `<section class="page-head">
+      <div><h1>Preferences</h1><p class="subtle">Tune how Backstage looks and behaves for your account.</p></div>
+    </section>
+    <div class="panel padded" style="max-width: 560px">
+
+      <div class="account-section">
+        <h2>Landing page</h2>
+        <p class="muted">Which page opens when you sign in.</p>
+        <label>Default page
+          <select data-pref="default_landing">
+            ${LANDING_OPTIONS.map((o) => `<option value="${esc(o.value)}" ${o.value === landing ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+
+      <div class="account-section">
+        <h2>Events list</h2>
+        <p class="muted">Default sort order for the Events list.</p>
+        <label>Sort by date
+          <select data-pref="events_sort">
+            <option value="" ${sort === '' ? 'selected' : ''}>App default (oldest first)</option>
+            <option value="asc" ${sort === 'asc' ? 'selected' : ''}>Oldest first</option>
+            <option value="desc" ${sort === 'desc' ? 'selected' : ''}>Newest first</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="account-section">
+        <h2>Navigation</h2>
+        <label class="checkbox-row">
+          <input type="checkbox" data-pref="nav_collapsed" ${this.prefs.nav_collapsed ? 'checked' : ''}>
+          <span>Start with the sidebar collapsed (icon-only rail)</span>
+        </label>
+      </div>
+
+      <div class="account-section">
+        <h2>Sign-in nudges</h2>
+        <label class="checkbox-row">
+          <input type="checkbox" data-pref="remind_credential" ${this.prefs.hide_credential_setup_prompt ? '' : 'checked'}>
+          <span>Remind me to set up a passkey or password when I don't have one</span>
+        </label>
+        <p class="muted small">When on and your account has neither a passkey nor a password, a small modal appears after each sign-in to help you set one up.</p>
+      </div>
+
+    </div>`;
+
+    $$('[data-pref]', this).forEach((el) => {
+      const evt = el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input';
+      el.addEventListener(evt, () => this.onChange(el));
+    });
+  }
+
+  async onChange(el) {
+    const field = el.dataset.pref;
+    let body;
+    if (field === 'remind_credential') {
+      body = { hide_credential_setup_prompt: !el.checked };
+    } else if (field === 'nav_collapsed') {
+      body = { nav_collapsed: el.checked };
+    } else {
+      body = { [field]: el.value };
+    }
+    try {
+      await api('/auth/preferences', { method: 'POST', body: JSON.stringify(body) });
+      // Update the local cache so other views reflect the change immediately.
+      const current = getAppUser() || {};
+      const merged = { ...current, ...body };
+      if ('hide_credential_setup_prompt' in body) this.prefs.hide_credential_setup_prompt = body.hide_credential_setup_prompt;
+      else if (field === 'nav_collapsed') this.prefs.nav_collapsed = el.checked;
+      else this.prefs[field] = el.value;
+      setAppUser(merged);
+      if (field === 'nav_collapsed') {
+        try { localStorage.setItem('pb.navCollapsed', el.checked ? '1' : '0'); } catch { /* storage blocked */ }
+        const shell = document.querySelector('pb-app-shell');
+        shell?.classList.toggle('nav-collapsed', el.checked);
+        shell?.querySelector('[data-nav-toggle]')?.setAttribute('aria-expanded', String(!el.checked));
+      }
+      publish('toast.show', { message: 'Preference saved.', tone: 'info' });
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Could not save preference', tone: 'error' });
+    }
+  }
+}
+
+// ── Contracts (admin) ─────────────────────────────────────────────────────────
+// Scaffold for managing reusable contract sections/clauses. Full CRUD lands in
+// a follow-up; this gives the Admin ▸ Contracts nav item a destination.
+class AdminContracts extends PanicElement {
+  connect() {
+    this.innerHTML = `<div class="panel padded">
+      <h2 style="margin-top:0">Contract sections</h2>
+      <p class="muted">Manage the reusable sections and clauses used to assemble event contracts.</p>
+      <p class="muted">This area is coming soon. Today, contracts are tracked per event via the contract link on each event.</p>
+    </div>`;
   }
 }
 
@@ -3553,6 +3783,7 @@ const ADMIN_TABS = [
   { key: 'users',     title: 'Users',     icon: 'fa-user-gear' },
   { key: 'staff',     title: 'Staff',     icon: 'fa-people-group' },
   { key: 'templates', title: 'Templates', icon: 'fa-layer-group' },
+  { key: 'contracts', title: 'Contracts', icon: 'fa-file-signature' },
 ];
 
 class AdminPage extends PanicElement {
@@ -3564,7 +3795,7 @@ class AdminPage extends PanicElement {
   render() {
     this.innerHTML = `
       <section class="page-head">
-        <div><h1>Admin</h1><p class="subtle">Manage login accounts, the staff roster, and event templates.</p></div>
+        <div><h1>Admin</h1><p class="subtle">Manage login accounts, the staff roster, event templates, and contract sections.</p></div>
       </section>
       <nav class="workspace-tabs tabs admin-tabs">
         ${ADMIN_TABS.map((t) => `<a data-admin-tab="${esc(t.key)}" href="#admin-${esc(t.key)}" class="${t.key === this.tab ? 'active' : ''}"><i class="fa-solid ${esc(t.icon)}" aria-hidden="true"></i> ${esc(t.title)}</a>`).join('')}
@@ -3577,7 +3808,7 @@ class AdminPage extends PanicElement {
       this.render();
     }));
     const outlet = $('.admin-outlet', this);
-    const tag = { users: 'pb-admin-users', staff: 'pb-admin-staff', templates: 'pb-admin-templates' }[this.tab];
+    const tag = { users: 'pb-admin-users', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts' }[this.tab];
     outlet.replaceChildren(document.createElement(tag));
   }
 }
@@ -3969,6 +4200,7 @@ customElements.define('pb-loading-state', LoadingState);
 customElements.define('pb-toast-stack', ToastStack);
 customElements.define('pb-login-page', LoginPage);
 customElements.define('pb-account-settings', AccountSettings);
+customElements.define('pb-preferences', Preferences);
 customElements.define('pb-app-shell', AppShell);
 customElements.define('pb-dashboard', DashboardView);
 customElements.define('pb-event-calendar', EventCalendar);
@@ -3996,3 +4228,4 @@ customElements.define('pb-admin-page', AdminPage);
 customElements.define('pb-admin-users', AdminUsers);
 customElements.define('pb-admin-staff', AdminStaff);
 customElements.define('pb-admin-templates', AdminTemplates);
+customElements.define('pb-admin-contracts', AdminContracts);
