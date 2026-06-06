@@ -3792,6 +3792,7 @@ const HELP_SECTIONS = [
       { slug: 'guest-list',   title: 'Guest list &amp; door' },
       { slug: 'assets',       title: 'Assets &amp; flyers' },
       { slug: 'invites',      title: 'Invites &amp; collaborators' },
+      { slug: 'contracts',    title: 'Contracts &amp; deal builder' },
       { slug: 'settlement',   title: 'Settlement' },
       { slug: 'publish',      title: 'Publishing the public page' },
       { slug: 'print',        title: 'Printable packets' },
@@ -3805,6 +3806,7 @@ const HELP_SECTIONS = [
       { slug: 'admin-users',  title: 'Managing login accounts' },
       { slug: 'admin-staff',  title: 'Staff roster' },
       { slug: 'admin-templates', title: 'Editing event templates' },
+      { slug: 'admin-contracts', title: 'Contract library &amp; templates' },
     ],
   },
   {
@@ -4160,6 +4162,45 @@ const HELP_CONTENT = {
     <p>Backstage hands invitation emails to the server's <code>sendmail</code> (Exim) for delivery and writes a copy to <code>storage/mail/</code> for local inspection. Delivery problems are logged but never block the API response — if a message fails to send, your link is still valid and you can resend with the <em>Email invite</em> button.</p>
   `,
 
+  contracts: `
+    <h2>Contracts &amp; deal builder</h2>
+    <p>The contract tool is a <strong>deal builder</strong>, not just a document editor. You capture the deal as structured terms — the money, the dates, the responsibilities — and Backstage assembles the written contract from approved clause modules. The same structured terms can later feed settlement and reporting, so the contract and the operations stay in sync.</p>
+
+    <h3>Where contracts live</h3>
+    <ul>
+      <li><strong>On an event</strong> — open an event and use the <em>Contracts</em> tab to create and list contracts tied to that show (rentals, single shows, promoter nights).</li>
+      <li><strong>Venue-level</strong> — recurring residencies (e.g. a weekly swing night) aren't tied to one date. A venue admin creates these from <a href="#help-admin-contracts">Admin &rarr; Contracts</a>.</li>
+    </ul>
+
+    <h3>Creating a contract</h3>
+    <ol>
+      <li>From an event's <em>Contracts</em> tab, pick a <strong>deal type</strong> (template) — Private Event Rental, Promoter / Production Show, Artist / Band Performance, Recurring Night, Famous / High-Draw Artist, Fundraiser, or House-Produced Show.</li>
+      <li>Optionally enter the counterparty (artist, promoter, or client), then <em>Create contract</em>. You land in the contract builder.</li>
+    </ol>
+
+    <h3>The builder, left to right</h3>
+    <ul>
+      <li><strong>Deal terms (left).</strong> Grouped, collapsible fields: counterparty, money &amp; splits, security &amp; production, recurring/residency terms, and any other variables a clause needs. Fill in what applies and click <em>Save deal terms</em>.</li>
+      <li><strong>Preview (center).</strong> A live render of the contract. Blank required values show as highlighted <span class="contract-token-missing">[ placeholders ]</span> so you can see what's still unfilled. Use <em>Generate version</em> to snapshot it, and <em>Download PDF</em> to produce a file (generated right in your browser).</li>
+      <li><strong>Status, checks &amp; clauses (right).</strong> The workflow status, missing-term and risk warnings, the clause list, and version history.</li>
+    </ul>
+
+    <h3>Smart clause selection</h3>
+    <p>Each template starts with a sensible set of clauses. As you change the deal terms, Backstage automatically adds or removes condition-based clauses — for example an all-ages event pulls in the <em>All-Ages Alcohol Control</em> and <em>Security</em> clauses; a bar minimum greater than zero pulls in the <em>Bar Minimum</em> clause. Auto-selected clauses are tagged <span class="auto-tag">auto</span>. Use <em>Smart re-check</em> to re-run the rules after big changes.</p>
+    <p>You can always override: toggle any clause on/off, reorder with ↑/↓, edit a clause's text with ✎, add another clause from the library, or rebuild from a template. Clauses marked with a <i class="fa-solid fa-lock"></i> lock (indemnification, governing law, force majeure) are legal language that only venue admins can edit or remove.</p>
+
+    <h3>Missing terms &amp; risk warnings</h3>
+    <p>The <em>Review</em> panel lists required terms that are still blank (grouped by clause) and flags deal risks — no deposit on a rental, an all-ages event with no security clause, a guarantee with no cancellation terms, and so on. You cannot mark a contract <em>Sent</em> or <em>Signed</em> until every required term is filled and at least one version has been generated.</p>
+
+    <h3>Status workflow</h3>
+    <p>Contracts move through: <strong>Draft &rarr; Needs Review &rarr; Approved &rarr; Sent &rarr; Signed</strong> (plus <em>Cancelled</em> and <em>Superseded</em>). Approving requires the <em>approve contracts</em> permission. The buttons available depend on the current status and your role.</p>
+
+    <h3>Versions &amp; PDF</h3>
+    <p>Every <em>Generate version</em> stores an immutable snapshot you can re-open from <em>Version history</em>. <em>Download PDF</em> renders the current preview to a PDF in the browser — no e-signature step is required for the MVP; a generated PDF plus manual signing is enough.</p>
+
+    <p class="muted small">Who sees what: venue admins and event owners can manage and approve event contracts; promoters can view them; bands, designers, and viewers do not see contracts. Clause text is starter language — have counsel review your clause library before sending real contracts.</p>
+  `,
+
   settlement: `
     <h2>Settlement</h2>
     <p>Settlement is the night-of-show or next-day reconciliation. It is visible to venue admins and event owners and hidden from promoters, designers, bands, and viewers.</p>
@@ -4206,13 +4247,14 @@ const HELP_CONTENT = {
 
   admin: `
     <h2>Admin overview</h2>
-    <p>The Admin nav item is visible only to venue admins. It groups three management tools as tabs on a single page:</p>
+    <p>The Admin nav item is visible only to venue admins. It groups four management tools as tabs on a single page:</p>
     <ul>
       <li><a href="#help-admin-users">Users</a> — create, edit, and delete backstage login accounts; reset passwords; change roles.</li>
       <li><a href="#help-admin-staff">Staff</a> — keep the roster of bartenders, security, door, sound, etc. used in event staffing.</li>
       <li><a href="#help-admin-templates">Templates</a> — edit run-sheet and checklist templates used to create new events.</li>
+      <li><a href="#help-admin-contracts">Contracts</a> — the contract clause library, contract templates, and a venue-wide list of all contracts.</li>
     </ul>
-    <p>Each tab has a stable deep link: <code>#admin-users</code>, <code>#admin-staff</code>, <code>#admin-templates</code>.</p>
+    <p>Each tab has a stable deep link: <code>#admin-users</code>, <code>#admin-staff</code>, <code>#admin-templates</code>, <code>#admin-contracts</code>.</p>
   `,
 
   'admin-users': `
@@ -4257,6 +4299,42 @@ const HELP_CONTENT = {
     <p>Open the template, edit the text, save. The new format will be used by future events created from this template; existing events keep their current run sheets unchanged.</p>
     <h3>Deleting a template</h3>
     <p>Deletes the template only. Events that were already created from it continue to exist and behave normally.</p>
+  `,
+
+  'admin-contracts': `
+    <h2>Contract library &amp; templates</h2>
+    <p>Admin &rarr; Contracts is where venue admins manage the building blocks behind every contract. It has three sub-tabs: <strong>All Contracts</strong>, <strong>Clause Library</strong>, and <strong>Templates</strong>. For how staff build a contract from these pieces, see <a href="#help-contracts">Contracts &amp; deal builder</a>.</p>
+
+    <h3>All Contracts</h3>
+    <p>A venue-wide list of every contract — event-bound and venue-level — with type, who it's for, counterparty, status, and last update. Click any row to open it in the builder. This tab also has a <em>New venue-level contract</em> form for residencies and other deals that aren't tied to a single event (pick a venue + template + counterparty).</p>
+
+    <h3>Clause Library</h3>
+    <p>Clauses (called <em>modules</em>) are the reusable paragraphs contracts are assembled from. Each clause has:</p>
+    <ul>
+      <li><strong>Name</strong> and a stable <strong>key</strong> (auto-generated from the name; used internally).</li>
+      <li><strong>Category</strong> — base, financial, operational, legal, or risk (for grouping).</li>
+      <li><strong>Risk level</strong> — none / low / medium / high, shown as a badge on the contract.</li>
+      <li><strong>Required variables</strong> — comma-separated token keys the clause needs (e.g. <code>rental_fee, deposit_amount</code>). Any blank required variable on an included clause becomes a "missing term" warning and blocks sending.</li>
+      <li><strong>Locked</strong> — locked clauses (indemnification, governing law, force majeure) can only be edited or removed by admins, even on an individual contract.</li>
+      <li><strong>Active</strong> — inactive clauses stay on existing contracts but aren't offered for new ones.</li>
+      <li><strong>Body</strong> — the clause text. Use <code>{{variable}}</code> tokens; they're filled from the contract's deal terms (e.g. <code>{{rental_fee}}</code>, <code>{{recurrence_rule}}</code>) and a few built-ins like <code>{{venue_name}}</code>, <code>{{counterparty_display}}</code>, and <code>{{event_date}}</code>. Money, percent, and date tokens are formatted automatically.</li>
+    </ul>
+
+    <h3>Templates</h3>
+    <p>A template is an ordered set of clauses for a deal type. Backstage ships seven — Recurring Night, Private Event Rental, Promoter / Production Show, Artist / Band Performance, Famous / High-Draw Artist, Fundraiser / Charity Event, and House-Produced Show — and you can add your own.</p>
+    <p>In the template editor, check the clauses to include and order them. For each clause you choose how it's included:</p>
+    <ul>
+      <li><strong>Required</strong> — always included, can't be auto-removed.</li>
+      <li><strong>Condition</strong> — a small JSON rule that auto-includes the clause only when the deal matches. Examples:
+        <br><code>{"all":[{"field":"age_policy","op":"eq","value":"all_ages"}]}</code> — include for all-ages events.
+        <br><code>{"any":[{"field":"expected_attendance","op":"gte","value":200},{"field":"age_policy","op":"eq","value":"all_ages"}]}</code> — include when the crowd is large <em>or</em> all-ages.
+        <br><code>{"all":[{"field":"bar_minimum","op":"gt","value":0}]}</code> — include when there's a bar minimum.</li>
+      <li><strong>Neither</strong> — included by default but removable on the contract.</li>
+    </ul>
+    <p>Supported condition operators: <code>eq</code>, <code>ne</code>, <code>in</code>, <code>nin</code>, <code>gt</code>, <code>gte</code>, <code>lt</code>, <code>lte</code>, <code>set</code>, <code>truthy</code>, <code>falsy</code>. Fields can be any deal-term column (<code>bar_minimum</code>, <code>guarantee_amount</code>, …), any contract variable, or the derived helpers <code>age_policy</code>, <code>expected_attendance</code>, and <code>room</code>.</p>
+
+    <h3>Editing safely</h3>
+    <p>Editing a clause or template changes what <em>future</em> contracts pick up. Existing contracts keep the snapshot they were built with — applying a template again on a contract rebuilds its clauses (and warns first). The seeded library is starter language; have legal review it before it's used for real agreements.</p>
   `,
 
   statuses: `

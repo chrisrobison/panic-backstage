@@ -238,6 +238,19 @@ See [`docs/google-sheet-sync.md`](docs/google-sheet-sync.md) for setup
 (service-account key, sharing, permissions), the field/column mapping, and
 troubleshooting.
 
+## Contracts / Deal Builder
+
+A structured contract system: capture the deal as queryable terms, auto-assemble
+the document from reusable clause modules via templates with smart
+(condition-based) clause selection, then render to a client-side PDF. Ships a
+clause library and seven starter templates covering every contract type.
+
+Apply `database/migrations/017_contracts.sql`, then seed the clause library with
+`php database/seed_contracts.php`. See [`docs/contracts.md`](docs/contracts.md)
+for the data model, API, condition engine, and how to extend it. End-user help
+is in the app under **Help → Contracts & deal builder** and **Contract library &
+templates**.
+
 ## Email
 
 Transactional email is handled by `src/Mailer.php`. It builds an RFC 5322
