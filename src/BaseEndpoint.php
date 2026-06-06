@@ -12,6 +12,7 @@ abstract class BaseEndpoint implements Endpoint
             'upload_assets', 'manage_assets', 'manage_invites',
             'manage_guest_list', 'manage_staffing',
             'view_settlement', 'edit_settlement',
+            'view_contracts', 'manage_contracts', 'approve_contracts',
         ],
         'event_owner' => [
             'read_event', 'edit_event', 'publish_event', 'delete_event',
@@ -19,10 +20,12 @@ abstract class BaseEndpoint implements Endpoint
             'upload_assets', 'manage_assets', 'manage_invites',
             'manage_guest_list', 'manage_staffing',
             'view_settlement', 'edit_settlement',
+            'view_contracts', 'manage_contracts', 'approve_contracts',
         ],
         'promoter' => [
             'read_event', 'manage_lineup', 'manage_tasks', 'manage_schedule',
             'manage_open_items', 'manage_guest_list', 'manage_staffing', 'view_public_page',
+            'view_contracts',
         ],
         'band' => ['read_event', 'upload_assets', 'view_assigned_tasks'],
         'artist' => ['read_event', 'upload_assets', 'view_assigned_tasks'],
@@ -37,10 +40,11 @@ abstract class BaseEndpoint implements Endpoint
         'upload_assets', 'manage_assets', 'manage_invites',
         'manage_guest_list', 'manage_staffing',
         'view_settlement', 'edit_settlement', 'view_public_page', 'view_assigned_tasks',
+        'view_contracts', 'manage_contracts', 'approve_contracts',
     ];
 
     private const GLOBAL_CAPABILITIES = [
-        'venue_admin' => ['view_all_events', 'create_events', 'manage_templates', 'manage_users', 'manage_staff_roster'],
+        'venue_admin' => ['view_all_events', 'create_events', 'manage_templates', 'manage_users', 'manage_staff_roster', 'manage_contract_library', 'view_all_contracts'],
         'event_owner' => [],
         'promoter' => [],
         'band' => [],
