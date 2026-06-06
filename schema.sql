@@ -5,9 +5,13 @@ CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
+  phone VARCHAR(64) NULL DEFAULT NULL,
   password_hash VARCHAR(255) NULL DEFAULT NULL,
   role ENUM('venue_admin','event_owner','promoter','band','artist','designer','staff','viewer') NOT NULL DEFAULT 'viewer',
   hide_credential_setup_prompt TINYINT(1) NOT NULL DEFAULT 0,
+  default_landing VARCHAR(32) NULL DEFAULT NULL,
+  nav_collapsed TINYINT(1) NOT NULL DEFAULT 0,
+  events_sort VARCHAR(8) NULL DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
