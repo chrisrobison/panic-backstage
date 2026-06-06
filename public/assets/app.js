@@ -2076,19 +2076,111 @@ class EventDetailsForm extends HTMLElement {
   }
 }
 
+// ---- Editable record lists: read-only review tables with hover-to-edit ----
+// These power the Tasks / Lineup / Run Sheet / Staffing / Guest / Open Items
+// panels. Existing items render as plain text rows; an edit pencil fades in on
+// row hover and swaps the row for its inline edit form. A "+" in the panel
+// header reveals the (otherwise hidden) add form. After any save the parent
+// component re-renders via refreshSection(), collapsing everything back to the
+// clean review view.
+
+// A small pill for status/category values; blank input renders as an em dash.
+function chip(value, tone) {
+  if (value === '' || value == null) return '';
+  return `<span class="chip${tone ? ` chip-${esc(tone)}` : ''}">${esc(titleCase(value))}</span>`;
+}
+
+// Format a YYYY-MM-DD value as a short, localized date (blank stays blank).
+function dateLabel(value) {
+  if (!value) return '';
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? esc(value) : esc(shortDate(date));
+}
+
+const editAffordance = '<button type="button" class="record-edit" data-edit aria-label="Edit" title="Edit"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>';
+
+// The "+" reveal button shown in a panel header (only when the user can edit).
+function addToggle(label, editable) {
+  return editable ? `<button type="button" class="add-toggle" data-add aria-label="${esc(label)}" title="${esc(label)}"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>` : '';
+}
+
+// Render a read-only review table whose rows reveal an inline edit form.
+//   items     – array of records
+//   cols      – [{ label, grid?, cell:(item)=>html }] (cell returns safe HTML)
+//   formFor   – (item)=>'<form class="row-form record-form" …>' edit form markup
+//   editable  – when false, rows are plain text with no pencil/form
+//   empty     – empty-state message (optional)
+//   opts.labeled  – grouped lists: skip the column header, keep per-cell labels
+//   opts.rowClass – (item)=>extra class string for the record wrapper
+function recordList(items, cols, formFor, editable, empty, opts = {}) {
+  if (!items.length) return empty ? emptyState(empty) : '';
+  const labeled = Boolean(opts.labeled);
+  const tpl = cols.map((c) => c.grid || 'minmax(110px, 1fr)').join(' ') + (editable ? ' 44px' : '');
+  const head = labeled ? '' : `<div class="record-head" style="grid-template-columns:${tpl}">${cols.map((c) => `<span>${esc(c.label)}</span>`).join('')}${editable ? '<span aria-hidden="true"></span>' : ''}</div>`;
+  const rows = items.map((item) => {
+    const cells = cols.map((c) => {
+      const value = c.cell(item);
+      const empty = value === '' || value == null;
+      return `<div class="record-cell"><span class="record-label">${esc(c.label)}</span><span class="record-value">${empty ? '<span class="record-empty">—</span>' : value}</span></div>`;
+    }).join('');
+    const rowClass = opts.rowClass ? opts.rowClass(item) : '';
+    const view = `<div class="record-view" style="grid-template-columns:${tpl}">${cells}${editable ? editAffordance : ''}</div>`;
+    return `<div class="record${rowClass ? ` ${rowClass}` : ''}" data-record>${view}${editable ? formFor(item) : ''}</div>`;
+  }).join('');
+  return `<div class="record-table${labeled ? ' record-table--labeled' : ''}">${head}${rows}</div>`;
+}
+
+// Wire up read<->edit toggling and the "+ add" reveal inside a list component.
+function bindRecords(root) {
+  $$('[data-edit]', root).forEach((btn) => btn.addEventListener('click', () => {
+    const rec = btn.closest('[data-record]');
+    if (!rec) return;
+    rec.classList.add('editing');
+    $$('input, select, textarea', rec).find((el) => !el.disabled && el.type !== 'hidden')?.focus();
+  }));
+  $$('[data-cancel]', root).forEach((btn) => btn.addEventListener('click', () => {
+    btn.closest('[data-record]')?.classList.remove('editing');
+  }));
+  const addBtn = $('[data-add]', root);
+  const addForm = $('[data-add-form]', root);
+  if (addBtn && addForm) {
+    addBtn.addEventListener('click', () => {
+      const show = addForm.hasAttribute('hidden');
+      addForm.toggleAttribute('hidden', !show);
+      addBtn.classList.toggle('active', show);
+      if (show) $$('input, select, textarea', addForm).find((el) => !el.disabled && el.type !== 'hidden')?.focus();
+    });
+    $$('[data-cancel-add]', root).forEach((btn) => btn.addEventListener('click', () => {
+      addForm.setAttribute('hidden', '');
+      addBtn.classList.remove('active');
+    }));
+  }
+}
+
 class TaskList extends HTMLElement {
   set data(data) {
     this.eventData = data;
     const tasks = data.tasks || [];
     const editable = can(data, 'manage_tasks');
-    const disabled = editable ? '' : ' disabled';
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Tasks ${helpLink('tasks', 'Tasks')}</h2></div>${tasks.map((task) => `<form data-api="/events/${data.event.id}/tasks/${task.id}" data-method="PATCH" class="row-form"><label>Task<input name="title" value="${esc(task.title)}"${disabled}></label><label>Status${select('status', ['todo','in_progress','blocked','done','canceled'], task.status).replace('<select ', `<select${disabled} `)}</label><label>Assigned${userSelect(data.users, task.assigned_user_id).replace('<select ', `<select${disabled} `)}</label><label>Due<input type="date" name="due_date" value="${esc(task.due_date || '')}"${disabled}></label><label>Priority${select('priority', ['low','normal','high','urgent'], task.priority).replace('<select ', `<select${disabled} `)}</label><label>Details<input name="description" value="${esc(task.description || '')}"${disabled}></label>${editable ? `<button>Save</button><button type="button" class="secondary" data-complete="${esc(task.id)}">Done</button>` : ''}</form>`).join('') || emptyState('No tasks for this event.')}
-    ${editable ? `<form data-api="/events/${data.event.id}/tasks" data-method="POST" class="row-form"><label>Task<input name="title" required placeholder="Confirm door count"></label><label>Assigned${userSelect(data.users)}</label><label>Due<input type="date" name="due_date"></label><label>Priority${select('priority', ['low','normal','high','urgent'], 'normal')}</label><input type="hidden" name="status" value="todo"><input name="description" placeholder="Details"><button>Add task</button></form>` : ''}</section>`;
+    const users = data.users || [];
+    const userName = (id) => { const u = users.find((x) => String(x.id) === String(id)); return u ? esc(u.name) : ''; };
+    const cols = [
+      { label: 'Task', grid: 'minmax(150px, 2fr)', cell: (t) => esc(t.title) },
+      { label: 'Status', grid: 'minmax(110px, 1fr)', cell: (t) => chip(t.status) },
+      { label: 'Assigned', grid: 'minmax(110px, 1fr)', cell: (t) => userName(t.assigned_user_id) },
+      { label: 'Due', grid: 'minmax(90px, 0.8fr)', cell: (t) => dateLabel(t.due_date) },
+      { label: 'Priority', grid: 'minmax(90px, 0.8fr)', cell: (t) => chip(t.priority) },
+      { label: 'Details', grid: 'minmax(140px, 2fr)', cell: (t) => esc(t.description || '') },
+    ];
+    const editForm = (task) => `<form data-api="/events/${data.event.id}/tasks/${task.id}" data-method="PATCH" class="row-form record-form"><label>Task<input name="title" value="${esc(task.title)}"></label><label>Status${select('status', ['todo','in_progress','blocked','done','canceled'], task.status)}</label><label>Assigned${userSelect(users, task.assigned_user_id)}</label><label>Due<input type="date" name="due_date" value="${esc(task.due_date || '')}"></label><label>Priority${select('priority', ['low','normal','high','urgent'], task.priority)}</label><label>Details<input name="description" value="${esc(task.description || '')}"></label><button>Save</button><button type="button" class="secondary" data-complete="${esc(task.id)}">Done</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
+    const addForm = editable ? `<form data-api="/events/${data.event.id}/tasks" data-method="POST" class="row-form" data-add-form hidden><label>Task<input name="title" required placeholder="Confirm door count"></label><label>Assigned${userSelect(users)}</label><label>Due<input type="date" name="due_date"></label><label>Priority${select('priority', ['low','normal','high','urgent'], 'normal')}</label><input type="hidden" name="status" value="todo"><label>Details<input name="description" placeholder="Details"></label><button>Add task</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : '';
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Tasks ${helpLink('tasks', 'Tasks')}</h2><div class="section-head-actions">${addToggle('Add task', editable)}</div></div><div class="record-body">${addForm}${recordList(tasks, cols, editForm, editable, 'No tasks for this event.')}</div></section>`;
     if (!editable) return;
     this.bind();
   }
 
   bind() {
+    bindRecords(this);
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
@@ -2111,14 +2203,24 @@ class LineupEditor extends HTMLElement {
     this.eventData = data;
     const lineup = data.lineup || [];
     const editable = can(data, 'manage_lineup');
-    const disabled = editable ? '' : ' disabled';
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Lineup ${helpLink('lineup', 'Lineup &amp; Bands')}</h2></div>${lineup.map((item) => `<form data-api="/events/${data.event.id}/lineup/${item.id}" data-method="PATCH" class="row-form"><input name="billing_order" type="number" value="${esc(item.billing_order)}"${disabled}><input name="display_name" value="${esc(item.display_name)}"${disabled}><input name="set_time" type="time" value="${esc(item.set_time || '')}"${disabled}><input name="set_length_minutes" type="number" value="${esc(item.set_length_minutes || '')}"${disabled}>${select('status', ['invited','tentative','confirmed','canceled'], item.status).replace('<select ', `<select${disabled} `)}<input name="payout_terms" value="${esc(item.payout_terms || '')}"${disabled}><input name="notes" value="${esc(item.notes || '')}"${disabled}>${editable ? '<button>Save</button>' : ''}</form>`).join('')}
-    ${editable ? `<form data-api="/events/${data.event.id}/lineup" data-method="POST" class="row-form"><input name="band_name" placeholder="Band/artist"><input name="display_name" placeholder="Display name"><input name="billing_order" type="number" placeholder="Order"><input name="set_time" type="time"><input name="set_length_minutes" type="number" placeholder="Minutes">${select('status', ['invited','tentative','confirmed','canceled'], 'tentative')}<input name="payout_terms" placeholder="Payout"><button>Add lineup</button></form>` : ''}</section>`;
+    const cols = [
+      { label: '#', grid: '46px', cell: (i) => esc(i.billing_order ?? '') },
+      { label: 'Artist', grid: 'minmax(140px, 2fr)', cell: (i) => esc(i.display_name) },
+      { label: 'Set', grid: 'minmax(80px, 1fr)', cell: (i) => i.set_time ? esc(timeLabel(i.set_time)) : '' },
+      { label: 'Length', grid: 'minmax(70px, 0.8fr)', cell: (i) => i.set_length_minutes ? `${esc(i.set_length_minutes)} min` : '' },
+      { label: 'Status', grid: 'minmax(100px, 1fr)', cell: (i) => chip(i.status) },
+      { label: 'Payout', grid: 'minmax(100px, 1fr)', cell: (i) => esc(i.payout_terms || '') },
+      { label: 'Notes', grid: 'minmax(120px, 2fr)', cell: (i) => esc(i.notes || '') },
+    ];
+    const editForm = (item) => `<form data-api="/events/${data.event.id}/lineup/${item.id}" data-method="PATCH" class="row-form record-form"><label>#<input name="billing_order" type="number" value="${esc(item.billing_order)}"></label><label>Artist<input name="display_name" value="${esc(item.display_name)}"></label><label>Set<input name="set_time" type="time" value="${esc(item.set_time || '')}"></label><label>Length<input name="set_length_minutes" type="number" value="${esc(item.set_length_minutes || '')}"></label><label>Status${select('status', ['invited','tentative','confirmed','canceled'], item.status)}</label><label>Payout<input name="payout_terms" value="${esc(item.payout_terms || '')}"></label><label>Notes<input name="notes" value="${esc(item.notes || '')}"></label><button>Save</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
+    const addForm = editable ? `<form data-api="/events/${data.event.id}/lineup" data-method="POST" class="row-form" data-add-form hidden><label>Artist<input name="band_name" placeholder="Band/artist"></label><label>Display name<input name="display_name" placeholder="Display name"></label><label>#<input name="billing_order" type="number" placeholder="Order"></label><label>Set<input name="set_time" type="time"></label><label>Length<input name="set_length_minutes" type="number" placeholder="Minutes"></label><label>Status${select('status', ['invited','tentative','confirmed','canceled'], 'tentative')}</label><label>Payout<input name="payout_terms" placeholder="Payout"></label><button>Add lineup</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : '';
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Lineup ${helpLink('lineup', 'Lineup &amp; Bands')}</h2><div class="section-head-actions">${addToggle('Add lineup', editable)}</div></div><div class="record-body">${addForm}${recordList(lineup, cols, editForm, editable, 'No lineup yet.')}</div></section>`;
     if (!editable) return;
     this.bind();
   }
 
   bind() {
+    bindRecords(this);
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
@@ -2133,14 +2235,23 @@ class RunSheet extends HTMLElement {
     this.eventData = data;
     const schedule = data.schedule || [];
     const editable = can(data, 'manage_schedule');
-    const disabled = editable ? '' : ' disabled';
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Run Sheet ${helpLink('schedule', 'Schedule &amp; Run Sheet')}</h2></div>${schedule.map((item) => `<form data-api="/events/${data.event.id}/schedule/${item.id}" data-method="PATCH" class="row-form"><input name="title" value="${esc(item.title)}"${disabled}>${select('item_type', ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'], item.item_type).replace('<select ', `<select${disabled} `)}<input type="time" name="start_time" value="${esc(item.start_time || '')}"${disabled}><input type="time" name="end_time" value="${esc(item.end_time || '')}"${disabled}><input name="notes" value="${esc(item.notes || '')}"${disabled}>${editable ? '<button>Save</button>' : ''}</form>`).join('')}
-    ${editable ? `<form data-api="/events/${data.event.id}/schedule" data-method="POST" class="row-form"><input name="title" required placeholder="Schedule item">${select('item_type', ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'], 'other')}<input type="time" name="start_time"><input type="time" name="end_time"><input name="notes" placeholder="Notes"><button>Add item</button></form>` : ''}</section>`;
+    const types = ['load_in','soundcheck','doors','set','changeover','curfew','staff_call','other'];
+    const cols = [
+      { label: 'Item', grid: 'minmax(140px, 2fr)', cell: (i) => esc(i.title) },
+      { label: 'Type', grid: 'minmax(110px, 1fr)', cell: (i) => chip(i.item_type) },
+      { label: 'Start', grid: 'minmax(80px, 1fr)', cell: (i) => i.start_time ? esc(timeLabel(i.start_time)) : '' },
+      { label: 'End', grid: 'minmax(80px, 1fr)', cell: (i) => i.end_time ? esc(timeLabel(i.end_time)) : '' },
+      { label: 'Notes', grid: 'minmax(120px, 2fr)', cell: (i) => esc(i.notes || '') },
+    ];
+    const editForm = (item) => `<form data-api="/events/${data.event.id}/schedule/${item.id}" data-method="PATCH" class="row-form record-form"><label>Item<input name="title" value="${esc(item.title)}"></label><label>Type${select('item_type', types, item.item_type)}</label><label>Start<input type="time" name="start_time" value="${esc(item.start_time || '')}"></label><label>End<input type="time" name="end_time" value="${esc(item.end_time || '')}"></label><label>Notes<input name="notes" value="${esc(item.notes || '')}"></label><button>Save</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
+    const addForm = editable ? `<form data-api="/events/${data.event.id}/schedule" data-method="POST" class="row-form" data-add-form hidden><label>Item<input name="title" required placeholder="Schedule item"></label><label>Type${select('item_type', types, 'other')}</label><label>Start<input type="time" name="start_time"></label><label>End<input type="time" name="end_time"></label><label>Notes<input name="notes" placeholder="Notes"></label><button>Add item</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : '';
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Run Sheet ${helpLink('schedule', 'Schedule &amp; Run Sheet')}</h2><div class="section-head-actions">${addToggle('Add run sheet item', editable)}</div></div><div class="record-body">${addForm}${recordList(schedule, cols, editForm, editable, 'No run sheet items yet.')}</div></section>`;
     if (!editable) return;
     this.bind();
   }
 
   bind() {
+    bindRecords(this);
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
@@ -2158,7 +2269,6 @@ class StaffingManager extends HTMLElement {
     const roles  = data.staffRoles || ['manager','security','bartender','barback','door','sound','lighting','stagehand','runner','cleaner','other'];
     const statuses = data.staffingStatuses || ['scheduled','confirmed','declined','no_show','completed','canceled'];
     const editable = can(data, 'manage_staffing');
-    const disabled = editable ? '' : ' disabled';
 
     const rosterOptions = (selectedId) => `<option value="">— TBD —</option>${roster.map((s) => `<option value="${esc(s.id)}" data-default-role="${esc(s.default_role)}" data-default-rate="${esc(s.hourly_rate || '')}" ${Number(s.id) === Number(selectedId || 0) ? 'selected' : ''}>${esc(s.name)} (${esc(titleCase(s.default_role))})</option>`).join('')}`;
 
@@ -2174,25 +2284,23 @@ class StaffingManager extends HTMLElement {
     const confirmed = shifts.filter((s) => s.status === 'confirmed').length;
     const tbd = shifts.filter((s) => !s.staff_member_id).length;
 
+    const cols = [
+      { label: 'Staff', grid: 'minmax(130px, 1.4fr)', cell: (s) => s.staff_name ? esc(s.staff_name) : '<span class="muted">TBD</span>' },
+      { label: 'Role', grid: 'minmax(100px, 1fr)', cell: (s) => chip(s.role) },
+      { label: 'Call', grid: 'minmax(70px, 0.8fr)', cell: (s) => s.call_time ? esc(timeLabel(s.call_time)) : '' },
+      { label: 'End', grid: 'minmax(70px, 0.8fr)', cell: (s) => s.end_time ? esc(timeLabel(s.end_time)) : '' },
+      { label: 'Rate', grid: 'minmax(80px, 0.8fr)', cell: (s) => s.hourly_rate ? `${esc(money(s.hourly_rate))}/hr` : '' },
+      { label: 'Status', grid: 'minmax(100px, 1fr)', cell: (s) => chip(s.status) },
+      { label: 'Contact', grid: 'minmax(120px, 1.4fr)', cell: (s) => [s.staff_phone, s.staff_email].filter(Boolean).map(esc).join(' &middot; ') },
+      { label: 'Notes', grid: 'minmax(120px, 1.4fr)', cell: (s) => esc(s.notes || '') },
+    ];
+
+    const editForm = (shift) => `<form data-shift="${esc(shift.id)}" class="row-form record-form staffing-row"><label>Staff <select name="staff_member_id">${rosterOptions(shift.staff_member_id)}</select></label><label>Role ${select('role', roles, shift.role)}</label><label>Call <input type="time" name="call_time" value="${esc(shift.call_time || '')}"></label><label>End <input type="time" name="end_time" value="${esc(shift.end_time || '')}"></label><label>Rate <input type="number" step="0.01" name="hourly_rate" value="${esc(shift.hourly_rate || '')}" placeholder="$/hr"></label><label>Status ${select('status', statuses, shift.status)}</label><label>Notes <input name="notes" value="${esc(shift.notes || '')}"></label><button>Save</button><button type="button" class="small danger" data-delete="${esc(shift.id)}">Remove</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
+
     const groupSections = roleOrder
       .filter((role) => grouped[role])
-      .map((role) => {
-        const rows = grouped[role].map((shift) => `<form data-shift="${esc(shift.id)}" class="row-form staffing-row">
-          <label>Staff <select name="staff_member_id"${disabled}>${rosterOptions(shift.staff_member_id)}</select></label>
-          <label>Role ${select('role', roles, shift.role).replace('<select ', `<select${disabled} `)}</label>
-          <label>Call <input type="time" name="call_time" value="${esc(shift.call_time || '')}"${disabled}></label>
-          <label>End <input type="time" name="end_time" value="${esc(shift.end_time || '')}"${disabled}></label>
-          <label>Rate <input type="number" step="0.01" name="hourly_rate" value="${esc(shift.hourly_rate || '')}" placeholder="$/hr"${disabled}></label>
-          <label>Status ${select('status', statuses, shift.status).replace('<select ', `<select${disabled} `)}</label>
-          <label>Notes <input name="notes" value="${esc(shift.notes || '')}"${disabled}></label>
-          ${editable ? `<button>Save</button><button type="button" class="small danger" data-delete="${esc(shift.id)}">Remove</button>` : ''}
-          ${shift.staff_phone || shift.staff_email ? `<small class="staffing-contact muted">${esc(shift.staff_phone || '')}${shift.staff_phone && shift.staff_email ? ' &middot; ' : ''}${esc(shift.staff_email || '')}</small>` : ''}
-        </form>`).join('');
-        return `<div class="staffing-section">
-          <h3 class="guest-section-head">${esc(titleCase(role))} <span class="muted">${grouped[role].length} shift${grouped[role].length === 1 ? '' : 's'}</span></h3>
-          ${rows}
-        </div>`;
-      }).join('');
+      .map((role) => `<div class="staffing-section"><h3 class="guest-section-head">${esc(titleCase(role))} <span class="muted">${grouped[role].length} shift${grouped[role].length === 1 ? '' : 's'}</span></h3>${recordList(grouped[role], cols, editForm, editable, '', { labeled: true })}</div>`)
+      .join('');
 
     const rosterHint = roster.length
       ? ''
@@ -2200,7 +2308,7 @@ class StaffingManager extends HTMLElement {
         ? '<p class="muted padded">No active staff in the roster yet. Open <a href="#admin-staff">Admin &rarr; Staff</a> to add bartenders, security, sound, etc.</p>'
         : '');
 
-    const addForm = editable ? `<form data-form="add" class="row-form staffing-add">
+    const addForm = editable ? `<form data-form="add" data-add-form hidden class="row-form staffing-add">
       <label>Staff <select name="staff_member_id">${rosterOptions(null)}</select></label>
       <label>Role ${select('role', roles, 'security')}</label>
       <label>Call <input type="time" name="call_time"></label>
@@ -2209,17 +2317,21 @@ class StaffingManager extends HTMLElement {
       <label>Status ${select('status', statuses, 'scheduled')}</label>
       <label>Notes <input name="notes" placeholder="Door area, late call, etc."></label>
       <button>Add shift</button>
+      <button type="button" class="secondary small" data-cancel-add>Cancel</button>
     </form>` : '';
 
     this.innerHTML = `<section class="panel">
       <div class="section-head padded">
         <h2>Staffing ${helpLink('staffing', 'Staffing')}</h2>
-        <div class="staffing-totals muted">${totalShifts} shift${totalShifts === 1 ? '' : 's'} &middot; ${confirmed} confirmed${tbd ? ` &middot; ${tbd} TBD` : ''}</div>
+        <div class="section-head-actions">
+          <div class="staffing-totals muted">${totalShifts} shift${totalShifts === 1 ? '' : 's'} &middot; ${confirmed} confirmed${tbd ? ` &middot; ${tbd} TBD` : ''}</div>
+          ${addToggle('Add shift', editable)}
+        </div>
       </div>
-      <div class="staffing-body">
+      <div class="record-body staffing-body">
         ${rosterHint}
-        ${shifts.length ? groupSections : emptyState('No shifts assigned yet. Add bartenders, security, sound, door staff, etc. below.')}
         ${addForm}
+        ${shifts.length ? groupSections : emptyState('No shifts assigned yet. Add bartenders, security, sound, door staff, etc.')}
       </div>
     </section>`;
     if (!editable) return;
@@ -2227,6 +2339,7 @@ class StaffingManager extends HTMLElement {
   }
 
   bind() {
+    bindRecords(this);
     const eventId = this.eventData.event.id;
     const buildBody = (form) => {
       const body = formData(form);
@@ -2292,14 +2405,21 @@ class OpenItems extends HTMLElement {
     this.eventData = data;
     const items = data.blockers || [];
     const editable = can(data, 'manage_open_items');
-    const disabled = editable ? '' : ' disabled';
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Open Items ${helpLink('open-items', 'Open Items')}</h2></div>${items.map((item) => `<form data-api="/events/${data.event.id}/open-items/${item.id}" data-method="PATCH" class="row-form"><label>Item<input name="title" value="${esc(item.title)}"${disabled}></label><label>Status${select('status', ['open','waiting','resolved','canceled'], item.status).replace('<select ', `<select${disabled} `)}</label><label>Due<input type="date" name="due_date" value="${esc(item.due_date || '')}"${disabled}></label><label>Details<input name="description" value="${esc(item.description || '')}"${disabled}></label><input type="hidden" name="owner_user_id" value="${esc(item.owner_user_id || '')}">${editable ? `<button>Save</button><button type="button" class="secondary" data-resolve="${esc(item.id)}">Mark Complete</button>` : ''}</form>`).join('') || emptyState('No open items for this event.')}
-    ${editable ? `<form data-api="/events/${data.event.id}/open-items" data-method="POST" class="row-form"><label>Item<input name="title" required placeholder="Waiting on ticket link"></label><label>Details<input name="description" placeholder="Details"></label><input type="hidden" name="status" value="open"><input type="date" name="due_date"><button>Add open item</button></form>` : ''}</section>`;
+    const cols = [
+      { label: 'Item', grid: 'minmax(150px, 2fr)', cell: (i) => esc(i.title) },
+      { label: 'Status', grid: 'minmax(110px, 1fr)', cell: (i) => chip(i.status) },
+      { label: 'Due', grid: 'minmax(90px, 0.8fr)', cell: (i) => dateLabel(i.due_date) },
+      { label: 'Details', grid: 'minmax(150px, 2fr)', cell: (i) => esc(i.description || '') },
+    ];
+    const editForm = (item) => `<form data-api="/events/${data.event.id}/open-items/${item.id}" data-method="PATCH" class="row-form record-form"><label>Item<input name="title" value="${esc(item.title)}"></label><label>Status${select('status', ['open','waiting','resolved','canceled'], item.status)}</label><label>Due<input type="date" name="due_date" value="${esc(item.due_date || '')}"></label><label>Details<input name="description" value="${esc(item.description || '')}"></label><input type="hidden" name="owner_user_id" value="${esc(item.owner_user_id || '')}"><button>Save</button><button type="button" class="secondary" data-resolve="${esc(item.id)}">Mark Complete</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
+    const addForm = editable ? `<form data-api="/events/${data.event.id}/open-items" data-method="POST" class="row-form" data-add-form hidden><label>Item<input name="title" required placeholder="Waiting on ticket link"></label><label>Details<input name="description" placeholder="Details"></label><input type="hidden" name="status" value="open"><label>Due<input type="date" name="due_date"></label><button>Add open item</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : '';
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Open Items ${helpLink('open-items', 'Open Items')}</h2><div class="section-head-actions">${addToggle('Add open item', editable)}</div></div><div class="record-body">${addForm}${recordList(items, cols, editForm, editable, 'No open items for this event.')}</div></section>`;
     if (!editable) return;
     this.bind();
   }
 
   bind() {
+    bindRecords(this);
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
@@ -2322,7 +2442,6 @@ class GuestListManager extends HTMLElement {
     this.eventData = data;
     const guests = data.guests || [];
     const editable = can(data, 'manage_guest_list');
-    const disabled = editable ? '' : ' disabled';
     const listTypes = ['comp', 'guest', 'will_call', 'vip', 'press', 'industry'];
 
     const grouped = guests.reduce((map, guest) => {
@@ -2339,46 +2458,48 @@ class GuestListManager extends HTMLElement {
       .filter((g) => Number(g.checked_in))
       .reduce((sum, g) => sum + Number(g.party_size || 1), 0);
 
+    // The check-in toggle stays live in the read-only row — it's the primary
+    // door-night action — while the pencil reveals the full edit form.
+    const cols = [
+      { label: 'In', grid: '64px', cell: (g) => `<label class="guest-check"><input type="checkbox" data-checkin="${esc(g.id)}" ${Number(g.checked_in) ? 'checked' : ''}${editable ? '' : ' disabled'}><span>${Number(g.checked_in) ? 'In' : 'Out'}</span></label>` },
+      { label: 'Name', grid: 'minmax(120px, 1.6fr)', cell: (g) => esc(g.name) },
+      { label: 'Party', grid: '70px', cell: (g) => esc(g.party_size || 1) },
+      { label: 'Type', grid: 'minmax(90px, 1fr)', cell: (g) => chip(g.list_type) },
+      { label: 'Guest of', grid: 'minmax(110px, 1.2fr)', cell: (g) => esc(g.guest_of || '') },
+      { label: 'Notes', grid: 'minmax(120px, 1.4fr)', cell: (g) => esc(g.notes || '') },
+    ];
+
+    const editForm = (guest) => `<form data-api="/events/${data.event.id}/guest-list/${guest.id}" data-method="PATCH" class="row-form record-form guest-row"><label>Name<input name="name" value="${esc(guest.name)}"></label><label>Party<input name="party_size" type="number" min="1" value="${esc(guest.party_size || 1)}"></label><label>Type${select('list_type', listTypes, guest.list_type)}</label><label>Guest of<input name="guest_of" placeholder="Guest of" value="${esc(guest.guest_of || '')}"></label><label>Notes<input name="notes" placeholder="Notes" value="${esc(guest.notes || '')}"></label><button>Save</button><button type="button" class="small danger" data-delete="${esc(guest.id)}">Delete</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
+
     const sections = sectionOrder
       .filter((key) => grouped[key])
       .map((key) => {
-        const rows = grouped[key].map((guest) => `<form data-api="/events/${data.event.id}/guest-list/${guest.id}" data-method="PATCH" class="row-form guest-row ${Number(guest.checked_in) ? 'checked-in' : ''}">
-          <label class="guest-check">
-            <input type="checkbox" data-checkin="${esc(guest.id)}" ${Number(guest.checked_in) ? 'checked' : ''}${disabled}>
-            <span>${Number(guest.checked_in) ? 'In' : 'Out'}</span>
-          </label>
-          <input name="name" value="${esc(guest.name)}"${disabled}>
-          <input name="party_size" type="number" min="1" value="${esc(guest.party_size || 1)}" style="max-width:70px"${disabled}>
-          ${select('list_type', listTypes, guest.list_type).replace('<select ', `<select${disabled} `)}
-          <input name="guest_of" placeholder="Guest of" value="${esc(guest.guest_of || '')}"${disabled}>
-          <input name="notes" placeholder="Notes" value="${esc(guest.notes || '')}"${disabled}>
-          ${editable ? `<button>Save</button><button type="button" class="small danger" data-delete="${esc(guest.id)}">Delete</button>` : ''}
-        </form>`).join('');
         const subtotalEntries = grouped[key].length;
         const subtotalSeats = grouped[key].reduce((sum, g) => sum + Number(g.party_size || 1), 0);
-        return `<div class="guest-section">
-          <h3 class="guest-section-head">${esc(titleCase(key))} <span class="muted">${subtotalEntries} entries &middot; ${subtotalSeats} seats</span></h3>
-          ${rows}
-        </div>`;
+        return `<div class="guest-section"><h3 class="guest-section-head">${esc(titleCase(key))} <span class="muted">${subtotalEntries} entries &middot; ${subtotalSeats} seats</span></h3>${recordList(grouped[key], cols, editForm, editable, '', { labeled: true, rowClass: (g) => Number(g.checked_in) ? 'checked-in' : '' })}</div>`;
       }).join('');
 
-    const addForm = editable ? `<form data-api="/events/${data.event.id}/guest-list" data-method="POST" class="row-form guest-add">
-      <input name="name" required placeholder="Guest name">
-      <input name="party_size" type="number" min="1" value="1" placeholder="+" style="max-width:70px">
-      ${select('list_type', listTypes, 'guest')}
-      <input name="guest_of" placeholder="Guest of (band/promoter)">
-      <input name="notes" placeholder="Notes">
+    const addForm = editable ? `<form data-api="/events/${data.event.id}/guest-list" data-method="POST" data-add-form hidden class="row-form guest-add">
+      <label>Name<input name="name" required placeholder="Guest name"></label>
+      <label>Party<input name="party_size" type="number" min="1" value="1"></label>
+      <label>Type${select('list_type', listTypes, 'guest')}</label>
+      <label>Guest of<input name="guest_of" placeholder="Guest of (band/promoter)"></label>
+      <label>Notes<input name="notes" placeholder="Notes"></label>
       <button>Add guest</button>
+      <button type="button" class="secondary small" data-cancel-add>Cancel</button>
     </form>` : '';
 
     this.innerHTML = `<section class="panel">
       <div class="section-head padded">
         <h2>Door / Guest List ${helpLink('guest-list', 'Guest List')}</h2>
-        <div class="guest-totals muted">${totalEntries} entries &middot; ${totalSeats} seats &middot; ${checkedIn} checked in (${checkedSeats} seats)</div>
+        <div class="section-head-actions">
+          <div class="guest-totals muted">${totalEntries} entries &middot; ${totalSeats} seats &middot; ${checkedIn} checked in (${checkedSeats} seats)</div>
+          ${addToggle('Add guest', editable)}
+        </div>
       </div>
-      <div class="guest-list-body">
-        ${guests.length ? sections : emptyState('No guest list entries yet.')}
+      <div class="record-body guest-list-body">
         ${addForm}
+        ${guests.length ? sections : emptyState('No guest list entries yet.')}
       </div>
     </section>`;
     if (!editable) return;
@@ -2386,6 +2507,7 @@ class GuestListManager extends HTMLElement {
   }
 
   bind() {
+    bindRecords(this);
     $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
       event.preventDefault();
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
@@ -2436,12 +2558,12 @@ class AssetManager extends HTMLElement {
     const assets = data.assets || [];
     const canManage = can(data, 'manage_assets');
     const canUpload = can(data, 'upload_assets');
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets ${helpLink('assets', 'Assets &amp; Flyers')}</h2></div><div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img class="asset-image" src="${esc(assetUrl(asset.file_path))}" alt="${esc(asset.title)}" tabindex="0" role="button" aria-label="View ${esc(asset.title)} full size">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(titleCase(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div class="inline-actions"><a class="button small secondary" href="${esc(assetUrl(asset.file_path))}" download>Download</a>${canManage ? `<button class="small" data-approve="${esc(asset.id)}">Approve</button><button class="small secondary" data-reject="${esc(asset.id)}">Reject</button><button class="small danger" data-delete="${esc(asset.id)}">Delete</button>` : ''}</div></article>`).join('') || emptyState('No assets uploaded yet.')}</div>
-    ${canUpload ? `<form id="asset-form" class="row-form"><input name="title" placeholder="Asset title">${select('asset_type', ['flyer','poster','band_photo','logo','social_square','social_story','press_photo','other'], 'flyer')}<input type="file" name="asset" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.pdf" required><input name="notes" placeholder="Notes"><button>Upload asset</button></form>` : ''}</section>`;
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets ${helpLink('assets', 'Assets &amp; Flyers')}</h2><div class="section-head-actions">${addToggle('Upload asset', canUpload)}</div></div>${canUpload ? `<form id="asset-form" class="row-form" data-add-form hidden><label>Title<input name="title" placeholder="Asset title"></label><label>Type${select('asset_type', ['flyer','poster','band_photo','logo','social_square','social_story','press_photo','other'], 'flyer')}</label><label>File<input type="file" name="asset" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.pdf" required></label><label>Notes<input name="notes" placeholder="Notes"></label><button>Upload asset</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : ''}<div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img class="asset-image" src="${esc(assetUrl(asset.file_path))}" alt="${esc(asset.title)}" tabindex="0" role="button" aria-label="View ${esc(asset.title)} full size">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(titleCase(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div class="inline-actions"><a class="button small secondary" href="${esc(assetUrl(asset.file_path))}" download>Download</a>${canManage ? `<button class="small" data-approve="${esc(asset.id)}">Approve</button><button class="small secondary" data-reject="${esc(asset.id)}">Reject</button><button class="small danger" data-delete="${esc(asset.id)}">Delete</button>` : ''}</div></article>`).join('') || emptyState('No assets uploaded yet.')}</div></section>`;
     this.bind();
   }
 
   bind() {
+    bindRecords(this);
     $$('img.asset-image', this).forEach((img) => {
       const open = () => openImageLightbox(img.src, img.alt);
       img.addEventListener('click', open);

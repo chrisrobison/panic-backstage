@@ -749,6 +749,81 @@ pb-event-summary, pb-event-readiness, pb-event-next-action { display: contents; 
   border-top: 1px solid var(--line);
   align-items: end;
 }
+
+/* --- Editable record lists: read-only review tables with hover-to-edit --- */
+.section-head-actions { display: inline-flex; align-items: center; gap: 12px; flex: 0 0 auto; }
+.add-toggle {
+  width: 32px; height: 32px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 14px; line-height: 1; flex: 0 0 auto;
+  transition: background .15s ease, color .15s ease, border-color .15s ease, transform .15s ease;
+}
+.add-toggle:hover { background: var(--red); border-color: var(--red); color: #fff; }
+.add-toggle:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+.add-toggle.active { background: var(--red); border-color: var(--red); color: #fff; transform: rotate(45deg); }
+
+[data-add-form] { border-top: 1px solid var(--line); background: var(--soft); }
+[data-add-form][hidden] { display: none !important; }
+
+.record-table { display: block; }
+.record-head {
+  display: none; gap: 8px; padding: 9px 18px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); background: var(--soft);
+  border-bottom: 1px solid var(--line);
+}
+.record + .record { border-top: 1px solid var(--line); }
+.record-view {
+  display: grid; gap: 8px; align-items: center;
+  padding: 11px 18px; position: relative;
+  transition: background .12s ease;
+}
+.record-view:hover { background: var(--soft); }
+.record.checked-in .record-view { background: #f1f8f1; }
+.record.checked-in .record-view:hover { background: #e7f4e7; }
+.record-cell { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.record-label { display: none; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.record-value { font-size: 14px; color: var(--ink); line-height: 1.35; overflow-wrap: anywhere; }
+.record-value .muted { color: var(--muted); }
+.record-empty { color: var(--line); }
+
+.record-edit {
+  position: absolute; top: 50%; right: 12px; transform: translateY(-50%);
+  width: 28px; height: 28px; padding: 0; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: 0;
+  transition: opacity .12s ease, color .12s ease, border-color .12s ease, background .12s ease;
+}
+.record-view:hover .record-edit, .record-edit:focus-visible { opacity: 1; }
+.record-edit:hover { color: #fff; background: var(--red); border-color: var(--red); }
+
+.record .record-form { display: none; }
+.record.editing .record-view { display: none; }
+.record.editing .record-form { display: grid; background: var(--soft); border-top: none; }
+
+.record-table--labeled .record-label { display: block; }
+
+.chip {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; line-height: 1.5;
+  background: var(--soft); color: var(--ink); border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.guest-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.guest-check input { margin: 0; }
+
+@media (min-width: 861px) {
+  .record-head { display: grid; }
+  .record-table:not(.record-table--labeled) .record-label { display: none !important; }
+}
+@media (max-width: 860px) {
+  .record-head { display: none; }
+  .record-view { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; padding-right: 48px; }
+  .record-label { display: block; }
+  .record-edit { opacity: 1; top: 12px; transform: none; }
+}
 .asset-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 250px)); gap: 14px; padding: 18px; justify-content: start; }
 .asset-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
 .asset-card img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 5px; background: #111; }
