@@ -181,7 +181,11 @@ Famous / High-Draw Artist, Fundraiser / Charity Event, House-Produced Show.
 
 ## Frontend
 
-Vanilla web components in `public/assets/app.js`:
+The frontend is vanilla web components split into ES modules under
+`public/assets/` (no build step; loaded via native ESM). `app.js` is the entry
+(shell + routing) and imports the rest; `core.js` holds the shared kit
+(`api`, `publish`/`subscribe`, `PanicElement`, `esc`, formatting helpers) that
+every module imports. Contract UI lives in `contracts.js`:
 
 - `pb-event-contracts` — the event-workspace **Contracts** tab (list + create).
 - `pb-contract-editor` — full builder at route `#contract-<id>` (deal-terms

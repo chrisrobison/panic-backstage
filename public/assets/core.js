@@ -1,0 +1,388 @@
+// ── JWT token storage ────────────────────────────────────────────────────────
+const TOKEN_KEY   = 'backstage_access_token';
+
+const REFRESH_KEY = 'backstage_refresh_token';
+
+const getToken        = () => localStorage.getItem(TOKEN_KEY);
+
+const getRefreshToken = () => localStorage.getItem(REFRESH_KEY);
+
+const setTokens = (access, refresh) => {
+  localStorage.setItem(TOKEN_KEY, access);
+  if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
+};
+
+const clearTokens = () => {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_KEY);
+};
+
+
+const $ = (selector, root = document) => root.querySelector(selector);
+
+const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+
+const titleCase = (value) => String(value || '').replace(/[_-]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+
+const scriptUrl = new URL((document.currentScript || $$('script[src*="assets/app.js"]').at(-1) || { src: location.href }).src);
+
+const appBaseUrl = /\/public\/assets\/app\.js$/i.test(scriptUrl.pathname) ? new URL('../..', scriptUrl) : new URL('..', scriptUrl);
+
+const statuses = ['empty', 'proposed', 'hold', 'confirmed', 'needs_assets', 'ready_to_announce', 'published', 'advanced', 'completed', 'settled', 'canceled'];
+
+
+function appUrl(path = '') {
+  return new URL(path.replace(/^\/+/, ''), appBaseUrl).toString();
+}
+
+
+function apiUrl(path = '') {
+  return appUrl(`api/${path.replace(/^\/+/, '')}`);
+}
+
+
+function assetUrl(path = '') {
+  const value = String(path || '');
+  return /^(?:[a-z]+:|#)/i.test(value) ? value : appUrl(value);
+}
+
+
+// Module-level cache of the signed-in user (incl. UI preferences from /me).
+// Set by AppShell once /me resolves; read by views that honor preferences
+// (e.g. EventsList default sort) without issuing another request.
+let _appUser = null;
+
+function getAppUser() { return _appUser; }
+
+function setAppUser(user) { _appUser = user || null; }
+
+
+function publish(topic, payload = {}) {
+  document.dispatchEvent(new CustomEvent(topic, { detail: payload }));
+  document.dispatchEvent(new CustomEvent('pan:publish', { detail: { topic, payload } }));
+}
+
+
+function subscribe(topic, handler, signal) {
+  const local = (event) => handler(event.detail);
+  const pan = (event) => {
+    if (event.detail?.topic === topic) handler(event.detail.payload);
+  };
+  document.addEventListener(topic, local, { signal });
+  document.addEventListener('pan:message', pan, { signal });
+}
+
+
+async function api(path, options = {}) {
+  publish('events.requested', { path });
+  const doFetch = async (token) => {
+    const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return fetch(apiUrl(path), { ...options, headers: { ...headers, ...(options.headers || {}) } });
+  };
+
+  let response = await doFetch(getToken());
+
+  // On 401, attempt a silent token refresh then retry once
+  if (response.status === 401) {
+    const newToken = await tryRefresh();
+    if (newToken) {
+      response = await doFetch(newToken);
+    } else {
+      clearTokens();
+      location.href = appUrl('login.html');
+      throw new Error('Session expired');
+    }
+  }
+
+  const body = response.status === 204 ? null : await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = body?.error || `Request failed: ${response.status}`;
+    publish('api.error', { message, path });
+    throw new Error(message);
+  }
+  return body;
+}
+
+
+async function tryRefresh() {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+  try {
+    const response = await fetch(apiUrl('/auth/refresh'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data.access_token) {
+      setTokens(data.access_token, data.refresh_token);
+      return data.access_token;
+    }
+  } catch { /* network error */ }
+  return null;
+}
+
+
+function formData(form) {
+  return Object.fromEntries(new FormData(form).entries());
+}
+
+
+// Broadcast a fresh, full event payload on the page bus. Any component that
+// derives from event data (e.g. the workspace summary counts/facts) can
+// subscribe to `event.changed` and update itself without a page reload.
+function broadcastEventData(data) {
+  if (data?.event) publish('event.changed', { data });
+}
+
+
+// Re-render a single event-workspace section in place from fresh server data.
+// Used instead of publishing `event.saved` (which re-mounts the whole event
+// workspace and scrolls the page back to the top). Re-assigning `.data`
+// re-runs just this component's render + bind, so the page keeps its scroll
+// position, active tab, and sibling sections untouched. The same fresh payload
+// is broadcast on the bus so summary listeners stay in sync.
+async function refreshSection(component) {
+  const id = component?.eventData?.event?.id;
+  if (!id) return;
+  const data = await api(`/events/${id}`);
+  component.data = data;
+  broadcastEventData(data);
+}
+
+
+function eventDate(event) {
+  const date = event?.date ? new Date(`${event.date}T12:00:00`) : null;
+  return Number.isNaN(date?.getTime()) ? null : date;
+}
+
+
+function shortDate(date) {
+  return date ? date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : 'TBA';
+}
+
+
+// Full date including year — used for tooltips so multi-year lists are legible.
+function longDate(date) {
+  return date ? date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Date TBA';
+}
+
+
+function isoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+
+function addDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+
+function timeLabel(value) {
+  if (!value) return 'TBA';
+  const [hours, minutes] = value.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hours || 0, minutes || 0, 0, 0);
+  return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+
+function money(value) {
+  return `$${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+
+function statusTone(status) {
+  if (status === 'published') return 'blue';
+  if (['advanced', 'ready_to_announce', 'settled'].includes(status)) return 'green';
+  if (['needs_assets', 'confirmed', 'completed'].includes(status)) return 'amber';
+  if (['hold', 'canceled'].includes(status)) return 'red';
+  return 'gray';
+}
+
+
+// Sheet-derived display labels for the event-status enum. The MabEvents
+// Google Sheet's "Status" column is the source of truth for vocabulary, so
+// pipeline columns and badges read in the same language as the sheet.
+// Statuses with no sheet counterpart fall through to titleCase().
+const STATUS_LABELS = {
+  proposed:  'Prospect',
+  hold:      'In Negotiations',
+  confirmed: 'Booked',
+  canceled:  'Cancelled',
+  completed: 'Archived',
+};
+
+
+function statusLabel(status) {
+  return STATUS_LABELS[status] || titleCase(status);
+}
+
+
+function badge(status) {
+  return `<span class="badge status-${esc(status)}">${esc(statusLabel(status))}</span>`;
+}
+
+
+function option(value, selected, label = value, labelFn) {
+  const display = labelFn ? labelFn(value) : titleCase(label);
+  return `<option value="${esc(value)}" ${String(value) === String(selected ?? '') ? 'selected' : ''}>${esc(display)}</option>`;
+}
+
+
+function select(name, values, selected, labelFn) {
+  return `<select name="${esc(name)}">${values.map((value) => option(value, selected, value, labelFn)).join('')}</select>`;
+}
+
+
+function userSelect(users = [], selected = '') {
+  return `<select name="assigned_user_id"><option value="">Unassigned</option>${users.map((user) => `<option value="${esc(user.id)}" ${String(user.id) === String(selected || '') ? 'selected' : ''}>${esc(user.name)}</option>`).join('')}</select>`;
+}
+
+
+function ownerSelect(users = [], selected = '') {
+  return `<select name="owner_user_id"><option value="">Unassigned</option>${users.map((user) => `<option value="${esc(user.id)}" ${String(user.id) === String(selected || '') ? 'selected' : ''}>${esc(user.name)}</option>`).join('')}</select>`;
+}
+
+
+function emptyState(message) {
+  return `<div class="empty-state">${esc(message)}</div>`;
+}
+
+
+function helpLink(slug, label) {
+  const safe = esc(slug);
+  const title = label ? `Help: ${esc(label)}` : 'Open help for this section';
+  return `<a class="help-link" href="#help-${safe}" target="_blank" rel="noopener noreferrer" title="${title}" aria-label="${title}"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></a>`;
+}
+
+
+function can(data, capability) {
+  return Boolean(data?.capabilities?.[capability]);
+}
+
+
+function eventRow(event) {
+  const issue = event.primary_blocker || (Number(event.approved_flyers) ? 'Flyer approved' : 'Flyer needs review');
+  return `<tr>
+    <td data-label="ID"><a href="#event-${esc(event.id)}" class="event-code">${esc(event.external_id || '—')}</a></td>
+    <td data-label="Date" title="${esc(longDate(eventDate(event)))}">${esc(shortDate(eventDate(event)))}</td>
+    <td data-label="Event"><a href="#event-${esc(event.id)}">${esc(event.title)}</a></td>
+    <td data-label="Status">${badge(event.status)}</td>
+    <td data-label="Main Issue"><span class="status-dot ${esc(event.primary_blocker ? 'red' : statusTone(event.status))}"></span>${esc(issue)}</td>
+    <td data-label="Owner">${esc(event.owner_name || 'Unassigned')}</td>
+  </tr>`;
+}
+
+
+// Column metadata for the events table. `sortBy` returns a comparable value for
+// each event; `type` picks the comparator (dates/strings) used by sortEvents().
+const EVENT_COLUMNS = [
+  { key: 'code',   label: 'ID',         type: 'string', sortBy: (e) => String(e.external_id || '') },
+  { key: 'date',   label: 'Date',       type: 'date',   sortBy: (e) => `${e.date || ''} ${e.show_time || ''}` },
+  { key: 'title',  label: 'Event',      type: 'string', sortBy: (e) => String(e.title || '') },
+  { key: 'status', label: 'Status',     type: 'string', sortBy: (e) => statusLabel(e.status) },
+  { key: 'issue',  label: 'Main Issue', type: 'string', sortBy: (e) => String(e.primary_blocker || '') },
+  { key: 'owner',  label: 'Owner',      type: 'string', sortBy: (e) => String(e.owner_name || '') },
+];
+
+
+function sortEvents(events, sort) {
+  const col = sort && EVENT_COLUMNS.find((c) => c.key === sort.key);
+  if (!col) return events;
+  const dir = sort.dir === 'asc' ? 1 : -1;
+  return events.slice().sort((a, b) => {
+    const av = col.sortBy(a);
+    const bv = col.sortBy(b);
+    const cmp = col.type === 'string'
+      ? String(av).localeCompare(String(bv), undefined, { sensitivity: 'base', numeric: true })
+      : (av < bv ? -1 : av > bv ? 1 : 0);
+    return cmp * dir;
+  });
+}
+
+
+// When `sort` is provided the column headers become sortable buttons and rows
+// are ordered accordingly; without it the table renders static headers (used by
+// the dashboard preview). Default Events-page sort is reverse date.
+function table(events, sort) {
+  const sortable = Boolean(sort);
+  const rows = (sortable ? sortEvents(events, sort) : events).map(eventRow).join('');
+  const head = EVENT_COLUMNS.map((col) => {
+    if (!sortable) return `<th>${esc(col.label)}</th>`;
+    const active = sort.key === col.key;
+    const arrow = active ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+    return `<th class="${active ? 'sorted' : ''}"><button type="button" class="th-sort" data-sort-key="${esc(col.key)}" aria-sort="${active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}">${esc(col.label)}<span class="sort-arrow">${arrow}</span></button></th>`;
+  }).join('');
+  return `<table class="data-table">
+    <thead><tr>${head}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+
+class PanicElement extends HTMLElement {
+  connectedCallback() {
+    this.abort = new AbortController();
+    this.connect?.();
+  }
+
+  disconnectedCallback() {
+    this.abort?.abort();
+  }
+
+  setLoading(label = 'Loading') {
+    this.innerHTML = `<pb-loading-state label="${esc(label)}"></pb-loading-state>`;
+  }
+
+  showError(error) {
+    this.innerHTML = `<div class="panel padded"><h2>Something went wrong</h2><p class="error-text">${esc(error.message || error)}</p></div>`;
+  }
+}
+
+
+class LoadingState extends HTMLElement {
+  connectedCallback() {
+    this.innerHTML = `<div class="loading-state"><span class="spinner"></span>${esc(this.getAttribute('label') || 'Loading')}</div>`;
+  }
+}
+
+
+class ToastStack extends PanicElement {
+  connect() {
+    this.items = [];
+    subscribe('toast.show', (toast) => this.add(toast), this.abort.signal);
+    subscribe('api.error', (error) => this.add({ tone: 'error', message: error.message }), this.abort.signal);
+    this.render();
+  }
+
+  add(toast) {
+    const id = crypto.randomUUID?.() || String(Date.now());
+    this.items = [...this.items, { id, tone: toast.tone || 'info', message: toast.message || '' }];
+    this.render();
+    window.setTimeout(() => {
+      this.items = this.items.filter((item) => item.id !== id);
+      this.render();
+    }, 4200);
+  }
+
+  render() {
+    this.innerHTML = `<div class="toast-stack">${this.items.map((item) => `<div class="toast ${esc(item.tone)}">${esc(item.message)}</div>`).join('')}</div>`;
+  }
+}
+
+
+// The "+" reveal button shown in a panel header (only when the user can edit).
+function addToggle(label, editable) {
+  return editable ? `<button type="button" class="add-toggle" data-add aria-label="${esc(label)}" title="${esc(label)}"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>` : '';
+}
+customElements.define('pb-loading-state', LoadingState);
+customElements.define('pb-toast-stack', ToastStack);
+
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, isoDate, addDays, timeLabel, money, statusTone, STATUS_LABELS, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle };
