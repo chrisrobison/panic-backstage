@@ -74,6 +74,25 @@ final class Kernel
             return [Users::class, ['userId' => $this->intOrNull($segments[1] ?? null)]];
         }
 
+        // Contract clause library (admin)
+        if ($segments[0] === 'contract-modules') {
+            return [ContractModules::class, ['moduleId' => $this->intOrNull($segments[1] ?? null)]];
+        }
+
+        // Contract templates (admin)
+        if ($segments[0] === 'contract-templates') {
+            return [ContractTemplates::class, ['templateId' => $this->intOrNull($segments[1] ?? null)]];
+        }
+
+        // Contracts (deal builder)
+        if ($segments[0] === 'contracts') {
+            return [Contracts::class, [
+                'contractId' => $this->intOrNull($segments[1] ?? null),
+                'child'      => $segments[2] ?? null,
+                'childId'    => $this->intOrNull($segments[3] ?? null),
+            ]];
+        }
+
         // Staff roster (admin)
         if ($segments[0] === 'staff-members') {
             return [StaffMembers::class, ['staffId' => $this->intOrNull($segments[1] ?? null)]];
@@ -113,6 +132,7 @@ final class Kernel
                 'invites'    => [Events\Invites::class,  ['eventId' => $eventId, 'inviteId'   => $childId]],
                 'guest-list' => [Events\GuestList::class, ['eventId' => $eventId, 'guestId'   => $childId]],
                 'staffing'   => [Events\Staffing::class,  ['eventId' => $eventId, 'staffingId' => $childId]],
+                'contracts'  => [Events\Contracts::class, ['eventId' => $eventId, 'contractId' => $childId]],
                 'stream'     => [Events\Stream::class,   ['eventId' => $eventId]],
                 default      => [Events::class,          ['eventId' => $eventId]],
             };

@@ -29,7 +29,7 @@ $pdo = new PDO("mysql:host=$host;port=$port;dbname=$dbName;charset=utf8mb4", $us
 ]);
 
 $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
-foreach (['event_activity_log','event_invites','event_settlements','event_schedule_items','event_staffing','event_assets','event_blockers','event_tasks','event_lineup','bands','event_collaborators','events','event_templates','staff_members','venues','users'] as $table) {
+foreach (['contract_versions','contract_sections','contract_template_modules','contracts','contract_templates','contract_modules','event_activity_log','event_invites','event_settlements','event_schedule_items','event_staffing','event_assets','event_blockers','event_tasks','event_lineup','bands','event_collaborators','events','event_templates','staff_members','venues','users'] as $table) {
     $pdo->exec("TRUNCATE TABLE $table");
 }
 $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
@@ -139,5 +139,9 @@ $staffingShifts = [
 foreach ($staffingShifts as $shift) {
     $staffingStmt->execute([$eventIds[1], $shift[0], $shift[1], $shift[2], $shift[3], $shift[4], $shift[5]]);
 }
+
+// Contract clause library + starter templates (idempotent).
+require $root . '/database/seed_contracts.php';
+Panic\seed_contract_library($pdo);
 
 echo "Seed complete. Login: admin@mabuhay.local / changeme\n";

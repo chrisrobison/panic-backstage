@@ -336,3 +336,136 @@ CREATE TABLE IF NOT EXISTS event_guest_list (
   FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
   FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
 );
+
+-- ── Contract / Deal Builder (migration 017) ─────────────────────────────────
+-- Structured deal terms first, rendered document second. See migration 017 for
+-- the full rationale. event_id is NULLABLE so recurring residencies can be
+-- venue-bound rather than tied to a single event row.
+
+CREATE TABLE IF NOT EXISTS contract_modules (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  module_key VARCHAR(80) NOT NULL UNIQUE,
+  name VARCHAR(255) NOT NULL,
+  category ENUM('base','financial','operational','legal','risk') NOT NULL DEFAULT 'operational',
+  body_template MEDIUMTEXT NOT NULL,
+  required_fields_json JSON,
+  risk_level ENUM('none','low','medium','high') NOT NULL DEFAULT 'none',
+  is_locked TINYINT(1) NOT NULL DEFAULT 0,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS contract_templates (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  contract_type ENUM('private_event','promoter_show','artist_performance','recurring_night','fundraiser','house_show','other') NOT NULL DEFAULT 'other',
+  intro_text MEDIUMTEXT,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS contract_template_modules (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  template_id INT NOT NULL,
+  module_id INT NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  is_required TINYINT(1) NOT NULL DEFAULT 0,
+  condition_json JSON,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_template_module (template_id, module_id),
+  FOREIGN KEY (template_id) REFERENCES contract_templates(id) ON DELETE CASCADE,
+  FOREIGN KEY (module_id) REFERENCES contract_modules(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS contracts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  event_id INT NULL,
+  venue_id INT NULL,
+  template_id INT NULL,
+  contract_type ENUM('private_event','promoter_show','artist_performance','recurring_night','fundraiser','house_show','other') NOT NULL DEFAULT 'other',
+  title VARCHAR(255) NOT NULL,
+  status ENUM('draft','needs_review','approved','sent','signed','canceled','superseded') NOT NULL DEFAULT 'draft',
+  counterparty_name VARCHAR(255) NULL,
+  counterparty_org VARCHAR(255) NULL,
+  counterparty_email VARCHAR(255) NULL,
+  rental_fee DECIMAL(10,2) NULL,
+  deposit_amount DECIMAL(10,2) NULL,
+  balance_due_date DATE NULL,
+  bar_minimum DECIMAL(10,2) NULL,
+  guarantee_amount DECIMAL(10,2) NULL,
+  door_split_artist DECIMAL(5,2) NULL,
+  door_split_venue DECIMAL(5,2) NULL,
+  door_split_promoter DECIMAL(5,2) NULL,
+  advance_ticket_price DECIMAL(10,2) NULL,
+  door_ticket_price DECIMAL(10,2) NULL,
+  security_count INT NULL,
+  security_rate DECIMAL(10,2) NULL,
+  security_paid_by ENUM('venue','artist','promoter','client','shared') NULL,
+  sound_tech_included TINYINT(1) NULL,
+  lighting_tech_included TINYINT(1) NULL,
+  merch_venue_percent DECIMAL(5,2) NULL,
+  recurrence_rule VARCHAR(255) NULL,
+  term_start DATE NULL,
+  term_end DATE NULL,
+  trial_period_weeks INT NULL,
+  termination_notice_days INT NULL,
+  review_cadence VARCHAR(120) NULL,
+  revenue_split_house DECIMAL(5,2) NULL,
+  revenue_split_producer DECIMAL(5,2) NULL,
+  variables_json JSON,
+  internal_notes TEXT,
+  current_version_id INT NULL,
+  created_by_user_id INT NULL,
+  approved_by_user_id INT NULL,
+  sent_at TIMESTAMP NULL,
+  signed_at TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_contracts_event (event_id),
+  INDEX idx_contracts_status (status),
+  INDEX idx_contracts_type (contract_type),
+  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE SET NULL,
+  FOREIGN KEY (venue_id) REFERENCES venues(id) ON DELETE SET NULL,
+  FOREIGN KEY (template_id) REFERENCES contract_templates(id) ON DELETE SET NULL,
+  FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY (approved_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS contract_sections (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  contract_id INT NOT NULL,
+  module_id INT NULL,
+  module_key VARCHAR(80) NULL,
+  title VARCHAR(255) NOT NULL,
+  body_template MEDIUMTEXT NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  included TINYINT(1) NOT NULL DEFAULT 1,
+  is_locked TINYINT(1) NOT NULL DEFAULT 0,
+  auto_selected TINYINT(1) NOT NULL DEFAULT 0,
+  risk_level ENUM('none','low','medium','high') NOT NULL DEFAULT 'none',
+  required_fields_json JSON,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_sections_contract (contract_id),
+  FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE,
+  FOREIGN KEY (module_id) REFERENCES contract_modules(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS contract_versions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  contract_id INT NOT NULL,
+  version_number INT NOT NULL DEFAULT 1,
+  rendered_html MEDIUMTEXT,
+  rendered_text MEDIUMTEXT,
+  variables_snapshot_json JSON,
+  summary_json JSON,
+  created_by_user_id INT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_versions_contract (contract_id),
+  FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
