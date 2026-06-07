@@ -95,6 +95,11 @@ final class SquareProvider implements PaymentProvider
             ],
         ];
 
+        // Pre-fill the buyer's email when we have one. Square validates the
+        // address server-side and rejects the ENTIRE request if it dislikes it.
+        // Pre-fill is a convenience, not a requirement, so if that's the only
+        // thing it objected to, retry once without it rather than failing an
+        // otherwise-valid checkout.
         $email = (string) ($order['buyer_email'] ?? '');
         if ($email !== '') {
             $payload['pre_populated_data'] = ['buyer_email' => $email];
@@ -102,6 +107,13 @@ final class SquareProvider implements PaymentProvider
 
         [$code, $body] = $this->http('POST', '/v2/online-checkout/payment-links', $payload);
         $json = json_decode($body, true);
+
+        if (isset($payload['pre_populated_data']) && $this->rejectedBuyerEmail($json, $code)) {
+            unset($payload['pre_populated_data']);
+            $payload['idempotency_key'] = $this->idempotencyKey('link-' . (string) ($order['id'] ?? '') . '-');
+            [$code, $body] = $this->http('POST', '/v2/online-checkout/payment-links', $payload);
+            $json = json_decode($body, true);
+        }
 
         $link = is_array($json) ? ($json['payment_link'] ?? null) : null;
         if ($code < 200 || $code >= 300 || !is_array($link) || empty($link['url']) || empty($link['id'])) {
@@ -215,6 +227,30 @@ final class SquareProvider implements PaymentProvider
     }
 
     /** Deterministic-ish, collision-resistant idempotency key (Square caps 45 chars elsewhere; refunds allow 192). */
+    /**
+     * True when Square's only objection was the pre-filled buyer email, so the
+     * request is worth retrying without it. Any other error is left to surface.
+     */
+    private function rejectedBuyerEmail($json, int $code): bool
+    {
+        if ($code >= 200 && $code < 300) {
+            return false;
+        }
+        if (!is_array($json) || empty($json['errors']) || !is_array($json['errors'])) {
+            return false;
+        }
+        foreach ($json['errors'] as $err) {
+            if (!is_array($err)) {
+                continue;
+            }
+            if ((string) ($err['code'] ?? '') === 'INVALID_EMAIL_ADDRESS'
+                || str_contains((string) ($err['field'] ?? ''), 'buyer_email')) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private function idempotencyKey(string $prefix): string
     {
         return $prefix . bin2hex(random_bytes(12));
