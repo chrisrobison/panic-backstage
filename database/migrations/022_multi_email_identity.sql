@@ -1,12 +1,13 @@
 -- 022_multi_email_identity.sql
 -- Secondary emails live in a JSON array on users (per product decision). Only
--- entries with a non-null verified_at may authenticate. A UNIQUE multi-valued
--- index is a DB backstop so the same email can't sit in two users' arrays;
--- application code additionally guards against collisions with any users.email.
+-- entries with a non-null verified_at may authenticate.
+-- NOTE: this database is MariaDB, which does NOT support MySQL 8 multi-valued
+-- indexes (CAST(... AS CHAR ARRAY)). Global email uniqueness is therefore
+-- enforced at the application layer (Panic\Identity::emailIsTaken), which checks
+-- a candidate against every users.email and every user's alt_emails before an
+-- alias is added/verified/promoted. Lookups use JSON_CONTAINS/JSON_EXTRACT,
+-- which work on both MariaDB and MySQL 8.
 ALTER TABLE users ADD COLUMN alt_emails JSON NULL;
--- MySQL 8.0.17+ multi-valued UNIQUE index over the array's email members.
-ALTER TABLE users ADD UNIQUE INDEX uq_users_alt_emails
-  ( (CAST(alt_emails->'$[*].email' AS CHAR(255) ARRAY)) );
 
 -- One-time tokens to confirm ownership of a newly added alias (hashed, single-use).
 CREATE TABLE email_verification_tokens (

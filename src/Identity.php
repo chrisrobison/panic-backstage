@@ -46,7 +46,7 @@ final class Identity
         // 3. Verified-alias fallback. The multi-valued index narrows candidates;
         //    PHP confirms the matching entry is actually verified.
         $candidate = $db->one(
-            "SELECT * FROM users WHERE ? MEMBER OF (alt_emails->'$[*].email') LIMIT 1",
+            "SELECT * FROM users WHERE JSON_CONTAINS(JSON_EXTRACT(alt_emails, '$[*].email'), JSON_QUOTE(?)) LIMIT 1",
             [$e]
         );
         if (!$candidate) {
@@ -85,7 +85,7 @@ final class Identity
 
         // Alias collision on another user (any verified_at state).
         $aliasOwner = $db->one(
-            "SELECT id FROM users WHERE ? MEMBER OF (alt_emails->'$[*].email')"
+            "SELECT id FROM users WHERE JSON_CONTAINS(JSON_EXTRACT(alt_emails, '$[*].email'), JSON_QUOTE(?))"
             . ($exceptUserId !== null ? ' AND id != ?' : '') . ' LIMIT 1',
             $exceptUserId !== null ? [$e, $exceptUserId] : [$e]
         );

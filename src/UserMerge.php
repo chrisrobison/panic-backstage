@@ -472,7 +472,7 @@ final class UserMerge
         }
 
         $alias = $this->db->one(
-            "SELECT id FROM users WHERE ? MEMBER OF (alt_emails->'$[*].email') AND id NOT IN ($placeholders) LIMIT 1",
+            "SELECT id FROM users WHERE JSON_CONTAINS(JSON_EXTRACT(alt_emails, '$[*].email'), JSON_QUOTE(?)) AND id NOT IN ($placeholders) LIMIT 1",
             array_merge([$e], $exceptIds)
         );
 

@@ -9,9 +9,9 @@ CREATE TABLE IF NOT EXISTS users (
   role ENUM('venue_admin','event_owner','promoter','band','artist','designer','staff','viewer') NOT NULL DEFAULT 'viewer',
   alt_emails JSON NULL,                            -- verified secondary emails; only entries with non-null verified_at may authenticate
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  -- MySQL 8.0.17+ multi-valued UNIQUE index over the array's email members.
-  UNIQUE INDEX uq_users_alt_emails ( (CAST(alt_emails->'$[*].email' AS CHAR(255) ARRAY)) )
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  -- alt_emails uniqueness is enforced in the app layer (Panic\Identity::emailIsTaken);
+  -- MariaDB has no multi-valued index, so there is no DB-level array unique constraint.
 );
 
 CREATE TABLE IF NOT EXISTS venues (
