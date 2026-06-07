@@ -303,7 +303,9 @@ CREATE TABLE ticket_scans (
   user_agent VARCHAR(255) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_ticket_scans_ticket (ticket_id),
-  INDEX idx_ticket_scans_event (event_id)
+  INDEX idx_ticket_scans_event (event_id),
+  FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE SET NULL,
+  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
 );
 
 -- per-event scanner links: door-staff auth without user accounts
