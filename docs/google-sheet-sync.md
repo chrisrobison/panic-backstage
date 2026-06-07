@@ -214,14 +214,49 @@ php scripts/push-sheet-queue.php --verbose
 
 ---
 
+## Appending app-created events
+
+Outbound sync resolves each event in three steps (`GoogleSheets::syncEventRow`):
+
+1. **App ID (col Z) match** → update the app-owned fields in place.
+2. **`external_id` (col A) match** → write the App ID to link the row, then update.
+3. **No match** → **append a complete new Tracker row** (identity + app fields +
+   App ID), so an event created in the app shows up in the sheet instead of
+   stranding as a permanent `pending` outbox row.
+
+Step 2 is what prevents duplicates for events that originated in the sheet but
+were never linked. Row lookups distinguish API errors from genuine not-found, so
+a transient read failure can never trigger a spurious append.
+
+## Staff Contact (two-way staff sync)
+
+The `Staff Contact` tab syncs two-way with `staff_members` via
+`scripts/sync-staff.php` (run from the same 5-minute cron, after the event
+write-back). Set `GOOGLE_STAFF_TAB` to override the tab name (default
+`Staff Contact`).
+
+- **Link key:** a hidden **App ID column at `K`** holds `staff_members.id`
+  (the tab is only 17 columns wide — A–Q — so the Tracker's `Z` is out of grid).
+- **Column map** (header row 1, data row 2+): `A` Department · `B` Fname ·
+  `C` Lname · `D` Pronoun · `E` Staffing Status · `F` Phone · `G` Email ·
+  `H` Position · `I` Staffing Notes · `J` **Hire Date** · `K` App ID.
+- **Department ↔ role** is mapped both ways (Bar↔bartender, Sound↔sound,
+  Light↔lighting, …); `Fname`/`Lname` combine into `name` and split back on append.
+- **Reconcile rules:** linked rows **gap-fill both ways** (a non-empty sheet cell
+  wins into the app; a non-empty app value fills an *empty* sheet cell — nothing
+  is ever blanked). Unlinked sheet rows are **adopted by email then name**, or
+  **created** only when the row has a real email (not blank, not `*.local`).
+  Real-email, active app staff with no sheet row are **appended**.
+
 ## Relevant files
 
 | File | Role |
 |---|---|
-| `src/GoogleSheets.php` | Service-account auth + Sheets REST writer; field/status maps |
-| `src/Events.php` (`pushToSheet`) | Real-time enqueue + push on PATCH |
+| `src/GoogleSheets.php` | Service-account auth + Sheets REST writer; event field/status maps; generic grid toolkit (`readGrid`/`appendGridRow`/`batchWriteCells`/`ensureGridColumn`) |
+| `src/Events.php` (`pushToSheet`) | Real-time enqueue + `syncEventRow` on PATCH |
 | `database/migrations/012_sheet_sync_queue.sql` | Outbox table |
-| `scripts/push-sheet-queue.php` | Fallback retry sweep |
-| `scripts/cron-sync.sh` | 5-min cron: inbound sync, then outbound sweep |
+| `scripts/push-sheet-queue.php` | Fallback retry sweep (events) |
+| `scripts/sync-staff.php` | Two-way `Staff Contact` ↔ `staff_members` reconcile |
+| `scripts/cron-sync.sh` | 5-min cron: inbound sync → outbound event sweep → staff sync |
 | `scripts/sync-mabevents.py` | Inbound download + import orchestrator |
 | `scripts/generate-import-sql.py` | Inbound column map + `STATUS_MAP` |

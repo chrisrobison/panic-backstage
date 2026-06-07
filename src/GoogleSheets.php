@@ -716,6 +716,12 @@ final class GoogleSheets
     /** Numeric sheetId (gid) of the configured tab, or null on error. */
     public function tabSheetId(): ?int
     {
+        return $this->tabSheetIdFor($this->tab);
+    }
+
+    /** Numeric sheetId (gid) of a named tab, or null on error. */
+    public function tabSheetIdFor(string $tab): ?int
+    {
         $token = $this->accessToken();
         if ($token === null) {
             return null;
@@ -734,12 +740,137 @@ final class GoogleSheets
         $json = json_decode($resp, true);
         foreach (($json['sheets'] ?? []) as $sheet) {
             $props = $sheet['properties'] ?? [];
-            if (($props['title'] ?? '') === $this->tab) {
+            if (($props['title'] ?? '') === $tab) {
                 return (int) ($props['sheetId'] ?? 0);
             }
         }
-        $this->log("FAIL: tab '{$this->tab}' not found in spreadsheet");
+        $this->log("FAIL: tab '{$tab}' not found in spreadsheet");
         return null;
+    }
+
+    // ─── Generic, tab-aware grid toolkit (used by the staff sync) ───────────────
+
+    /** Read a 2-D A1 range from any tab. Rows of cell-arrays, or null on error. */
+    public function readGrid(string $tab, string $a1Range): ?array
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return null;
+        }
+        [$code, $resp] = $this->http(
+            'GET',
+            self::API_BASE . '/' . rawurlencode($this->sheetId)
+                . '/values/' . rawurlencode("{$tab}!{$a1Range}"),
+            $token,
+            null
+        );
+        if ($code < 200 || $code >= 300) {
+            $this->log("FAIL: read grid {$tab}!{$a1Range} -> HTTP {$code} {$resp}");
+            return null;
+        }
+        return json_decode($resp, true)['values'] ?? [];
+    }
+
+    /** Append one row to a tab. $colToValue maps column letters to values. */
+    public function appendGridRow(string $tab, array $colToValue, string $anchorRange): bool
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return false;
+        }
+        $cells = [];
+        $maxIdx = 0;
+        foreach ($colToValue as $col => $val) {
+            $idx = self::colIndex($col);
+            $cells[$idx] = (string) $val;
+            $maxIdx = max($maxIdx, $idx);
+        }
+        $row = [];
+        for ($i = 0; $i <= $maxIdx; $i++) {
+            $row[$i] = $cells[$i] ?? '';
+        }
+        [$code, $resp] = $this->http(
+            'POST',
+            self::API_BASE . '/' . rawurlencode($this->sheetId)
+                . '/values/' . rawurlencode("{$tab}!{$anchorRange}")
+                . ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',
+            $token,
+            ['values' => [$row]]
+        );
+        if ($code >= 200 && $code < 300) {
+            return true;
+        }
+        $this->log("FAIL: append {$tab} row -> HTTP {$code} {$resp}");
+        return false;
+    }
+
+    /** Write specific cells on a tab: ['A3' => 'x', 'Z3' => '5']. */
+    public function batchWriteCells(string $tab, array $cellToValue): bool
+    {
+        if (!$cellToValue) {
+            return true;
+        }
+        $token = $this->accessToken();
+        if ($token === null) {
+            return false;
+        }
+        $data = [];
+        foreach ($cellToValue as $a1 => $val) {
+            $data[] = ['range' => "{$tab}!{$a1}", 'values' => [[(string) $val]]];
+        }
+        [$code, $resp] = $this->http(
+            'POST',
+            self::API_BASE . '/' . rawurlencode($this->sheetId) . '/values:batchUpdate',
+            $token,
+            ['valueInputOption' => 'USER_ENTERED', 'data' => $data]
+        );
+        if ($code >= 200 && $code < 300) {
+            return true;
+        }
+        $this->log("FAIL: batchWrite {$tab} -> HTTP {$code} {$resp}");
+        return false;
+    }
+
+    /** Ensure a header label in a column on a tab; optionally hide the column. Idempotent. */
+    public function ensureGridColumn(string $tab, string $col, string $header, int $headerRow, bool $hide): bool
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return false;
+        }
+        [$code, $resp] = $this->http(
+            'PUT',
+            self::API_BASE . '/' . rawurlencode($this->sheetId)
+                . '/values/' . rawurlencode("{$tab}!{$col}{$headerRow}") . '?valueInputOption=RAW',
+            $token,
+            ['values' => [[$header]]]
+        );
+        if ($code < 200 || $code >= 300) {
+            $this->log("FAIL: header {$tab}!{$col}{$headerRow} -> HTTP {$code} {$resp}");
+            return false;
+        }
+        if ($hide) {
+            $gid = $this->tabSheetIdFor($tab);
+            if ($gid === null) {
+                return false;
+            }
+            $ci = self::colIndex($col);
+            [$code, $resp] = $this->http(
+                'POST',
+                self::API_BASE . '/' . rawurlencode($this->sheetId) . ':batchUpdate',
+                $token,
+                ['requests' => [['updateDimensionProperties' => [
+                    'range'      => ['sheetId' => $gid, 'dimension' => 'COLUMNS', 'startIndex' => $ci, 'endIndex' => $ci + 1],
+                    'properties' => ['hiddenByUser' => true],
+                    'fields'     => 'hiddenByUser',
+                ]]]]
+            );
+            if ($code < 200 || $code >= 300) {
+                $this->log("FAIL: hide {$tab} col {$col} -> HTTP {$code} {$resp}");
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Raw spreadsheet metadata (sheets + properties), for inspection/tooling. */

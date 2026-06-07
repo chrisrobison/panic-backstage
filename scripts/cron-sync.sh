@@ -55,5 +55,10 @@ fi
   php "$SCRIPT_DIR/push-sheet-queue.php" || echo "[$(ts)] write-back step errored (non-fatal)"
   echo "[$(ts)] write-back done"
 
+  # Two-way staff sync ('Staff Contact' tab). Best-effort, never fails the tick.
+  echo "[$(ts)] staff sync start"
+  php "$SCRIPT_DIR/sync-staff.php" || echo "[$(ts)] staff sync step errored (non-fatal)"
+  echo "[$(ts)] staff sync done"
+
   exit $rc
 } >> "$LOG_FILE" 2>&1
