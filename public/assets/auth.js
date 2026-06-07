@@ -145,11 +145,71 @@ class LoginPage extends PanicElement {
       <button class="passkey-btn" data-action="passkey" type="button">
         <span class="passkey-icon">🔑</span>Sign in with passkey
       </button>
+
+      <p class="auth-sub">No account yet? <a href="#" data-action="request-access">Request access</a></p>
     </main>
     <pb-toast-stack></pb-toast-stack>`;
 
     $('[data-form="email-step"]', this).addEventListener('submit', (e) => this.onEmailContinue(e));
     $('[data-action="passkey"]', this).addEventListener('click', () => this.passkeyLogin());
+    $('[data-action="request-access"]', this).addEventListener('click', (e) => {
+      e.preventDefault();
+      this.showRequestAccessStep();
+    });
+  }
+
+  /** Self-service "request access" form. Stored server-side for admin approval. */
+  showRequestAccessStep(notice = '') {
+    this.innerHTML = `<main class="auth-card">
+      <h1>Panic Backstage</h1>
+      <p class="auth-greeting">Request access</p>
+      <p class="muted">Tell us who you are and why you need access. An administrator will review your request and email you a login link once it's approved.</p>
+      ${notice ? `<div class="auth-notice ${notice.startsWith('✓') ? 'success' : 'error'}">${esc(notice)}</div>` : ''}
+
+      <form class="stack" data-form="request-access">
+        <label>Name <input type="text" name="name" required autocomplete="name" placeholder="Your full name" autofocus></label>
+        <label>Email <input type="email" name="email" required autocomplete="email" placeholder="you@example.com" value="${esc(this.email || '')}"></label>
+        <label>Phone <input type="tel" name="phone" autocomplete="tel" placeholder="Optional"></label>
+        <label>Your situation <textarea name="notes" rows="4" placeholder="Briefly describe who you are and what you need access for"></textarea></label>
+        <button class="primary block" type="submit">Send request</button>
+        <p class="error-text" data-ra-error></p>
+      </form>
+
+      <p class="auth-sub"><a href="#" data-action="back-to-login">Back to sign in</a></p>
+    </main>
+    <pb-toast-stack></pb-toast-stack>`;
+
+    $('[data-form="request-access"]', this).addEventListener('submit', (e) => this.submitAccessRequest(e));
+    $('[data-action="back-to-login"]', this).addEventListener('click', (e) => {
+      e.preventDefault();
+      this.showEmailStep();
+    });
+  }
+
+  async submitAccessRequest(event) {
+    event.preventDefault();
+    const btn = $('button[type="submit"]', event.target);
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    $('[data-ra-error]', this).textContent = '';
+    try {
+      const res = await api('/auth/request-access', { method: 'POST', body: JSON.stringify(formData(event.target)) });
+      this.innerHTML = `<main class="auth-card">
+        <h1>Panic Backstage</h1>
+        <div class="auth-notice success">✓ ${esc(res?.message || 'Your request has been sent. An administrator will email you a login link once it is approved.')}</div>
+        <p class="auth-sub"><a href="#" data-action="back-to-login">Back to sign in</a></p>
+      </main>
+      <pb-toast-stack></pb-toast-stack>`;
+      $('[data-action="back-to-login"]', this).addEventListener('click', (e) => {
+        e.preventDefault();
+        this.email = '';
+        this.showEmailStep();
+      });
+    } catch (err) {
+      $('[data-ra-error]', this).textContent = err.message || 'Could not send your request. Try again.';
+      btn.disabled = false;
+      btn.textContent = 'Send request';
+    }
   }
 
   /** Step 2: per-account methods. Always offers the magic-link fallback. */

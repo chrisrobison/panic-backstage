@@ -6,10 +6,11 @@ namespace Panic;
 /**
  * Admin endpoint for managing login accounts.
  *
- *   GET    /api/users             list users
- *   POST   /api/users             create user (name, email, role, optional password)
- *   PATCH  /api/users/{id}        update name/email/role and optionally reset password
- *   DELETE /api/users/{id}        delete user
+ *   GET    /api/users               list users (incl. pending access requests)
+ *   POST   /api/users               create user (name, email, role, optional password)
+ *   POST   /api/users/{id}/approve  approve a requested account (set role) + email login link
+ *   PATCH  /api/users/{id}          update name/email/role and optionally reset password
+ *   DELETE /api/users/{id}          delete user (also used to dismiss a request)
  *
  * All actions require the manage_users global capability (venue_admin).
  */
@@ -25,6 +26,10 @@ final class Users extends BaseEndpoint
             return $denied;
         }
         $userId = $this->params['userId'] ?? null;
+        $action = $this->params['action'] ?? null;
+        if ($request->method() === 'POST' && $userId && $action === 'approve') {
+            return $this->approve($request, (int) $userId);
+        }
         return match ($request->method()) {
             'GET'    => $userId ? $this->show((int) $userId) : $this->index(),
             'POST'   => $this->create($request),
@@ -37,13 +42,14 @@ final class Users extends BaseEndpoint
     private function index(): Response
     {
         $users = $this->db->all(
-            "SELECT u.id, u.name, u.email, u.role, u.created_at, u.updated_at,
+            "SELECT u.id, u.name, u.email, u.phone, u.role, u.access_status, u.request_notes,
+                    u.created_at, u.updated_at,
                     (u.password_hash IS NOT NULL) AS has_password,
                     (SELECT COUNT(*) FROM passkeys p WHERE p.user_id = u.id) AS passkey_count,
                     (SELECT COUNT(*) FROM events e WHERE e.owner_user_id = u.id) AS owned_event_count,
                     (SELECT COUNT(*) FROM event_collaborators c WHERE c.user_id = u.id) AS collaborator_event_count
              FROM users u
-             ORDER BY u.name"
+             ORDER BY (u.access_status = 'requested') DESC, u.name"
         );
         return $this->ok([
             'users' => $users,
@@ -90,6 +96,64 @@ final class Users extends BaseEndpoint
             [$name, $email, $hash, $role]
         );
         return $this->ok(['id' => $id]);
+    }
+
+    /**
+     * Approve a pending access request: assign the chosen role, flip the
+     * account to 'active', mint a 7-day magic link, and email it. Mirrors the
+     * flow in scripts/bootstrap-admins.php.
+     */
+    private function approve(Request $request, int $id): Response
+    {
+        $user = $this->db->one(
+            'SELECT id, name, email, access_status FROM users WHERE id = ?',
+            [$id]
+        );
+        if (!$user) {
+            return $this->notFound('User not found');
+        }
+        if ($user['access_status'] !== 'requested') {
+            return Response::json(['error' => 'This account is not awaiting approval'], 409);
+        }
+
+        $role = (string) $request->body('role', 'viewer');
+        if (!in_array($role, self::ROLES, true)) {
+            return Response::json(['error' => 'Invalid role'], 422);
+        }
+
+        $this->db->run(
+            "UPDATE users SET role = ?, access_status = 'active' WHERE id = ?",
+            [$role, $id]
+        );
+
+        // Mint a 7-day login link and email it.
+        $token = $this->auth->generateToken(24);
+        $hash  = $this->auth->hashToken($token);
+        $this->db->run(
+            'INSERT INTO magic_link_tokens (email, token_hash, expires_at)
+             VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))',
+            [$user['email'], $hash]
+        );
+
+        $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        $link   = "{$appUrl}/login.html?token={$token}";
+        $name   = (string) $user['name'];
+
+        $body = "Hi {$name},\n\n"
+              . "Your request for access to Mabuhay Gardens Backstage has been approved.\n\n"
+              . "Click the link below to log in. The link is good for 7 days — once you click it, "
+              . "you'll be signed in and can set a password or add a passkey from your account menu so "
+              . "you don't need a magic link next time.\n\n"
+              . "  {$link}\n\n"
+              . "— Backstage\n";
+
+        (new Mailer($this->root))->send(
+            (string) $user['email'],
+            'Your Backstage access has been approved',
+            $body
+        );
+
+        return $this->ok(['ok' => true]);
     }
 
     private function update(Request $request, int $id): Response

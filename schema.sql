@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
   phone VARCHAR(64) NULL DEFAULT NULL,
   password_hash VARCHAR(255) NULL DEFAULT NULL,
   role ENUM('venue_admin','event_owner','promoter','band','artist','designer','staff','viewer') NOT NULL DEFAULT 'viewer',
+  access_status ENUM('active','requested') NOT NULL DEFAULT 'active',
+  request_notes TEXT NULL DEFAULT NULL,
   hide_credential_setup_prompt TINYINT(1) NOT NULL DEFAULT 0,
   default_landing VARCHAR(32) NULL DEFAULT NULL,
   nav_collapsed TINYINT(1) NOT NULL DEFAULT 0,

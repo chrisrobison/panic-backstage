@@ -54,9 +54,36 @@ class AdminUsers extends PanicElement {
   }
 
   renderList() {
-    const users = this.data.users || [];
+    const allUsers = this.data.users || [];
     const roles = this.data.roles || [];
+    const pending = allUsers.filter((u) => u.access_status === 'requested');
+    const users = allUsers.filter((u) => u.access_status !== 'requested');
+    const roleOptions = (selected) => roles.map((r) => `<option value="${esc(r)}" ${r === selected ? 'selected' : ''}>${esc(titleCase(r))}</option>`).join('');
+
+    const pendingPanel = pending.length ? `
+      <article class="panel">
+        <div class="section-head padded"><h2>Pending access requests</h2><span class="muted">${pending.length} awaiting review</span></div>
+        <table class="data-table admin-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Situation</th><th>Requested</th><th>Approve as</th><th></th></tr></thead>
+          <tbody>
+            ${pending.map((u) => `<tr>
+              <td>${esc(u.name)} <span class="badge">Requested</span></td>
+              <td>${esc(u.email)}</td>
+              <td>${esc(u.phone || '—')}</td>
+              <td class="muted">${u.request_notes ? esc(u.request_notes) : '—'}</td>
+              <td class="muted">${esc(u.created_at ? new Date(u.created_at).toLocaleDateString() : '')}</td>
+              <td><select data-approve-role="${esc(u.id)}">${roleOptions('viewer')}</select></td>
+              <td class="row-actions">
+                <button class="small" data-approve="${esc(u.id)}" data-name="${esc(u.name)}">Approve &amp; send link</button>
+                <button class="small danger" data-dismiss="${esc(u.id)}" data-name="${esc(u.name)}">Dismiss</button>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </article>` : '';
+
     this.innerHTML = `
+      ${pendingPanel}
       <article class="panel">
         <div class="section-head padded"><h2>Login Accounts</h2><span class="muted">${users.length} total</span></div>
         <table class="data-table admin-table">
@@ -90,6 +117,32 @@ class AdminUsers extends PanicElement {
     $('[data-form="create"]', this).addEventListener('submit', (event) => this.create(event));
     $$('[data-edit]', this).forEach((b) => b.addEventListener('click', () => this.openEdit(Number(b.dataset.edit))));
     $$('[data-delete]', this).forEach((b) => b.addEventListener('click', () => this.delete(Number(b.dataset.delete), b.dataset.name)));
+    $$('[data-approve]', this).forEach((b) => b.addEventListener('click', () => {
+      const role = $(`[data-approve-role="${b.dataset.approve}"]`, this)?.value || 'viewer';
+      this.approve(Number(b.dataset.approve), b.dataset.name, role);
+    }));
+    $$('[data-dismiss]', this).forEach((b) => b.addEventListener('click', () => this.dismiss(Number(b.dataset.dismiss), b.dataset.name)));
+  }
+
+  async approve(id, name, role) {
+    try {
+      await api(`/users/${id}/approve`, { method: 'POST', body: JSON.stringify({ role }) });
+      publish('toast.show', { message: `${name} approved — a login link was emailed.`, tone: 'success' });
+      this.connect();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
+  }
+
+  async dismiss(id, name) {
+    if (!confirm(`Dismiss the access request from ${name}? This deletes the request.`)) return;
+    try {
+      await api(`/users/${id}`, { method: 'DELETE' });
+      publish('toast.show', { message: `Request from ${name} dismissed.`, tone: 'info' });
+      this.connect();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
   }
 
   async create(event) {

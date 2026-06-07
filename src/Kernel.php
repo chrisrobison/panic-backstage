@@ -71,7 +71,10 @@ final class Kernel
 
         // User accounts (admin)
         if ($segments[0] === 'users') {
-            return [Users::class, ['userId' => $this->intOrNull($segments[1] ?? null)]];
+            return [Users::class, [
+                'userId' => $this->intOrNull($segments[1] ?? null),
+                'action' => $segments[2] ?? null,
+            ]];
         }
 
         // Contract clause library (admin)
