@@ -28,8 +28,22 @@ final class Response
         foreach ($this->headers as $name => $value) {
             header("$name: $value");
         }
-        if ($this->status !== 204) {
-            echo json_encode($this->body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($this->status === 204) {
+            return;
         }
+        // Non-JSON responses (e.g. text/html ticket pages, image/svg+xml QR codes)
+        // carry an already-rendered string/scalar body and must NOT be JSON-encoded.
+        $contentType = '';
+        foreach ($this->headers as $name => $value) {
+            if (strcasecmp((string) $name, 'Content-Type') === 0) {
+                $contentType = (string) $value;
+                break;
+            }
+        }
+        if ($contentType !== '' && stripos($contentType, 'application/json') === false && is_scalar($this->body)) {
+            echo (string) $this->body;
+            return;
+        }
+        echo json_encode($this->body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 }

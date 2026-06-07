@@ -336,9 +336,47 @@ php scripts/endpoint-smoke.php http://localhost:8000
 
 `node --check` is optional and only validates the plain JavaScript file. The app does not require Node to run.
 
+## Ticketing And Payments
+
+Events can sell tickets directly ("internal" ticketing mode) through a pluggable
+payment layer with **Stripe** and **Square** providers. There is no vendored SDK —
+both providers talk to their HTTP APIs over raw cURL with zero Composer
+dependencies.
+
+- **Provider configuration (admin):** Admin → Payments (`#admin-payments`) selects
+  the active provider and currency (the `pb-payment-settings` panel, gated by
+  `manage_users`). API keys live only in `.env` and are never returned by the API.
+- **Per-event ticketing (event workspace):** the **Ticketing** tab
+  (`pb-ticketing-admin`, gated by the new `manage_ticketing` event capability —
+  granted to `venue_admin` and `event_owner` only) configures tiers, inventory,
+  sales windows, comps, refunds, and door-scanner links.
+- **Public purchase:** the public event page mounts `<pb-ticket-purchase>` which
+  lists on-sale tiers, reserves a 15-minute inventory hold, and redirects the
+  buyer to the provider's hosted checkout.
+  - `GET  /api/public/tickets/{eventId}` — on-sale tiers + live availability
+  - `POST /api/public/tickets/{eventId}/checkout` — create a checkout session
+- **Webhooks:** providers confirm payment via signed webhooks
+  (`POST /api/webhooks/stripe`, `POST /api/webhooks/square`). These are public
+  routes authenticated by signature verification (HMAC), not JWT; fulfillment is
+  idempotent so retries never double-issue or double-email.
+- **Tickets and QR:** each fulfilled unit gets a one-time plaintext token (only
+  its `sha256` hash is stored). The holder's ticket page is `GET /t/{token}`, and
+  the scannable QR is generated on the fly by a from-scratch encoder at
+  `GET /assets/qr.svg?text=<token>` (byte mode, ECC level M; verified scannable
+  with OpenCV/ZBar).
+- **Door scanner:** `public/scanner.html` is a mobile camera scanner. It posts the
+  decoded token to `POST /api/scan/redeem` using a scanner-link token (not a JWT);
+  redemption is an atomic single-row flip with a mandatory `ticket_scans` audit
+  row. Scanner-link management lives under
+  `/api/events/{id}/scanner-links[/{linkId}]` (JWT + `manage_ticketing`).
+
+Required `.env` keys (see `.env.example`): `APP_URL`, `STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET`, `SQUARE_ACCESS_TOKEN`, `SQUARE_LOCATION_ID`,
+`SQUARE_WEBHOOK_SIGNATURE_KEY`, `SQUARE_ENV`, `SQUARE_WEBHOOK_URL`. The ticketing
+schema ships in migration `020`.
+
 ## MVP Limitations
 
-- Stripe is represented by ticket fields only.
 - Email delivery relies on the host MTA via `/usr/sbin/sendmail`; there is no queue, retry, or bounce handling beyond what the MTA provides.
 - Uploads use local disk storage under `storage/uploads/events/:eventId`.
 - The frontend is intentionally browser-native Web Components, optimized for hackability over framework features.

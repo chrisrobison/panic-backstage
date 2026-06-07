@@ -11,6 +11,7 @@ const ADMIN_TABS = [
   { key: 'staff',     title: 'Staff',     icon: 'fa-people-group' },
   { key: 'templates', title: 'Templates', icon: 'fa-layer-group' },
   { key: 'contracts', title: 'Contracts', icon: 'fa-file-signature' },
+  { key: 'payments',  title: 'Payments',  icon: 'fa-credit-card' },
 ];
 
 
@@ -36,7 +37,7 @@ class AdminPage extends PanicElement {
       this.render();
     }));
     const outlet = $('.admin-outlet', this);
-    const tag = { users: 'pb-admin-users', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts' }[this.tab];
+    const tag = { users: 'pb-admin-users', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts', payments: 'pb-payment-settings' }[this.tab];
     outlet.replaceChildren(document.createElement(tag));
   }
 }

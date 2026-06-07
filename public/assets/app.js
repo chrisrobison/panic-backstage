@@ -5,6 +5,8 @@ import './core.js';
 import './print.js';
 import './contracts.js';
 import './admin.js';
+import './ticketing-admin.js';
+import './tickets-public.js';
 import './help.js';
 
 
@@ -81,6 +83,7 @@ class AppShell extends PanicElement {
             <a data-nav="admin-staff" href="#admin-staff"><i class="fa-solid fa-people-group" aria-hidden="true"></i>Staff</a>
             <a data-nav="admin-templates" href="#admin-templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
             <a data-nav="admin-contracts" href="#admin-contracts"><i class="fa-solid fa-file-signature" aria-hidden="true"></i>Contracts</a>
+            <a data-nav="admin-payments" href="#admin-payments"><i class="fa-solid fa-credit-card" aria-hidden="true"></i>Payments</a>
           </div>
         </div>
         <a data-nav="help" href="#help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i>Help</a>

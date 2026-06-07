@@ -3,6 +3,15 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^api/ api/index.php [L]
 
+# Public ticket-view pretty URLs (/t/{token}) are served by the API kernel,
+# not a real file. Route them through the front controller.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^t/ api/index.php [L]
+
+# /assets/qr.svg is a dynamically generated QR image, not a static file.
+RewriteRule ^assets/qr\.svg$ api/index.php [L]
+
 # Increase upload limits to match the app's 10MB cap (mod_php only;
 # for PHP-FPM set upload_max_filesize in the pool .conf instead)
 <IfModule mod_php.c>
@@ -14,7 +23,7 @@ RewriteRule ^api/ api/index.php [L]
 # token in the query string. We don't want caches, archives, or search
 # crawlers to retain those URLs.
 <IfModule mod_headers.c>
-  <FilesMatch "^(login|invite)\.html$">
+  <FilesMatch "^(login|invite|scanner)\.html$">
     Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
     Header set Pragma "no-cache"
     Header set Expires "0"
