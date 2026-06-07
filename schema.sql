@@ -286,6 +286,7 @@ CREATE TABLE IF NOT EXISTS staff_members (
   ) NOT NULL DEFAULT 'other',
   position     VARCHAR(120) DEFAULT NULL,  -- sheet col 8 — free-text job title, more specific than default_role
   hourly_rate  DECIMAL(10,2) DEFAULT NULL,
+  hire_date    DATE DEFAULT NULL,          -- 'Staff Contact' sheet "Hire Date" column
   notes        TEXT DEFAULT NULL,
   active       TINYINT(1) NOT NULL DEFAULT 1,
   user_id      INT DEFAULT NULL,

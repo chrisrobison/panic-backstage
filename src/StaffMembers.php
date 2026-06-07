@@ -71,8 +71,8 @@ final class StaffMembers extends BaseEndpoint
         [$payload, $error] = $this->payload($request, isCreate: true);
         if ($error) return $error;
         $id = $this->db->insert(
-            'INSERT INTO staff_members (name, email, phone, pronoun, default_role, position, hourly_rate, notes, active, user_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO staff_members (name, email, phone, pronoun, default_role, position, hourly_rate, hire_date, notes, active, user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $payload['name'],
                 $payload['email'],
@@ -81,6 +81,7 @@ final class StaffMembers extends BaseEndpoint
                 $payload['default_role'],
                 $payload['position'],
                 $payload['hourly_rate'],
+                $payload['hire_date'],
                 $payload['notes'],
                 $payload['active'],
                 $payload['user_id'],
@@ -97,7 +98,7 @@ final class StaffMembers extends BaseEndpoint
         [$payload, $error] = $this->payload($request, isCreate: false);
         if ($error) return $error;
         $this->db->run(
-            'UPDATE staff_members SET name=?, email=?, phone=?, pronoun=?, default_role=?, position=?, hourly_rate=?, notes=?, active=?, user_id=? WHERE id=?',
+            'UPDATE staff_members SET name=?, email=?, phone=?, pronoun=?, default_role=?, position=?, hourly_rate=?, hire_date=?, notes=?, active=?, user_id=? WHERE id=?',
             [
                 $payload['name'],
                 $payload['email'],
@@ -106,6 +107,7 @@ final class StaffMembers extends BaseEndpoint
                 $payload['default_role'],
                 $payload['position'],
                 $payload['hourly_rate'],
+                $payload['hire_date'],
                 $payload['notes'],
                 $payload['active'],
                 $payload['user_id'],
@@ -144,6 +146,10 @@ final class StaffMembers extends BaseEndpoint
         $userId = $request->body('user_id');
         $userId = ($userId === '' || $userId === null) ? null : (int) $userId;
 
+        // Accept YYYY-MM-DD (the date input's format); anything unparseable -> null.
+        $hire = trim((string) $request->body('hire_date', ''));
+        $hireDate = ($hire !== '' && ($ts = strtotime($hire)) !== false) ? date('Y-m-d', $ts) : null;
+
         return [[
             'name'         => $name,
             'email'        => $email !== '' ? strtolower($email) : null,
@@ -152,6 +158,7 @@ final class StaffMembers extends BaseEndpoint
             'default_role' => $role,
             'position'     => trim((string) $request->body('position', '')) ?: null,
             'hourly_rate'  => $rate,
+            'hire_date'    => $hireDate,
             'notes'        => trim((string) $request->body('notes', '')) ?: null,
             'active'       => boolish($request->body('active', $isCreate ? 1 : 0)),
             'user_id'      => $userId,

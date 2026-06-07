@@ -175,20 +175,21 @@ class AdminStaff extends PanicElement {
           </div>
         </div>
         <table class="data-table admin-table">
-          <thead><tr><th>Name</th><th>Default role</th><th>Contact</th><th>Rate</th><th>Login</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Default role</th><th>Contact</th><th>Rate</th><th>Hired</th><th>Login</th><th>Status</th><th></th></tr></thead>
           <tbody>
             ${staff.map((s) => `<tr class="${Number(s.active) ? '' : 'muted-row'}">
               <td><strong>${esc(s.name)}</strong>${s.pronoun ? ` <small class="muted">(${esc(s.pronoun)})</small>` : ''}${s.position ? `<br><small>${esc(s.position)}</small>` : ''}${s.notes ? `<br><small class="muted">${esc(s.notes)}</small>` : ''}</td>
               <td><span class="badge">${esc(titleCase(s.default_role))}</span></td>
               <td>${s.email ? esc(s.email) : ''}${s.email && s.phone ? '<br>' : ''}${s.phone ? esc(s.phone) : ''}</td>
               <td>${s.hourly_rate ? `$${esc(Number(s.hourly_rate).toFixed(2))}/hr` : '—'}</td>
+              <td>${s.hire_date ? esc(String(s.hire_date).slice(0, 10)) : '<span class="muted">—</span>'}</td>
               <td>${s.user_name ? esc(s.user_name) : '<span class="muted">—</span>'}</td>
               <td>${Number(s.active) ? '<span class="badge status-confirmed">Active</span>' : '<span class="badge status-canceled">Inactive</span>'}</td>
               <td class="row-actions">
                 <button class="small secondary" data-edit="${esc(s.id)}">Edit</button>
                 <button class="small danger" data-delete="${esc(s.id)}" data-name="${esc(s.name)}">Delete</button>
               </td>
-            </tr>`).join('') || '<tr><td colspan="7"><div class="empty-state">No staff yet — use the + above to add your first crew member.</div></td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="8"><div class="empty-state">No staff yet — use the + above to add your first crew member.</div></td></tr>'}
           </tbody>
         </table>
       </article>
@@ -219,6 +220,7 @@ class AdminStaff extends PanicElement {
         <label>Email <input type="email" name="email" value="${esc(s.email || '')}" placeholder="Optional"></label>
         <label>Phone <input name="phone" value="${esc(s.phone || '')}" placeholder="Optional"></label>
         <label>Hourly rate <input type="number" step="0.01" name="hourly_rate" value="${esc(s.hourly_rate || '')}" placeholder="Optional"></label>
+        <label>Hire date <input type="date" name="hire_date" value="${esc(s.hire_date ? String(s.hire_date).slice(0, 10) : '')}"></label>
         <label>Link to login <select name="user_id">${userOpts}</select></label>
         <label class="wide">Notes <input name="notes" value="${esc(s.notes || '')}" placeholder="Allergies, certifications, availability"></label>
         <label class="check-label"><input type="checkbox" name="active" value="1" ${active ? 'checked' : ''}> Active</label>
