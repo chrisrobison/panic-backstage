@@ -68,6 +68,30 @@ final class GoogleSheets
     ];
 
     /**
+     * Columns written when APPENDING a brand-new row for an app-created event
+     * that has no sheet row yet. Superset of FIELD_COLUMN: also includes the
+     * identity columns (referral B, promoter C, title D, date E, capacity K,
+     * room L) so the appended row is a complete, human-readable Tracker entry.
+     * Positions match the importer's column map in generate-import-sql.py.
+     */
+    public const APPEND_COLUMN = [
+        'external_id'        => 'A',
+        'referral_source'    => 'B',
+        'promoter_name'      => 'C',
+        'title'              => 'D',
+        'date'               => 'E',
+        'potential_revenue'  => 'F',
+        'capacity'           => 'K',
+        'room'               => 'L',
+        'status'             => 'M',
+        'ticket_system'      => 'O',
+        'contract_url'       => 'P',
+        'walkthrough_done'   => 'Q',
+        'ticket_url'         => 'R',
+        'settlement_doc_url' => 'S',
+    ];
+
+    /**
      * Dedicated, immutable link key: the app's events.id is written into this
      * sheet column so write-back can locate a row even after its title/date
      * (and therefore its slug) is edited in-app. The column is hidden in the
@@ -285,9 +309,21 @@ final class GoogleSheets
     /** GET a single column's values (rows from row 1). Returns null on API error. */
     private function readColumn(string $col): ?array
     {
+        $r = $this->readColumnResult($col);
+        return $r['ok'] ? $r['values'] : null;
+    }
+
+    /**
+     * GET a column, distinguishing "read failed" from "read ok, empty/no match".
+     * @return array{ok:bool,values:array} ok=false means an API/auth error — the
+     *         caller must NOT treat a not-found as definitive (avoids a spurious
+     *         append when the lookup itself failed).
+     */
+    private function readColumnResult(string $col): array
+    {
         $token = $this->accessToken();
         if ($token === null) {
-            return null;
+            return ['ok' => false, 'values' => []];
         }
         [$code, $resp] = $this->http(
             'GET',
@@ -298,10 +334,161 @@ final class GoogleSheets
         );
         if ($code < 200 || $code >= 300) {
             $this->log("FAIL: read column {$col} -> HTTP {$code} {$resp}");
-            return null;
+            return ['ok' => false, 'values' => []];
         }
         $json = json_decode($resp, true);
-        return $json['values'] ?? [];
+        return ['ok' => true, 'values' => $json['values'] ?? []];
+    }
+
+    /**
+     * Locate the first row whose cell in $col satisfies $match.
+     * @return array{ok:bool,row:?int} ok=false on read error; row=null = no match.
+     */
+    private function locateInColumn(string $col, callable $match): array
+    {
+        $r = $this->readColumnResult($col);
+        if (!$r['ok']) {
+            return ['ok' => false, 'row' => null];
+        }
+        foreach ($r['values'] as $i => $cells) {
+            $cell = isset($cells[0]) ? trim((string) $cells[0]) : '';
+            if ($cell !== '' && $match($cell)) {
+                return ['ok' => true, 'row' => $i + 1]; // values are 0-indexed from row 1
+            }
+        }
+        return ['ok' => true, 'row' => null];
+    }
+
+    /** @return array{ok:bool,row:?int} row of the App ID column matching $appId. */
+    public function locateAppId(int $appId): array
+    {
+        return $this->locateInColumn(self::APP_ID_COLUMN, fn ($c) => ctype_digit($c) && (int) $c === $appId);
+    }
+
+    /** @return array{ok:bool,row:?int} row of column A matching the external id. */
+    public function locateExternalId(string $externalId): array
+    {
+        $externalId = trim($externalId);
+        if ($externalId === '') {
+            return ['ok' => true, 'row' => null];
+        }
+        return $this->locateInColumn('A', fn ($c) => strcasecmp($c, $externalId) === 0);
+    }
+
+    // ─── Two-way write: update existing, link legacy, or append new ──────────────
+
+    /**
+     * Reconcile one app event with the sheet. Order of resolution:
+     *   1. App ID (col Z) match        → update app-owned fields in place.
+     *   2. external_id (col A) match    → link the row (write App ID), then update.
+     *   3. no match                     → append a complete new Tracker row.
+     *
+     * The link step (2) is what prevents duplicate rows for events that came
+     * from the sheet originally (they have EVT-N in col A) but were never linked.
+     *
+     * @param array<string,mixed> $event row with at least array_keys(APPEND_COLUMN)
+     * @return array{ok:bool,action:string} action ∈ updated|linked|appended|error|not_configured
+     */
+    public function syncEventRow(int $appId, array $event): array
+    {
+        if (!$this->isConfigured()) {
+            return ['ok' => false, 'action' => 'not_configured'];
+        }
+        $appFields = [];
+        foreach (array_keys(self::FIELD_COLUMN) as $f) {
+            if (array_key_exists($f, $event)) {
+                $appFields[$f] = $event[$f];
+            }
+        }
+
+        $byId = $this->locateAppId($appId);
+        if (!$byId['ok']) {
+            return ['ok' => false, 'action' => 'error'];
+        }
+        if ($byId['row'] !== null) {
+            return ['ok' => $this->writeFields($byId['row'], $appFields, "app id {$appId}"), 'action' => 'updated'];
+        }
+
+        // Not linked yet — try the legacy external_id key before appending so we
+        // adopt an existing Tracker row instead of duplicating it.
+        $ext = trim((string) ($event['external_id'] ?? ''));
+        if ($ext !== '') {
+            $byExt = $this->locateExternalId($ext);
+            if (!$byExt['ok']) {
+                return ['ok' => false, 'action' => 'error'];
+            }
+            if ($byExt['row'] !== null) {
+                $this->writeAppId($byExt['row'], $appId); // link for next time
+                return ['ok' => $this->writeFields($byExt['row'], $appFields, "app id {$appId} (linked)"), 'action' => 'linked'];
+            }
+        }
+
+        return ['ok' => $this->appendEventRow($appId, $event), 'action' => 'appended'];
+    }
+
+    /**
+     * Append a complete new Tracker row for an app-created event, including its
+     * immutable App ID (so the next sync finds it by id and updates in place).
+     *
+     * @param array<string,mixed> $event row with array_keys(APPEND_COLUMN)
+     */
+    public function appendEventRow(int $appId, array $event): bool
+    {
+        if (!$this->isConfigured()) {
+            $this->log("skip append: not configured (app id {$appId})");
+            return false;
+        }
+        $colToValue = [];
+        foreach (self::APPEND_COLUMN as $field => $col) {
+            if (array_key_exists($field, $event)) {
+                $colToValue[$col] = $this->formatValue($field, $event[$field]);
+            }
+        }
+        $colToValue[self::APP_ID_COLUMN] = (string) $appId;
+        $ok = $this->appendRow($colToValue);
+        $this->log(($ok ? 'ok' : 'FAIL') . ": append app id {$appId} (EVT " . ($event['external_id'] ?? '?') . ')');
+        return $ok;
+    }
+
+    /**
+     * Append a single row to the Tracker table. $colToValue maps column letters
+     * to values; gaps are written blank. Uses the API's append (INSERT_ROWS) so
+     * Google places the row after the last data row of the table.
+     *
+     * @param array<string,string> $colToValue e.g. ['A' => 'EVT-9', 'D' => 'Title', 'Z' => '123']
+     */
+    public function appendRow(array $colToValue): bool
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return false;
+        }
+        $cells = [];
+        $maxIdx = 0;
+        foreach ($colToValue as $col => $val) {
+            $idx = self::colIndex($col);
+            $cells[$idx] = (string) $val;
+            $maxIdx = max($maxIdx, $idx);
+        }
+        $row = [];
+        for ($i = 0; $i <= $maxIdx; $i++) {
+            $row[$i] = $cells[$i] ?? '';
+        }
+
+        $range = "{$this->tab}!A" . self::HEADER_ROW . ':' . self::APP_ID_COLUMN;
+        [$code, $resp] = $this->http(
+            'POST',
+            self::API_BASE . '/' . rawurlencode($this->sheetId)
+                . '/values/' . rawurlencode($range)
+                . ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',
+            $token,
+            ['values' => [$row]]
+        );
+        if ($code >= 200 && $code < 300) {
+            return true;
+        }
+        $this->log("FAIL: append row -> HTTP {$code} {$resp}");
+        return false;
     }
 
     // ─── App ID column management (backfill / linking) ───────────────────────────
@@ -603,6 +790,10 @@ final class GoogleSheets
             // Known slug -> curated label; otherwise Title Case the slug.
             return self::STATUS_SHEET_LABEL[$slug]
                 ?? ucwords(str_replace('_', ' ', $slug));
+        }
+        if ($field === 'room') {
+            $room = strtolower(trim((string) $value));
+            return $room === '' ? '' : ucfirst($room); // upstairs -> Upstairs, both -> Both
         }
         if ($value === null) {
             return '';

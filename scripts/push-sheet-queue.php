@@ -39,11 +39,12 @@ if (!$sheets->isConfigured()) {
     exit(0);
 }
 
-$pushable = array_keys(GoogleSheets::FIELD_COLUMN);
+// Full identity + app-owned field set so unlinked events can be appended.
+$pushable = array_keys(GoogleSheets::APPEND_COLUMN);
 $cols     = implode(', ', array_map(fn ($c) => "e.{$c}", $pushable));
 
 $rows = $db->all(
-    "SELECT q.event_id, e.external_id, {$cols}
+    "SELECT q.event_id, {$cols}
      FROM   sheet_sync_queue q
      JOIN   events e ON e.id = q.event_id
      WHERE  q.status = 'pending' AND q.attempts < ?
@@ -57,18 +58,19 @@ $ok = 0; $fail = 0; $skip = 0;
 foreach ($rows as $r) {
     $eventId = (int) $r['event_id'];
 
-    $fields = [];
+    $event = [];
     foreach ($pushable as $f) {
         if (array_key_exists($f, $r)) {
-            $fields[$f] = $r[$f];
+            $event[$f] = $r[$f];
         }
     }
 
-    // Locate the row by the immutable app id (App ID column). An event whose
-    // row hasn't been linked yet (no App ID written) returns false and stays
-    // pending — it is NOT marked done, so the silent-success bug is gone and the
-    // failure is visible in last_error for inspection / backfill.
-    if ($sheets->pushEventByAppId($eventId, $fields)) {
+    // Update the linked row, link+update a legacy EVT-N row, or append a brand
+    // new row. Only a genuine success marks the queue row done; read errors keep
+    // it pending (no spurious append), and definitive failures surface in
+    // last_error for inspection.
+    $res = $sheets->syncEventRow($eventId, $event);
+    if ($res['ok']) {
         $db->run(
             "UPDATE sheet_sync_queue
              SET status = 'done', attempts = attempts + 1, last_error = NULL, pushed_at = NOW()
@@ -76,7 +78,7 @@ foreach ($rows as $r) {
             [$eventId]
         );
         $ok++;
-        if ($verbose) echo "  ✓ event #{$eventId}\n";
+        if ($verbose) echo "  ✓ event #{$eventId} ({$res['action']})\n";
     } else {
         $db->run(
             "UPDATE sheet_sync_queue

@@ -248,12 +248,10 @@ final class Events extends BaseEndpoint
                 [$id]
             );
 
-            $ev = $this->db->one(
-                'SELECT status, potential_revenue, ticket_system,
-                        contract_url, walkthrough_done, ticket_url, settlement_doc_url
-                 FROM events WHERE id = ? LIMIT 1',
-                [$id]
-            );
+            // Full identity + app-owned field set so an unlinked event can be
+            // appended as a complete Tracker row (not just updated in place).
+            $cols = implode(', ', array_keys(GoogleSheets::APPEND_COLUMN));
+            $ev = $this->db->one("SELECT {$cols} FROM events WHERE id = ? LIMIT 1", [$id]);
             if (!$ev) {
                 return;
             }
@@ -263,18 +261,10 @@ final class Events extends BaseEndpoint
                 return; // not set up yet — the cron sweep retries once the key lands
             }
 
-            $fields = [];
-            foreach (array_keys(GoogleSheets::FIELD_COLUMN) as $f) {
-                if (array_key_exists($f, $ev)) {
-                    $fields[$f] = $ev[$f];
-                }
-            }
-
-            // Locate the sheet row by the immutable app id (App ID column). This
-            // works for every event whose row has been linked, regardless of
-            // whether it has an external_id. Rows that aren't linked yet stay
-            // 'pending' for the cron sweep / backfill to handle.
-            if ($sheets->pushEventByAppId($id, $fields)) {
+            // Update the linked row, link+update a legacy EVT-N row, or append a
+            // brand-new row for an app-created event with no sheet presence.
+            $res = $sheets->syncEventRow($id, $ev);
+            if ($res['ok']) {
                 $this->db->run(
                     'UPDATE sheet_sync_queue
                      SET status = \'done\', attempts = attempts + 1, last_error = NULL, pushed_at = NOW()
