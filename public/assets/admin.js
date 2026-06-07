@@ -8,6 +8,7 @@ import { esc, titleCase, publish, api, formData, badge, option, select, can, tab
 
 const ADMIN_TABS = [
   { key: 'users',     title: 'Users',     icon: 'fa-user-gear' },
+  { key: 'duplicates', title: 'Duplicates', icon: 'fa-clone' },
   { key: 'staff',     title: 'Staff',     icon: 'fa-people-group' },
   { key: 'templates', title: 'Templates', icon: 'fa-layer-group' },
   { key: 'contracts', title: 'Contracts', icon: 'fa-file-signature' },
@@ -37,7 +38,7 @@ class AdminPage extends PanicElement {
       this.render();
     }));
     const outlet = $('.admin-outlet', this);
-    const tag = { users: 'pb-admin-users', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts', payments: 'pb-payment-settings' }[this.tab];
+    const tag = { users: 'pb-admin-users', duplicates: 'pb-user-duplicates', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts', payments: 'pb-payment-settings' }[this.tab];
     outlet.replaceChildren(document.createElement(tag));
   }
 }
@@ -174,8 +175,13 @@ class AdminUsers extends PanicElement {
         <p class="muted">${Number(user.has_password) ? 'Password is set.' : 'No password set — user can sign in via passkey or email link.'} ${Number(user.passkey_count)} passkey${Number(user.passkey_count) === 1 ? '' : 's'} registered.</p>
         <button>Save</button>
       </form>
+      <div class="section-head padded"><h2>Email addresses</h2></div>
+      <div class="padded" data-emails-mount></div>
     </div>`;
     document.body.appendChild(dialog);
+    const emailsEl = document.createElement('pb-user-emails');
+    emailsEl.user = user;
+    $('[data-emails-mount]', dialog).appendChild(emailsEl);
     const close = () => dialog.remove();
     $('[data-close]', dialog).addEventListener('click', close);
     dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });

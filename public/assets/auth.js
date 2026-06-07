@@ -60,7 +60,16 @@ class LoginPage extends PanicElement {
     // and a verify call here would mark the token used_at and burn it
     // before the human ever clicks the bubble. Instead we render an
     // explicit "Continue" interstitial and verify only on a real click.
-    const urlToken = new URLSearchParams(location.search).get('token');
+    const params = new URLSearchParams(location.search);
+    // ── Email-alias verification landing ──────────────────────────────────
+    // {APP_URL}/login.html?verify_email=<token> confirms a newly-added alias.
+    // Unlike magic links this grants no session, so it is safe to call on load.
+    const verifyEmailToken = params.get('verify_email');
+    if (verifyEmailToken) {
+      await this.renderVerifyEmail(verifyEmailToken);
+      return;
+    }
+    const urlToken = params.get('token');
     if (urlToken) {
       await this.renderTokenLanding(urlToken);
       return;
@@ -115,6 +124,30 @@ class LoginPage extends PanicElement {
       if (errEl) errEl.textContent = err.message || 'Could not sign in. Request a fresh link.';
       if (btn) { btn.disabled = false; btn.textContent = 'Continue to your account'; }
     }
+  }
+
+  /**
+   * Confirm an email alias from ?verify_email=<token>. Calls the public
+   * /auth/verify-email endpoint and shows a success/failure state. Grants no
+   * session — the user still signs in normally afterward.
+   */
+  async renderVerifyEmail(token) {
+    this.innerHTML = `<main class="auth-card"><pb-loading-state label="Confirming your email"></pb-loading-state></main>`;
+    let ok = false;
+    try {
+      const res = await api('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) });
+      ok = !!res?.ok;
+    } catch {
+      ok = false;
+    }
+    this.innerHTML = `<main class="auth-card">
+      <h1>Panic Backstage</h1>
+      ${ok
+        ? `<div class="auth-notice success">✓ Email confirmed. You can now sign in with this address.</div>`
+        : `<div class="auth-notice error">That confirmation link is invalid or has expired. Ask an admin to resend it.</div>`}
+      <p class="auth-sub"><a href="${esc(appUrl('login.html'))}">Continue to sign in</a></p>
+    </main>
+    <pb-toast-stack></pb-toast-stack>`;
   }
 
   /** Hand off to the app after any successful sign-in path. */

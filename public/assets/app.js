@@ -5,6 +5,7 @@ import './core.js';
 import './print.js';
 import './contracts.js';
 import './admin.js';
+import './user-emails.js';
 import './ticketing-admin.js';
 import './tickets-public.js';
 import './help.js';
@@ -80,6 +81,7 @@ class AppShell extends PanicElement {
           <button class="nav-parent" type="button" data-group-toggle="admin" aria-expanded="false"><i class="fa-solid fa-user-shield" aria-hidden="true"></i><span class="nav-parent-label">Admin</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
           <div class="nav-children">
             <a data-nav="admin-users" href="#admin-users"><i class="fa-solid fa-user-gear" aria-hidden="true"></i>Users</a>
+            <a data-nav="admin-duplicates" href="#admin-duplicates"><i class="fa-solid fa-clone" aria-hidden="true"></i>Duplicates</a>
             <a data-nav="admin-staff" href="#admin-staff"><i class="fa-solid fa-people-group" aria-hidden="true"></i>Staff</a>
             <a data-nav="admin-templates" href="#admin-templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
             <a data-nav="admin-contracts" href="#admin-contracts"><i class="fa-solid fa-file-signature" aria-hidden="true"></i>Contracts</a>
@@ -190,6 +192,9 @@ class AppShell extends PanicElement {
     }
     if (!this.capabilities?.create_events) {
       $$('[data-action="new-event"]', this).forEach((btn) => btn.remove());
+    }
+    if (!this.capabilities?.manage_users) {
+      $$('[data-nav="admin-duplicates"]', this).forEach((link) => link.remove());
     }
     if (!this.capabilities?.manage_users && !this.capabilities?.manage_staff_roster && !this.capabilities?.manage_templates) {
       $$('[data-nav-admin]', this).forEach((el) => el.remove());

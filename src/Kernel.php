@@ -71,6 +71,15 @@ final class Kernel
 
         // User accounts (admin)
         if ($segments[0] === 'users') {
+            // Duplicate detection + account merge (admin; manage_users gate inside endpoint).
+            //   GET  /api/users/duplicates  -> suggested duplicate pairs
+            //   POST /api/users/merge       -> fold loser into survivor (atomic)
+            if (($segments[1] ?? null) === 'duplicates') {
+                return [Duplicates::class, ['action' => 'duplicates']];
+            }
+            if (($segments[1] ?? null) === 'merge') {
+                return [Duplicates::class, ['action' => 'merge']];
+            }
             // Alias self-management: /api/users/{id}/emails[/resend|/primary]
             if (($segments[2] ?? null) === 'emails') {
                 return [UserEmails::class, [

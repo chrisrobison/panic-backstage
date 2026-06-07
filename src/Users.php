@@ -43,7 +43,7 @@ final class Users extends BaseEndpoint
     {
         $users = $this->db->all(
             "SELECT u.id, u.name, u.email, u.phone, u.role, u.access_status, u.request_notes,
-                    u.created_at, u.updated_at,
+                    u.alt_emails, u.created_at, u.updated_at,
                     (u.password_hash IS NOT NULL) AS has_password,
                     (SELECT COUNT(*) FROM passkeys p WHERE p.user_id = u.id) AS passkey_count,
                     (SELECT COUNT(*) FROM events e WHERE e.owner_user_id = u.id) AS owned_event_count,
