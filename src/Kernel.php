@@ -71,6 +71,13 @@ final class Kernel
 
         // User accounts (admin)
         if ($segments[0] === 'users') {
+            // Alias self-management: /api/users/{id}/emails[/resend|/primary]
+            if (($segments[2] ?? null) === 'emails') {
+                return [UserEmails::class, [
+                    'userId' => $this->intOrNull($segments[1] ?? null),
+                    'sub'    => $segments[3] ?? null,
+                ]];
+            }
             return [Users::class, [
                 'userId' => $this->intOrNull($segments[1] ?? null),
                 'action' => $segments[2] ?? null,

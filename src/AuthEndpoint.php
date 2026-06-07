@@ -44,14 +44,26 @@ final class AuthEndpoint extends BaseEndpoint
 {
     public function handle(Request $request): Response
     {
+        $action = $this->params['action'] ?? '';
+
+        // verify-email accepts GET (clicked link) or POST; everything else is POST.
+        if ($action === 'verify-email') {
+            if (!in_array($request->method(), ['GET', 'POST'], true)) {
+                return Response::methodNotAllowed();
+            }
+            return $this->verifyEmail($request);
+        }
+
         if ($request->method() !== 'POST') {
             return Response::methodNotAllowed();
         }
-        return match ($this->params['action'] ?? '') {
+        return match ($action) {
             // Magic-link
             'magic-link'               => $this->requestMagicLink($request),
             'verify-status'            => $this->verifyStatus($request),
             'verify'                   => $this->verify($request),
+            // Alias email confirmation (public, no JWT)
+            'verify-email'             => $this->verifyEmail($request),
             // Email-first lookup
             'lookup'                   => $this->lookup($request),
             // Access requests
@@ -181,7 +193,9 @@ final class AuthEndpoint extends BaseEndpoint
             [$row['id']]
         );
 
-        $user = $this->db->one('SELECT * FROM users WHERE email = ? LIMIT 1', [$row['email']]);
+        // Resolve via primary OR verified alias so a magic link sent to a
+        // verified alias signs the existing account in (never spawns a dupe).
+        $user = Identity::resolveUserByEmail($this->db, (string) $row['email']);
         if (!$user) {
             $id   = $this->db->insert(
                 'INSERT INTO users (name, email, role) VALUES (?, ?, ?)',
@@ -191,6 +205,88 @@ final class AuthEndpoint extends BaseEndpoint
         }
 
         return $this->ok($this->issueTokenPair($user));
+    }
+
+    // ─── Alias email confirmation ─────────────────────────────────────────────
+
+    /**
+     * Public, no-JWT confirmation of a newly added alias. Consumes a single-use,
+     * unexpired email_verification_tokens row (looked up by hash) and stamps the
+     * matching alt_emails entry's verified_at. Idempotent-ish: a token that was
+     * already consumed reports success only when the alias is in fact verified,
+     * so login.html can always render "email confirmed".
+     *
+     * Accepts the token via query string (GET link) or JSON body (POST).
+     */
+    private function verifyEmail(Request $request): Response
+    {
+        $token = trim((string) ($request->body('token', '') ?: $request->query('token', '')));
+        if ($token === '') {
+            return Response::json(['error' => 'Token is required'], 422);
+        }
+
+        $hash = $this->auth->hashToken($token);
+        $row  = $this->db->one(
+            'SELECT * FROM email_verification_tokens WHERE token_hash = ? LIMIT 1',
+            [$hash]
+        );
+        if (!$row) {
+            return Response::json(['error' => 'Invalid or expired confirmation link'], 401);
+        }
+
+        $email = strtolower(trim((string) $row['email']));
+
+        // Already consumed: succeed iff the alias is actually verified now.
+        if ($row['used_at'] !== null) {
+            $user = $this->db->one('SELECT * FROM users WHERE id = ? LIMIT 1', [(int) $row['user_id']]);
+            if ($user) {
+                foreach (Identity::altEmails($user) as $entry) {
+                    if (($entry['email'] ?? null) === $email && !empty($entry['verified_at'])) {
+                        return $this->ok(['ok' => true, 'email' => $email]);
+                    }
+                }
+            }
+            return Response::json(['error' => 'This confirmation link has already been used'], 401);
+        }
+
+        if (strtotime((string) $row['expires_at']) < time()) {
+            return Response::json(['error' => 'Invalid or expired confirmation link'], 401);
+        }
+
+        $user = $this->db->one('SELECT * FROM users WHERE id = ? LIMIT 1', [(int) $row['user_id']]);
+        if (!$user) {
+            return Response::json(['error' => 'Account no longer exists'], 401);
+        }
+
+        // Stamp verified_at on the matching alt_emails entry.
+        $entries = Identity::altEmails($user);
+        $found   = false;
+        foreach ($entries as &$entry) {
+            if (($entry['email'] ?? null) === $email) {
+                if (empty($entry['verified_at'])) {
+                    $entry['verified_at'] = date('c');
+                }
+                $found = true;
+                break;
+            }
+        }
+        unset($entry);
+
+        if (!$found) {
+            // Alias was removed after the token was minted.
+            return Response::json(['error' => 'This email is no longer pending confirmation'], 409);
+        }
+
+        $this->db->run(
+            'UPDATE users SET alt_emails = ? WHERE id = ?',
+            [json_encode(array_values($entries)), (int) $user['id']]
+        );
+        $this->db->run(
+            'UPDATE email_verification_tokens SET used_at = NOW() WHERE id = ?',
+            [(int) $row['id']]
+        );
+
+        return $this->ok(['ok' => true, 'email' => $email]);
     }
 
     /**
@@ -238,7 +334,10 @@ final class AuthEndpoint extends BaseEndpoint
     {
         // Active accounts only — a 'requested' account is awaiting admin
         // approval and must not be able to sign in via a self-served link.
-        if ($this->db->one("SELECT id FROM users WHERE email = ? AND access_status = 'active' LIMIT 1", [$email])) {
+        // Resolve via primary OR verified alias so a verified secondary
+        // address is also eligible to receive a link to its owning account.
+        $user = Identity::resolveUserByEmail($this->db, $email);
+        if ($user && ($user['access_status'] ?? null) === 'active') {
             return true;
         }
         return $this->hasOpenInvite($email);
@@ -345,7 +444,9 @@ final class AuthEndpoint extends BaseEndpoint
             return Response::json(['error' => 'Email and password are required'], 422);
         }
 
-        $user = $this->db->one('SELECT * FROM users WHERE email = ? LIMIT 1', [$email]);
+        // Primary-email login is unchanged: resolveUserByEmail tries the exact
+        // users.email match FIRST. A VERIFIED alias resolves as an added fallback.
+        $user = Identity::resolveUserByEmail($this->db, $email);
         if (!$user || !$user['password_hash'] || !password_verify($password, (string) $user['password_hash'])) {
             return Response::json(['error' => 'Invalid email or password'], 401);
         }
