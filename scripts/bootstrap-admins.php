@@ -42,7 +42,7 @@ if ($appUrl === '') {
 $seedAdmins = [
     ['name' => 'Tom',           'email' => 'tom@themab.org'],
     ['name' => 'Dre',           'email' => 'dre@themab.org'],
-    ['name' => 'Bobby Fishkin', 'email' => 'Bobby.fishkin@gmail.com'],
+    ['name' => 'Bobby Fishkin', 'email' => 'bobby@reframeit.com'],
     ['name' => 'Erik Katz',     'email' => 'erik@erikkatz.com'],
     ['name' => 'Sasha Josephs', 'email' => 'sashajosephs@gmail.com'],
     ['name' => 'Alan',          'email' => 'alfonzo10@gmail.com'],
