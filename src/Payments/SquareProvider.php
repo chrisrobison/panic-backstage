@@ -41,6 +41,7 @@ final class SquareProvider implements PaymentProvider
     private string $webhookSignatureKey;
     private string $webhookUrl;
     private string $apiBase;
+    private string $apiVersion;
 
     public function __construct(Env $env)
     {
@@ -48,6 +49,7 @@ final class SquareProvider implements PaymentProvider
         $this->locationId          = (string) $env->get('SQUARE_LOCATION_ID', '');
         $this->webhookSignatureKey = (string) $env->get('SQUARE_WEBHOOK_SIGNATURE_KEY', '');
         $this->webhookUrl          = (string) $env->get('SQUARE_WEBHOOK_URL', '');
+        $this->apiVersion          = (string) $env->get('SQUARE_API_VERSION', self::API_VERSION);
 
         $environment   = strtolower((string) $env->get('SQUARE_ENV', 'sandbox'));
         $this->apiBase = $environment === 'production' ? self::BASE_PROD : self::BASE_SANDBOX;
@@ -259,7 +261,7 @@ final class SquareProvider implements PaymentProvider
                 'Authorization: Bearer ' . $this->accessToken,
                 'Content-Type: application/json',
                 'Accept: application/json',
-                'Square-Version: ' . self::API_VERSION,
+                'Square-Version: ' . $this->apiVersion,
             ],
         ]);
         $body = curl_exec($ch);
