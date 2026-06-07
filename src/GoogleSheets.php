@@ -306,6 +306,32 @@ final class GoogleSheets
         return null;
     }
 
+    /**
+     * Every App ID currently present in the App ID column of the tab, as a set
+     * keyed by id. One API read. Returns null on read/auth error so a failed
+     * read is never mistaken for "nothing present" (which would trigger spurious
+     * re-pushes). Used by the queue reconciliation sweep to detect events marked
+     * done that have vanished from the sheet (older buggy done-marking, or a row
+     * deleted by hand).
+     *
+     * @return array<int,true>|null
+     */
+    public function presentAppIds(): ?array
+    {
+        $r = $this->readColumnResult(self::APP_ID_COLUMN);
+        if (!$r['ok']) {
+            return null;
+        }
+        $set = [];
+        foreach ($r['values'] as $cells) {
+            $cell = isset($cells[0]) ? trim((string) $cells[0]) : '';
+            if ($cell !== '' && ctype_digit($cell)) {
+                $set[(int) $cell] = true;
+            }
+        }
+        return $set;
+    }
+
     /** GET a single column's values (rows from row 1). Returns null on API error. */
     private function readColumn(string $col): ?array
     {

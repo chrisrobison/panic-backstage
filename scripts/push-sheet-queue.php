@@ -93,4 +93,69 @@ foreach ($rows as $r) {
     }
 }
 
-printf("sheet write-back: %d ok, %d failed, %d skipped (of %d pending)\n", $ok, $fail, $skip, count($rows));
+// ── Reconciliation sweep ─────────────────────────────────────────────────────
+// Self-heal events marked `done` that are no longer present in the sheet: rows
+// wrongly flagged done by older code, or a Tracker row a human deleted. One
+// column read tells us every App ID currently in the sheet; re-push only the
+// genuinely-missing ones, bounded per run so a mass deletion can't make a single
+// cron tick run long.
+$reconcileLimit = 50;
+$plainCols      = implode(', ', $pushable);
+$present        = $sheets->presentAppIds();
+$healed = 0; $healFail = 0;
+
+if ($present === null) {
+    if ($verbose) echo "  reconcile: skipped (could not read the App ID column)\n";
+} else {
+    $doneIds = $db->all(
+        "SELECT q.event_id
+         FROM   sheet_sync_queue q
+         JOIN   events e ON e.id = q.event_id
+         WHERE  q.status = 'done'
+         ORDER BY q.pushed_at ASC"
+    );
+
+    foreach ($doneIds as $row) {
+        if (($healed + $healFail) >= $reconcileLimit) {
+            break;
+        }
+        $eventId = (int) $row['event_id'];
+        if (isset($present[$eventId])) {
+            continue; // still in the sheet — nothing to do
+        }
+
+        // Marked done but absent. Re-push via the same path the inline create
+        // uses (update-linked / link-legacy / append-new).
+        $event = $db->one("SELECT {$plainCols} FROM events WHERE id = ? LIMIT 1", [$eventId]);
+        if (!$event) {
+            continue;
+        }
+        $res = $sheets->syncEventRow($eventId, $event);
+        if ($res['ok']) {
+            $db->run(
+                "UPDATE sheet_sync_queue
+                 SET attempts = attempts + 1, last_error = NULL, pushed_at = NOW()
+                 WHERE event_id = ?",
+                [$eventId]
+            );
+            $healed++;
+            if ($verbose) echo "  ⟳ re-pushed event #{$eventId} missing from sheet ({$res['action']})\n";
+        } else {
+            // Flip back to pending so the normal drain keeps retrying it.
+            $db->run(
+                "UPDATE sheet_sync_queue
+                 SET status = 'pending', attempts = attempts + 1,
+                     last_error = 'reconcile: missing from sheet, re-push failed'
+                 WHERE event_id = ?",
+                [$eventId]
+            );
+            $healFail++;
+            if ($verbose) echo "  ✗ event #{$eventId} missing from sheet, re-push failed\n";
+        }
+    }
+}
+
+printf(
+    "sheet write-back: %d ok, %d failed (of %d pending); reconcile: %d healed, %d failed\n",
+    $ok, $fail, count($rows), $healed, $healFail
+);
