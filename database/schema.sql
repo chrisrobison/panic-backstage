@@ -7,8 +7,11 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   role ENUM('venue_admin','event_owner','promoter','band','artist','designer','staff','viewer') NOT NULL DEFAULT 'viewer',
+  alt_emails JSON NULL,                            -- verified secondary emails; only entries with non-null verified_at may authenticate
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  -- MySQL 8.0.17+ multi-valued UNIQUE index over the array's email members.
+  UNIQUE INDEX uq_users_alt_emails ( (CAST(alt_emails->'$[*].email' AS CHAR(255) ARRAY)) )
 );
 
 CREATE TABLE IF NOT EXISTS venues (
@@ -337,3 +340,33 @@ CREATE TABLE payment_settings (
 
 -- events: add internal ticketing toggle (ticket_url/ticket_system already exist for external systems)
 ALTER TABLE events ADD COLUMN ticketing_mode ENUM('external','internal') NOT NULL DEFAULT 'external';
+
+-- ===========================================================================
+-- Multi-email identity (migration 022_multi_email_identity.sql)
+-- ===========================================================================
+
+-- One-time tokens to confirm ownership of a newly added alias (hashed, single-use).
+CREATE TABLE email_verification_tokens (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  token_hash VARCHAR(255) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  used_at DATETIME NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_email_verif_user (user_id),
+  INDEX idx_email_verif_email (email)
+);
+
+-- Audit trail for account merges (what was folded into what, and the moved refs).
+CREATE TABLE user_merges (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  survivor_user_id INT NOT NULL,
+  loser_user_id INT NOT NULL,
+  loser_email VARCHAR(255) NULL,
+  performed_by_user_id INT NULL,
+  details JSON NULL,                 -- per-table repoint counts, moved emails, signals
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_user_merges_survivor (survivor_user_id)
+);
