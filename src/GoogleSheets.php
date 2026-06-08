@@ -471,9 +471,161 @@ final class GoogleSheets
             }
         }
         $colToValue[self::APP_ID_COLUMN] = (string) $appId;
-        $ok = $this->appendRow($colToValue);
-        $this->log(($ok ? 'ok' : 'FAIL') . ": append app id {$appId} (EVT " . ($event['external_id'] ?? '?') . ')');
+
+        // Keep the Tracker in date order (oldest at top): place the new row at
+        // its chronological position instead of at the bottom. Fall back to a
+        // plain bottom append when the event has the latest date, has no
+        // parseable date, or the date column can't be read.
+        $dateCol   = self::APPEND_COLUMN['date'] ?? null;
+        $newDate   = trim((string) ($event['date'] ?? ''));
+        $insertRow = ($dateCol !== null && $newDate !== '')
+            ? $this->dateSortedInsertRow($dateCol, $newDate)
+            : null;
+
+        $ok = $insertRow !== null
+            ? $this->insertRowAt($insertRow, $colToValue)
+            : $this->appendRow($colToValue);
+
+        $this->log(($ok ? 'ok' : 'FAIL') . ': '
+            . ($insertRow !== null ? "insert at row {$insertRow}" : 'append')
+            . " app id {$appId} (EVT " . ($event['external_id'] ?? '?') . ')');
         return $ok;
+    }
+
+    /**
+     * 1-based sheet row at which a new event dated $newDate should be inserted to
+     * keep the date column ascending (oldest at top): the first DATA row whose
+     * date is strictly later than $newDate. Returns null to mean "append at the
+     * bottom" — no later row exists, the new date is unparseable, or the column
+     * read failed. Rows with blank/unparseable dates sort earliest and are
+     * skipped over (they stay above the dated rows, as they are today).
+     */
+    private function dateSortedInsertRow(string $dateCol, string $newDate): ?int
+    {
+        $newTs = strtotime($newDate);
+        if ($newTs === false) {
+            return null;
+        }
+        $r = $this->readColumnResult($dateCol);
+        if (!$r['ok']) {
+            return null; // can't read — append rather than guess a position
+        }
+        $values = $r['values'];
+        // $values[$i] is sheet row ($i + 1); data begins after the header row.
+        for ($i = self::HEADER_ROW; $i < count($values); $i++) {
+            $cell = isset($values[$i][0]) ? trim((string) $values[$i][0]) : '';
+            if ($cell === '') {
+                continue;
+            }
+            $ts = strtotime($cell);
+            if ($ts !== false && $ts > $newTs) {
+                return $i + 1; // insert before this row (1-based)
+            }
+        }
+        return null; // latest date — append at the end
+    }
+
+    /**
+     * Insert one blank row at $row1Based (shifting rows below down by one) and
+     * write $colToValue into it. Inherits formatting from the row above so date/
+     * number cells render consistently. Used to place a new event in date order.
+     */
+    public function insertRowAt(int $row1Based, array $colToValue): bool
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return false;
+        }
+        $gid = $this->tabSheetId();
+        if ($gid === null) {
+            return false;
+        }
+
+        // 1. Structural insert of one empty row.
+        [$code, $resp] = $this->http(
+            'POST',
+            self::API_BASE . '/' . rawurlencode($this->sheetId) . ':batchUpdate',
+            $token,
+            ['requests' => [[
+                'insertDimension' => [
+                    'range' => [
+                        'sheetId'    => $gid,
+                        'dimension'  => 'ROWS',
+                        'startIndex' => $row1Based - 1, // 0-based, inclusive
+                        'endIndex'   => $row1Based,     // exclusive
+                    ],
+                    'inheritFromBefore' => true,
+                ],
+            ]]]
+        );
+        if ($code < 200 || $code >= 300) {
+            $this->log("FAIL: insert row {$row1Based} -> HTTP {$code} {$resp}");
+            return false;
+        }
+
+        // 2. Write the cells into the freshly-inserted (empty) row.
+        $cells  = [];
+        $maxIdx = 0;
+        foreach ($colToValue as $col => $val) {
+            $idx          = self::colIndex($col);
+            $cells[$idx]  = (string) $val;
+            $maxIdx       = max($maxIdx, $idx);
+        }
+        $rowVals = [];
+        for ($i = 0; $i <= $maxIdx; $i++) {
+            $rowVals[$i] = $cells[$i] ?? '';
+        }
+        $range = "{$this->tab}!A{$row1Based}:" . self::APP_ID_COLUMN . $row1Based;
+        [$code, $resp] = $this->http(
+            'PUT',
+            self::API_BASE . '/' . rawurlencode($this->sheetId)
+                . '/values/' . rawurlencode($range)
+                . '?valueInputOption=USER_ENTERED',
+            $token,
+            ['values' => [$rowVals]]
+        );
+        if ($code >= 200 && $code < 300) {
+            return true;
+        }
+        $this->log("FAIL: write inserted row {$row1Based} -> HTTP {$code} {$resp}");
+        return false;
+    }
+
+    /**
+     * Delete a single row by 1-based number (shifting rows below up by one).
+     * Symmetric counterpart to insertRowAt; used by tests and for removing a
+     * row from the sheet.
+     */
+    public function deleteRow(int $row1Based): bool
+    {
+        $token = $this->accessToken();
+        if ($token === null) {
+            return false;
+        }
+        $gid = $this->tabSheetId();
+        if ($gid === null) {
+            return false;
+        }
+        [$code, $resp] = $this->http(
+            'POST',
+            self::API_BASE . '/' . rawurlencode($this->sheetId) . ':batchUpdate',
+            $token,
+            ['requests' => [[
+                'deleteDimension' => [
+                    'range' => [
+                        'sheetId'    => $gid,
+                        'dimension'  => 'ROWS',
+                        'startIndex' => $row1Based - 1,
+                        'endIndex'   => $row1Based,
+                    ],
+                ],
+            ]]]
+        );
+        if ($code >= 200 && $code < 300) {
+            return true;
+        }
+        $this->log("FAIL: delete row {$row1Based} -> HTTP {$code} {$resp}");
+        return false;
     }
 
     /**
