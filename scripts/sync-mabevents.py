@@ -44,6 +44,7 @@ XLSX_PATH    = PROJECT_ROOT / 'MabEvents.xlsx'
 GENERATE_PY  = SCRIPT_DIR / 'generate-import-sql.py'
 IMPORT_PHP   = SCRIPT_DIR / 'import-mabevents.php'
 DUMP_PHP     = SCRIPT_DIR / 'dump-sheet-shadow.php'
+DUMP_LINKS_PHP = SCRIPT_DIR / 'dump-sheet-import-links.php'
 APPID_PHP    = SCRIPT_DIR / 'app-id-sync.php'
 
 # ── Default sheet ─────────────────────────────────────────────────────────────
@@ -94,11 +95,29 @@ def dump_shadow() -> None:
     if result.returncode != 0:
         sys.exit(f"ERROR: {DUMP_PHP.name} exited {result.returncode}")
 
+def dump_import_links() -> None:
+    # Export not-yet-confirmed sheet->app links so the generator reuses an
+    # already-created event for a still-blank row instead of inserting a
+    # duplicate. Best-effort: a failure just falls back to insert-if-new.
+    print(f"→ Dumping pending import links via {DUMP_LINKS_PHP.name} …")
+    result = subprocess.run(['php', str(DUMP_LINKS_PHP)])
+    if result.returncode != 0:
+        print(f"  WARNING: {DUMP_LINKS_PHP.name} exited {result.returncode} (non-fatal)")
+
 def generate_sql() -> None:
     print(f"→ Regenerating SQL via {GENERATE_PY.name} …")
     result = subprocess.run([sys.executable, str(GENERATE_PY)])
     if result.returncode != 0:
         sys.exit(f"ERROR: {GENERATE_PY.name} exited {result.returncode}")
+
+def link_imports() -> None:
+    # Write each freshly-created event's id back into the EXACT sheet row it came
+    # from (recorded in sheet_import_links) and confirm the link. Precise and
+    # retry-safe — runs every sync, a no-op once everything is confirmed.
+    print(f"→ Writing back new-event App IDs via {APPID_PHP.name} link-imports …")
+    result = subprocess.run(['php', str(APPID_PHP), 'link-imports'])
+    if result.returncode != 0:
+        print(f"  WARNING: {APPID_PHP.name} link-imports exited {result.returncode} (non-fatal)")
 
 def backfill_app_ids() -> None:
     # Links any newly-inserted events back to their sheet rows (writes the App ID
@@ -137,6 +156,7 @@ def main() -> None:
         print(f"→ Skipping download; using existing {XLSX_PATH}")
 
     dump_shadow()
+    dump_import_links()
     generate_sql()
 
     if args.dry_run:
@@ -145,7 +165,8 @@ def main() -> None:
         return
 
     apply_sql()
-    backfill_app_ids()
+    link_imports()      # precise write-back for events just created from the sheet
+    backfill_app_ids()  # legacy slug/external_id linking for everything else
     print("✓ Sync complete.")
 
 if __name__ == '__main__':
