@@ -61,32 +61,32 @@ class AppShell extends PanicElement {
     this.innerHTML = `<aside class="sidebar">
       <a class="brand" href="#dashboard" aria-label="Panic Backstage home"><span class="brand-mark" aria-hidden="true"></span><span>Panic Backstage</span></a>
       <nav class="side-nav" aria-label="Main navigation">
-        <a data-nav="dashboard" href="#dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
+        <a data-nav="dashboard" href="#dashboard" title="Dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
         <div class="nav-group" data-group="events">
-          <button class="nav-parent" type="button" data-group-toggle="events" aria-expanded="false"><i class="fa-solid fa-ticket" aria-hidden="true"></i><span class="nav-parent-label">Events</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+          <button class="nav-parent" type="button" data-group-toggle="events" aria-expanded="false" title="Events"><i class="fa-solid fa-ticket" aria-hidden="true"></i><span class="nav-parent-label">Events</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
           <div class="nav-children">
-            <a data-nav="events" href="#events"><i class="fa-solid fa-list" aria-hidden="true"></i>List</a>
-            <a data-nav="calendar" href="#calendar"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Calendar</a>
-            <a data-nav="pipeline" href="#pipeline"><i class="fa-solid fa-table-columns" aria-hidden="true"></i>Pipeline</a>
+            <a data-nav="events" href="#events" title="Event list"><i class="fa-solid fa-list" aria-hidden="true"></i>List</a>
+            <a data-nav="calendar" href="#calendar" title="Calendar"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Calendar</a>
+            <a data-nav="pipeline" href="#pipeline" title="Pipeline"><i class="fa-solid fa-table-columns" aria-hidden="true"></i>Pipeline</a>
           </div>
         </div>
         <div class="nav-group" data-group="settings">
-          <button class="nav-parent" type="button" data-group-toggle="settings" aria-expanded="false"><i class="fa-solid fa-gear" aria-hidden="true"></i><span class="nav-parent-label">Settings</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+          <button class="nav-parent" type="button" data-group-toggle="settings" aria-expanded="false" title="Settings"><i class="fa-solid fa-gear" aria-hidden="true"></i><span class="nav-parent-label">Settings</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
           <div class="nav-children">
-            <a data-nav="account" href="#account"><i class="fa-solid fa-user" aria-hidden="true"></i>Account</a>
-            <a data-nav="templates" href="#templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
-            <a data-nav="preferences" href="#preferences"><i class="fa-solid fa-sliders" aria-hidden="true"></i>Preferences</a>
+            <a data-nav="account" href="#account" title="Account"><i class="fa-solid fa-user" aria-hidden="true"></i>Account</a>
+            <a data-nav="templates" href="#templates" title="Templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
+            <a data-nav="preferences" href="#preferences" title="Preferences"><i class="fa-solid fa-sliders" aria-hidden="true"></i>Preferences</a>
           </div>
         </div>
         <div class="nav-group" data-group="admin" data-nav-admin>
-          <button class="nav-parent" type="button" data-group-toggle="admin" aria-expanded="false"><i class="fa-solid fa-user-shield" aria-hidden="true"></i><span class="nav-parent-label">Admin</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+          <button class="nav-parent" type="button" data-group-toggle="admin" aria-expanded="false" title="Admin"><i class="fa-solid fa-user-shield" aria-hidden="true"></i><span class="nav-parent-label">Admin</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
           <div class="nav-children">
-            <a data-nav="admin-users" href="#admin-users"><i class="fa-solid fa-user-gear" aria-hidden="true"></i>Users</a>
-            <a data-nav="admin-duplicates" href="#admin-duplicates"><i class="fa-solid fa-clone" aria-hidden="true"></i>Duplicates</a>
-            <a data-nav="admin-staff" href="#admin-staff"><i class="fa-solid fa-people-group" aria-hidden="true"></i>Staff</a>
-            <a data-nav="admin-templates" href="#admin-templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
-            <a data-nav="admin-contracts" href="#admin-contracts"><i class="fa-solid fa-file-signature" aria-hidden="true"></i>Contracts</a>
-            <a data-nav="admin-payments" href="#admin-payments"><i class="fa-solid fa-credit-card" aria-hidden="true"></i>Payments</a>
+            <a data-nav="admin-users" href="#admin-users" title="Users"><i class="fa-solid fa-user-gear" aria-hidden="true"></i>Users</a>
+            <a data-nav="admin-duplicates" href="#admin-duplicates" title="Duplicates"><i class="fa-solid fa-clone" aria-hidden="true"></i>Duplicates</a>
+            <a data-nav="admin-staff" href="#admin-staff" title="Staff"><i class="fa-solid fa-people-group" aria-hidden="true"></i>Staff</a>
+            <a data-nav="admin-templates" href="#admin-templates" title="Admin templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
+            <a data-nav="admin-contracts" href="#admin-contracts" title="Contracts"><i class="fa-solid fa-file-signature" aria-hidden="true"></i>Contracts</a>
+            <a data-nav="admin-payments" href="#admin-payments" title="Payments"><i class="fa-solid fa-credit-card" aria-hidden="true"></i>Payments</a>
           </div>
         </div>
         ${this.helpNavGroup()}
@@ -211,12 +211,12 @@ class AppShell extends PanicElement {
     const children = HELP_SECTIONS.map((g) => {
       const first = g.items[0]?.slug || '';
       const icon = g.icon || 'fa-solid fa-circle-question';
-      return `<a data-nav="help-${g.key}" href="#help-${first}"><i class="${icon}" aria-hidden="true"></i>${g.group}</a>`;
+      return `<a data-nav="help-${g.key}" href="#help-${first}" title="${g.group}"><i class="${icon}" aria-hidden="true"></i>${g.group}</a>`;
     }).join('');
     return `<div class="nav-group" data-group="help">
-          <button class="nav-parent" type="button" data-group-toggle="help" aria-expanded="false"><i class="fa-solid fa-circle-question" aria-hidden="true"></i><span class="nav-parent-label">Help</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+          <button class="nav-parent" type="button" data-group-toggle="help" aria-expanded="false" title="Help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i><span class="nav-parent-label">Help</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
           <div class="nav-children">
-            <a data-nav="help" href="#help"><i class="fa-solid fa-bookmark" aria-hidden="true"></i>All topics</a>
+            <a data-nav="help" href="#help" title="All topics"><i class="fa-solid fa-bookmark" aria-hidden="true"></i>All topics</a>
             ${children}
           </div>
         </div>`;
