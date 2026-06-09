@@ -233,18 +233,25 @@ const HELP_CONTENT = {
 
   'event-create': `
     <h2>Creating an event</h2>
-    <p>Every show starts from a template. Open <a href="#help-templates">Templates</a>, pick a template that matches the kind of night you are programming, fill in date and doors/show times, and click <em>Create event</em>.</p>
-    <p>From there, work top to bottom in the event workspace:</p>
+    <p>Every show in Backstage follows the same arc: spin the event up from a template, lock in the deal and the details, get the key pieces <strong>approved</strong> (the contract and the flyer), announce it to the public, run it on the night, and settle the money afterward. The event workspace is a set of tabs that roughly follow that arc, and the <a href="#help-overview">Overview</a> tab keeps score — its <em>Readiness</em> checks and <em>Next Recommended Action</em> banner always point you at the next thing the show needs.</p>
+    <p>Approvals happen in two places as you go. A <a href="#help-contracts">contract</a> moves through a status workflow (<em>draft &rarr; needs review &rarr; approved &rarr; sent &rarr; signed</em>) and can't be marked sent or signed until its required terms are filled. A flyer is uploaded as <em>pending</em> and a promoter or admin marks it <em>approved</em> before it appears publicly. The event's own <a href="#help-statuses">status</a> (Booked, Ready To Announce, Published, Advanced, Settled…) is the high-level signal to the rest of the team about where the show stands.</p>
+    <p>Every show starts from a template. Open <a href="#help-templates">Templates</a>, pick one that matches the kind of night you are programming, fill in date and doors/show times, and click <em>Create event</em>. From there, work through the tabs — roughly in this order:</p>
     <ol>
-      <li><a href="#help-details">Event details</a> — set venue, type, status, owner, ticket price, capacity, age restriction.</li>
-      <li><a href="#help-lineup">Lineup</a> — add the bands or performers.</li>
-      <li><a href="#help-schedule">Run sheet</a> — set load-in, soundcheck, set times, curfew.</li>
-      <li><a href="#help-tasks">Tasks</a> — assign anything that has to be done before doors.</li>
-      <li><a href="#help-assets">Assets</a> — collect and approve flyers.</li>
-      <li><a href="#help-publish">Publish</a> — flip the public page on when the show is ready to announce.</li>
-      <li><a href="#help-guest-list">Guest list</a> — close to show day, build the door list.</li>
-      <li><a href="#help-settlement">Settlement</a> — after the show, reconcile the numbers.</li>
+      <li><a href="#help-details">Event details</a> — set venue, type, status, owner, ticket price, capacity, and age restriction.</li>
+      <li><a href="#help-lineup">Lineup</a> — add the bands or performers, capture payout terms, and confirm them.</li>
+      <li><a href="#help-contracts">Contracts</a> — capture the deal as structured terms, generate the agreement, and walk it through approval to signed.</li>
+      <li><a href="#help-ticketing">Ticketing &amp; door</a> — link an external ticket URL, or sell in-house: set up tiers, comps, and door-scanner links.</li>
+      <li><a href="#help-schedule">Run sheet</a> — set load-in, soundcheck, set times, changeovers, and curfew.</li>
+      <li><a href="#help-staffing">Staffing</a> — schedule security, bar, door, sound, and other night-of-show crew.</li>
+      <li><a href="#help-tasks">Tasks</a> — assign anything your team has to do before doors.</li>
+      <li><a href="#help-open-items">Open items</a> — track external blockers you're waiting on (a contract back, an insurance cert, a ticket link).</li>
+      <li><a href="#help-assets">Assets</a> — collect flyers and art, and approve the primary flyer.</li>
+      <li><a href="#help-invites">Invites</a> — bring promoters, designers, or bands onto the event as collaborators.</li>
+      <li><a href="#help-publish">Publish</a> — flip the public page on once the show is approved and ready to announce.</li>
+      <li><a href="#help-guest-list">Guest list</a> — close to show day, build the comp / will-call / VIP door list.</li>
+      <li><a href="#help-settlement">Settlement</a> — after the show, reconcile the numbers and close the books.</li>
     </ol>
+    <p>You don't have to do these strictly in order, and not every show needs every tab. A couple of supporting tools run alongside: the <a href="#help-print">Print</a> menu produces night-of packets (run sheet, staffing, guest list, or a combined master packet), and the <a href="#help-activity">Activity log</a> at the bottom of the event records who changed what, so hand-offs between bookers and night-of staff stay clean.</p>
   `,
 
   overview: `
