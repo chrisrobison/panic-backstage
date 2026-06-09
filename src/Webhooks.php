@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use Panic\Payments\PaymentProvider;
 use Panic\Payments\PaymentProviders;
 
 /**
@@ -53,9 +54,9 @@ final class Webhooks extends BaseEndpoint
         $paymentRef  = (string) ($event['provider_payment_ref'] ?? '');
 
         if ($type === 'payment_succeeded') {
-            $this->handleSuccess($providerKey, $providerRef, $paymentRef);
+            $this->handleSuccess($provider, $providerRef, $paymentRef);
         } elseif ($type === 'payment_failed') {
-            $this->handleFailure($providerKey, $providerRef);
+            $this->handleFailure($provider, $providerRef);
         }
 
         // Signature was valid: acknowledge so the provider stops retrying.
@@ -63,11 +64,11 @@ final class Webhooks extends BaseEndpoint
     }
 
     /** Fulfill the matched order (idempotent) and email any freshly-issued tickets. */
-    private function handleSuccess(string $providerKey, string $providerRef, string $paymentRef): void
+    private function handleSuccess(PaymentProvider $provider, string $providerRef, string $paymentRef): void
     {
-        $order = $this->matchOrder($providerKey, $providerRef);
+        $order = $this->matchOrder($provider, $providerRef);
         if ($order === null) {
-            error_log("Webhook {$providerKey}: no order for provider_ref '{$providerRef}'.");
+            error_log("Webhook {$provider->key()}: no order for provider_ref '{$providerRef}'.");
             return;
         }
         $orderId = (int) $order['id'];
@@ -101,9 +102,9 @@ final class Webhooks extends BaseEndpoint
     }
 
     /** Release the inventory hold for a payment that failed/expired. */
-    private function handleFailure(string $providerKey, string $providerRef): void
+    private function handleFailure(PaymentProvider $provider, string $providerRef): void
     {
-        $order = $this->matchOrder($providerKey, $providerRef);
+        $order = $this->matchOrder($provider, $providerRef);
         if ($order === null) {
             return;
         }
@@ -116,16 +117,55 @@ final class Webhooks extends BaseEndpoint
         );
     }
 
-    /** Match an order by the provider that created it + its checkout reference. */
-    private function matchOrder(string $providerKey, string $providerRef): ?array
+    /**
+     * Match an order by the provider that created it + its checkout reference.
+     *
+     * Primary path: a direct (provider, provider_ref) lookup — this is what
+     * succeeds for every order created after provider_ref was aligned with the
+     * value the webhook echoes (Stripe: session id; Square: order id).
+     *
+     * Fallback path: if the direct lookup misses, ask the provider to resolve
+     * the webhook ref to our internal order id (Square reads it back from the
+     * order's reference_id). This recovers legacy Square orders that stored the
+     * payment_link id as provider_ref. On a fallback hit we backfill
+     * provider_ref to the webhook ref so retries take the fast path and the row
+     * is self-consistent going forward.
+     */
+    private function matchOrder(PaymentProvider $provider, string $providerRef): ?array
     {
         if ($providerRef === '') {
             return null;
         }
-        return $this->db->one(
+        $providerKey = $provider->key();
+
+        $order = $this->db->one(
             'SELECT * FROM ticket_orders WHERE provider = ? AND provider_ref = ? LIMIT 1',
             [$providerKey, $providerRef]
         );
+        if ($order !== null) {
+            return $order;
+        }
+
+        $internalId = $provider->resolveInternalOrderId($providerRef);
+        if ($internalId === null || $internalId <= 0) {
+            return null;
+        }
+        $order = $this->db->one(
+            'SELECT * FROM ticket_orders WHERE id = ? AND provider = ? LIMIT 1',
+            [$internalId, $providerKey]
+        );
+        if ($order === null) {
+            return null;
+        }
+
+        // Self-heal: align provider_ref with the value the webhook carries so
+        // subsequent retries match directly without another provider round-trip.
+        $this->db->run(
+            'UPDATE ticket_orders SET provider_ref = ? WHERE id = ?',
+            [$providerRef, (int) $order['id']]
+        );
+        $order['provider_ref'] = $providerRef;
+        return $order;
     }
 
     /**

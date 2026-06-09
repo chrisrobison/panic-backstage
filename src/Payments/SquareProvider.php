@@ -120,9 +120,21 @@ final class SquareProvider implements PaymentProvider
             throw new RuntimeException('Square checkout creation failed: ' . $this->errorMessage($json, $code));
         }
 
+        // Match key: the webhook's payment object echoes the Square *order* id
+        // (payment.order_id), NOT the payment_link id — so we MUST persist the
+        // order id as provider_ref for the receiver to match it back. The
+        // payment_link object carries order_id; related_resources.orders is a
+        // secondary source. Fall back to the link id only if neither is present
+        // (the resolveInternalOrderId() fallback then recovers the match).
+        $orderId = (string) ($link['order_id'] ?? '');
+        if ($orderId === '' && isset($json['related_resources']['orders'][0]['id'])) {
+            $orderId = (string) $json['related_resources']['orders'][0]['id'];
+        }
+        $providerRef = $orderId !== '' ? $orderId : (string) $link['id'];
+
         return [
             'checkout_url' => (string) $link['url'],
-            'provider_ref' => (string) $link['id'],
+            'provider_ref' => $providerRef,
         ];
     }
 
@@ -167,10 +179,11 @@ final class SquareProvider implements PaymentProvider
         $amount     = (int) ($payment['amount_money']['amount'] ?? 0);
         $status     = (string) ($payment['status'] ?? '');
 
-        // payment_link id is the order's provider_ref. Square's payment object
-        // does not echo it, so the webhook receiver matches on order_id /
-        // reference_id; we surface order_id as provider_ref here, and the
-        // receiver falls back to its own lookup when needed.
+        // provider_ref is the Square order id on both sides: createCheckout()
+        // persists payment_link.order_id, and the payment webhook echoes the
+        // same id as payment.order_id. They match directly. (Legacy orders that
+        // stored the payment_link id instead are recovered by the receiver's
+        // resolveInternalOrderId() fallback.)
         $providerRef = $orderRef;
 
         if ($eventType === 'payment.updated' || $eventType === 'payment.created') {
@@ -224,6 +237,34 @@ final class SquareProvider implements PaymentProvider
         }
 
         return ['ok' => false, 'refund_ref' => null, 'error' => $this->errorMessage($json, $code)];
+    }
+
+    /**
+     * Fallback: resolve a webhook provider_ref (a Square order id) to our
+     * internal ticket_orders.id by reading the order's reference_id, which
+     * createCheckout() set to that internal id. Recovers matches for legacy
+     * orders whose provider_ref was stored as the payment_link id rather than
+     * the order id. Never throws — returns null on any failure.
+     */
+    public function resolveInternalOrderId(string $providerRef): ?int
+    {
+        if ($providerRef === '' || $this->accessToken === '') {
+            return null;
+        }
+        try {
+            [$code, $body] = $this->http('GET', '/v2/orders/' . rawurlencode($providerRef), []);
+            if ($code < 200 || $code >= 300) {
+                return null;
+            }
+            $json = json_decode($body, true);
+            $ref  = is_array($json) ? (string) ($json['order']['reference_id'] ?? '') : '';
+            if ($ref === '' || !ctype_digit($ref)) {
+                return null;
+            }
+            return (int) $ref;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /** Deterministic-ish, collision-resistant idempotency key (Square caps 45 chars elsewhere; refunds allow 192). */
@@ -288,10 +329,9 @@ final class SquareProvider implements PaymentProvider
     private function http(string $method, string $path, array $payload): array
     {
         $ch = curl_init($this->apiBase . $path);
-        curl_setopt_array($ch, [
+        $opts = [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CUSTOMREQUEST  => $method,
-            CURLOPT_POSTFIELDS     => json_encode($payload),
             CURLOPT_TIMEOUT        => 20,
             CURLOPT_HTTPHEADER     => [
                 'Authorization: Bearer ' . $this->accessToken,
@@ -299,7 +339,13 @@ final class SquareProvider implements PaymentProvider
                 'Accept: application/json',
                 'Square-Version: ' . $this->apiVersion,
             ],
-        ]);
+        ];
+        // Only send a request body for write calls; a GET (e.g. order lookup)
+        // carries none.
+        if ($method !== 'GET' || $payload !== []) {
+            $opts[CURLOPT_POSTFIELDS] = json_encode($payload);
+        }
+        curl_setopt_array($ch, $opts);
         $body = curl_exec($ch);
         if ($body === false) {
             $err = curl_error($ch);

@@ -67,4 +67,18 @@ interface PaymentProvider
      * @return array{ok:bool,refund_ref:?string,error:?string}
      */
     public function refund(string $providerPaymentRef, int $amountCents): array;
+
+    /**
+     * Fallback order resolution for webhooks.
+     *
+     * Called only when the webhook receiver's direct (provider, provider_ref)
+     * lookup fails. Given the provider_ref carried by a verified webhook,
+     * resolve our internal ticket_orders.id when the provider can — e.g. Square
+     * stores the internal id as the order's reference_id, so it can fetch the
+     * order and read it back. Returns null when unsupported or unresolvable.
+     *
+     * Implementations MUST NOT throw; on any error they return null so the
+     * receiver simply logs the unmatched webhook.
+     */
+    public function resolveInternalOrderId(string $providerRef): ?int;
 }

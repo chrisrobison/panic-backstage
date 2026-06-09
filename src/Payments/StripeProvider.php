@@ -192,6 +192,16 @@ final class StripeProvider implements PaymentProvider
     }
 
     /**
+     * Stripe needs no fallback: the checkout session id is used as provider_ref
+     * on both sides (createCheckout returns it, the webhook echoes object.id),
+     * so the receiver's direct match always succeeds.
+     */
+    public function resolveInternalOrderId(string $providerRef): ?int
+    {
+        return null;
+    }
+
+    /**
      * Verify a Stripe-Signature header.
      *
      * Header form: "t=1492774577,v1=5257a8...,v1=...". We HMAC-SHA256 the
