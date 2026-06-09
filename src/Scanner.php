@@ -348,7 +348,14 @@ final class Scanner extends BaseEndpoint
     {
         $base = rtrim((string) (getenv('APP_URL') ?: ''), '/');
         $basePath = rtrim((string) (getenv('APP_BASE_PATH') ?: ''), '/');
-        return $base . $basePath . '/scanner.html?token=' . rawurlencode($token);
+        // APP_URL is the canonical public root and usually already includes the
+        // base path (e.g. https://host/backstage). Only append APP_BASE_PATH
+        // when it isn't already the tail of APP_URL — otherwise we'd produce a
+        // doubled /backstage/backstage/scanner.html (every asset 404s).
+        if ($basePath !== '' && !str_ends_with($base, $basePath)) {
+            $base .= $basePath;
+        }
+        return $base . '/scanner.html?token=' . rawurlencode($token);
     }
 
     /** Best-effort client IP for the audit row. */
