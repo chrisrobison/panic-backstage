@@ -38,8 +38,7 @@ Ticket status: `issued → redeemed` (plus `void`).
 
 ## Data model
 
-Migration `database/migrations/020_event_ticketing.sql` (mirrored in `schema.sql`
-for fresh installs) creates the ticketing tables and adds
+The baseline `database/schema.sql` creates the ticketing tables and adds
 `events.ticketing_mode`:
 
 - `ticket_types` — tiers: `price_cents`, `currency`, `quantity_total`,

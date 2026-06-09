@@ -2,16 +2,16 @@
 /**
  * import-mabevents.php
  *
- * Applies migration 002 and imports all MabEvents.xlsx data into panic_backstage.
+ * Imports all MabEvents.xlsx data into panic_backstage.
  *
  * Usage:
  *   php backstage/scripts/import-mabevents.php
  *
  * Prerequisites:
- *   1. schema.sql has been applied (or seed.php has been run)
- *   2. migration 001 has been applied
- *   3. The 'mabuhay-gardens' venue row exists (created by seed.php)
- *   4. The .env file is present in backstage/
+ *   1. database/schema.sql has been applied (or seed.php has been run) — it is
+ *      the baseline schema and already includes the MabEvents columns.
+ *   2. The 'mabuhay-gardens' venue row exists (created by seed.php)
+ *   3. The .env file is present in backstage/
  */
 
 declare(strict_types=1);
@@ -39,25 +39,9 @@ try {
     exit(1);
 }
 
-// ── Step 1: apply migration 002 ────────────────────────────────────────────
-$migrationFile = $root . '/database/migrations/002_mabevents_fields.sql';
-echo "Applying migration 002...\n";
-try {
-    foreach (parseSqlStatements(file_get_contents($migrationFile)) as $stmt) {
-        $pdo->exec($stmt);
-    }
-    echo "  Migration 002 applied.\n";
-} catch (PDOException $e) {
-    // Column already exists is fine; anything else is fatal
-    if (str_contains($e->getMessage(), 'Duplicate column')) {
-        echo "  Columns already exist, skipping.\n";
-    } else {
-        fwrite(STDERR, "Migration failed: " . $e->getMessage() . "\n");
-        exit(1);
-    }
-}
-
-// ── Step 2: check prerequisites ────────────────────────────────────────────
+// ── Step 1: check prerequisites ────────────────────────────────────────────
+// The MabEvents columns ship in the baseline database/schema.sql, so there is
+// no migration to apply here — schema.sql / seed.php must have been run first.
 $venueId = $pdo->query("SELECT id FROM venues WHERE slug = 'mabuhay-gardens' LIMIT 1")->fetchColumn();
 if (!$venueId) {
     fwrite(STDERR, "Venue 'mabuhay-gardens' not found. Run seed.php first.\n");

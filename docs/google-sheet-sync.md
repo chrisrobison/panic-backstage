@@ -148,7 +148,7 @@ possible future enhancement.
 
 ### The outbox table
 
-`sheet_sync_queue` (migration `database/migrations/012_sheet_sync_queue.sql`):
+`sheet_sync_queue` (defined in the baseline `database/schema.sql`):
 
 | column | meaning |
 |---|---|
@@ -254,7 +254,7 @@ write-back). Set `GOOGLE_STAFF_TAB` to override the tab name (default
 |---|---|
 | `src/GoogleSheets.php` | Service-account auth + Sheets REST writer; event field/status maps; generic grid toolkit (`readGrid`/`appendGridRow`/`batchWriteCells`/`ensureGridColumn`) |
 | `src/Events.php` (`pushToSheet`) | Real-time enqueue + `syncEventRow` on PATCH |
-| `database/migrations/012_sheet_sync_queue.sql` | Outbox table |
+| `database/schema.sql` (`sheet_sync_queue`) | Outbox table |
 | `scripts/push-sheet-queue.php` | Fallback retry sweep (events) |
 | `scripts/sync-staff.php` | Two-way `Staff Contact` ↔ `staff_members` reconcile |
 | `scripts/cron-sync.sh` | 5-min cron: inbound sync → outbound event sweep → staff sync |

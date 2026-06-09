@@ -30,7 +30,7 @@ final class UserMerge
 {
     /**
      * Tables that hold a users(id) reference, derived from every
-     * `REFERENCES users(id)` in schema.sql PLUS the un-constrained
+     * `REFERENCES users(id)` in database/schema.sql PLUS the un-constrained
      * INT user columns the product still treats as user references
      * (tickets / scans / scanner links / payment settings).
      *

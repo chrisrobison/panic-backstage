@@ -35,8 +35,7 @@ required term on an included section is filled **and** at least one version exis
 
 ## Data model
 
-Migration `database/migrations/017_contracts.sql` (mirrored in `schema.sql` for
-fresh installs) creates six tables:
+The baseline `database/schema.sql` creates six contract tables:
 
 - `contract_modules` — clause library (`module_key` unique, `body_template`,
   `required_fields_json`, `risk_level`, `is_locked`, `is_active`).
@@ -208,8 +207,9 @@ preview HTML is rendered to a Letter-size PDF in the browser.
 - **New template:** Admin → Contracts → Templates → *New template*. Check
   clauses, order them, and set each as required / conditional (paste the
   `condition_json`).
-- **New deal-term column:** add the column to `contracts` (migration +
-  `schema.sql`), append it to `ContractRenderer::DEAL_COLUMNS`, and add an input
+- **New deal-term column:** add the column to `contracts` (a new migration under
+  `database/migrations/`, plus the baseline `database/schema.sql`), append it to
+  `ContractRenderer::DEAL_COLUMNS`, and add an input
   to the deal-terms form group in `ContractEditor.dealFormHtml()`. Free-form
   terms don't need a column — use a contract variable instead.
 

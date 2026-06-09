@@ -16,7 +16,7 @@ try {
     $rootPdo = new PDO("mysql:host=$host;port=$port;charset=utf8mb4", $user, $password, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     ]);
-    $rootPdo->exec(file_get_contents($root . '/schema.sql'));
+    $rootPdo->exec(file_get_contents($root . '/database/schema.sql'));
 } catch (PDOException $error) {
     fwrite(STDERR, "Could not connect to MySQL with the configured credentials. Update .env and run again.\n");
     fwrite(STDERR, $error->getMessage() . "\n");
