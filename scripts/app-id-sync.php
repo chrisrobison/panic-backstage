@@ -311,29 +311,38 @@ switch ($cmd) {
             break;
         }
 
-        $cols = $sheets->batchGetColumns(['D', 'E', GoogleSheets::APP_ID_COLUMN]);
+        // Read C (organizer) and D (genre): the event title comes from D, or
+        // falls back to C when D is blank (see generate-import-sql.py), so a row
+        // is identified by date + (C or D matching the snapshot), never D alone.
+        $cols = $sheets->batchGetColumns(['C', 'D', 'E', GoogleSheets::APP_ID_COLUMN]);
         if ($cols === null) {
             fwrite(STDERR, "FAIL: could not read sheet columns\n");
             exit(1);
         }
+        $colC   = $cols['C'] ?? [];
         $colD   = $cols['D'] ?? [];
         $colE   = $cols['E'] ?? [];
         $appCol = $cols[GoogleSheets::APP_ID_COLUMN] ?? [];
 
-        $zAt     = fn (int $row): string => trim((string) ($appCol[$row - 1] ?? ''));
-        $titleAt = fn (int $row): string => trim((string) ($colD[$row - 1] ?? ''));
-        $dateAt  = fn (int $row): ?string => sheet_date($colE[$row - 1] ?? null);
+        $zAt    = fn (int $row): string => trim((string) ($appCol[$row - 1] ?? ''));
+        $dateAt = fn (int $row): string => (string) (sheet_date($colE[$row - 1] ?? null) ?? '');
+        // The row's title matches the snapshot if either the genre (D) or the
+        // organizer (C) equals it — mirrors the importer's title fallback.
+        $titleMatches = function (int $row, string $snap) use ($colC, $colD): bool {
+            $d = trim((string) ($colD[$row - 1] ?? ''));
+            $c = trim((string) ($colC[$row - 1] ?? ''));
+            return $snap !== '' && ($d === $snap || $c === $snap);
+        };
 
-        // Index data rows by "title|date" for relocation when a captured row
-        // shifted (only rows whose App ID cell is still blank are candidates).
-        $maxRows  = max(count($colD), count($colE), count($appCol));
-        $blankByKey = []; // "title|date" => [rows with empty App ID cell]
+        // Index still-blank data rows by date for relocation when a captured row
+        // shifted; title (C or D) disambiguates rows sharing a date.
+        $maxRows = max(count($colC), count($colD), count($colE), count($appCol));
+        $blankByDate = []; // date => [rows with empty App ID cell]
         for ($i = 0; $i < $maxRows; $i++) {
             $row = $i + 1;
             if ($row <= GoogleSheets::HEADER_ROW) continue;
             if ($zAt($row) !== '') continue;
-            $key = $titleAt($row) . '|' . ($dateAt($row) ?? '');
-            $blankByKey[$key][] = $row;
+            $blankByDate[$dateAt($row)][] = $row;
         }
 
         $toWrite = [];   // row => event_id (cells to write)
@@ -349,15 +358,19 @@ switch ($cmd) {
             // human pasted it): just confirm.
             if ($zAt($row) === (string) $id) { $confirm[] = $id; continue; }
 
-            // Captured row still blank AND its title/date still match → write here.
-            if ($zAt($row) === '' && $titleAt($row) === $tSnap && ($dateAt($row) ?? '') === $dSnap) {
+            // Captured row still blank AND its date matches (title via C-or-D) →
+            // write here. Date is the strong key; title is the tiebreaker.
+            if ($zAt($row) === '' && $dateAt($row) === $dSnap && $titleMatches($row, $tSnap)) {
                 $toWrite[$row] = $id;
                 continue;
             }
 
-            // Row shifted/changed — relocate by title+date among still-blank rows.
-            $cands = $blankByKey[$tSnap . '|' . $dSnap] ?? [];
-            $cands = array_values(array_filter($cands, fn ($r) => !isset($toWrite[$r])));
+            // Row shifted — relocate among still-blank rows sharing the date,
+            // disambiguated by the title (C or D) matching the snapshot.
+            $cands = array_values(array_filter(
+                $blankByDate[$dSnap] ?? [],
+                fn ($r) => !isset($toWrite[$r]) && $titleMatches($r, $tSnap)
+            ));
             if (count($cands) === 1) {
                 $toWrite[$cands[0]] = $id;
             } else {
