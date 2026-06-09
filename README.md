@@ -309,6 +309,57 @@ Creating an invite emails the recipient an accept link by default, and each
 pending invite can be re-sent. The link is also shown in the UI to copy and
 share manually (see [Email](#email)).
 
+## Multi-Email Identity
+
+A login account can own more than one email address. Each user has a primary
+`users.email` plus a set of verified secondary addresses (aliases) stored as
+JSON in `users.alt_emails`. This schema ships in migration
+`022_multi_email_identity.sql` (apply it once against the database; it adds the
+`alt_emails` column, its multi-valued uniqueness index, the
+`email_verification_tokens` table, and the `user_merges` audit table).
+
+- **Identity resolution.** All authentication-time email lookups route through
+  `Panic\Identity::resolveUserByEmail()`. It tries the exact `users.email`
+  first — so signing in with a primary email behaves exactly as before — and
+  only then falls back to a user whose `alt_emails` contains the address with a
+  non-null `verified_at`. A verified alias is strictly an *added* sign-in path,
+  never a replacement. Magic-link, password, and magic-link-request flows all
+  resolve through it, and magic-link verify resolves before auto-creating a
+  viewer so an alias never spawns a duplicate account.
+
+- **Aliases (add / verify / resend / remove / promote).** Admins (or a user
+  acting on their own account) manage addresses from the user Edit modal
+  (`<pb-user-emails>` in `public/assets/user-emails.js`). Adding an alias mints
+  a 7-day hashed verification token (`email_verification_tokens`) and emails a
+  confirmation link of the form `{APP_URL}/login.html?verify_email=<token>`.
+  `login.html` handles that parameter by calling `POST /api/auth/verify-email`
+  (public, no JWT) and showing an "email confirmed" state; only verified
+  aliases may authenticate. Endpoints:
+  - `POST   /api/users/{id}/emails`         — add an unverified alias
+  - `POST   /api/users/{id}/emails/resend`  — re-mint and re-send the link
+  - `DELETE /api/users/{id}/emails`         — remove an alias (never the primary)
+  - `POST   /api/users/{id}/emails/primary` — promote a verified alias to primary
+    (the old primary is demoted into `alt_emails` as verified)
+  - `GET|POST /api/auth/verify-email`       — confirm an alias from its token
+
+  Every address stays globally unique across all primaries and aliases via
+  `Identity::emailIsTaken()`.
+
+- **Duplicate detection + account merge.** The Admin ▸ Duplicates tab
+  (`<pb-user-duplicates>`) lists likely duplicate account pairs surfaced by
+  three signals: matching normalized name, a shared phone, and a shared
+  gmail-canonical address (dots/`+suffix` normalized for *detection only* — never
+  for login matching). Merging is atomic: every `REFERENCES users(id)` row is
+  repointed from the loser to the survivor, passkeys move over, refresh tokens
+  are revoked, the loser's primary and aliases fold into the survivor's
+  `alt_emails` as verified entries, the loser is hard-deleted, and a
+  `user_merges` audit row records the per-table counts, folded emails, role
+  decision, and signals. Endpoints (both gated on `manage_users`):
+  - `GET  /api/users/duplicates` — suggested pairs, strongest match first
+  - `POST /api/users/merge`      — `{survivor_id, loser_id, confirm:true,
+    override_role?}`; a cross-role merge returns `409` unless `override_role`
+    is set.
+
 ## Collaborator Demo Flow
 
 After logging in as the seeded admin:
@@ -336,9 +387,47 @@ php scripts/endpoint-smoke.php http://localhost:8000
 
 `node --check` is optional and only validates the plain JavaScript file. The app does not require Node to run.
 
+## Ticketing And Payments
+
+Events can sell tickets directly ("internal" ticketing mode) through a pluggable
+payment layer with **Stripe** and **Square** providers. There is no vendored SDK —
+both providers talk to their HTTP APIs over raw cURL with zero Composer
+dependencies.
+
+- **Provider configuration (admin):** Admin → Payments (`#admin-payments`) selects
+  the active provider and currency (the `pb-payment-settings` panel, gated by
+  `manage_users`). API keys live only in `.env` and are never returned by the API.
+- **Per-event ticketing (event workspace):** the **Ticketing** tab
+  (`pb-ticketing-admin`, gated by the new `manage_ticketing` event capability —
+  granted to `venue_admin` and `event_owner` only) configures tiers, inventory,
+  sales windows, comps, refunds, and door-scanner links.
+- **Public purchase:** the public event page mounts `<pb-ticket-purchase>` which
+  lists on-sale tiers, reserves a 15-minute inventory hold, and redirects the
+  buyer to the provider's hosted checkout.
+  - `GET  /api/public/tickets/{eventId}` — on-sale tiers + live availability
+  - `POST /api/public/tickets/{eventId}/checkout` — create a checkout session
+- **Webhooks:** providers confirm payment via signed webhooks
+  (`POST /api/webhooks/stripe`, `POST /api/webhooks/square`). These are public
+  routes authenticated by signature verification (HMAC), not JWT; fulfillment is
+  idempotent so retries never double-issue or double-email.
+- **Tickets and QR:** each fulfilled unit gets a one-time plaintext token (only
+  its `sha256` hash is stored). The holder's ticket page is `GET /t/{token}`, and
+  the scannable QR is generated on the fly by a from-scratch encoder at
+  `GET /assets/qr.svg?text=<token>` (byte mode, ECC level M; verified scannable
+  with OpenCV/ZBar).
+- **Door scanner:** `public/scanner.html` is a mobile camera scanner. It posts the
+  decoded token to `POST /api/scan/redeem` using a scanner-link token (not a JWT);
+  redemption is an atomic single-row flip with a mandatory `ticket_scans` audit
+  row. Scanner-link management lives under
+  `/api/events/{id}/scanner-links[/{linkId}]` (JWT + `manage_ticketing`).
+
+Required `.env` keys (see `.env.example`): `APP_URL`, `STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET`, `SQUARE_ACCESS_TOKEN`, `SQUARE_LOCATION_ID`,
+`SQUARE_WEBHOOK_SIGNATURE_KEY`, `SQUARE_ENV`, `SQUARE_WEBHOOK_URL`. The ticketing
+schema ships in migration `020`.
+
 ## MVP Limitations
 
-- Stripe is represented by ticket fields only.
 - Email delivery relies on the host MTA via `/usr/sbin/sendmail`; there is no queue, retry, or bounce handling beyond what the MTA provides.
 - Uploads use local disk storage under `storage/uploads/events/:eventId`.
 - The frontend is intentionally browser-native Web Components, optimized for hackability over framework features.

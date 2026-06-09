@@ -13,6 +13,7 @@ abstract class BaseEndpoint implements Endpoint
             'manage_guest_list', 'manage_staffing',
             'view_settlement', 'edit_settlement',
             'view_contracts', 'manage_contracts', 'approve_contracts',
+            'manage_ticketing',
         ],
         'event_owner' => [
             'read_event', 'edit_event', 'publish_event', 'delete_event',
@@ -21,6 +22,7 @@ abstract class BaseEndpoint implements Endpoint
             'manage_guest_list', 'manage_staffing',
             'view_settlement', 'edit_settlement',
             'view_contracts', 'manage_contracts', 'approve_contracts',
+            'manage_ticketing',
         ],
         'promoter' => [
             'read_event', 'manage_lineup', 'manage_tasks', 'manage_schedule',
@@ -41,6 +43,7 @@ abstract class BaseEndpoint implements Endpoint
         'manage_guest_list', 'manage_staffing',
         'view_settlement', 'edit_settlement', 'view_public_page', 'view_assigned_tasks',
         'view_contracts', 'manage_contracts', 'approve_contracts',
+        'manage_ticketing',
     ];
 
     private const GLOBAL_CAPABILITIES = [

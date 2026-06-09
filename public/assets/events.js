@@ -496,6 +496,7 @@ class EventWorkspace extends PanicElement {
     if (can(data, 'manage_invites')) tabs.splice(8, 0, 'invites');
     if (can(data, 'view_settlement')) tabs.splice(tabs.length - 1, 0, 'settlement');
     if (can(data, 'view_contracts')) tabs.splice(tabs.indexOf('assets') + 1, 0, 'contracts');
+    if (can(data, 'manage_ticketing')) tabs.splice(tabs.length - 1, 0, 'ticketing');
     this.innerHTML = `<section class="event-top">
       <div><a class="back-link" href="#events">&lt;- Back to Events</a><h1>${esc(event.title)}</h1><p class="subtle">${esc(shortDate(eventDate(event)))} at ${esc(event.venue_name)}</p></div>
       <div class="event-actions">
@@ -533,6 +534,7 @@ class EventWorkspace extends PanicElement {
     ${can(data, 'view_contracts') ? '<pb-event-contracts id="contracts"></pb-event-contracts>' : ''}
     ${can(data, 'manage_invites') ? '<pb-invite-manager id="invites"></pb-invite-manager>' : ''}
     ${can(data, 'view_settlement') ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
+    ${can(data, 'manage_ticketing') ? '<pb-ticketing-admin id="ticketing"></pb-ticketing-admin>' : ''}
     <section id="activity" class="panel"><div class="section-head padded"><h2>Activity ${helpLink('activity', 'Activity Log')}</h2></div><ul class="timeline">${data.activity.map((entry) => `<li><strong>${esc(entry.action)}</strong> by ${esc(entry.user_name || 'system')} <span class="muted">${esc(entry.created_at)}</span></li>`).join('')}</ul></section>`;
     $('pb-event-summary', this).data = data;
     $('pb-event-next-action', this).data = data;
@@ -548,6 +550,7 @@ class EventWorkspace extends PanicElement {
     if ($('pb-event-contracts', this)) $('pb-event-contracts', this).data = data;
     if ($('pb-invite-manager', this)) $('pb-invite-manager', this).data = data;
     if ($('pb-settlement-form', this)) $('pb-settlement-form', this).data = data;
+    if ($('pb-ticketing-admin', this)) $('pb-ticketing-admin', this).data = data;
     $('[data-publish]', this)?.addEventListener('click', () => this.togglePublic());
     $$('[data-print]', this).forEach((button) => button.addEventListener('click', () => {
       $('details.print-menu', this)?.removeAttribute('open');
@@ -1303,7 +1306,7 @@ class PublicEventPage extends PanicElement {
     try {
       const data = await api(`/public/events/${encodeURIComponent(slug || '')}`);
       const event = data.event;
-      this.innerHTML = `<main class="public-container"><article class="public-event">${data.flyer ? `<img class="public-flyer" src="${esc(assetUrl(data.flyer.file_path))}" alt="">` : `<div class="public-flyer flyer">${esc(event.title)}</div>`}<div class="public-copy"><p class="eyebrow">${esc(shortDate(eventDate(event)))} - ${esc(event.venue_name)}</p><h1>${esc(event.title)}</h1><p><strong>Doors</strong> ${esc(timeLabel(event.doors_time))} - <strong>Show</strong> ${esc(timeLabel(event.show_time))}</p><p>${esc(event.age_restriction || 'All ages unless noted')} - ${Number(event.ticket_price) > 0 ? money(event.ticket_price) : 'Free / door'}</p>${event.ticket_url ? `<a class="button" href="${esc(event.ticket_url)}">Tickets</a>` : ''}<p>${esc(event.description_public || '')}</p><h2>Lineup</h2><ul class="plain-list">${data.lineup.map((item) => `<li>${esc(item.display_name)} ${item.set_time ? `<span>${esc(timeLabel(item.set_time))}</span>` : ''}</li>`).join('')}</ul><p class="muted">${esc(event.address)}, ${esc(event.city)}, ${esc(event.state)}</p></div></article></main>`;
+      this.innerHTML = `<main class="public-container"><article class="public-event">${data.flyer ? `<img class="public-flyer" src="${esc(assetUrl(data.flyer.file_path))}" alt="">` : `<div class="public-flyer flyer">${esc(event.title)}</div>`}<div class="public-copy"><p class="eyebrow">${esc(shortDate(eventDate(event)))} - ${esc(event.venue_name)}</p><h1>${esc(event.title)}</h1><p><strong>Doors</strong> ${esc(timeLabel(event.doors_time))} - <strong>Show</strong> ${esc(timeLabel(event.show_time))}</p><p>${esc(event.age_restriction || 'All ages unless noted')} - ${Number(event.ticket_price) > 0 ? money(event.ticket_price) : 'Free / door'}</p>${event.ticket_url ? `<a class="button" href="${esc(event.ticket_url)}">Tickets</a>` : ''}<pb-ticket-purchase event-id="${esc(String(event.id))}"></pb-ticket-purchase><p>${esc(event.description_public || '')}</p><h2>Lineup</h2><ul class="plain-list">${data.lineup.map((item) => `<li>${esc(item.display_name)} ${item.set_time ? `<span>${esc(timeLabel(item.set_time))}</span>` : ''}</li>`).join('')}</ul><p class="muted">${esc(event.address)}, ${esc(event.city)}, ${esc(event.state)}</p></div></article></main>`;
     } catch (error) {
       this.showError(error);
     }

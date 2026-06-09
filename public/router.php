@@ -34,7 +34,7 @@ if ($path !== '/' && is_file($file)) {
     return false;
 }
 
-if (str_starts_with($path, '/api/')) {
+if (str_starts_with($path, '/api/') || $path === '/t' || str_starts_with($path, '/t/') || $path === '/assets/qr.svg') {
     require __DIR__ . '/api/index.php';
     return true;
 }
@@ -50,7 +50,7 @@ require __DIR__ . '/index.html';
 function sensitive_html_headers(string $path): void
 {
     $name = strtolower(basename($path));
-    if ($name !== 'login.html' && $name !== 'invite.html') {
+    if ($name !== 'login.html' && $name !== 'invite.html' && $name !== 'scanner.html') {
         return;
     }
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');

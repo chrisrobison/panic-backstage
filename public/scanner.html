@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <meta name="referrer" content="no-referrer">
+  <title>Door Scanner | Panic Backstage</title>
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/favicon/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon/favicon-32x32.png">
+  <link rel="icon" href="./assets/favicon/favicon.ico" sizes="any">
+  <!-- CDN QR decoder. No local vendoring. -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
+  <style>
+    :root {
+      --bg: #0d0f14;
+      --panel: #161a22;
+      --line: #262c38;
+      --ink: #f4f6fb;
+      --muted: #9aa3b2;
+      --admit: #1f9d55;
+      --admit-bg: #0e3d24;
+      --used: #c2410c;
+      --used-bg: #3a1c0b;
+      --invalid: #4b5563;
+      --invalid-bg: #20242e;
+      --accent: #6d8cff;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+    header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px; border-bottom: 1px solid var(--line);
+    }
+    header img { height: 26px; width: auto; }
+    header .ttl { font-weight: 700; letter-spacing: .02em; font-size: 15px; }
+    header .ev { margin-left: auto; color: var(--muted); font-size: 13px; text-align: right; }
+    main { flex: 1; display: flex; flex-direction: column; padding: 14px; gap: 14px; }
+
+    #reader {
+      width: 100%; max-width: 520px; margin: 0 auto;
+      border-radius: 16px; overflow: hidden; background: #000;
+      border: 1px solid var(--line); aspect-ratio: 1 / 1;
+    }
+    #reader video, #reader canvas { width: 100% !important; height: 100% !important; object-fit: cover; }
+
+    .result {
+      max-width: 520px; margin: 0 auto; width: 100%;
+      border-radius: 16px; padding: 22px; text-align: center;
+      border: 1px solid var(--line); background: var(--panel);
+      min-height: 132px; display: flex; flex-direction: column; justify-content: center; gap: 6px;
+      transition: background .15s ease, border-color .15s ease;
+    }
+    .result .state { font-size: 30px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+    .result .holder { font-size: 22px; font-weight: 700; }
+    .result .meta { color: var(--muted); font-size: 14px; }
+    .result.admit   { background: var(--admit-bg);   border-color: var(--admit);   }
+    .result.admit   .state { color: #5ee08f; }
+    .result.used    { background: var(--used-bg);    border-color: var(--used);    }
+    .result.used    .state { color: #fb923c; }
+    .result.invalid { background: var(--invalid-bg); border-color: var(--invalid); }
+    .result.invalid .state { color: #cbd2df; }
+    .result.idle .state { color: var(--muted); font-size: 18px; letter-spacing: 0; text-transform: none; }
+
+    .controls { max-width: 520px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 10px; }
+    .row { display: flex; gap: 10px; align-items: center; }
+    label { color: var(--muted); font-size: 13px; }
+    input[type="text"], input[type="tel"] {
+      flex: 1; background: var(--panel); border: 1px solid var(--line);
+      color: var(--ink); border-radius: 10px; padding: 11px 12px; font-size: 16px;
+    }
+    input:focus { outline: none; border-color: var(--accent); }
+    button {
+      border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+      border-radius: 10px; padding: 12px 16px; font-size: 15px; font-weight: 600; cursor: pointer;
+    }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #0b0e17; }
+    button:active { transform: translateY(1px); }
+    .hint { color: var(--muted); font-size: 13px; text-align: center; }
+    .scanned-tier { font-size: 14px; color: var(--muted); }
+    .pin-wrap { display: none; }
+    .pin-wrap.show { display: flex; }
+    .manual { display: flex; gap: 8px; }
+    .fatal {
+      max-width: 520px; margin: 40px auto; padding: 24px; text-align: center;
+      border: 1px solid var(--line); border-radius: 16px; background: var(--panel);
+    }
+    .fatal h2 { margin: 0 0 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="./assets/pb-logo.png" alt="Panic" onerror="this.style.display='none'">
+    <span class="ttl">Door Scanner</span>
+    <span class="ev" id="event-label"></span>
+  </header>
+
+  <main id="app">
+    <div id="reader"></div>
+
+    <div class="result idle" id="result" role="status" aria-live="assertive">
+      <div class="state">Point the camera at a ticket QR</div>
+    </div>
+
+    <div class="controls">
+      <div class="row pin-wrap" id="pin-wrap">
+        <label for="pin">PIN</label>
+        <input type="tel" inputmode="numeric" autocomplete="off" id="pin" placeholder="Door PIN" maxlength="12">
+      </div>
+      <div class="manual">
+        <input type="text" id="manual" placeholder="Or type a ticket code/token" autocomplete="off" autocapitalize="characters">
+        <button class="primary" id="manual-go" type="button">Check</button>
+      </div>
+      <p class="hint" id="hint">Camera will start automatically. Allow camera access when prompted.</p>
+    </div>
+  </main>
+
+  <script src="./assets/scanner.js" defer></script>
+</body>
+</html>

@@ -71,7 +71,26 @@ final class Kernel
 
         // User accounts (admin)
         if ($segments[0] === 'users') {
-            return [Users::class, ['userId' => $this->intOrNull($segments[1] ?? null)]];
+            // Duplicate detection + account merge (admin; manage_users gate inside endpoint).
+            //   GET  /api/users/duplicates  -> suggested duplicate pairs
+            //   POST /api/users/merge       -> fold loser into survivor (atomic)
+            if (($segments[1] ?? null) === 'duplicates') {
+                return [Duplicates::class, ['action' => 'duplicates']];
+            }
+            if (($segments[1] ?? null) === 'merge') {
+                return [Duplicates::class, ['action' => 'merge']];
+            }
+            // Alias self-management: /api/users/{id}/emails[/resend|/primary]
+            if (($segments[2] ?? null) === 'emails') {
+                return [UserEmails::class, [
+                    'userId' => $this->intOrNull($segments[1] ?? null),
+                    'sub'    => $segments[3] ?? null,
+                ]];
+            }
+            return [Users::class, [
+                'userId' => $this->intOrNull($segments[1] ?? null),
+                'action' => $segments[2] ?? null,
+            ]];
         }
 
         // Contract clause library (admin)
@@ -101,6 +120,45 @@ final class Kernel
         // Public event pages (unauthenticated)
         if ($segments[0] === 'public' && ($segments[1] ?? '') === 'events') {
             return [PublicEvents::class, ['slug' => $segments[2] ?? null]];
+        }
+
+        // Public ticket purchase (unauthenticated):
+        //   GET  /api/public/tickets/{eventId}           -> list on-sale tiers
+        //   POST /api/public/tickets/{eventId}/checkout  -> create checkout session
+        if ($segments[0] === 'public' && ($segments[1] ?? '') === 'tickets') {
+            return [PublicTickets::class, [
+                'eventId' => $this->intOrNull($segments[2] ?? null),
+                'action'  => $segments[3] ?? null,
+            ]];
+        }
+
+        // Payment provider webhooks (unauthenticated; verified by signature):
+        //   POST /api/webhooks/stripe | /api/webhooks/square
+        if ($segments[0] === 'webhooks') {
+            return [Webhooks::class, ['provider' => $segments[1] ?? null]];
+        }
+
+        // Door scanner redeem (scanner-token auth, NOT JWT):
+        //   POST /api/scan/redeem
+        if ($segments[0] === 'scan' && ($segments[1] ?? '') === 'redeem') {
+            return [Scanner::class, ['scan' => 'redeem']];
+        }
+
+        // Public ticket view (pretty URL, no /api prefix, no JWT):
+        //   GET /t/{token}  (router.php forwards /t/* to the API kernel)
+        if ($segments[0] === 't') {
+            return [TicketView::class, ['token' => $segments[1] ?? null]];
+        }
+
+        // Dynamically generated QR image (no JWT). /assets/qr.svg?text=...
+        // The web server forwards this exact path to the kernel.
+        if ($segments[0] === 'assets' && ($segments[1] ?? '') === 'qr.svg') {
+            return [QrCode::class, []];
+        }
+
+        // Global payment settings (admin; manage_users gate inside endpoint)
+        if ($segments[0] === 'payment-settings') {
+            return [PaymentSettings::class, []];
         }
 
         // Invite acceptance (unauthenticated)
@@ -134,6 +192,12 @@ final class Kernel
                 'staffing'   => [Events\Staffing::class,  ['eventId' => $eventId, 'staffingId' => $childId]],
                 'contracts'  => [Events\Contracts::class, ['eventId' => $eventId, 'contractId' => $childId]],
                 'stream'     => [Events\Stream::class,   ['eventId' => $eventId]],
+                'ticketing'  => [Events\Ticketing::class, [
+                    'eventId' => $eventId,
+                    'child'   => $segments[3] ?? '',
+                    'childId' => $this->intOrNull($segments[4] ?? null),
+                ]],
+                'scanner-links' => [Scanner::class, ['eventId' => $eventId, 'linkId' => $childId]],
                 default      => [Events::class,          ['eventId' => $eventId]],
             };
         }
@@ -153,6 +217,12 @@ final class Kernel
             PublicEvents::class,
             Invites::class,
             Me::class,          // returns null user gracefully when unauthenticated
+            PublicTickets::class, // public ticket browse + checkout
+            Webhooks::class,    // provider webhooks, authenticated by signature
+            TicketView::class,  // public ticket page, looked up by token hash
+            Scanner::class,     // /api/scan/redeem (scanner-token); JWT mgmt paths
+                                // still gated via requireEventCapability (null user => denied)
+            QrCode::class,      // /assets/qr.svg — public QR image generator
         ], true);
     }
 

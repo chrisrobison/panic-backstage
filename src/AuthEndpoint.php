@@ -17,6 +17,9 @@ namespace Panic;
  * ── Email-first login lookup ────────────────────────────────────
  * POST /api/auth/lookup                  What sign-in methods does this email have?
  *
+ * ── Access requests ─────────────────────────────────────────────
+ * POST /api/auth/request-access          Prospective user asks for an account
+ *
  * ── Password ────────────────────────────────────────────────────
  * POST /api/auth/login                   Email + password → JWT pair
  * POST /api/auth/set-password            Set / change password  [auth required]
@@ -41,16 +44,30 @@ final class AuthEndpoint extends BaseEndpoint
 {
     public function handle(Request $request): Response
     {
+        $action = $this->params['action'] ?? '';
+
+        // verify-email accepts GET (clicked link) or POST; everything else is POST.
+        if ($action === 'verify-email') {
+            if (!in_array($request->method(), ['GET', 'POST'], true)) {
+                return Response::methodNotAllowed();
+            }
+            return $this->verifyEmail($request);
+        }
+
         if ($request->method() !== 'POST') {
             return Response::methodNotAllowed();
         }
-        return match ($this->params['action'] ?? '') {
+        return match ($action) {
             // Magic-link
             'magic-link'               => $this->requestMagicLink($request),
             'verify-status'            => $this->verifyStatus($request),
             'verify'                   => $this->verify($request),
+            // Alias email confirmation (public, no JWT)
+            'verify-email'             => $this->verifyEmail($request),
             // Email-first lookup
             'lookup'                   => $this->lookup($request),
+            // Access requests
+            'request-access'           => $this->requestAccess($request),
             // Password
             'login'                    => $this->login($request),
             'set-password'             => $this->setPassword($request),
@@ -176,7 +193,9 @@ final class AuthEndpoint extends BaseEndpoint
             [$row['id']]
         );
 
-        $user = $this->db->one('SELECT * FROM users WHERE email = ? LIMIT 1', [$row['email']]);
+        // Resolve via primary OR verified alias so a magic link sent to a
+        // verified alias signs the existing account in (never spawns a dupe).
+        $user = Identity::resolveUserByEmail($this->db, (string) $row['email']);
         if (!$user) {
             $id   = $this->db->insert(
                 'INSERT INTO users (name, email, role) VALUES (?, ?, ?)',
@@ -186,6 +205,88 @@ final class AuthEndpoint extends BaseEndpoint
         }
 
         return $this->ok($this->issueTokenPair($user));
+    }
+
+    // ─── Alias email confirmation ─────────────────────────────────────────────
+
+    /**
+     * Public, no-JWT confirmation of a newly added alias. Consumes a single-use,
+     * unexpired email_verification_tokens row (looked up by hash) and stamps the
+     * matching alt_emails entry's verified_at. Idempotent-ish: a token that was
+     * already consumed reports success only when the alias is in fact verified,
+     * so login.html can always render "email confirmed".
+     *
+     * Accepts the token via query string (GET link) or JSON body (POST).
+     */
+    private function verifyEmail(Request $request): Response
+    {
+        $token = trim((string) ($request->body('token', '') ?: $request->query('token', '')));
+        if ($token === '') {
+            return Response::json(['error' => 'Token is required'], 422);
+        }
+
+        $hash = $this->auth->hashToken($token);
+        $row  = $this->db->one(
+            'SELECT * FROM email_verification_tokens WHERE token_hash = ? LIMIT 1',
+            [$hash]
+        );
+        if (!$row) {
+            return Response::json(['error' => 'Invalid or expired confirmation link'], 401);
+        }
+
+        $email = strtolower(trim((string) $row['email']));
+
+        // Already consumed: succeed iff the alias is actually verified now.
+        if ($row['used_at'] !== null) {
+            $user = $this->db->one('SELECT * FROM users WHERE id = ? LIMIT 1', [(int) $row['user_id']]);
+            if ($user) {
+                foreach (Identity::altEmails($user) as $entry) {
+                    if (($entry['email'] ?? null) === $email && !empty($entry['verified_at'])) {
+                        return $this->ok(['ok' => true, 'email' => $email]);
+                    }
+                }
+            }
+            return Response::json(['error' => 'This confirmation link has already been used'], 401);
+        }
+
+        if (strtotime((string) $row['expires_at']) < time()) {
+            return Response::json(['error' => 'Invalid or expired confirmation link'], 401);
+        }
+
+        $user = $this->db->one('SELECT * FROM users WHERE id = ? LIMIT 1', [(int) $row['user_id']]);
+        if (!$user) {
+            return Response::json(['error' => 'Account no longer exists'], 401);
+        }
+
+        // Stamp verified_at on the matching alt_emails entry.
+        $entries = Identity::altEmails($user);
+        $found   = false;
+        foreach ($entries as &$entry) {
+            if (($entry['email'] ?? null) === $email) {
+                if (empty($entry['verified_at'])) {
+                    $entry['verified_at'] = date('c');
+                }
+                $found = true;
+                break;
+            }
+        }
+        unset($entry);
+
+        if (!$found) {
+            // Alias was removed after the token was minted.
+            return Response::json(['error' => 'This email is no longer pending confirmation'], 409);
+        }
+
+        $this->db->run(
+            'UPDATE users SET alt_emails = ? WHERE id = ?',
+            [json_encode(array_values($entries)), (int) $user['id']]
+        );
+        $this->db->run(
+            'UPDATE email_verification_tokens SET used_at = NOW() WHERE id = ?',
+            [(int) $row['id']]
+        );
+
+        return $this->ok(['ok' => true, 'email' => $email]);
     }
 
     /**
@@ -231,7 +332,12 @@ final class AuthEndpoint extends BaseEndpoint
     /** True iff a magic-link request for this email should actually send mail. */
     private function isEligibleForMagicLink(string $email): bool
     {
-        if ($this->db->one('SELECT id FROM users WHERE email = ? LIMIT 1', [$email])) {
+        // Active accounts only — a 'requested' account is awaiting admin
+        // approval and must not be able to sign in via a self-served link.
+        // Resolve via primary OR verified alias so a verified secondary
+        // address is also eligible to receive a link to its owning account.
+        $user = Identity::resolveUserByEmail($this->db, $email);
+        if ($user && ($user['access_status'] ?? null) === 'active') {
             return true;
         }
         return $this->hasOpenInvite($email);
@@ -247,6 +353,86 @@ final class AuthEndpoint extends BaseEndpoint
         );
     }
 
+    // ─── Access requests ────────────────────────────────────────────────────────
+
+    /**
+     * Public "request access" form (login page). Records the request as a
+     * 'requested' user row (no credentials) for a venue_admin to review and
+     * approve. Admins are emailed a heads-up. The response is intentionally
+     * uniform so the form can't be used to enumerate existing accounts.
+     */
+    private function requestAccess(Request $request): Response
+    {
+        $name  = trim((string) $request->body('name', ''));
+        $email = trim(strtolower((string) $request->body('email', '')));
+        $phone = trim((string) $request->body('phone', ''));
+        $notes = trim((string) $request->body('notes', ''));
+
+        if ($name === '') {
+            return Response::json(['error' => 'Your name is required'], 422);
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return Response::json(['error' => 'A valid email is required'], 422);
+        }
+
+        $ok = ['ok' => true, 'message' => 'Thanks — your request has been sent. An administrator will review it and email you a login link once approved.'];
+
+        $existing = $this->db->one(
+            'SELECT id, access_status FROM users WHERE email = ? LIMIT 1',
+            [$email]
+        );
+
+        if ($existing) {
+            // Already a pending request → refresh the details they submitted.
+            if ($existing['access_status'] === 'requested') {
+                $this->db->run(
+                    'UPDATE users SET name = ?, phone = ?, request_notes = ? WHERE id = ?',
+                    [$name, ($phone !== '' ? $phone : null), ($notes !== '' ? $notes : null), $existing['id']]
+                );
+                $this->notifyAdminsOfAccessRequest($name, $email, $phone, $notes);
+            }
+            // For an already-active account we silently no-op (don't reveal it
+            // exists); they can just sign in. Either way the response is uniform.
+            return $this->ok($ok);
+        }
+
+        $this->db->insert(
+            "INSERT INTO users (name, email, phone, role, access_status, request_notes)
+             VALUES (?, ?, ?, 'viewer', 'requested', ?)",
+            [$name, $email, ($phone !== '' ? $phone : null), ($notes !== '' ? $notes : null)]
+        );
+
+        $this->notifyAdminsOfAccessRequest($name, $email, $phone, $notes);
+
+        return $this->ok($ok);
+    }
+
+    /** Email every venue_admin that a new access request is awaiting review. */
+    private function notifyAdminsOfAccessRequest(string $name, string $email, string $phone, string $notes): void
+    {
+        $admins = $this->db->all(
+            "SELECT email FROM users WHERE role = 'venue_admin' AND access_status = 'active'"
+        );
+        if (!$admins) {
+            return;
+        }
+
+        $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        $link   = "{$appUrl}/index.html#admin-users";
+
+        $body = "A new account request is waiting for review on Backstage.\n\n"
+              . "  Name:  {$name}\n"
+              . "  Email: {$email}\n"
+              . ($phone !== '' ? "  Phone: {$phone}\n" : '')
+              . ($notes !== '' ? "\n  Situation:\n  {$notes}\n" : '')
+              . "\nReview and approve it here:\n  {$link}\n";
+
+        $mailer = new Mailer($this->root);
+        foreach ($admins as $admin) {
+            $mailer->send((string) $admin['email'], 'Backstage — new access request', $body);
+        }
+    }
+
     // ─── Password auth ────────────────────────────────────────────────────────
 
     private function login(Request $request): Response
@@ -258,7 +444,9 @@ final class AuthEndpoint extends BaseEndpoint
             return Response::json(['error' => 'Email and password are required'], 422);
         }
 
-        $user = $this->db->one('SELECT * FROM users WHERE email = ? LIMIT 1', [$email]);
+        // Primary-email login is unchanged: resolveUserByEmail tries the exact
+        // users.email match FIRST. A VERIFIED alias resolves as an added fallback.
+        $user = Identity::resolveUserByEmail($this->db, $email);
         if (!$user || !$user['password_hash'] || !password_verify($password, (string) $user['password_hash'])) {
             return Response::json(['error' => 'Invalid email or password'], 401);
         }
