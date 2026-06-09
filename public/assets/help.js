@@ -86,6 +86,10 @@ const HELP_CONTENT = {
   welcome: `
     <h2>Welcome to Panic Backstage</h2>
     <p>Panic Backstage helps a venue run a show from the first hold through final settlement. It keeps the lineup, run sheet, flyers, ticketing notes, open items, door list, and money in one place so a small team can hand off cleanly between bookers, promoters, designers, and night-of-show staff.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/dashboard.png" alt="The Panic Backstage dashboard: a left navigation sidebar and a grid of readiness counters and upcoming-show cards" loading="lazy">
+      <figcaption>The dashboard — the left sidebar navigates the app; the cards summarize the next two weeks of shows.</figcaption>
+    </figure>
     <p>If this is your first visit, start with <a href="#help-sign-in">Signing in</a>, then <a href="#help-navigation">Main navigation</a>, then <a href="#help-event-create">Creating an event</a>. Section "?" icons inside each event open the relevant help page in a new tab so you do not lose your place.</p>
   `,
 
@@ -256,6 +260,10 @@ const HELP_CONTENT = {
 
   overview: `
     <h2>Overview &amp; readiness</h2>
+    <figure class="help-shot">
+      <img src="./assets/help/event.png" alt="An event workspace: the row of section tabs, the event header with flyer thumbnail and facts, the Next Recommended Action banner, and the Readiness panel" loading="lazy">
+      <figcaption>An event workspace — the tab row jumps between sections; below it sit the event facts, Next Recommended Action, and the Readiness checklist.</figcaption>
+    </figure>
     <p>The top of every event workspace shows a flyer thumbnail, the event facts (date, doors, show, status, owner, public-page state), and two counters that link straight to the matching tabs:</p>
     <ul>
       <li><strong>Open Items</strong> count — blockers that are still <em>open</em> or <em>waiting</em>.</li>
@@ -434,6 +442,10 @@ const HELP_CONTENT = {
   contracts: `
     <h2>Contracts &amp; deal builder</h2>
     <p>The contract tool is a <strong>deal builder</strong>, not just a document editor. You capture the deal as structured terms — the money, the dates, the responsibilities — and Backstage assembles the written contract from approved clause modules. The same structured terms can later feed settlement and reporting, so the contract and the operations stay in sync.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/contract.png" alt="The contract builder's three columns: the deal-terms form on the left, the live document preview in the center, and the status workflow, review warnings, and clause list on the right" loading="lazy">
+      <figcaption>The contract builder — deal terms on the left, a live document preview in the center, and the status workflow, missing-term checks, and clause list on the right.</figcaption>
+    </figure>
 
     <h3>Where contracts live</h3>
     <ul>
@@ -473,6 +485,10 @@ const HELP_CONTENT = {
   ticketing: `
     <h2>Ticketing &amp; door</h2>
     <p>Backstage can sell tickets for a show directly — no third-party platform required — and then scan them at the door. The whole flow lives on the event's <em>Ticketing</em> tab. Before you can take money, a venue admin must pick a payment processor under <a href="#help-admin-payments">Admin &rarr; Payments</a>.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/ticketing.png" alt="The Ticketing tab: an in-house ticketing badge, a live sales summary (sold, available, redeemed, gross), the mode toggle, and the ticket-tier form" loading="lazy">
+      <figcaption>The Ticketing tab in in-house mode — live sales totals up top, the external/internal mode toggle, and the ticket-tier editor below.</figcaption>
+    </figure>
 
     <h3>External vs. in-house ticketing</h3>
     <p>Every event is in one of two ticketing modes, shown as a badge at the top of the tab:</p>
