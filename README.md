@@ -209,6 +209,38 @@ php scripts/endpoint-smoke.php http://localhost:8000
 
 The smoke script logs in as admin, loads dashboard data, creates an event from a template, updates an open item, creates and accepts a viewer invite, verifies collaborator event access, verifies unrelated event access and viewer mutation are blocked, saves settlement data, publishes the event, and verifies the public event API. It triggers real invite and magic-link emails through the Mailer (each written to `storage/mail/` and piped to the system MTA); it does not exercise multipart asset upload.
 
+## Regenerating Help Screenshots
+
+The in-app Help pages embed screenshots from `public/assets/help/`. Regenerate
+them after a UI change with:
+
+```bash
+node scripts/screenshots.mjs
+```
+
+The script is self-contained and has **no npm dependencies** — it uses Node's
+built-in `fetch`/`WebSocket` (Node 21+) and the system Chromium/Chrome. It:
+
+1. starts a local PHP dev server if one isn't already running,
+2. mints a **non-destructive** magic-link token for an admin via
+   `scripts/login-link.php` (no password is set or changed),
+3. drives headless Chromium over the DevTools Protocol to log in and capture the
+   dashboard, an event workspace, the ticketing panel, and the contract builder, then
+4. writes the PNGs to `public/assets/help/` and cleans up.
+
+Override the defaults via env vars when your data differs — e.g.:
+
+```bash
+SHOT_EMAIL=admin@mabuhay.local SHOT_EVENT_ID=641027 SHOT_CONTRACT_ID=10 \
+  node scripts/screenshots.mjs
+```
+
+The target event must have in-house ticketing enabled for the ticketing panel to
+appear, and the contract id must exist. Other knobs: `SHOT_PORT`,
+`SHOT_CDP_PORT`, `SHOT_BASE`, `SHOT_OUT`, `SHOT_SCALE` (see the file header).
+`dashboard.png` shows date-relative data, so it changes on every run — only
+re-commit it when the layout itself has changed.
+
 ## Deployment Notes
 
 Use `public/` as the web root.
