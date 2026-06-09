@@ -24,6 +24,26 @@ if ($basePath !== '' && $basePath !== '/' && str_starts_with($path, $basePath . 
 }
 $file = __DIR__ . $path;
 
+// Uploaded files are untrusted user content. The PHP built-in server (php -S)
+// will execute any .php it is allowed to serve, so we must stream anything
+// under /uploads ourselves as inert static content and never fall through to
+// the runtime. We resolve the real path and confirm it stays inside the
+// uploads directory to block traversal (php -S's own guard is bypassed once we
+// readfile directly). Production Apache is covered by storage/uploads/.htaccess.
+if (str_starts_with($path, '/uploads/')) {
+    $real = realpath($file);
+    $uploadsRoot = realpath(__DIR__ . '/uploads');
+    if ($real !== false && $uploadsRoot !== false && str_starts_with($real, $uploadsRoot . DIRECTORY_SEPARATOR) && is_file($real)) {
+        header('Content-Type: ' . content_type($real));
+        header('X-Content-Type-Options: nosniff');
+        header('Content-Disposition: inline; filename="' . basename($real) . '"');
+        readfile($real);
+    } else {
+        http_response_code(404);
+    }
+    return true;
+}
+
 if ($path !== '/' && is_file($file)) {
     sensitive_html_headers($path);
     if ($strippedBasePath) {

@@ -217,6 +217,31 @@ For Apache, the included `public/.htaccess` routes API requests to `public/api/i
 
 For Nginx/PHP-FPM, route `/api/*` to `public/api/index.php` and serve static files from `public/`. If the app is mounted under a subdirectory such as `/backstage`, route that prefix to `public/` and set `APP_BASE_PATH=/backstage` if the server does not expose the prefix through `SCRIPT_NAME`. Uploads should resolve through the `public/uploads` symlink to `storage/uploads`.
 
+### Uploads must never execute (security)
+
+Uploaded files are untrusted. The upload endpoint already validates each file by
+its detected MIME type and writes it under a server-generated name whose
+extension is derived from that type (never from the client filename), so a
+disguised script can't be stored as `.php`. Enforce the same rule at the web
+server as defense-in-depth so a single bug can't become remote code execution:
+
+- **Apache:** handled automatically by `storage/uploads/.htaccess`, which turns
+  the PHP engine off and denies any scriptable file in the uploads tree. This
+  requires the vhost to allow those overrides (`AllowOverride` including
+  `Options` and `FileInfo` — the same overrides the app's rewrites already need).
+- **Nginx/PHP-FPM:** `.htaccess` is ignored, so add a location block that serves
+  the uploads path statically and **never** passes it to PHP-FPM, e.g.:
+
+  ```nginx
+  location ^~ /uploads/ {
+      alias /path/to/app/storage/uploads/;
+      add_header X-Content-Type-Options "nosniff" always;
+      types { } default_type application/octet-stream;   # don't infer active types
+      location ~ \.(php|phtml|phar|phps?|pht|cgi|pl|py|sh|s?html)$ { deny all; }
+      # Critically: do NOT include fastcgi_pass in this block.
+  }
+  ```
+
 Keep `.env` outside version control. It is ignored by `.gitignore`.
 
 Staging checklist:

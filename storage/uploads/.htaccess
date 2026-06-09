@@ -1,0 +1,40 @@
+# Uploaded files are untrusted user content. Under no circumstances may the web
+# server execute anything in this tree as code — a malicious upload (e.g. a PHP
+# file, or an image/PHP "polyglot" kept under a .php name) must be served as an
+# inert static file, never run. This is the web-server backstop; the upload
+# endpoint also forces a safe extension from the detected MIME type.
+#
+# NOTE: requires the vhost to allow these overrides (AllowOverride includes
+# Options + FileInfo, which this app already relies on for its RewriteRules).
+
+# 1) mod_php: turn the PHP interpreter fully off for this directory tree.
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php8.c>
+  php_flag engine off
+</IfModule>
+
+# 2) Strip any execution handlers/types (covers AddHandler/AddType setups and
+#    CGI). RemoveHandler/RemoveType are no-ops if the type was never mapped.
+<IfModule mod_mime.c>
+  RemoveHandler .php .phtml .phar .php3 .php4 .php5 .php7 .php8 .phps .pht .cgi .pl .py .jsp .asp .aspx .sh .shtml .fcgi
+  RemoveType .php .phtml .phar .php3 .php4 .php5 .php7 .php8 .phps .pht
+</IfModule>
+
+# 3) Belt-and-suspenders for PHP-FPM (proxy_fcgi via SetHandler) and any other
+#    handler RemoveHandler can't undo: refuse to serve scriptable files at all.
+<FilesMatch "(?i)\.(php|phtml|phar|php[0-9]?|phps?|pht|cgi|pl|py|jsp|aspx?|sh|shtml|fcgi|htaccess)$">
+  SetHandler none
+  Require all denied
+</FilesMatch>
+
+# 4) Never sniff a served file into a different (executable/active) type, and no
+#    directory listings or CGI in this tree.
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+</IfModule>
+Options -Indexes -ExecCGI

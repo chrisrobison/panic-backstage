@@ -47,14 +47,25 @@ final class Assets extends BaseEndpoint
         if (($file['size'] ?? 0) > 10 * 1024 * 1024) {
             return Response::json(['error' => 'Uploads must be 10MB or smaller'], 422);
         }
+        // Detect the type from the file's actual bytes, and derive the stored
+        // extension from THAT — never from the user-supplied filename. Trusting
+        // the client extension lets a polyglot (valid image bytes + PHP code)
+        // be stored as ".php" and executed by the web server. The map below is
+        // the only set of extensions we will ever write to disk.
         $mime = mime_content_type($file['tmp_name']) ?: '';
-        $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
-        if (!in_array($mime, $allowed, true)) {
+        $allowed = [
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            'application/pdf' => 'pdf',
+        ];
+        if (!isset($allowed[$mime])) {
             return Response::json(['error' => 'Only images and PDFs are accepted (detected: ' . $mime . ')'], 422);
         }
-        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $ext = $allowed[$mime];
         $base = slugify(pathinfo($file['name'], PATHINFO_FILENAME));
-        $filename = time() . '-' . bin2hex(random_bytes(4)) . '-' . $base . ($ext ? ".$ext" : '');
+        $filename = time() . '-' . bin2hex(random_bytes(4)) . '-' . $base . '.' . $ext;
         $dir = $this->root . '/public/uploads/events/' . $eventId;
         if (!is_dir($dir)) {
             mkdir($dir, 0775, true);
