@@ -1,24 +1,34 @@
 // ── Admin ticketing surface ──────────────────────────────────────────────────
-// Web component for the event workspace: manage ticket tiers, view the live
-// sales dashboard, comp tickets, manage door-scanner links, and switch the
-// internal/external ticketing mode. A separate global control (pb-payment-
-// settings) lets venue admins switch the active payment provider.
+// Web component for the event workspace. It guides the operator through one
+// clear choice — sell tickets in-house or link out to another platform — and
+// then surfaces only the tools relevant to that mode:
 //
-// New file only — registers its own custom elements; events.js mounts
-// <pb-ticketing-admin> by assigning `.data` (the event workspace payload).
+//   • External: just the public ticket URL + platform name (with a preview).
+//   • In-house: live sales summary, ticket types, comps, door-scanner links,
+//     and a cancel/refund action.
+//
+// A separate global control (pb-payment-settings) lets venue admins switch the
+// active payment provider. events.js mounts <pb-ticketing-admin> by assigning
+// `.data` (the event workspace payload).
 
-import { esc, titleCase, publish, api, formData, can, money, helpLink, PanicElement, addToggle, $, $$ } from './core.js';
+import { esc, titleCase, publish, api, formData, can, money, helpLink, PanicElement, $, $$ } from './core.js';
 
 
 const moneyCents = (cents) => money(Number(cents || 0) / 100);
 
-const TIER_STATUSES = ['draft', 'on_sale', 'paused', 'sold_out', 'closed'];
+const TYPE_STATUSES = ['draft', 'on_sale', 'paused', 'sold_out', 'closed'];
 
 // QR rendered by our own /assets/qr.svg generator (src/QrCode.php) — never send
 // scanner-link or ticket tokens to a third-party CDN, which would leak secrets
 // that grant entry. Same-origin, zero dependencies.
 const qrSrc = (text, size = 160) =>
   `assets/qr.svg?size=${size}&text=${encodeURIComponent(text)}`;
+
+// A "+" reveal button that toggles a specific form (by selector) within the
+// component. Mirrors the shared addToggle styling but targets one of several
+// independent forms in this panel (ticket types, scanner links).
+const revealBtn = (label, target) =>
+  `<button type="button" class="add-toggle" data-add-target="${esc(target)}" aria-label="${esc(label)}" title="${esc(label)}"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>`;
 
 
 class TicketingAdmin extends PanicElement {
@@ -63,18 +73,60 @@ class TicketingAdmin extends PanicElement {
   render() {
     const dash = this.dash;
     const ev = dash.event;
-    const summary = dash.summary;
     const editable = this.editable;
     const internal = ev.ticketing_mode === 'internal';
 
-    this.innerHTML = `<section class="panel" id="ticketing">
+    this.innerHTML = `<section class="panel ticketing" id="ticketing">
       <div class="section-head padded">
         <h2>Ticketing ${helpLink('ticketing', 'Ticketing')}</h2>
-        <div class="inline-actions">
-          <span class="badge ${internal ? 'status-published' : ''}">${internal ? 'In-house ticketing' : 'External ticketing'}</span>
-        </div>
+        <span class="badge ${internal ? 'status-published' : ''}">${internal ? 'Selling in-house' : 'External tickets'}</span>
       </div>
 
+      ${editable ? this.modePickerHtml(ev, internal) : ''}
+
+      ${internal ? this.internalBodyHtml(dash.summary) : this.externalBodyHtml(ev)}
+    </section>`;
+
+    this.bind();
+  }
+
+  // The single most important control: how tickets are sold. Two clear cards;
+  // picking "external" reveals the public-URL fields, picking "in-house" hides
+  // them. The heavy sections below switch only after the choice is saved.
+  modePickerHtml(ev, internal) {
+    const option = (value, icon, title, desc) => {
+      const selected = (value === 'internal') === internal;
+      return `<label class="mode-option${selected ? ' selected' : ''}">
+        <input type="radio" name="ticketing_mode" value="${value}" ${selected ? 'checked' : ''}>
+        <span class="mode-option-icon"><i class="fa-solid ${icon}" aria-hidden="true"></i></span>
+        <span class="mode-option-body"><strong>${title}</strong><span class="muted">${desc}</span></span>
+      </label>`;
+    };
+    return `<form class="padded ticketing-mode" data-form="mode">
+      <div class="field-label">How are tickets sold?</div>
+      <div class="mode-options">
+        ${option('internal', 'fa-store', 'Sell tickets here', 'In-house checkout, QR tickets &amp; door scanning.')}
+        ${option('external', 'fa-arrow-up-right-from-square', 'Use another platform', 'Send buyers to TIXR, Eventbrite, etc.')}
+      </div>
+      <div class="mode-config" data-mode-config="external"${internal ? ' hidden' : ''}>
+        <label class="wide">Ticket page URL
+          <input name="ticket_url" type="url" value="${esc(ev.ticket_url || '')}" placeholder="https://tickets.example.com/your-show">
+        </label>
+        <label>Platform name
+          <input name="ticket_system" value="${esc(ev.ticket_system || '')}" placeholder="TIXR, Eventbrite…">
+        </label>
+      </div>
+      <div class="form-actions">
+        <button class="small">Save ticketing mode</button>
+        <span class="unsaved-hint" data-unsaved hidden>Unsaved changes — click save to apply.</span>
+      </div>
+    </form>`;
+  }
+
+  // In-house: sales summary + ticket types + comps + scanner links + refund.
+  internalBodyHtml(summary) {
+    const editable = this.editable;
+    return `
       <div class="padded ticketing-summary">
         <div class="stat-grid">
           ${this.stat('Sold', summary.tickets_sold)}
@@ -84,40 +136,41 @@ class TicketingAdmin extends PanicElement {
         </div>
       </div>
 
-      <form class="row-form padded" data-form="mode">
-        <label>Mode
-          <select name="ticketing_mode" ${editable ? '' : 'disabled'}>
-            <option value="external" ${!internal ? 'selected' : ''}>External (link out)</option>
-            <option value="internal" ${internal ? 'selected' : ''}>Internal (in-house)</option>
-          </select>
-        </label>
-        <label class="wide">External ticket URL
-          <input name="ticket_url" value="${esc(ev.ticket_url || '')}" placeholder="https://…" ${editable ? '' : 'disabled'}>
-        </label>
-        <label>Ticket system
-          <input name="ticket_system" value="${esc(ev.ticket_system || '')}" placeholder="TIXR / Door" ${editable ? '' : 'disabled'}>
-        </label>
-        ${editable ? '<button class="small">Save mode</button>' : ''}
-      </form>
-
       <div class="section-head padded sub-head">
-        <h3>Tiers</h3>
-        ${addToggle('Add tier', editable)}
+        <h3>Ticket types</h3>
+        ${editable ? revealBtn('Add ticket type', 'form[data-form="tier"]') : ''}
       </div>
       ${editable ? this.tierFormHtml() : ''}
       <div class="ticketing-tiers padded">${this.tiersHtml()}</div>
 
-      ${internal ? this.compSectionHtml() : ''}
-      ${internal ? this.scannerSectionHtml() : ''}
+      ${editable ? this.compSectionHtml() : ''}
+      ${this.scannerSectionHtml()}
 
-      ${editable && internal ? `<div class="padded danger-zone">
+      ${editable ? `<div class="padded danger-zone">
         <h3>Cancel &amp; refund</h3>
-        <p class="subtle">Refunds every paid order through its original processor, voids all issued tickets, and marks orders refunded. This cannot be undone.</p>
+        <p class="ticket-note">Refunds every paid order through its original processor, voids all issued tickets, and marks orders refunded. This cannot be undone.</p>
         <button type="button" class="danger" data-refund-all>Refund all orders</button>
-      </div>` : ''}
-    </section>`;
+      </div>` : ''}`;
+  }
 
-    this.bind();
+  // External: just a preview of where buyers are sent (the editable URL fields
+  // live in the mode picker above).
+  externalBodyHtml(ev) {
+    const url = ev.ticket_url || '';
+    const card = url
+      ? `<div class="external-link-card">
+          <div class="external-link-info">
+            <span class="muted">Buyers are sent to</span>
+            <a href="${esc(url)}" target="_blank" rel="noopener" class="external-link-url">${esc(url)}</a>
+            ${ev.ticket_system ? `<span class="muted">via ${esc(ev.ticket_system)}</span>` : ''}
+          </div>
+          <a class="button secondary" href="${esc(url)}" target="_blank" rel="noopener">Open <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>
+        </div>`
+      : `<p class="empty-state">No ticket link yet.${this.editable ? ' Add your ticket page URL above so it appears on the public event page.' : ''}</p>`;
+    return `<div class="padded ticketing-external">
+      ${card}
+      <p class="ticket-note">In-house tools — ticket types, comps, and door scanning — are available in “Sell tickets here” mode.</p>
+    </div>`;
   }
 
   stat(label, value) {
@@ -126,12 +179,14 @@ class TicketingAdmin extends PanicElement {
 
   tiersHtml() {
     const tiers = this.dash.tiers || [];
-    if (!tiers.length) return '<p class="empty-state">No ticket tiers yet.</p>';
+    if (!tiers.length) {
+      return `<p class="empty-state">No ticket types yet.${this.editable ? ' Add one (e.g. “General Admission”) to start selling.' : ''}</p>`;
+    }
     const editable = this.editable;
     return `<table class="data-table">
-      <thead><tr><th>Tier</th><th>Price</th><th>Sold</th><th>Comp</th><th>Avail</th><th>Revenue</th><th>Status</th>${editable ? '<th></th>' : ''}</tr></thead>
+      <thead><tr><th>Type</th><th>Price</th><th>Sold</th><th>Comp</th><th>Avail</th><th>Revenue</th><th>Status</th>${editable ? '<th></th>' : ''}</tr></thead>
       <tbody>${tiers.map((t) => `<tr data-tier="${esc(t.id)}">
-        <td data-label="Tier"><strong>${esc(t.name)}</strong>${t.description ? `<br><span class="muted">${esc(t.description)}</span>` : ''}</td>
+        <td data-label="Type"><strong>${esc(t.name)}</strong>${t.description ? `<br><span class="muted">${esc(t.description)}</span>` : ''}</td>
         <td data-label="Price">${moneyCents(t.price_cents)}</td>
         <td data-label="Sold">${esc(t.quantity_sold)} / ${esc(t.quantity_total)}</td>
         <td data-label="Comp">${esc(t.quantity_comped)}</td>
@@ -146,38 +201,40 @@ class TicketingAdmin extends PanicElement {
   tierFormHtml(tier = null) {
     const t = tier || {};
     const dollars = t.price_cents != null ? (t.price_cents / 100).toFixed(2) : '';
-    return `<form class="grid-form padded hidden" data-form="tier" data-tier-id="${esc(t.id || '')}">
-      <label>Name <input name="name" required value="${esc(t.name || '')}"></label>
+    return `<form class="grid-form padded" data-form="tier" data-tier-id="${esc(t.id || '')}" hidden>
+      <label>Name <input name="name" required value="${esc(t.name || '')}" placeholder="General Admission"></label>
       <label>Price (USD) <input name="price_dollars" type="number" step="0.01" min="0" value="${esc(dollars)}" placeholder="0.00"></label>
-      <label>Quantity <input name="quantity_total" type="number" min="0" required value="${esc(t.quantity_total ?? '')}"></label>
-      <label>Status <select name="status">${TIER_STATUSES.map((s) => `<option value="${s}" ${s === (t.status || 'draft') ? 'selected' : ''}>${esc(titleCase(s))}</option>`).join('')}</select></label>
+      <label>Quantity <input name="quantity_total" type="number" min="0" required value="${esc(t.quantity_total ?? '')}" placeholder="100"></label>
+      <label>Status <select name="status">${TYPE_STATUSES.map((s) => `<option value="${s}" ${s === (t.status || 'draft') ? 'selected' : ''}>${esc(titleCase(s))}</option>`).join('')}</select></label>
       <label>Sales start <input name="sales_start" type="datetime-local" value="${esc((t.sales_start || '').replace(' ', 'T').slice(0, 16))}"></label>
       <label>Sales end <input name="sales_end" type="datetime-local" value="${esc((t.sales_end || '').replace(' ', 'T').slice(0, 16))}"></label>
-      <label class="wide">Description <input name="description" value="${esc(t.description || '')}"></label>
-      <div class="form-actions"><button>${t.id ? 'Save tier' : 'Add tier'}</button><button type="button" class="secondary" data-cancel-tier>Cancel</button></div>
+      <label class="wide">Description <input name="description" value="${esc(t.description || '')}" placeholder="What’s included (optional)"></label>
+      <div class="form-actions"><button>${t.id ? 'Save ticket type' : 'Add ticket type'}</button><button type="button" class="secondary" data-cancel-tier>Cancel</button></div>
     </form>`;
   }
 
   compSectionHtml() {
     const tiers = this.dash.tiers || [];
     if (!this.editable) return '';
-    return `<div class="section-head padded sub-head"><h3>Comp tickets</h3></div>
-      <form class="grid-form padded" data-form="comp">
-        <label>Tier <select name="ticket_type_id" required>${tiers.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
+    return `<div class="section-head padded sub-head"><h3>Comp tickets</h3>${tiers.length ? revealBtn('Issue comp tickets', 'form[data-form="comp"]') : ''}</div>
+      ${tiers.length ? `<form class="grid-form padded" data-form="comp" hidden>
+        <label>Ticket type <select name="ticket_type_id" required>${tiers.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
         <label>Quantity <input name="quantity" type="number" min="1" value="1" required></label>
         <label>Holder name <input name="holder_name" placeholder="Optional"></label>
         <label>Holder email <input name="holder_email" type="email" placeholder="Emails QR if set"></label>
-        <div class="form-actions"><button>Issue comps</button></div>
+        <div class="form-actions"><button>Issue comps</button><button type="button" class="secondary" data-cancel-comp>Cancel</button></div>
       </form>
-      <div class="comp-result padded" hidden></div>`;
+      <div class="comp-result padded" hidden></div>`
+        : '<p class="ticket-note padded">Add a ticket type first to issue comps.</p>'}`;
   }
 
   scannerSectionHtml() {
     const links = this.links;
     const editable = this.editable;
     const body = this.scannerListInner();
-    return `<div class="section-head padded sub-head"><h3>Door scanner links</h3>${editable && links !== null ? addToggle('New scanner link', true) : ''}</div>
-      ${editable && links !== null ? `<form class="row-form padded hidden" data-form="scanner">
+    const canManage = editable && links !== null;
+    return `<div class="section-head padded sub-head"><h3>Door scanner links</h3>${canManage ? revealBtn('New scanner link', 'form[data-form="scanner"]') : ''}</div>
+      ${canManage ? `<form class="row-form padded" data-form="scanner" hidden>
         <label class="wide">Label <input name="label" placeholder="Front door"></label>
         <label>PIN (optional) <input name="pin" inputmode="numeric" placeholder="e.g. 4821"></label>
         <button class="small">Create link</button>
@@ -187,39 +244,82 @@ class TicketingAdmin extends PanicElement {
   }
 
   bind() {
-    // Toggle reveal forms (+ buttons).
-    $$('[data-add]', this).forEach((btn) => btn.addEventListener('click', () => {
-      const form = btn.closest('.section-head')?.nextElementSibling;
-      if (form?.matches('form')) form.classList.toggle('hidden');
+    // "+" reveal buttons, each targeting a specific form by selector.
+    $$('[data-add-target]', this).forEach((btn) => btn.addEventListener('click', () => {
+      const form = $(btn.dataset.addTarget, this);
+      if (!form) return;
+      const show = form.hasAttribute('hidden');
+      form.toggleAttribute('hidden', !show);
+      btn.classList.toggle('active', show);
+      if (show) $$('input, select, textarea', form).find((el) => !el.disabled && el.type !== 'hidden')?.focus();
     }));
 
-    // Mode / settings
-    $('form[data-form="mode"]', this)?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      await api(`/events/${this.eventId}/ticketing`, { method: 'PATCH', body: JSON.stringify(formData(e.target)) });
-      publish('toast.show', { message: 'Ticketing settings saved.' });
-      await this.load();
-    });
+    // Mode picker: reactively reveal the external-URL fields and flag unsaved
+    // changes; persist on submit.
+    const modeForm = $('form[data-form="mode"]', this);
+    if (modeForm) {
+      const saved = this.dash.event.ticketing_mode === 'internal' ? 'internal' : 'external';
+      $$('input[name="ticketing_mode"]', modeForm).forEach((radio) => radio.addEventListener('change', () => {
+        $$('.mode-option', modeForm).forEach((lab) => lab.classList.toggle('selected', $('input', lab).checked));
+        $('[data-mode-config="external"]', modeForm)?.toggleAttribute('hidden', radio.value !== 'external');
+        const hint = $('[data-unsaved]', modeForm);
+        if (hint) hint.hidden = radio.value === saved;
+      }));
+      modeForm.addEventListener('submit', (e) => this.saveMode(e));
+    }
 
-    // Tier create
+    // Ticket type create / cancel
     $('form[data-form="tier"]', this)?.addEventListener('submit', (e) => this.saveTier(e));
-    $('[data-cancel-tier]', this)?.addEventListener('click', () => $('form[data-form="tier"]', this)?.classList.add('hidden'));
+    $('[data-cancel-tier]', this)?.addEventListener('click', () => this.collapseForm('form[data-form="tier"]'));
 
-    // Tier edit / delete (row actions, only if editable)
+    // Ticket type edit / delete (row actions, only if editable)
     $$('[data-edit-tier]', this).forEach((btn) => btn.addEventListener('click', () => this.editTier(Number(btn.dataset.editTier))));
     $$('[data-del-tier]', this).forEach((btn) => btn.addEventListener('click', () => this.deleteTier(Number(btn.dataset.delTier))));
 
     // Comp
     $('form[data-form="comp"]', this)?.addEventListener('submit', (e) => this.issueComps(e));
+    $('[data-cancel-comp]', this)?.addEventListener('click', () => this.collapseForm('form[data-form="comp"]'));
 
     // Refund all
     $('[data-refund-all]', this)?.addEventListener('click', () => this.refundAll());
 
     // Scanner links
     $('form[data-form="scanner"]', this)?.addEventListener('submit', (e) => this.createScannerLink(e));
+    this.bindScanner();
+  }
+
+  // Wire the per-row scanner actions. Kept separate so it can be re-run after
+  // the links list is re-rendered in place (without double-binding the rest).
+  bindScanner() {
     $$('[data-revoke-link]', this).forEach((btn) => btn.addEventListener('click', () => this.revokeLink(Number(btn.dataset.revokeLink))));
     $$('[data-show-link]', this).forEach((btn) => btn.addEventListener('click', () => this.toggleScannerReveal(Number(btn.dataset.showLink))));
     $$('[data-gen-link]', this).forEach((btn) => btn.addEventListener('click', () => this.regenerateScannerLink(Number(btn.dataset.genLink))));
+  }
+
+  // Hide a reveal form again and reset its matching "+" toggle. Matches the
+  // toggle in JS (not a CSS attribute selector) because the selector value
+  // itself contains quotes.
+  collapseForm(selector) {
+    $(selector, this)?.setAttribute('hidden', '');
+    $$('[data-add-target]', this).forEach((btn) => {
+      if (btn.dataset.addTarget === selector) btn.classList.remove('active');
+    });
+  }
+
+  async saveMode(e) {
+    e.preventDefault();
+    const values = formData(e.target);
+    const mode = values.ticketing_mode === 'internal' ? 'internal' : 'external';
+    const body = { ticketing_mode: mode };
+    // Only persist the external fields when external — and keep any saved URL
+    // untouched when switching to in-house so toggling back doesn't lose it.
+    if (mode === 'external') {
+      body.ticket_url = values.ticket_url || '';
+      body.ticket_system = values.ticket_system || '';
+    }
+    await api(`/events/${this.eventId}/ticketing`, { method: 'PATCH', body: JSON.stringify(body) });
+    publish('toast.show', { message: 'Ticketing settings saved.' });
+    await this.load();
   }
 
   editTier(id) {
@@ -227,8 +327,9 @@ class TicketingAdmin extends PanicElement {
     if (!tier) return;
     const host = $('form[data-form="tier"]', this);
     if (!host) return;
-    host.outerHTML = this.tierFormHtml(tier).replace('class="grid-form padded hidden"', 'class="grid-form padded"');
+    host.outerHTML = this.tierFormHtml(tier);
     const form = $('form[data-form="tier"]', this);
+    form.removeAttribute('hidden');
     form.addEventListener('submit', (e) => this.saveTier(e));
     $('[data-cancel-tier]', form)?.addEventListener('click', () => this.load());
     form.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -249,15 +350,15 @@ class TicketingAdmin extends PanicElement {
     const id = e.target.dataset.tierId;
     const path = id ? `/events/${this.eventId}/ticketing/types/${id}` : `/events/${this.eventId}/ticketing`;
     await api(path, { method: id ? 'PATCH' : 'POST', body: JSON.stringify(body) });
-    publish('toast.show', { message: id ? 'Tier updated.' : 'Tier created.' });
+    publish('toast.show', { message: id ? 'Ticket type updated.' : 'Ticket type created.' });
     await this.load();
   }
 
   async deleteTier(id) {
-    if (!confirm('Delete this tier? Tiers with issued tickets cannot be deleted.')) return;
+    if (!confirm('Delete this ticket type? Types with issued tickets cannot be deleted.')) return;
     try {
       await api(`/events/${this.eventId}/ticketing/types/${id}`, { method: 'DELETE' });
-      publish('toast.show', { message: 'Tier deleted.' });
+      publish('toast.show', { message: 'Ticket type deleted.' });
       await this.load();
     } catch (error) {
       publish('toast.show', { tone: 'error', message: error.message });
@@ -308,7 +409,7 @@ class TicketingAdmin extends PanicElement {
       // Refresh the links list region in place.
       const region = $('.scanner-links', this);
       if (region) region.innerHTML = this.scannerListInner();
-      this.bind();
+      this.bindScanner();
     } catch (error) {
       publish('toast.show', { tone: 'error', message: error.message });
     }
@@ -369,7 +470,7 @@ class TicketingAdmin extends PanicElement {
       publish('toast.show', { message: 'Scanner link generated.' });
       const region = $('.scanner-links', this);
       if (region) region.innerHTML = this.scannerListInner();
-      this.bind();
+      this.bindScanner();
       this.revealScannerUrl(id, url);
     } catch (error) {
       publish('toast.show', { tone: 'error', message: error.message });
