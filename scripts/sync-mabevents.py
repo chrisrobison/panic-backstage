@@ -29,6 +29,7 @@ Requires:
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -54,6 +55,28 @@ DEFAULT_SHEET_ID = '1STS6et19iDHxtLvK2HVfqmAzs1HUa9GgF25KqBikRRE'
 
 def export_url(sheet_id: str) -> str:
     return f'https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx'
+
+def load_env_flags(*names: str) -> None:
+    """Propagate selected KEY=VALUE entries from backstage/.env into the process
+    environment so the generator subprocess (pure Python — it does NOT load .env,
+    unlike the PHP steps which use Env::load) sees them. A real OS env var always
+    wins, so the cron/shell can still override. Keeps the flag in one place (.env)
+    for operators instead of needing it exported separately."""
+    wanted = {n for n in names if n not in os.environ}
+    if not wanted:
+        return
+    env_path = BACKSTAGE / '.env'
+    try:
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, _, val = line.partition('=')
+            key = key.strip()
+            if key in wanted:
+                os.environ[key] = val.strip().strip('"').strip("'")
+    except OSError:
+        pass
 
 # ── Steps ─────────────────────────────────────────────────────────────────────
 
@@ -146,6 +169,10 @@ def main() -> None:
     p.add_argument('--dry-run', action='store_true',
                    help='Download and regenerate SQL but skip the DB apply step')
     args = p.parse_args()
+
+    # Honor SHEET_INSERT_NEW (and related) from backstage/.env for the generator
+    # subprocess, which doesn't load .env on its own.
+    load_env_flags('SHEET_INSERT_NEW', 'SHEET_SHADOW_JSON', 'SHEET_IMPORT_LINKS_JSON')
 
     if not args.no_download:
         url = args.url or export_url(args.sheet_id)
