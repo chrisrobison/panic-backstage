@@ -7,7 +7,7 @@
 // New file only — registers its own custom elements; events.js mounts
 // <pb-ticketing-admin> by assigning `.data` (the event workspace payload).
 
-import { esc, titleCase, publish, api, formData, can, money, PanicElement, addToggle, $, $$ } from './core.js';
+import { esc, titleCase, publish, api, formData, can, money, helpLink, PanicElement, addToggle, $, $$ } from './core.js';
 
 
 const moneyCents = (cents) => money(Number(cents || 0) / 100);
@@ -69,7 +69,7 @@ class TicketingAdmin extends PanicElement {
 
     this.innerHTML = `<section class="panel" id="ticketing">
       <div class="section-head padded">
-        <h2>Ticketing</h2>
+        <h2>Ticketing ${helpLink('ticketing', 'Ticketing')}</h2>
         <div class="inline-actions">
           <span class="badge ${internal ? 'status-published' : ''}">${internal ? 'In-house ticketing' : 'External ticketing'}</span>
         </div>
@@ -391,7 +391,7 @@ class PaymentSettingsPanel extends PanicElement {
     const s = this.settings;
     const providers = s.providers || [];
     this.innerHTML = `<section class="panel" id="payment-settings">
-      <div class="section-head padded"><h2>Payment provider</h2></div>
+      <div class="section-head padded"><h2>Payment provider ${helpLink('admin-payments', 'Payment providers')}</h2></div>
       <div class="padded">
         <p class="subtle">Select the active processor for in-house ticket checkout. Secret keys live in the server environment and are never shown here.</p>
         <form class="grid-form" data-form="payment">

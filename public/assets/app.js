@@ -9,6 +9,7 @@ import './user-emails.js';
 import './ticketing-admin.js';
 import './tickets-public.js';
 import './help.js';
+import { HELP_SECTIONS } from './help.js';
 
 
 class AppShell extends PanicElement {
@@ -88,7 +89,7 @@ class AppShell extends PanicElement {
             <a data-nav="admin-payments" href="#admin-payments"><i class="fa-solid fa-credit-card" aria-hidden="true"></i>Payments</a>
           </div>
         </div>
-        <a data-nav="help" href="#help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i>Help</a>
+        ${this.helpNavGroup()}
       </nav>
       <div class="side-card"><span class="bolt"></span><strong>Good shows.<br><span>No surprises.</span></strong></div>
       <button class="venue-switch" type="button"><i class="fa-solid fa-building" aria-hidden="true"></i>Mabuhay Gardens</button>
@@ -203,6 +204,33 @@ class AppShell extends PanicElement {
     if (pill && this.user) pill.textContent = this.user.name || this.user.email || 'Account';
   }
 
+  // Build the collapsible Help nav group from the shared HELP_SECTIONS table
+  // (the single source of truth that also drives the Help page's TOC). Each
+  // category deep-links to its first topic; "All topics" opens the help home.
+  helpNavGroup() {
+    const children = HELP_SECTIONS.map((g) => {
+      const first = g.items[0]?.slug || '';
+      const icon = g.icon || 'fa-solid fa-circle-question';
+      return `<a data-nav="help-${g.key}" href="#help-${first}"><i class="${icon}" aria-hidden="true"></i>${g.group}</a>`;
+    }).join('');
+    return `<div class="nav-group" data-group="help">
+          <button class="nav-parent" type="button" data-group-toggle="help" aria-expanded="false"><i class="fa-solid fa-circle-question" aria-hidden="true"></i><span class="nav-parent-label">Help</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+          <div class="nav-children">
+            <a data-nav="help" href="#help"><i class="fa-solid fa-bookmark" aria-hidden="true"></i>All topics</a>
+            ${children}
+          </div>
+        </div>`;
+  }
+
+  // Map a help anchor (#help-<slug>) to the nav key of the category that owns
+  // it, so the right Help child highlights and the group auto-opens.
+  helpNavKey(route) {
+    if (route === 'help' || route === 'help/') return 'help';
+    const slug = route.replace(/^help[-/]/, '');
+    const group = HELP_SECTIONS.find((g) => g.items.some((it) => it.slug === slug));
+    return group ? `help-${group.key}` : 'help';
+  }
+
   // Resolve the hash into the leaf nav key used for active-state matching.
   // Event-workspace deep links (event-<id>) light up the Events ▸ List leaf.
   navKeyForRoute(route) {
@@ -211,7 +239,7 @@ class AppShell extends PanicElement {
       const tab = route === 'admin' ? 'users' : route.replace(/^admin[-/]/, '');
       return `admin-${tab}`;
     }
-    if (route.startsWith('help')) return 'help';
+    if (route.startsWith('help')) return this.helpNavKey(route);
     return route;
   }
 

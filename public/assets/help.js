@@ -5,9 +5,11 @@ import { esc, statuses, publish, api, money, badge, option, can, table, PanicEle
 // Long-form documentation for the backstage app. Sections are anchored so the
 // small "?" icons next to each event section can deep-link via #help-<slug>.
 
-const HELP_SECTIONS = [
+export const HELP_SECTIONS = [
   {
     group: 'Getting Started',
+    key: 'getting-started',
+    icon: 'fa-solid fa-flag-checkered',
     items: [
       { slug: 'welcome',      title: 'Welcome' },
       { slug: 'sign-in',      title: 'Signing in' },
@@ -18,6 +20,8 @@ const HELP_SECTIONS = [
   },
   {
     group: 'Working with the App',
+    key: 'working',
+    icon: 'fa-solid fa-compass',
     items: [
       { slug: 'navigation',   title: 'Main navigation' },
       { slug: 'dashboard',    title: 'Dashboard' },
@@ -29,6 +33,8 @@ const HELP_SECTIONS = [
   },
   {
     group: 'Running an Event',
+    key: 'running',
+    icon: 'fa-solid fa-calendar-check',
     items: [
       { slug: 'event-create', title: 'Creating an event' },
       { slug: 'overview',     title: 'Overview &amp; readiness' },
@@ -42,6 +48,7 @@ const HELP_SECTIONS = [
       { slug: 'assets',       title: 'Assets &amp; flyers' },
       { slug: 'invites',      title: 'Invites &amp; collaborators' },
       { slug: 'contracts',    title: 'Contracts &amp; deal builder' },
+      { slug: 'ticketing',    title: 'Ticketing &amp; door' },
       { slug: 'settlement',   title: 'Settlement' },
       { slug: 'publish',      title: 'Publishing the public page' },
       { slug: 'print',        title: 'Printable packets' },
@@ -50,16 +57,21 @@ const HELP_SECTIONS = [
   },
   {
     group: 'Administration',
+    key: 'administration',
+    icon: 'fa-solid fa-user-shield',
     items: [
       { slug: 'admin',        title: 'Admin overview' },
       { slug: 'admin-users',  title: 'Managing login accounts' },
       { slug: 'admin-staff',  title: 'Staff roster' },
       { slug: 'admin-templates', title: 'Editing event templates' },
       { slug: 'admin-contracts', title: 'Contract library &amp; templates' },
+      { slug: 'admin-payments', title: 'Payment providers' },
     ],
   },
   {
     group: 'Reference',
+    key: 'reference',
+    icon: 'fa-solid fa-book',
     items: [
       { slug: 'statuses',     title: 'Event status reference' },
       { slug: 'workflow',     title: 'End-to-end show workflow' },
@@ -451,6 +463,53 @@ const HELP_CONTENT = {
     <p class="muted small">Who sees what: venue admins and event owners can manage and approve event contracts; promoters can view them; bands, designers, and viewers do not see contracts. Clause text is starter language — have counsel review your clause library before sending real contracts.</p>
   `,
 
+  ticketing: `
+    <h2>Ticketing &amp; door</h2>
+    <p>Backstage can sell tickets for a show directly — no third-party platform required — and then scan them at the door. The whole flow lives on the event's <em>Ticketing</em> tab. Before you can take money, a venue admin must pick a payment processor under <a href="#help-admin-payments">Admin &rarr; Payments</a>.</p>
+
+    <h3>External vs. in-house ticketing</h3>
+    <p>Every event is in one of two ticketing modes, shown as a badge at the top of the tab:</p>
+    <ul>
+      <li><strong>External ticketing.</strong> The default. You sell elsewhere (Eventbrite, DICE, a promoter's link) and just paste the link into the <em>Ticket URL</em> field on <a href="#help-details">Event details</a>. Backstage doesn't track inventory.</li>
+      <li><strong>In-house ticketing.</strong> Backstage sells the tickets, holds the inventory, emails each buyer a QR ticket, and lets you scan at the door. Switch the mode toggle to turn this on.</li>
+    </ul>
+
+    <h3>Ticket tiers</h3>
+    <p>In in-house mode, create one or more <strong>ticket tiers</strong> (Advance, Door, VIP, and so on). Each tier has:</p>
+    <ul>
+      <li><strong>Name &amp; price.</strong> What the buyer sees, in your configured currency.</li>
+      <li><strong>Quantity.</strong> Total inventory for the tier. Backstage tracks sold vs. available live and won't oversell.</li>
+      <li><strong>Sales window.</strong> Optional start/end dates for when the tier is buyable.</li>
+      <li><strong>Status.</strong> <em>draft</em> (hidden), <em>on sale</em> (buyable), <em>paused</em>, <em>sold out</em> (set automatically when inventory runs out), or <em>closed</em>.</li>
+    </ul>
+    <p>The dashboard at the top of the tab shows live sales — sold, available, redeemed, and gross revenue — across all tiers.</p>
+
+    <h3>How a sale works</h3>
+    <ol>
+      <li>Once the event is <a href="#help-publish">published</a> and a tier is <em>on sale</em>, the public event page shows a <em>Buy tickets</em> panel.</li>
+      <li>The buyer picks quantities and checks out. Backstage holds that inventory for <strong>15 minutes</strong> and sends them to the processor's hosted checkout page — card details never touch Backstage.</li>
+      <li>When the processor confirms payment, Backstage issues the tickets, emails each one as a QR code, and updates the sold count. If payment fails or times out, the hold is released and the inventory comes back.</li>
+    </ol>
+
+    <h3>Comp tickets</h3>
+    <p>Use the <em>Comp tickets</em> section to issue free tickets (guests, press, trade) without a payment. Enter the recipient's name, email, tier, and quantity, and Backstage emails them a real scannable QR just like a paid ticket. Comps still count against the tier's inventory, so they can't push you into an oversell.</p>
+
+    <h3>Refunds</h3>
+    <p>The <em>Refund / cancel</em> action is the cancel-the-show path: it refunds buyers through the original processor and voids every ticket for the event so none of them scan at the door. (Per-ticket partial refunds aren't in this version.)</p>
+
+    <h3>Door scanner links</h3>
+    <p>Door staff don't need a Backstage login. Instead you create a <strong>scanner link</strong> in the <em>Door scanner links</em> section:</p>
+    <ol>
+      <li>Click <em>New scanner link</em>, give it a label (e.g. "Front door iPad"), and optionally set a PIN and/or expiry.</li>
+      <li>Backstage shows the secret link <strong>once</strong> — copy it then. Open it on the scanning device.</li>
+      <li>The link opens a mobile camera scanner. Staff point it at each ticket's QR; an admit / already-used / void / not-found result shows instantly.</li>
+      <li>Every scan is logged. Revoke a link any time to immediately cut off that device without affecting tickets or other doors.</li>
+    </ol>
+    <p>Redemption is one-and-done: a ticket flips from <em>issued</em> to <em>redeemed</em> on the first valid scan, so a screenshotted or forwarded QR can't get a second person in.</p>
+
+    <p class="muted small">Who sees what: the Ticketing tab (tiers, comps, refunds, scanner links) is limited to venue admins and event owners — promoters and other collaborators don't see it. Selecting the payment processor is a venue-admin task under <a href="#help-admin-payments">Admin &rarr; Payments</a>.</p>
+  `,
+
   settlement: `
     <h2>Settlement</h2>
     <p>Settlement is the night-of-show or next-day reconciliation. It is visible to venue admins and event owners and hidden from promoters, designers, bands, and viewers.</p>
@@ -497,14 +556,15 @@ const HELP_CONTENT = {
 
   admin: `
     <h2>Admin overview</h2>
-    <p>The Admin nav item is visible only to venue admins. It groups four management tools as tabs on a single page:</p>
+    <p>The Admin nav item is visible only to venue admins. It groups these management tools as tabs on a single page:</p>
     <ul>
       <li><a href="#help-admin-users">Users</a> — create, edit, and delete backstage login accounts; reset passwords; change roles.</li>
       <li><a href="#help-admin-staff">Staff</a> — keep the roster of bartenders, security, door, sound, etc. used in event staffing.</li>
       <li><a href="#help-admin-templates">Templates</a> — edit run-sheet and checklist templates used to create new events.</li>
       <li><a href="#help-admin-contracts">Contracts</a> — the contract clause library, contract templates, and a venue-wide list of all contracts.</li>
+      <li><a href="#help-admin-payments">Payments</a> — choose the payment processor and currency used for in-house ticket sales.</li>
     </ul>
-    <p>Each tab has a stable deep link: <code>#admin-users</code>, <code>#admin-staff</code>, <code>#admin-templates</code>, <code>#admin-contracts</code>.</p>
+    <p>Each tab has a stable deep link: <code>#admin-users</code>, <code>#admin-staff</code>, <code>#admin-templates</code>, <code>#admin-contracts</code>, <code>#admin-payments</code>.</p>
   `,
 
   'admin-users': `
@@ -585,6 +645,29 @@ const HELP_CONTENT = {
 
     <h3>Editing safely</h3>
     <p>Editing a clause or template changes what <em>future</em> contracts pick up. Existing contracts keep the snapshot they were built with — applying a template again on a contract rebuilds its clauses (and warns first). The seeded library is starter language; have legal review it before it's used for real agreements.</p>
+  `,
+
+  'admin-payments': `
+    <h2>Payment providers</h2>
+    <p>Admin &rarr; Payments (<code>#admin-payments</code>) is where a venue admin chooses how in-house ticket sales are processed. It's only needed if you sell tickets through Backstage — see <a href="#help-ticketing">Ticketing &amp; door</a> for the selling and scanning flow. The tab is gated to venue admins.</p>
+
+    <h3>Choosing a processor</h3>
+    <p>Backstage supports <strong>Stripe</strong> and <strong>Square</strong>. Pick the <em>active provider</em> and the <em>currency</em> used for all ticket prices, then save. Only one provider is active at a time; switching it changes which processor new checkouts are sent to (tickets already sold are unaffected).</p>
+
+    <h3>Where the keys live</h3>
+    <p>For security, the actual API secret keys are <strong>never entered or shown in the app</strong> — they live in the server's environment configuration (<code>.env</code>), set once during deployment. This screen only shows, per provider, whether its keys are present, so you can confirm a processor is fully configured before going live. If a provider shows as not configured, ask whoever runs the server to add its keys.</p>
+    <p>Required environment keys are <code>STRIPE_SECRET_KEY</code> and <code>STRIPE_WEBHOOK_SECRET</code> for Stripe, and <code>SQUARE_ACCESS_TOKEN</code>, <code>SQUARE_LOCATION_ID</code>, <code>SQUARE_WEBHOOK_SIGNATURE_KEY</code>, <code>SQUARE_ENV</code>, and <code>SQUARE_WEBHOOK_URL</code> for Square.</p>
+
+    <h3>Webhooks</h3>
+    <p>Each processor confirms payment by calling back to Backstage (a "webhook") at <code>/api/webhooks/stripe</code> or <code>/api/webhooks/square</code>. Register that URL in the Stripe/Square dashboard during setup. Backstage verifies every callback's signature and is safe against duplicate notifications, so a buyer is never double-charged tickets or double-emailed.</p>
+
+    <h3>Going live checklist</h3>
+    <ol>
+      <li>Server keys for your chosen processor are present (this screen confirms it).</li>
+      <li>Active provider and currency are set here.</li>
+      <li>The webhook URL is registered in the processor's dashboard.</li>
+      <li>On an event, switch <a href="#help-ticketing">Ticketing</a> to in-house mode, add an <em>on sale</em> tier, and publish the page.</li>
+    </ol>
   `,
 
   statuses: `
