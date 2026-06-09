@@ -426,6 +426,9 @@ Required `.env` keys (see `.env.example`): `APP_URL`, `STRIPE_SECRET_KEY`,
 `SQUARE_WEBHOOK_SIGNATURE_KEY`, `SQUARE_ENV`, `SQUARE_WEBHOOK_URL`. The ticketing
 schema ships in migration `020`.
 
+See [`docs/ticketing.md`](docs/ticketing.md) for the full data model, API,
+payment/fulfillment flow, door-scanner details, and an operating checklist.
+
 ## MVP Limitations
 
 - Email delivery relies on the host MTA via `/usr/sbin/sendmail`; there is no queue, retry, or bounce handling beyond what the MTA provides.
