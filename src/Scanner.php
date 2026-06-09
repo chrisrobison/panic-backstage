@@ -61,7 +61,9 @@ final class Scanner extends BaseEndpoint
 
         return match ($request->method()) {
             'GET'    => $this->listLinks($eventId),
-            'POST'   => $this->createLink($request, $eventId),
+            'POST'   => $linkId !== null
+                ? $this->regenerateLink($eventId, $linkId)
+                : $this->createLink($request, $eventId),
             'DELETE' => $this->revokeLink($eventId, $linkId),
             default  => Response::methodNotAllowed(),
         };
@@ -69,11 +71,16 @@ final class Scanner extends BaseEndpoint
 
     // ─── (a) management ──────────────────────────────────────────────────────────
 
-    /** GET — list this event's scanner links (never exposes secrets). */
+    /**
+     * GET — list this event's scanner links. For links whose plaintext secret
+     * is stored (created/regenerated since migration 024) the shareable URL is
+     * returned so the link + QR can be re-displayed; older links carry no token
+     * (has_token=false) and must be regenerated to reveal a working link.
+     */
     private function listLinks(int $eventId): Response
     {
         $rows = $this->db->all(
-            'SELECT id, label, created_by_user_id, expires_at, revoked_at,
+            'SELECT id, label, token, created_by_user_id, expires_at, revoked_at,
                     last_used_at, created_at,
                     (pin_hash IS NOT NULL) AS has_pin
                FROM event_scanner_links
@@ -84,10 +91,15 @@ final class Scanner extends BaseEndpoint
 
         $links = [];
         foreach ($rows as $r) {
+            $token = ($r['token'] ?? null) !== null ? (string) $r['token'] : null;
             $links[] = [
                 'id'           => (int) $r['id'],
                 'label'        => $r['label'] !== null ? (string) $r['label'] : null,
                 'has_pin'      => (bool) (int) $r['has_pin'],
+                'has_token'    => $token !== null,
+                // Present only when the secret is stored (so the UI can re-show
+                // the link/QR). Carries the live secret — admin-gated surface.
+                'scanner_url'  => $token !== null ? $this->scannerUrl($token) : null,
                 'expires_at'   => $r['expires_at'],
                 'revoked_at'   => $r['revoked_at'],
                 'last_used_at' => $r['last_used_at'],
@@ -120,17 +132,18 @@ final class Scanner extends BaseEndpoint
             return Response::json(['error' => 'PIN must be 4–12 digits.'], 422);
         }
 
-        // Secret token: random bytes, base32 for URL/QR friendliness; only the
-        // sha256 hash is persisted.
+        // Secret token: random bytes, base32 for URL/QR friendliness. The
+        // sha256 hash drives redeem lookups; the plaintext is also stored so the
+        // link/QR can be re-displayed to staff later.
         $token = $this->base32Encode(random_bytes(24));
         $hash  = hash('sha256', $token);
         $pinHash = $pin !== '' ? password_hash($pin, PASSWORD_DEFAULT) : null;
 
         $id = $this->db->insert(
             'INSERT INTO event_scanner_links
-                (event_id, label, token_hash, pin_hash, created_by_user_id, expires_at)
-             VALUES (?, ?, ?, ?, ?, ?)',
-            [$eventId, ($label !== '' ? $label : null), $hash, $pinHash, $this->userId(), $expires]
+                (event_id, label, token_hash, token, pin_hash, created_by_user_id, expires_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [$eventId, ($label !== '' ? $label : null), $hash, $token, $pinHash, $this->userId(), $expires]
         );
 
         log_activity($this->db, $eventId, $this->userId(), 'scanner link created', [
@@ -147,6 +160,44 @@ final class Scanner extends BaseEndpoint
                 'expires_at' => $expires,
             ],
             // Returned ONCE — the page URL door staff open on their device.
+            'scanner_url' => $this->scannerUrl($token),
+            'token'       => $token,
+        ]);
+    }
+
+    /**
+     * POST {linkId} — rotate an existing link's secret and return the fresh
+     * URL. Used to reveal a working link/QR for legacy links that predate token
+     * storage, or to deliberately rotate a leaked link. Any previously shared
+     * copy of this link stops working.
+     */
+    private function regenerateLink(int $eventId, ?int $linkId): Response
+    {
+        if ($linkId === null) {
+            return $this->notFound('Scanner link not found');
+        }
+        $link = $this->db->one(
+            'SELECT id, revoked_at FROM event_scanner_links WHERE id = ? AND event_id = ?',
+            [$linkId, $eventId]
+        );
+        if ($link === null) {
+            return $this->notFound('Scanner link not found');
+        }
+        if ($link['revoked_at'] !== null) {
+            return Response::json(['error' => 'This scanner link is revoked; create a new one.'], 422);
+        }
+
+        $token = $this->base32Encode(random_bytes(24));
+        $hash  = hash('sha256', $token);
+        $this->db->run(
+            'UPDATE event_scanner_links SET token = ?, token_hash = ? WHERE id = ?',
+            [$token, $hash, $linkId]
+        );
+        log_activity($this->db, $eventId, $this->userId(), 'scanner link regenerated', [
+            'scanner_link_id' => $linkId,
+        ]);
+
+        return $this->ok([
             'scanner_url' => $this->scannerUrl($token),
             'token'       => $token,
         ]);

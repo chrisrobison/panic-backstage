@@ -584,7 +584,8 @@ CREATE TABLE event_scanner_links (
   id INT AUTO_INCREMENT PRIMARY KEY,
   event_id INT NOT NULL,
   label VARCHAR(120) NULL,
-  token_hash CHAR(64) NOT NULL,                    -- sha256 of the link secret
+  token_hash CHAR(64) NOT NULL,                    -- sha256 of the link secret (redeem lookup)
+  token VARCHAR(64) NULL,                           -- plaintext secret, kept so the link/QR can be re-displayed
   pin_hash VARCHAR(255) NULL,                      -- optional, via password_hash()
   created_by_user_id INT NULL,
   expires_at DATETIME NULL,

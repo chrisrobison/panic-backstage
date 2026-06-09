@@ -175,23 +175,7 @@ class TicketingAdmin extends PanicElement {
   scannerSectionHtml() {
     const links = this.links;
     const editable = this.editable;
-    let body;
-    if (links === null) {
-      body = '<p class="empty-state">Scanner links are unavailable.</p>';
-    } else if (!links.length) {
-      body = '<p class="empty-state">No scanner links yet.</p>';
-    } else {
-      body = `<table class="data-table">
-        <thead><tr><th>Label</th><th>Created</th><th>Last used</th><th>Status</th>${editable ? '<th></th>' : ''}</tr></thead>
-        <tbody>${links.map((l) => `<tr data-link="${esc(l.id)}">
-          <td data-label="Label">${esc(l.label || 'Door scanner')}</td>
-          <td data-label="Created">${esc((l.created_at || '').slice(0, 16).replace('T', ' '))}</td>
-          <td data-label="Last used">${esc(l.last_used_at ? l.last_used_at.slice(0, 16).replace('T', ' ') : '—')}</td>
-          <td data-label="Status">${l.revoked_at ? '<span class="badge status-canceled">Revoked</span>' : '<span class="badge status-published">Active</span>'}</td>
-          ${editable ? `<td class="row-actions">${l.revoked_at ? '' : `<button type="button" class="link danger" data-revoke-link="${esc(l.id)}">Revoke</button>`}</td>` : ''}
-        </tr>`).join('')}</tbody>
-      </table>`;
-    }
+    const body = this.scannerListInner();
     return `<div class="section-head padded sub-head"><h3>Door scanner links</h3>${editable && links !== null ? addToggle('New scanner link', true) : ''}</div>
       ${editable && links !== null ? `<form class="row-form padded hidden" data-form="scanner">
         <label class="wide">Label <input name="label" placeholder="Front door"></label>
@@ -234,6 +218,8 @@ class TicketingAdmin extends PanicElement {
     // Scanner links
     $('form[data-form="scanner"]', this)?.addEventListener('submit', (e) => this.createScannerLink(e));
     $$('[data-revoke-link]', this).forEach((btn) => btn.addEventListener('click', () => this.revokeLink(Number(btn.dataset.revokeLink))));
+    $$('[data-show-link]', this).forEach((btn) => btn.addEventListener('click', () => this.toggleScannerReveal(Number(btn.dataset.showLink))));
+    $$('[data-gen-link]', this).forEach((btn) => btn.addEventListener('click', () => this.regenerateScannerLink(Number(btn.dataset.genLink))));
   }
 
   editTier(id) {
@@ -328,12 +314,14 @@ class TicketingAdmin extends PanicElement {
     }
   }
 
-  // Inner HTML of the scanner links list (table or empty state) for in-place refresh.
+  // Inner HTML of the scanner links list (table or empty state). Single source
+  // of truth for both first render and in-place refresh after create/regenerate.
   scannerListInner() {
     const links = this.links;
     const editable = this.editable;
     if (links === null) return '<p class="empty-state">Scanner links are unavailable.</p>';
     if (!links.length) return '<p class="empty-state">No scanner links yet.</p>';
+    const cols = editable ? 5 : 4;
     return `<table class="data-table">
       <thead><tr><th>Label</th><th>Created</th><th>Last used</th><th>Status</th>${editable ? '<th></th>' : ''}</tr></thead>
       <tbody>${links.map((l) => `<tr data-link="${esc(l.id)}">
@@ -341,9 +329,51 @@ class TicketingAdmin extends PanicElement {
         <td data-label="Created">${esc((l.created_at || '').slice(0, 16).replace('T', ' '))}</td>
         <td data-label="Last used">${esc(l.last_used_at ? l.last_used_at.slice(0, 16).replace('T', ' ') : '—')}</td>
         <td data-label="Status">${l.revoked_at ? '<span class="badge status-canceled">Revoked</span>' : '<span class="badge status-published">Active</span>'}</td>
-        ${editable ? `<td class="row-actions">${l.revoked_at ? '' : `<button type="button" class="link danger" data-revoke-link="${esc(l.id)}">Revoke</button>`}</td>` : ''}
-      </tr>`).join('')}</tbody>
+        ${editable ? `<td class="row-actions">${l.revoked_at ? '' : `${l.has_token
+            ? `<button type="button" class="link" data-show-link="${esc(l.id)}">Show link</button>`
+            : `<button type="button" class="link" data-gen-link="${esc(l.id)}">Generate link</button>`}
+          <button type="button" class="link danger" data-revoke-link="${esc(l.id)}">Revoke</button>`}</td>` : ''}
+      </tr>${editable && !l.revoked_at ? `<tr class="scanner-reveal-row" data-reveal-row="${esc(l.id)}" hidden><td colspan="${cols}"><div class="scanner-reveal" data-reveal="${esc(l.id)}"></div></td></tr>` : ''}`).join('')}</tbody>
     </table>`;
+  }
+
+  // Render the URL + QR for a link into its reveal row and show it.
+  revealScannerUrl(id, url) {
+    const host = $(`[data-reveal="${id}"]`, this);
+    const row = $(`[data-reveal-row="${id}"]`, this);
+    if (!host || !row || !url) return;
+    host.innerHTML = `<p class="subtle">Open on the door device, or have staff scan this QR:</p>
+      <code class="scanner-url">${esc(url)}</code>
+      <div class="qr"><img src="${esc(qrSrc(url))}" alt="Scanner link QR" width="160" height="160"></div>`;
+    row.hidden = false;
+    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // Toggle an existing (token-bearing) link's reveal row.
+  toggleScannerReveal(id) {
+    const row = $(`[data-reveal-row="${id}"]`, this);
+    if (!row) return;
+    if (!row.hidden) { row.hidden = true; return; }
+    const link = (this.links || []).find((l) => Number(l.id) === id);
+    this.revealScannerUrl(id, link?.scanner_url);
+  }
+
+  // Rotate a legacy/leaked link's secret, then reveal the fresh URL + QR.
+  async regenerateScannerLink(id) {
+    if (!confirm('Generate a fresh link for this scanner? Any previously shared copy of this link will stop working.')) return;
+    try {
+      const res = await api(`/events/${this.eventId}/scanner-links/${id}`, { method: 'POST', body: JSON.stringify({}) });
+      const url = res?.scanner_url || res?.url;
+      const link = (this.links || []).find((l) => Number(l.id) === id);
+      if (link && url) { link.has_token = true; link.scanner_url = url; }
+      publish('toast.show', { message: 'Scanner link generated.' });
+      const region = $('.scanner-links', this);
+      if (region) region.innerHTML = this.scannerListInner();
+      this.bind();
+      this.revealScannerUrl(id, url);
+    } catch (error) {
+      publish('toast.show', { tone: 'error', message: error.message });
+    }
   }
 
   async revokeLink(id) {
