@@ -1,4 +1,4 @@
-import { esc, titleCase, publish, api, formData, badge, option, select, helpLink, can, table, PanicElement, $, $$ } from './core.js';
+import { esc, titleCase, publish, api, formData, badge, option, select, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
 
 
 // ── Contracts (admin) ─────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ class EventContracts extends HTMLElement {
     const contracts = this.list.contracts || [];
     const templates = this.list.templates || [];
     this.innerHTML = `<section class="panel">
-      <div class="section-head padded"><h2>Contracts ${helpLink('contracts', 'Contracts')}</h2><span class="muted">${contracts.length} total</span></div>
+      <div class="section-head padded"><h2>Contracts ${helpLink('contracts', 'Contracts')}</h2><div class="section-head-actions"><span class="muted">${contracts.length} total</span>${addToggle('Create contract', manage)}</div></div>
       <table class="data-table">
         <thead><tr><th>Title</th><th>Type</th><th>Counterparty</th><th>Status</th><th>Updated</th></tr></thead>
         <tbody>${contracts.map((c) => `<tr>
@@ -85,13 +85,15 @@ class EventContracts extends HTMLElement {
           <td class="muted">${esc((c.updated_at || '').slice(0, 10))}</td>
         </tr>`).join('') || '<tr><td colspan="5"><div class="empty-state">No contracts yet for this event.</div></td></tr>'}</tbody>
       </table>
-      ${manage ? `<form class="row-form" data-form="new">
+      ${manage ? `<form class="row-form" data-form="new" data-add-form hidden>
         <label>Deal type <select name="template_id" required><option value="">Choose a template…</option>${templates.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
         <label>Counterparty <input name="counterparty_name" placeholder="Artist / promoter / client"></label>
         <button>Create contract</button>
+        <button type="button" class="secondary small" data-cancel-add>Cancel</button>
       </form>` : ''}
     </section>`;
     if (manage) {
+      bindAddToggle(this);
       $('[data-form="new"]', this).addEventListener('submit', async (event) => {
         event.preventDefault();
         try {

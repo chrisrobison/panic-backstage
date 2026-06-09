@@ -382,7 +382,28 @@ class ToastStack extends PanicElement {
 function addToggle(label, editable) {
   return editable ? `<button type="button" class="add-toggle" data-add aria-label="${esc(label)}" title="${esc(label)}"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>` : '';
 }
+
+// Wire a panel-header "+" ([data-add]) to reveal/hide its add form
+// ([data-add-form]), focusing the first field on open. Any [data-cancel-add]
+// button inside the form collapses it again. Safe to call when the toggle or
+// form is absent (no-op). Shared by the list panels and the Invites/Contracts
+// sections so they all behave identically.
+function bindAddToggle(root) {
+  const addBtn = $('[data-add]', root);
+  const addForm = $('[data-add-form]', root);
+  if (!addBtn || !addForm) return;
+  addBtn.addEventListener('click', () => {
+    const show = addForm.hasAttribute('hidden');
+    addForm.toggleAttribute('hidden', !show);
+    addBtn.classList.toggle('active', show);
+    if (show) $$('input, select, textarea', addForm).find((el) => !el.disabled && el.type !== 'hidden')?.focus();
+  });
+  $$('[data-cancel-add]', root).forEach((btn) => btn.addEventListener('click', () => {
+    addForm.setAttribute('hidden', '');
+    addBtn.classList.remove('active');
+  }));
+}
 customElements.define('pb-loading-state', LoadingState);
 customElements.define('pb-toast-stack', ToastStack);
 
-export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, isoDate, addDays, timeLabel, money, statusTone, STATUS_LABELS, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle };
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, isoDate, addDays, timeLabel, money, statusTone, STATUS_LABELS, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle };

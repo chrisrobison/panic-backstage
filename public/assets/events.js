@@ -1,4 +1,4 @@
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
 import { openPrintWindow } from './print.js';
 
 
@@ -708,20 +708,7 @@ function bindRecords(root) {
   $$('[data-cancel]', root).forEach((btn) => btn.addEventListener('click', () => {
     btn.closest('[data-record]')?.classList.remove('editing');
   }));
-  const addBtn = $('[data-add]', root);
-  const addForm = $('[data-add-form]', root);
-  if (addBtn && addForm) {
-    addBtn.addEventListener('click', () => {
-      const show = addForm.hasAttribute('hidden');
-      addForm.toggleAttribute('hidden', !show);
-      addBtn.classList.toggle('active', show);
-      if (show) $$('input, select, textarea', addForm).find((el) => !el.disabled && el.type !== 'hidden')?.focus();
-    });
-    $$('[data-cancel-add]', root).forEach((btn) => btn.addEventListener('click', () => {
-      addForm.setAttribute('hidden', '');
-      addBtn.classList.remove('active');
-    }));
-  }
+  bindAddToggle(root);
 }
 
 
@@ -1202,15 +1189,18 @@ class InviteManager extends HTMLElement {
     }).join('') : emptyState('No invites have been created for this event.');
 
     this.innerHTML = `<section class="panel">
-      <div class="section-head padded"><h2>Invites ${helpLink('invites', 'Invites &amp; Collaborators')}</h2></div>
+      <div class="section-head padded"><h2>Invites ${helpLink('invites', 'Invites &amp; Collaborators')}</h2><div class="section-head-actions">${addToggle('Create invite', true)}</div></div>
       <div class="invite-list">${rowsHtml}</div>
-      <form class="row-form invite-add">
+      <form class="row-form invite-add" data-add-form hidden>
         <label>Email <input type="email" name="email" required placeholder="promoter@example.com"></label>
         <label>Role ${select('role', roles, 'viewer')}</label>
         <label class="check-label"><input type="checkbox" name="send_email" value="1" checked> Send invitation email</label>
         <button>Create invite</button>
+        <button type="button" class="secondary small" data-cancel-add>Cancel</button>
       </form>
     </section>`;
+
+    bindAddToggle(this);
 
     $('form', this).addEventListener('submit', async (event) => {
       event.preventDefault();
