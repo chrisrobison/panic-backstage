@@ -280,8 +280,137 @@ switch ($cmd) {
         break;
     }
 
+    case 'link-imports': {
+        // Write the App ID back into the EXACT sheet row each freshly-created
+        // event came from (recorded in sheet_import_links by the importer), then
+        // confirm the link. This is the precise, retry-safe counterpart to the
+        // slug-heuristic `backfill`: a row anchor + title/date snapshot, never a
+        // fuzzy slug guess. Unconfirmed links are retried on every sync, so a
+        // transient write failure self-heals without ever creating a duplicate.
+
+        // Be safe if run standalone before the migration/dumper created the table.
+        $db->run(
+            'CREATE TABLE IF NOT EXISTS sheet_import_links (
+                event_id     INT          NOT NULL PRIMARY KEY,
+                sheet_row    INT          NOT NULL,
+                title_snap   VARCHAR(200) NOT NULL DEFAULT \'\',
+                date_snap    DATE         NULL,
+                linked       TINYINT(1)   NOT NULL DEFAULT 0,
+                created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                confirmed_at TIMESTAMP    NULL,
+                KEY idx_unlinked (linked)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+        );
+
+        $pending = $db->all(
+            'SELECT event_id, sheet_row, title_snap, date_snap
+             FROM sheet_import_links WHERE linked = 0 ORDER BY event_id'
+        );
+        if (!$pending) {
+            echo "ok: no pending import links to write back\n";
+            break;
+        }
+
+        // Read C (organizer) and D (genre): the event title comes from D, or
+        // falls back to C when D is blank (see generate-import-sql.py), so a row
+        // is identified by date + (C or D matching the snapshot), never D alone.
+        $cols = $sheets->batchGetColumns(['C', 'D', 'E', GoogleSheets::APP_ID_COLUMN]);
+        if ($cols === null) {
+            fwrite(STDERR, "FAIL: could not read sheet columns\n");
+            exit(1);
+        }
+        $colC   = $cols['C'] ?? [];
+        $colD   = $cols['D'] ?? [];
+        $colE   = $cols['E'] ?? [];
+        $appCol = $cols[GoogleSheets::APP_ID_COLUMN] ?? [];
+
+        $zAt    = fn (int $row): string => trim((string) ($appCol[$row - 1] ?? ''));
+        $dateAt = fn (int $row): string => (string) (sheet_date($colE[$row - 1] ?? null) ?? '');
+        // The row's title matches the snapshot if either the genre (D) or the
+        // organizer (C) equals it — mirrors the importer's title fallback.
+        $titleMatches = function (int $row, string $snap) use ($colC, $colD): bool {
+            $d = trim((string) ($colD[$row - 1] ?? ''));
+            $c = trim((string) ($colC[$row - 1] ?? ''));
+            return $snap !== '' && ($d === $snap || $c === $snap);
+        };
+
+        // Index still-blank data rows by date for relocation when a captured row
+        // shifted; title (C or D) disambiguates rows sharing a date.
+        $maxRows = max(count($colC), count($colD), count($colE), count($appCol));
+        $blankByDate = []; // date => [rows with empty App ID cell]
+        for ($i = 0; $i < $maxRows; $i++) {
+            $row = $i + 1;
+            if ($row <= GoogleSheets::HEADER_ROW) continue;
+            if ($zAt($row) !== '') continue;
+            $blankByDate[$dateAt($row)][] = $row;
+        }
+
+        $toWrite = [];   // row => event_id (cells to write)
+        $confirm = [];   // event_ids whose App ID is already present in the sheet
+        $deferred = 0;   // couldn't resolve a row this run — retried next sync
+        foreach ($pending as $p) {
+            $id    = (int) $p['event_id'];
+            $row   = (int) $p['sheet_row'];
+            $tSnap = trim((string) ($p['title_snap'] ?? ''));
+            $dSnap = $p['date_snap'] !== null ? (string) $p['date_snap'] : '';
+
+            // Already linked in the sheet (write-back previously succeeded, or a
+            // human pasted it): just confirm.
+            if ($zAt($row) === (string) $id) { $confirm[] = $id; continue; }
+
+            // Captured row still blank AND its date matches (title via C-or-D) →
+            // write here. Date is the strong key; title is the tiebreaker.
+            if ($zAt($row) === '' && $dateAt($row) === $dSnap && $titleMatches($row, $tSnap)) {
+                $toWrite[$row] = $id;
+                continue;
+            }
+
+            // Row shifted — relocate among still-blank rows sharing the date,
+            // disambiguated by the title (C or D) matching the snapshot.
+            $cands = array_values(array_filter(
+                $blankByDate[$dSnap] ?? [],
+                fn ($r) => !isset($toWrite[$r]) && $titleMatches($r, $tSnap)
+            ));
+            if (count($cands) === 1) {
+                $toWrite[$cands[0]] = $id;
+            } else {
+                // 0 candidates (row gone/renamed) or ambiguous — leave unconfirmed.
+                $deferred++;
+            }
+        }
+
+        $written = 0;
+        if ($toWrite) {
+            $written = $sheets->writeAppIds($toWrite);
+            if ($written < 0) {
+                fwrite(STDERR, "FAIL: batch write failed (see sheet-sync.log); will retry next sync\n");
+                // Still confirm any already-present links below.
+            } else {
+                $confirm = array_merge($confirm, array_values($toWrite));
+            }
+        }
+
+        if ($confirm) {
+            $in = implode(',', array_map('intval', $confirm));
+            $db->run(
+                "UPDATE sheet_import_links SET linked = 1, confirmed_at = NOW()
+                 WHERE event_id IN ($in)"
+            );
+        }
+
+        printf(
+            "link-imports: %d pending, %d written, %d already-present, %d deferred (retry next sync)\n",
+            count($pending),
+            $written < 0 ? 0 : $written,
+            count($confirm) - ($written < 0 ? 0 : $written),
+            $deferred
+        );
+        if ($written < 0) exit(1);
+        break;
+    }
+
     default:
         fwrite(STDERR, "unknown command: {$cmd}\n");
-        fwrite(STDERR, "commands: inspect | ensure-column | backfill [--dry-run] | push-codes | push <id>...\n");
+        fwrite(STDERR, "commands: inspect | ensure-column | backfill [--dry-run] | link-imports | push-codes | push <id>...\n");
         exit(1);
 }

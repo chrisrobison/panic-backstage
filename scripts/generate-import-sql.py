@@ -79,6 +79,27 @@ try:
 except (FileNotFoundError, json.JSONDecodeError):
     SHADOW_BASELINE = {}
 
+# Pending sheet->app links: events that were CREATED from a new sheet row on a
+# previous sync but whose App ID hasn't been confirmed back into the sheet yet
+# (written by dump-sheet-import-links.php). For such a row — still blank in the
+# sheet's App ID column — we REUSE the already-created event instead of inserting
+# again, so a failed/retried write-back can't spawn a duplicate. Indexed both by
+# sheet row number (the precise anchor) and by (title, date) as a fallback for
+# when rows shifted position between syncs.
+LINKS_JSON_PATH = os.environ.get(
+    'SHEET_IMPORT_LINKS_JSON', str(BACKSTAGE / 'storage' / 'tmp' / 'sheet-import-links.json')
+)
+PENDING_BY_ROW: dict[int, dict] = {}
+PENDING_BY_TITLE_DATE: dict[tuple, dict] = {}
+try:
+    with open(LINKS_JSON_PATH, 'r') as _fh:
+        for _rec in (json.load(_fh) or []):
+            PENDING_BY_ROW[int(_rec['sheet_row'])] = _rec
+            PENDING_BY_TITLE_DATE[(str(_rec.get('title') or ''), _rec.get('date'))] = _rec
+except (FileNotFoundError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+    PENDING_BY_ROW = {}
+    PENDING_BY_TITLE_DATE = {}
+
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def esc(v):
@@ -236,7 +257,10 @@ skipped = 0
 # row 4 — row 3 may be a stray comment). iter_rows(min_row=2) keeps the legacy
 # behaviour: rows that fail the date/genre guards are skipped, so a stray
 # header passes through harmlessly.
-for row in ws.iter_rows(min_row=2, values_only=True):
+# enumerate(start=2): iter_rows(min_row=2) yields sheet row 2 (the header) first,
+# so `sheet_row` is the true 1-based row number — the same numbering app-id-sync.php
+# uses to address cells. It anchors the App ID write-back to the exact source row.
+for sheet_row, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
     cols = list(row[:20]) + [None] * max(0, 20 - len(row))
     (raw_ext_id, referral, organizer, genre, raw_date, potential_rev,
         t_load_in, t_doors, t_close, t_lockup, crowd_size, venue_room,
@@ -293,6 +317,7 @@ for row in ws.iter_rows(min_row=2, values_only=True):
 
     events_rows.append({
         'app_id': app_id,
+        'sheet_row': sheet_row,
         'title': title, 'slug': slug, 'etype': etype, 'status': status,
         'desc_int': desc_int, 'date': date_str,
         'doors': fmt_time(t_doors), 'end_t': fmt_time(t_close),
@@ -470,7 +495,20 @@ def field_specs(ev):
 # SHEET_INSERT_NEW=1 to restore the old auto-insert behaviour.
 INSERT_NEW = os.environ.get('SHEET_INSERT_NEW', '0') == '1'
 
-stat = {'inserted': 0, 'updated': 0, 'unchanged': 0, 'seeded': 0, 'unlinked': 0}
+def link_upsert(eid_expr, ev) -> str:
+    """SQL recording (event_id, sheet_row) in sheet_import_links so the App ID
+    write-back can target this row precisely. `linked` is left untouched on
+    conflict so a confirmed link is never re-opened."""
+    date_sql = f"'{ev['date']}'" if ev['date'] else 'NULL'
+    return (
+        f"INSERT INTO sheet_import_links (event_id, sheet_row, title_snap, date_snap, linked) "
+        f"VALUES ({eid_expr}, {ev['sheet_row']}, {esc(ev['title'])}, {date_sql}, 0) "
+        f"ON DUPLICATE KEY UPDATE sheet_row = VALUES(sheet_row), "
+        f"title_snap = VALUES(title_snap), date_snap = VALUES(date_snap);"
+    )
+
+stat = {'inserted': 0, 'updated': 0, 'unchanged': 0, 'seeded': 0,
+        'unlinked': 0, 'relinked': 0}
 unlinked_rows = []
 
 for ev in events_rows:
@@ -504,36 +542,52 @@ for ev in events_rows:
             else:
                 stat['unchanged'] += 1
             out.append(f"SET @eid = {app_id};")
-    elif not INSERT_NEW:
-        # Unlinked sheet row: report it, don't insert (prevents duplicate-on-drift).
-        unlinked_rows.append(f"{ev['title']} ({ev['date']})")
-        out.append(f"-- unlinked sheet row (not imported): {ev['title']} ({ev['date']})")
-        stat['unlinked'] += 1
-        continue
     else:
-        # Brand-new sheet row (no App ID): full slug-keyed upsert. The post-sync
-        # App ID backfill writes its id back to the sheet so it links next time.
-        out.append(
-            f"INSERT INTO events (venue_id, title, slug, event_type, status, "
-            f"description_internal, date, doors_time, end_time, capacity, "
-            f"public_visibility, owner_user_id, external_id, referral_source, "
-            f"promoter_name, room, potential_revenue, ticket_url, ticket_system, "
-            f"contract_url, walkthrough_done, settlement_doc_url) VALUES ("
-            f"@venue_id, {esc(ev['title'])}, {esc(ev['slug'])}, "
-            f"'{ev['etype']}', '{ev['status']}', {esc(ev['desc_int'])}, "
-            f"'{ev['date']}', {ev['doors']}, {ev['end_t']}, {ev['cap']}, "
-            f"{ev['pub']}, @owner_id, {esc(ev['ext_id'])}, "
-            f"{esc(ev['ref'])}, {esc(ev['prom'])}, {esc(ev['room'])}, "
-            f"{num_or_null(ev['potential_revenue'])}, "
-            f"{esc(ev['ticket_url'])}, {esc(ev['ticket_system'])}, "
-            f"{esc(ev['contract_url'])}, {ev['walkthrough_done']}, "
-            f"{esc(ev['settlement_doc_url'])}"
-            f")\n  ON DUPLICATE KEY UPDATE\n    id = LAST_INSERT_ID(id),\n    "
-            f"{event_update_clause};"
-        )
-        out.append("SET @eid = LAST_INSERT_ID();")
-        sched_changed = True
-        stat['inserted'] += 1
+        # No App ID in the sheet for this row. Two cases:
+        pending = (PENDING_BY_ROW.get(ev['sheet_row'])
+                   or PENDING_BY_TITLE_DATE.get((ev['title'], ev['date'])))
+        if pending is not None:
+            # We ALREADY created an event from this row on a prior sync; its App
+            # ID just hasn't been confirmed back into the sheet yet. Reuse that
+            # event — never insert a second one — and keep the link tracked so
+            # the write-back step retries. This is what makes the create rule
+            # safe to retry across a failed write-back (no duplicate-on-drift).
+            reuse_id = int(pending['event_id'])
+            out.append(f"SET @eid = {reuse_id};")
+            out.append(link_upsert(str(reuse_id), ev))
+            stat['relinked'] += 1
+        elif not INSERT_NEW:
+            # Unlinked sheet row: report it, don't insert.
+            unlinked_rows.append(f"{ev['title']} ({ev['date']})")
+            out.append(f"-- unlinked sheet row (not imported): {ev['title']} ({ev['date']})")
+            stat['unlinked'] += 1
+            continue
+        else:
+            # Brand-new sheet row (no App ID): slug-keyed upsert to create the
+            # event, then record (event_id, sheet_row) in sheet_import_links so
+            # app-id-sync.php link-imports writes its id back into THIS exact row.
+            out.append(
+                f"INSERT INTO events (venue_id, title, slug, event_type, status, "
+                f"description_internal, date, doors_time, end_time, capacity, "
+                f"public_visibility, owner_user_id, external_id, referral_source, "
+                f"promoter_name, room, potential_revenue, ticket_url, ticket_system, "
+                f"contract_url, walkthrough_done, settlement_doc_url) VALUES ("
+                f"@venue_id, {esc(ev['title'])}, {esc(ev['slug'])}, "
+                f"'{ev['etype']}', '{ev['status']}', {esc(ev['desc_int'])}, "
+                f"'{ev['date']}', {ev['doors']}, {ev['end_t']}, {ev['cap']}, "
+                f"{ev['pub']}, @owner_id, {esc(ev['ext_id'])}, "
+                f"{esc(ev['ref'])}, {esc(ev['prom'])}, {esc(ev['room'])}, "
+                f"{num_or_null(ev['potential_revenue'])}, "
+                f"{esc(ev['ticket_url'])}, {esc(ev['ticket_system'])}, "
+                f"{esc(ev['contract_url'])}, {ev['walkthrough_done']}, "
+                f"{esc(ev['settlement_doc_url'])}"
+                f")\n  ON DUPLICATE KEY UPDATE\n    id = LAST_INSERT_ID(id),\n    "
+                f"{event_update_clause};"
+            )
+            out.append("SET @eid = LAST_INSERT_ID();")
+            out.append(link_upsert('@eid', ev))
+            sched_changed = True
+            stat['inserted'] += 1
 
     # Schedule items (load_in / curfew): only rewrite when they changed in the
     # sheet (or it's a new row), so app-edited schedules aren't reverted.
@@ -570,8 +624,8 @@ OUTPUT_SQL.write_text(sql)
 print(f"Written: {OUTPUT_SQL}")
 print(f"Events:  {len(events_rows)}  (skipped {skipped} rows without a parseable date)")
 print(f"Merge:   {stat['updated']} updated, {stat['unchanged']} unchanged, "
-      f"{stat['inserted']} new, {stat['seeded']} seeded, {stat['unlinked']} unlinked "
-      f"(baseline: {len(SHADOW_BASELINE)} events)")
+      f"{stat['inserted']} new, {stat['relinked']} relinked, {stat['seeded']} seeded, "
+      f"{stat['unlinked']} unlinked (baseline: {len(SHADOW_BASELINE)} events)")
 if unlinked_rows:
     print(f"Unlinked sheet rows (reported, not imported — set SHEET_INSERT_NEW=1 to import):")
     for r in unlinked_rows:

@@ -174,6 +174,9 @@ final class Events extends BaseEndpoint
         );
         $this->assignEventCode($id);
         log_activity($this->db, $id, $this->userId(), 'event created', ['title' => $body['title']]);
+        // Push the freshly-created event to the sheet so it appears in the Tracker
+        // immediately. pushToSheet() no-ops for a nameless event (draft).
+        $this->pushToSheet($id);
         return $this->ok(['id' => $id]);
     }
 
@@ -240,14 +243,6 @@ final class Events extends BaseEndpoint
     private function pushToSheet(int $id): void
     {
         try {
-            // One pending outbox row per event; repeated edits collapse into it.
-            $this->db->run(
-                'INSERT INTO sheet_sync_queue (event_id, status, attempts)
-                 VALUES (?, \'pending\', 0)
-                 ON DUPLICATE KEY UPDATE status = \'pending\', updated_at = NOW()',
-                [$id]
-            );
-
             // Full identity + app-owned field set so an unlinked event can be
             // appended as a complete Tracker row (not just updated in place).
             $cols = implode(', ', array_keys(GoogleSheets::APPEND_COLUMN));
@@ -255,6 +250,21 @@ final class Events extends BaseEndpoint
             if (!$ev) {
                 return;
             }
+
+            // Only NAMED events belong in the sheet. A nameless (untitled) event
+            // is treated as an in-progress draft: keep it app-only and don't even
+            // enqueue it, so it never appears in the Tracker until it's named.
+            if (trim((string) ($ev['title'] ?? '')) === '') {
+                return;
+            }
+
+            // One pending outbox row per event; repeated edits collapse into it.
+            $this->db->run(
+                'INSERT INTO sheet_sync_queue (event_id, status, attempts)
+                 VALUES (?, \'pending\', 0)
+                 ON DUPLICATE KEY UPDATE status = \'pending\', updated_at = NOW()',
+                [$id]
+            );
 
             $sheets = new GoogleSheets($this->root);
             if (!$sheets->isConfigured()) {
@@ -322,6 +332,7 @@ final class Events extends BaseEndpoint
             $this->db->run('INSERT INTO event_schedule_items (event_id, title, item_type, start_time, end_time) VALUES (?, ?, ?, ?, ?)', [$id, $item['title'], $item['item_type'] ?? 'other', $item['start_time'] ?? null, $item['end_time'] ?? null]);
         }
         log_activity($this->db, $id, $this->userId(), 'event created from template', ['template_id' => $templateId]);
+        $this->pushToSheet($id);
         return $this->ok(['id' => $id]);
     }
 

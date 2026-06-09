@@ -29,6 +29,7 @@ Requires:
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -44,6 +45,7 @@ XLSX_PATH    = PROJECT_ROOT / 'MabEvents.xlsx'
 GENERATE_PY  = SCRIPT_DIR / 'generate-import-sql.py'
 IMPORT_PHP   = SCRIPT_DIR / 'import-mabevents.php'
 DUMP_PHP     = SCRIPT_DIR / 'dump-sheet-shadow.php'
+DUMP_LINKS_PHP = SCRIPT_DIR / 'dump-sheet-import-links.php'
 APPID_PHP    = SCRIPT_DIR / 'app-id-sync.php'
 
 # ── Default sheet ─────────────────────────────────────────────────────────────
@@ -53,6 +55,28 @@ DEFAULT_SHEET_ID = '1STS6et19iDHxtLvK2HVfqmAzs1HUa9GgF25KqBikRRE'
 
 def export_url(sheet_id: str) -> str:
     return f'https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx'
+
+def load_env_flags(*names: str) -> None:
+    """Propagate selected KEY=VALUE entries from backstage/.env into the process
+    environment so the generator subprocess (pure Python — it does NOT load .env,
+    unlike the PHP steps which use Env::load) sees them. A real OS env var always
+    wins, so the cron/shell can still override. Keeps the flag in one place (.env)
+    for operators instead of needing it exported separately."""
+    wanted = {n for n in names if n not in os.environ}
+    if not wanted:
+        return
+    env_path = BACKSTAGE / '.env'
+    try:
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, _, val = line.partition('=')
+            key = key.strip()
+            if key in wanted:
+                os.environ[key] = val.strip().strip('"').strip("'")
+    except OSError:
+        pass
 
 # ── Steps ─────────────────────────────────────────────────────────────────────
 
@@ -94,11 +118,29 @@ def dump_shadow() -> None:
     if result.returncode != 0:
         sys.exit(f"ERROR: {DUMP_PHP.name} exited {result.returncode}")
 
+def dump_import_links() -> None:
+    # Export not-yet-confirmed sheet->app links so the generator reuses an
+    # already-created event for a still-blank row instead of inserting a
+    # duplicate. Best-effort: a failure just falls back to insert-if-new.
+    print(f"→ Dumping pending import links via {DUMP_LINKS_PHP.name} …")
+    result = subprocess.run(['php', str(DUMP_LINKS_PHP)])
+    if result.returncode != 0:
+        print(f"  WARNING: {DUMP_LINKS_PHP.name} exited {result.returncode} (non-fatal)")
+
 def generate_sql() -> None:
     print(f"→ Regenerating SQL via {GENERATE_PY.name} …")
     result = subprocess.run([sys.executable, str(GENERATE_PY)])
     if result.returncode != 0:
         sys.exit(f"ERROR: {GENERATE_PY.name} exited {result.returncode}")
+
+def link_imports() -> None:
+    # Write each freshly-created event's id back into the EXACT sheet row it came
+    # from (recorded in sheet_import_links) and confirm the link. Precise and
+    # retry-safe — runs every sync, a no-op once everything is confirmed.
+    print(f"→ Writing back new-event App IDs via {APPID_PHP.name} link-imports …")
+    result = subprocess.run(['php', str(APPID_PHP), 'link-imports'])
+    if result.returncode != 0:
+        print(f"  WARNING: {APPID_PHP.name} link-imports exited {result.returncode} (non-fatal)")
 
 def backfill_app_ids() -> None:
     # Links any newly-inserted events back to their sheet rows (writes the App ID
@@ -128,6 +170,10 @@ def main() -> None:
                    help='Download and regenerate SQL but skip the DB apply step')
     args = p.parse_args()
 
+    # Honor SHEET_INSERT_NEW (and related) from backstage/.env for the generator
+    # subprocess, which doesn't load .env on its own.
+    load_env_flags('SHEET_INSERT_NEW', 'SHEET_SHADOW_JSON', 'SHEET_IMPORT_LINKS_JSON')
+
     if not args.no_download:
         url = args.url or export_url(args.sheet_id)
         download(url, XLSX_PATH)
@@ -137,6 +183,7 @@ def main() -> None:
         print(f"→ Skipping download; using existing {XLSX_PATH}")
 
     dump_shadow()
+    dump_import_links()
     generate_sql()
 
     if args.dry_run:
@@ -145,7 +192,8 @@ def main() -> None:
         return
 
     apply_sql()
-    backfill_app_ids()
+    link_imports()      # precise write-back for events just created from the sheet
+    backfill_app_ids()  # legacy slug/external_id linking for everything else
     print("✓ Sync complete.")
 
 if __name__ == '__main__':
