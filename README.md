@@ -181,6 +181,20 @@ Then re-add the leading `CREATE DATABASE IF NOT EXISTS` / `USE` lines, strip the
 volatile `AUTO_INCREMENT=N` table counters, switch `CREATE TABLE` to
 `CREATE TABLE IF NOT EXISTS`, and keep the `schema_migrations` table definition.
 
+### Contacts / CRM import
+
+The **Contacts** page (top-level nav, `manage_contacts` capability) holds the
+ticket-buying audience used for event email. Seed it from the ticketing
+provider's **Fan View** CSV export:
+
+```bash
+php scripts/import-fanview.php [path/to/export.csv]   # defaults to database/fanview.csv
+```
+
+The importer keys on the provider's User ID, so re-running UPSERTs instead of
+duplicating. The raw export contains real customer PII and is **git-ignored**
+(`database/fanview.csv`) — keep it local; never commit it.
+
 ## Running Locally
 
 Use PHP's built-in server:

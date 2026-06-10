@@ -117,6 +117,11 @@ final class Kernel
             return [StaffMembers::class, ['staffId' => $this->intOrNull($segments[1] ?? null)]];
         }
 
+        // Marketing / CRM contacts (admin)
+        if ($segments[0] === 'contacts') {
+            return [Contacts::class, ['contactId' => $this->intOrNull($segments[1] ?? null)]];
+        }
+
         // Public event pages (unauthenticated)
         if ($segments[0] === 'public' && ($segments[1] ?? '') === 'events') {
             return [PublicEvents::class, ['slug' => $segments[2] ?? null]];

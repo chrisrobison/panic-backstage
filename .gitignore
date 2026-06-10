@@ -12,3 +12,5 @@ storage/tmp/
 storage/backups/
 dns.log
 database/mabevents-import.sql
+# Ticketing "Fan View" export — real customer PII; import locally, never commit.
+database/fanview.csv

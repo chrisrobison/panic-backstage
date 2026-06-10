@@ -5,6 +5,7 @@ import './core.js';
 import './print.js';
 import './contracts.js';
 import './admin.js';
+import './contacts.js';
 import './user-emails.js';
 import './ticketing-admin.js';
 import './tickets-public.js';
@@ -63,6 +64,7 @@ class AppShell extends PanicElement {
       <a class="brand" href="#dashboard" aria-label="Panic Backstage home"><span class="brand-mark" aria-hidden="true"></span><span>Panic Backstage</span></a>
       <nav class="side-nav" aria-label="Main navigation">
         <a data-nav="dashboard" href="#dashboard" title="Dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
+        <a data-nav="contacts" href="#contacts" title="Contacts" data-nav-contacts><i class="fa-solid fa-address-book" aria-hidden="true"></i>Contacts</a>
         <div class="nav-group" data-group="events">
           <button class="nav-parent" type="button" data-group-toggle="events" aria-expanded="false" title="Events"><i class="fa-solid fa-ticket" aria-hidden="true"></i><span class="nav-parent-label">Events</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
           <div class="nav-children">
@@ -221,6 +223,9 @@ class AppShell extends PanicElement {
     if (!this.capabilities?.manage_users) {
       $$('[data-nav="admin-duplicates"]', this).forEach((link) => link.remove());
     }
+    if (!this.capabilities?.manage_contacts) {
+      $$('[data-nav-contacts]', this).forEach((link) => link.remove());
+    }
     if (!this.capabilities?.manage_users && !this.capabilities?.manage_staff_roster && !this.capabilities?.manage_templates) {
       $$('[data-nav-admin]', this).forEach((el) => el.remove());
     }
@@ -288,6 +293,7 @@ class AppShell extends PanicElement {
     if (route === 'calendar')    return this.mount(outlet, 'pb-event-calendar');
     if (route === 'pipeline')    return this.mount(outlet, 'pb-pipeline-board');
     if (route === 'events')      return this.mount(outlet, 'pb-events-list');
+    if (route === 'contacts')    return this.mount(outlet, 'pb-contacts-page');
     if (route === 'templates')   return this.mount(outlet, 'pb-template-picker');
     if (route === 'account')     return this.mount(outlet, 'pb-account-settings');
     if (route === 'preferences') return this.mount(outlet, 'pb-preferences');
