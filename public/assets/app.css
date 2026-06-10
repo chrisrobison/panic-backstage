@@ -543,26 +543,21 @@ h3 { margin-bottom: 8px; font-size: 15px; }
   text-align: center;
 }
 .calendar-day:nth-child(7n), .weekday:nth-child(7n) { border-right: 0; }
-.day-num { display: block; color: #4f5663; font-size: 13px; margin-bottom: 8px; }
+.day-num { display: block; color: #4f5663; font-size: 13px; margin-bottom: 6px; }
 .mini-event {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
+  margin-top: 3px;
   font-size: 12px;
   font-weight: 760;
   line-height: 1.25;
 }
+.mini-event .status-dot { margin-right: 0; }
 .mini-event-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mini-event:hover .mini-event-title { text-decoration: underline; }
-/* Per-space colour key, shared by the calendar legend and each event dot. */
-.venue-dot {
-  flex: none;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--venue-color, #a8aeb8);
-}
+
+/* Status colour key above the grid (dot colour = event status). */
 .calendar-legend {
   display: flex;
   flex-wrap: wrap;
@@ -575,6 +570,16 @@ h3 { margin-bottom: 8px; font-size: 15px; }
   color: var(--muted);
 }
 .calendar-legend .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.calendar-legend .legend-item .status-dot { margin-right: 0; }
+
+/* Day cell split by floor: upstairs (On Broadway) above the divider, downstairs
+   (The Mab) below it, whole-building "Both Rooms" bookings straddling. */
+.calendar-split .calendar-day { display: flex; flex-direction: column; }
+.cell-zone { display: flex; flex-direction: column; flex: 1 1 0; min-height: 26px; }
+.zone-down { border-top: 1px dashed var(--line); margin-top: 5px; padding-top: 4px; }
+.zone-both { display: flex; flex-direction: column; }
+.zone-both .mini-event-title { font-style: italic; }
+.zone-both .mini-event-title::after { content: " · both"; color: var(--muted); font-style: normal; font-weight: 600; }
 .program-night {
   border: 1px dashed #c5ccd6;
   border-radius: 7px;
