@@ -49,11 +49,16 @@ $stmt->execute(['Mabuhay Admin', 'admin@mabuhay.local', password_hash('changeme'
 $adminId = (int) $pdo->lastInsertId();
 
 $stmt = $pdo->prepare('INSERT INTO venues (name, slug, address, city, state, timezone) VALUES (?, ?, ?, ?, ?, ?)');
-$stmt->execute(['Mabuhay Gardens', 'mabuhay-gardens', '443 Broadway', 'San Francisco', 'CA', 'America/Los_Angeles']);
+// "The Mab" — the downstairs room at 443 Broadway. Slug kept as the original
+// mabuhay-gardens for link stability.
+$stmt->execute(['Mabuhay Gardens: The Mab', 'mabuhay-gardens', '443 Broadway', 'San Francisco', 'CA', 'America/Los_Angeles']);
 $venueId = (int) $pdo->lastInsertId();
 
-// "Mabuhay Upstairs" — the upstairs room at the same 443 Broadway building.
-$stmt->execute(['Mabuhay Upstairs', 'mabuhay-upstairs', '443 Broadway', 'San Francisco', 'CA', 'America/Los_Angeles']);
+// "On Broadway" — the upstairs room at the same 443 Broadway building.
+$stmt->execute(['Mabuhay Gardens: On Broadway', 'mabuhay-upstairs', '443 Broadway', 'San Francisco', 'CA', 'America/Los_Angeles']);
+
+// "Both Rooms" — an event that takes over the whole building.
+$stmt->execute(['Mabuhay Gardens: Both Rooms', 'mabuhay-both', '443 Broadway', 'San Francisco', 'CA', 'America/Los_Angeles']);
 
 $templateStmt = $pdo->prepare('INSERT INTO event_templates (venue_id, name, event_type, default_title, default_description_public, default_ticket_price, default_age_restriction, checklist_json, schedule_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
 foreach ($templates as [$name, $type, $title, $copy, $price, $age, $tasks, $schedule]) {

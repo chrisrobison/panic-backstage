@@ -2,7 +2,29 @@
 // Dashboard, Calendar, Pipeline, Events list, Template picker, and the two
 // public/unauthenticated pages (public event page + invite acceptance). Also
 // owns the quick-create event modal (shared by the calendar and the topbar).
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
+
+// Each Mabuhay space gets a stable dot colour so the calendar can be scanned by
+// venue at a glance (the key is shown in the legend above the grid). The two
+// rooms and the whole-building option are pinned by slug; any other venue falls
+// back to a rotating palette. `label` strips the shared "Mabuhay Gardens:"
+// prefix so legend chips and tooltips stay short.
+const VENUE_PINS = {
+  'mabuhay-upstairs': '#7c3aed', // On Broadway (upstairs)
+  'mabuhay-gardens':  '#0d9488', // The Mab (downstairs)
+  'mabuhay-both':     '#d99100', // Both Rooms (whole building)
+};
+const VENUE_PALETTE = ['#1268c7', '#be185d', '#0f8f46', '#b45309', '#0e7490', '#7c3aed'];
+function venueColorMap(venues) {
+  const map = new Map();
+  let next = 0;
+  (venues || []).forEach((venue) => {
+    const color = VENUE_PINS[venue.slug] || VENUE_PALETTE[next++ % VENUE_PALETTE.length];
+    const label = String(venue.name || 'Venue').replace(/^Mabuhay Gardens:\s*/i, '');
+    map.set(Number(venue.id), { color, label });
+  });
+  return map;
+}
 
 // ── Quick-create event modal ─────────────────────────────────────────────────
 //
@@ -189,15 +211,22 @@ class EventCalendar extends PanicElement {
       const data = await api(`/events?start_date=${isoDate(start)}&end_date=${isoDate(end)}`);
       publish('events.loaded', data);
       this.canCreate = Boolean(data?.capabilities?.create_events);
-      this.render(data.events || [], start);
+      this.render(data.events || [], start, data.venues || []);
     } catch (error) {
       this.showError(error);
     }
   }
 
-  render(events, start) {
+  render(events, start, venues = []) {
     const days = Array.from({ length: 42 }, (_, index) => addDays(start, index));
     const createable = this.canCreate ? ' calendar-clickable' : '';
+    const venueMap = venueColorMap(venues);
+    const legend = venues.length
+      ? `<div class="calendar-legend" aria-label="Space colour key">${venues.map((venue) => {
+          const meta = venueMap.get(Number(venue.id));
+          return `<span class="legend-item"><span class="venue-dot" style="--venue-color:${meta.color}"></span>${esc(meta.label)}</span>`;
+        }).join('')}</div>`
+      : '';
     this.innerHTML = `<section class="calendar-page">
       <div class="page-head"><div><h1>Calendar</h1><p class="subtle">Dynamic booking window for Mabuhay Gardens.${this.canCreate ? ' <span class="muted small">Click any day to create.</span>' : ''}</p></div>${this.canCreate ? '<button class="button" data-action="quick-new" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> New event</button>' : ''}</div>
       <article class="panel calendar-shell">
@@ -206,13 +235,18 @@ class EventCalendar extends PanicElement {
           <h2>${esc(this.month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }))}</h2>
           <div class="calendar-actions"><a class="button secondary small" href="#pipeline">Pipeline</a></div>
         </div>
+        ${legend}
         <div class="calendar-grid">
           ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day) => `<div class="weekday">${day}</div>`).join('')}
           ${days.map((date) => {
             const iso = isoDate(date);
             const dayEvents = events.filter((event) => event.date === iso);
             const clickAttr = this.canCreate ? ` data-create-date="${esc(iso)}" role="button" tabindex="0"` : '';
-            return `<div class="calendar-day${createable}"${clickAttr}><span class="day-num">${date.getDate()}</span>${dayEvents.length ? dayEvents.map((event) => `<a class="mini-event" href="#event-${esc(event.id)}"><span class="status-dot ${statusTone(event.status)}"></span>${esc(event.title)}<br>${badge(event.status)}</a>`).join('') : `<div class="program-night">${this.canCreate ? '+ Available' : 'Available'}</div>`}</div>`;
+            return `<div class="calendar-day${createable}"${clickAttr}><span class="day-num">${date.getDate()}</span>${dayEvents.length ? dayEvents.map((event) => {
+              const meta = venueMap.get(Number(event.venue_id)) || { color: '#a8aeb8', label: 'Unassigned' };
+              const tip = `${statusLabel(event.status)} · ${meta.label}`;
+              return `<a class="mini-event" href="#event-${esc(event.id)}" title="${esc(tip)}"><span class="venue-dot" style="--venue-color:${meta.color}"></span><span class="mini-event-title">${esc(event.title)}</span></a>`;
+            }).join('') : `<div class="program-night">${this.canCreate ? '+ Available' : 'Available'}</div>`}</div>`;
           }).join('')}
         </div>
       </article>
