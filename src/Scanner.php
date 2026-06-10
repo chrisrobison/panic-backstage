@@ -135,7 +135,7 @@ final class Scanner extends BaseEndpoint
         // Secret token: random bytes, base32 for URL/QR friendliness. The
         // sha256 hash drives redeem lookups; the plaintext is also stored so the
         // link/QR can be re-displayed to staff later.
-        $token = $this->base32Encode(random_bytes(24));
+        $token = self::base32Encode(random_bytes(24));
         $hash  = hash('sha256', $token);
         $pinHash = $pin !== '' ? password_hash($pin, PASSWORD_DEFAULT) : null;
 
@@ -187,7 +187,7 @@ final class Scanner extends BaseEndpoint
             return Response::json(['error' => 'This scanner link is revoked; create a new one.'], 422);
         }
 
-        $token = $this->base32Encode(random_bytes(24));
+        $token = self::base32Encode(random_bytes(24));
         $hash  = hash('sha256', $token);
         $this->db->run(
             'UPDATE event_scanner_links SET token = ?, token_hash = ? WHERE id = ?',
@@ -422,8 +422,26 @@ final class Scanner extends BaseEndpoint
         return ctype_digit((string) $value) ? (int) $value : null;
     }
 
+    /**
+     * Mint a scanner link programmatically (no PIN, no expiry) and return its
+     * id. Shared by endpoints that seed a default door link — e.g. switching an
+     * event to in-house ticketing. The plaintext token is stored, so the
+     * link/QR can be re-displayed later from the scanner-links list.
+     */
+    public static function mintLink(Database $db, int $eventId, ?string $label, ?int $userId): int
+    {
+        $token = self::base32Encode(random_bytes(24));
+        $hash  = hash('sha256', $token);
+        return $db->insert(
+            'INSERT INTO event_scanner_links
+                (event_id, label, token_hash, token, pin_hash, created_by_user_id, expires_at)
+             VALUES (?, ?, ?, ?, NULL, ?, NULL)',
+            [$eventId, ($label !== null && $label !== '' ? $label : null), $hash, $token, $userId]
+        );
+    }
+
     /** RFC 4648 base32 (uppercase, no padding) of arbitrary bytes. */
-    private function base32Encode(string $bytes): string
+    private static function base32Encode(string $bytes): string
     {
         $bits = '';
         $len  = strlen($bytes);

@@ -497,6 +497,7 @@ const HELP_CONTENT = {
       <li><strong>External ticketing.</strong> The default. You sell elsewhere (Eventbrite, DICE, a promoter's link) and just paste the link into the <em>Ticket URL</em> field on <a href="#help-details">Event details</a>. Backstage doesn't track inventory.</li>
       <li><strong>In-house ticketing.</strong> Backstage sells the tickets, holds the inventory, emails each buyer a QR ticket, and lets you scan at the door. Switch the mode toggle to turn this on.</li>
     </ul>
+    <p>The first time you switch a fresh event to in-house, Backstage seeds a ready-to-run setup so you are not starting from a blank slate: a <strong>General Admission</strong> tier at the event's ticket price, sized to capacity minus a 20-ticket house hold; a <strong>Comps</strong> allocation of those 20 (free and off-sale, but issuable from the comp flow); and a <strong>Door</strong> scanner link. All three are starting points — edit, rename, or delete any of them.</p>
 
     <h3>Ticket tiers</h3>
     <p>In in-house mode, create one or more <strong>ticket tiers</strong> (Advance, Door, VIP, and so on). Each tier has:</p>

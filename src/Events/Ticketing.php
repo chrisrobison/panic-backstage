@@ -37,6 +37,9 @@ final class Ticketing extends BaseEndpoint
 {
     private const TIER_STATUSES = ['draft', 'on_sale', 'paused', 'sold_out', 'closed'];
 
+    /** House comp allocation reserved out of capacity on first in-house setup. */
+    private const DEFAULT_COMP_RESERVE = 20;
+
     public function handle(Request $request): Response
     {
         $eventId = $this->requireEventId();
@@ -498,21 +501,30 @@ final class Ticketing extends BaseEndpoint
         $this->db->run('UPDATE events SET ' . implode(', ', $sets) . ' WHERE id = ?', $params);
         log_activity($this->db, $eventId, $this->userId(), 'ticketing settings updated', array_intersect_key($b, array_flip(['ticketing_mode', 'ticket_url', 'ticket_system'])));
 
-        // Turning on in-house ticketing for a fresh event seeds a default
-        // "General Admission" type so the operator has something to sell.
+        // Turning on in-house ticketing for a fresh event seeds the default
+        // setup so the operator can sell + scan immediately: a paid General
+        // Admission tier (capacity − comp reserve), a held-back Comps allocation,
+        // and a "Door" scanner link. Only on a genuinely fresh event (no tiers).
         $seeded = $newMode === 'internal' ? $this->seedDefaultTicketType($eventId) : false;
+        $seededLink = $seeded ? $this->seedDefaultScannerLink($eventId) : false;
 
         // Re-read for the caller.
         $event = $this->db->one('SELECT ticketing_mode, ticket_url, ticket_system FROM events WHERE id = ?', [$eventId]);
-        return $this->ok(['event' => $event, 'seeded_default_type' => $seeded]);
+        return $this->ok([
+            'event' => $event,
+            'seeded_default_type' => $seeded,
+            'seeded_scanner_link' => $seededLink,
+        ]);
     }
 
     /**
-     * Seed a default "General Admission" ticket type for an event the first
-     * time it switches to in-house ticketing. Priced from the event's
-     * ticket_price, sized to capacity (fallback 100), on sale from today
-     * through the end of the event date. No-op — returns false — if any ticket
-     * type already exists, so it never duplicates on re-save.
+     * Seed the default ticket types for an event the first time it switches to
+     * in-house ticketing: a paid "General Admission" tier (priced from the
+     * event's ticket_price, sized to capacity minus the comp reserve, on sale
+     * from today through the end of the event day) plus a held-back "Comps"
+     * allocation of {@see DEFAULT_COMP_RESERVE} free, off-sale tickets. No-op —
+     * returns false — if any ticket type already exists, so it never duplicates
+     * on re-save.
      */
     private function seedDefaultTicketType(int $eventId): bool
     {
@@ -528,23 +540,61 @@ final class Ticketing extends BaseEndpoint
 
         $priceCents = (int) round(((float) ($event['ticket_price'] ?? 0)) * 100);
         $capacity   = (int) ($event['capacity'] ?? 0);
-        $quantity   = $capacity > 0 ? $capacity : 100;
+
+        // Split the room into paid GA + house comps: Comps = 20 (capped at a
+        // tiny capacity), GA = the rest. With no capacity set, fall back to a
+        // 100-seat GA so there is still something to sell.
+        $compQty = $capacity > 0 ? min(self::DEFAULT_COMP_RESERVE, $capacity) : self::DEFAULT_COMP_RESERVE;
+        $gaQty   = $capacity > 0 ? max(0, $capacity - $compQty) : 100;
 
         // Sales open today and close at the end of the event day.
         $salesStart = date('Y-m-d') . ' 00:00:00';
         $salesEnd   = !empty($event['date']) ? $event['date'] . ' 23:59:59' : null;
 
-        $id = $this->db->insert(
+        $gaId = $this->db->insert(
             'INSERT INTO ticket_types
                 (event_id, name, description, price_cents, currency, quantity_total,
                  sales_start, sales_end, status, sort_order)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [$eventId, 'General Admission', null, $priceCents, 'USD', $quantity, $salesStart, $salesEnd, 'on_sale', 0]
+            [$eventId, 'General Admission', null, $priceCents, 'USD', $gaQty, $salesStart, $salesEnd, 'on_sale', 0]
         );
-        log_activity($this->db, $eventId, $this->userId(), 'default ticket type seeded', [
-            'ticket_type_id' => $id,
-            'price_cents'    => $priceCents,
-            'quantity_total' => $quantity,
+        // Comps: free and kept in 'draft' so they never appear on the public
+        // sale page, but are still issuable from the comp flow.
+        $compId = $this->db->insert(
+            'INSERT INTO ticket_types
+                (event_id, name, description, price_cents, currency, quantity_total,
+                 sales_start, sales_end, status, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [$eventId, 'Comps', 'House complimentary allocation', 0, 'USD', $compQty, null, null, 'draft', 1]
+        );
+        log_activity($this->db, $eventId, $this->userId(), 'default ticket types seeded', [
+            'general_admission_id' => $gaId,
+            'ga_quantity'          => $gaQty,
+            'comp_id'              => $compId,
+            'comp_quantity'        => $compQty,
+            'price_cents'          => $priceCents,
+        ]);
+        return true;
+    }
+
+    /**
+     * Seed a default "Door" scanner link so the operator has a working door-scan
+     * URL/QR the moment in-house ticketing is enabled. No-op — returns false —
+     * if any active (non-revoked) scanner link already exists.
+     */
+    private function seedDefaultScannerLink(int $eventId): bool
+    {
+        $existing = $this->db->one(
+            'SELECT COUNT(*) AS n FROM event_scanner_links WHERE event_id = ? AND revoked_at IS NULL',
+            [$eventId]
+        );
+        if ((int) ($existing['n'] ?? 0) > 0) {
+            return false;
+        }
+        $id = \Panic\Scanner::mintLink($this->db, $eventId, 'Door', $this->userId());
+        log_activity($this->db, $eventId, $this->userId(), 'default scanner link seeded', [
+            'scanner_link_id' => $id,
+            'label'           => 'Door',
         ]);
         return true;
     }
