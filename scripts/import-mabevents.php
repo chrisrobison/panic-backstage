@@ -86,6 +86,16 @@ try {
     exit(1);
 }
 
+// ── Step 5: keep venue_id aligned with the freshly-imported room values ──────
+// The sheet only carries `room` (Upstairs/Downstairs/Both); derive the matching
+// `venue_id` so the Venue dropdown + calendar floor-split reflect the same floor
+// instead of drifting back to the downstairs default.
+require_once __DIR__ . '/reconcile-venue-from-room.php';
+$venueFixed = \Panic\reconcileVenueFromRoom($pdo);
+if ($venueFixed > 0) {
+    echo "  Venue realigned to room: $venueFixed event(s)\n";
+}
+
 // ── Report ─────────────────────────────────────────────────────────────────
 $totalEvents = (int) $pdo->query("SELECT COUNT(*) FROM events")->fetchColumn();
 $totalUsers  = (int) $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
