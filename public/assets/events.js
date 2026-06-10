@@ -579,6 +579,31 @@ class EventWorkspace extends PanicElement {
 }
 
 
+// Convenience: when one of the Doors / Show / End time fields is set, fill in
+// whichever of the others are still empty using a sensible default running
+// order — Show is 1h after Doors, End is 5h after Doors (so Doors 6:00pm →
+// Show 7:00pm, End 11:00pm). Works from any field (e.g. setting Show back-fills
+// Doors). Existing values are never overwritten. Times are <input type="time">
+// 24h "HH:MM" strings; End wraps past midnight (e.g. 10:00pm → 3:00am).
+const TIME_OFFSETS = { doors_time: 0, show_time: 60, end_time: 300 }; // minutes after doors
+function autofillEventTimes(form, changed) {
+  const valueOf = (name) => (form[name]?.value || '').trim();
+  const toMinutes = (value) => { const m = /^(\d{1,2}):(\d{2})/.exec(value); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const toTime = (mins) => { const m = ((mins % 1440) + 1440) % 1440; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
+
+  const base = toMinutes(valueOf(changed));
+  if (base === null) return;
+  const doorsBaseline = base - TIME_OFFSETS[changed];
+
+  Object.keys(TIME_OFFSETS).forEach((name) => {
+    if (name === changed) return;
+    const field = form[name];
+    if (!field || field.disabled || valueOf(name) !== '') return; // keep existing values
+    field.value = toTime(doorsBaseline + TIME_OFFSETS[name]);
+  });
+}
+
+
 class EventDetailsForm extends HTMLElement {
   set data(data) {
     this.eventData = data;
@@ -637,7 +662,12 @@ class EventDetailsForm extends HTMLElement {
         publish('toast.show', { message: err.message || 'Save failed.', tone: 'error' });
       }
     };
-    $$('input, select, textarea', form).forEach((field) => field.addEventListener('change', () => save(field.name)));
+    $$('input, select, textarea', form).forEach((field) => field.addEventListener('change', () => {
+      // Setting any one show-time back-fills the empty others before we save,
+      // so all three persist in the same PATCH.
+      if (field.name in TIME_OFFSETS) autofillEventTimes(form, field.name);
+      save(field.name);
+    }));
     // Pressing Enter in a field still saves, but never reloads the page.
     form.addEventListener('submit', (submitEvent) => { submitEvent.preventDefault(); save(); });
   }
