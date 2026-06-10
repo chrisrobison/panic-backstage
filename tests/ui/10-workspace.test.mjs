@@ -1,0 +1,32 @@
+// Event workspace shell + the editable section panels' reveal/collapse forms.
+import { test, assert } from './harness.mjs';
+
+test('event workspace mounts with tabs and core panels', async (page) => {
+  if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
+  await page.openEvent();
+  assert.ok(await page.exists('pb-event-workspace .workspace-tabs'), 'workspace tabs render');
+  assert.atLeast(await page.count('.workspace-tabs a'), 8, 'has the expected tab set');
+  assert.ok(await page.exists('#details'), 'Details panel present');
+  assert.ok(await page.exists('#tasks'), 'Tasks panel present');
+  assert.ok(await page.exists('#assets'), 'Assets panel present');
+});
+
+test('a panel "+" reveals its hidden add form (Tasks)', async (page) => {
+  if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
+  await page.openEvent();
+  if (!(await page.exists('#tasks [data-add]'))) return page.skip('no manage_tasks capability for this user');
+  await page.until(`document.querySelector('#tasks form[data-add-form]')`);
+  assert.notOk(await page.visible('#tasks form[data-add-form]'), 'add form hidden before clicking +');
+  await page.click('#tasks [data-add]');
+  assert.ok(await page.visible('#tasks form[data-add-form]'), 'add form revealed after clicking +');
+});
+
+test('Invites add form is collapsed behind a "+" toggle', async (page) => {
+  if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
+  await page.openEvent();
+  if (!(await page.exists('#invites'))) return page.skip('invites panel not available for this user');
+  await page.until(`document.querySelector('#invites form[data-add-form]')`);
+  assert.notOk(await page.visible('#invites form[data-add-form]'), 'invite form hidden initially');
+  await page.click('#invites [data-add]');
+  assert.ok(await page.visible('#invites form[data-add-form]'), 'invite form revealed after +');
+});

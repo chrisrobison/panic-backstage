@@ -482,6 +482,24 @@ php scripts/endpoint-smoke.php http://localhost:8000
 
 `node --check` is optional and only validates the plain JavaScript file. The app does not require Node to run.
 
+### Test suites
+
+Two zero-dependency suites (no npm, no build):
+
+```bash
+# API smoke tests (curl + php) — run the numbered scripts in order:
+for t in tests/[0-9]*.sh; do bash "$t" || break; done
+
+# UI tests — headless Chromium over the DevTools Protocol against the live DOM:
+node tests/ui/run.mjs
+```
+
+The UI runner starts a local PHP dev server, logs in via a non-destructive
+magic-link token, and asserts client-side behaviour (panel reveals, the
+ticketing mode toggle, the Doors/Show/End autofill, …) without persisting
+changes. It shares its browser/CDP/login machinery with
+`scripts/screenshots.mjs`. See [`tests/ui/README.md`](tests/ui/README.md).
+
 ## Ticketing And Payments
 
 Events can sell tickets directly ("internal" ticketing mode) through a pluggable

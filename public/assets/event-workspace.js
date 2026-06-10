@@ -214,6 +214,10 @@ function autofillEventTimes(form, changed) {
   });
 }
 
+// Exported for the UI test suite (tests/ui) to unit-test the pure time logic
+// against a detached form. Inert for the running app.
+export { autofillEventTimes, TIME_OFFSETS };
+
 class EventDetailsForm extends HTMLElement {
   set data(data) {
     this.eventData = data;
