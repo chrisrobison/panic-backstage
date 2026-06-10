@@ -3,6 +3,7 @@
 // summary/readiness/next-action bus cards and the autosaving details form.
 import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
 import { openPrintWindow } from './print.js';
+import './paint-splat.js';
 
 function factCell(label, value) {
   return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
@@ -39,7 +40,10 @@ class EventSummary extends EventBusCard {
     const openItems = (data.blockers || []).filter((item) => ['open', 'waiting'].includes(item.status)).length;
     const tasksLeft = (data.tasks || []).filter((task) => !['done', 'canceled'].includes(task.status)).length;
     this.innerHTML = `<article class="event-summary">
-      <div class="flyer">${esc(event.title)}</div>
+      <div class="flyer">
+        <paint-splat class="flyer-splat" width="520" height="320" bg-color="#141414" interactive="false" wall-texture="false"></paint-splat>
+        <span class="flyer-title">${esc(event.title)}</span>
+      </div>
       <div class="facts-grid">
         ${factCell('Date', shortDate(eventDate(event)))}
         ${factCell('Doors', timeLabel(event.doors_time))}
