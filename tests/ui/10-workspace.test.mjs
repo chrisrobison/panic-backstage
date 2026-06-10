@@ -11,6 +11,18 @@ test('event workspace mounts with tabs and core panels', async (page) => {
   assert.ok(await page.exists('#assets'), 'Assets panel present');
 });
 
+test('Event Details form drops ticket + contract fields (now in their own sections)', async (page) => {
+  if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
+  await page.openEvent();
+  await page.until(`document.querySelector('#details form')`);
+  // These moved to the dedicated Ticketing / Contracts sections below.
+  assert.notOk(await page.exists('#details [name="ticket_url"]'), 'no Ticket URL field in Details');
+  assert.notOk(await page.exists('#details [name="ticket_system"]'), 'no Ticket system field in Details');
+  assert.notOk(await page.exists('#details [name="contract_url"]'), 'no Contract link field in Details');
+  // Core details still present.
+  assert.ok(await page.exists('#details [name="title"]'), 'title field still present');
+});
+
 test('a panel "+" reveals its hidden add form (Tasks)', async (page) => {
   if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
   await page.openEvent();

@@ -239,9 +239,6 @@ class EventDetailsForm extends HTMLElement {
       <label>Paid deposit <input type="number" step="0.01" min="0" name="deposit_amount" value="${esc(event.deposit_amount ?? '')}" placeholder="0.00"${disabled}></label>
       <label>Potential revenue <input type="number" step="0.01" min="0" name="potential_revenue" value="${esc(event.potential_revenue ?? '')}" placeholder="0.00"${disabled}></label>
       <label>Capacity <input type="number" name="capacity" value="${esc(event.capacity || '')}"${disabled}></label>
-      <label>Ticket system <input name="ticket_system" value="${esc(event.ticket_system || '')}" placeholder="TIXR / Eventbrite / Door"${disabled}></label>
-      <label class="wide">Ticket URL <input type="url" name="ticket_url" value="${esc(event.ticket_url || '')}"${disabled}></label>
-      <label class="wide">Contract link <input name="contract_url" value="${esc(event.contract_url || '')}" placeholder="URL or note (e.g. 'Verbal contract')"${disabled}></label>
       <label class="check-label"><input type="checkbox" name="walkthrough_done" value="1" ${Number(event.walkthrough_done) ? 'checked' : ''}${disabled}> Walk-through happened</label>
       <label class="wide">Public description <textarea name="description_public"${disabled}>${esc(event.description_public || '')}</textarea></label>
       <label class="wide">Internal notes <textarea name="description_internal"${disabled}>${esc(event.description_internal || '')}</textarea></label>
