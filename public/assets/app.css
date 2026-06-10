@@ -2075,3 +2075,19 @@ button.link.danger { color: var(--danger); }
 .contact-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin: 2px 0 0; padding: 12px; background: var(--soft); border-radius: 8px; }
 .contact-meta dt { font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 800; }
 .contact-meta dd { margin: 2px 0 0; font-weight: 700; }
+
+/* ── Comp tickets on the guest list + issued-tickets table ───────────────── */
+.comp-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.comp-badge {
+  display: inline-block; font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .03em; padding: 2px 7px; border-radius: 999px;
+  background: #e7eafc; color: #3548c4;
+}
+.comp-view {
+  font-size: 12px; font-weight: 700; text-decoration: none;
+  padding: 1px 7px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink);
+}
+.comp-view:hover { border-color: var(--accent, #2563eb); color: var(--accent, #2563eb); }
+.tickets-table td.row-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.ticket-row.ticket-void td { opacity: .55; }
+.ticket-row.ticket-redeemed td[data-label="Code"] { text-decoration: none; }

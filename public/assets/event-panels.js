@@ -361,7 +361,22 @@ class GuestListManager extends HTMLElement {
     this.eventData = data;
     const guests = data.guests || [];
     const editable = can(data, 'manage_guest_list');
+    const internal = data.event?.ticketing_mode === 'internal';
     const listTypes = ['comp', 'guest', 'will_call', 'vip', 'press', 'industry'];
+
+    // Per-guest comp affordance: view/resend issued comps, or issue them.
+    const compCell = (g) => {
+      if (!internal) return '';
+      const tickets = g.comp_tickets || [];
+      if (tickets.length) {
+        const links = tickets.map((t) => `<a class="comp-view" href="${esc(t.url || '#')}" target="_blank" rel="noopener" title="${esc(t.code)} — ${esc(t.status)}">${t.status === 'redeemed' ? '✓ ' : ''}QR</a>`).join('');
+        return `<div class="comp-cell"><span class="comp-badge">${tickets.length} comp${tickets.length > 1 ? 's' : ''}</span>${links}${editable ? `<button type="button" class="small secondary" data-resend-comp="${esc(g.id)}">Resend</button>` : ''}</div>`;
+      }
+      if (!editable) return '';
+      return g.email
+        ? `<button type="button" class="small" data-issue-comp="${esc(g.id)}">Issue comp</button>`
+        : '<span class="muted small">needs email</span>';
+    };
 
     const grouped = guests.reduce((map, guest) => {
       const key = guest.list_type || 'guest';
@@ -381,14 +396,15 @@ class GuestListManager extends HTMLElement {
     // door-night action — while the pencil reveals the full edit form.
     const cols = [
       { label: 'In', grid: '64px', cell: (g) => `<label class="guest-check"><input type="checkbox" data-checkin="${esc(g.id)}" ${Number(g.checked_in) ? 'checked' : ''}${editable ? '' : ' disabled'}><span>${Number(g.checked_in) ? 'In' : 'Out'}</span></label>` },
-      { label: 'Name', grid: 'minmax(120px, 1.6fr)', cell: (g) => esc(g.name) },
-      { label: 'Party', grid: '70px', cell: (g) => esc(g.party_size || 1) },
-      { label: 'Type', grid: 'minmax(90px, 1fr)', cell: (g) => chip(g.list_type) },
-      { label: 'Guest of', grid: 'minmax(110px, 1.2fr)', cell: (g) => esc(g.guest_of || '') },
-      { label: 'Notes', grid: 'minmax(120px, 1.4fr)', cell: (g) => esc(g.notes || '') },
+      { label: 'Name', grid: 'minmax(140px, 1.8fr)', cell: (g) => `${esc(g.name)}${g.email ? `<br><span class="muted small">${esc(g.email)}</span>` : ''}` },
+      { label: 'Party', grid: '64px', cell: (g) => esc(g.party_size || 1) },
+      { label: 'Type', grid: 'minmax(86px, 0.9fr)', cell: (g) => chip(g.list_type) },
+      { label: 'Guest of', grid: 'minmax(100px, 1fr)', cell: (g) => esc(g.guest_of || '') },
+      ...(internal ? [{ label: 'Comp', grid: 'minmax(130px, 1.3fr)', cell: compCell }] : []),
+      { label: 'Notes', grid: 'minmax(110px, 1.2fr)', cell: (g) => esc(g.notes || '') },
     ];
 
-    const editForm = (guest) => `<form data-api="/events/${data.event.id}/guest-list/${guest.id}" data-method="PATCH" class="row-form record-form guest-row"><label>Name<input name="name" value="${esc(guest.name)}"></label><label>Party<input name="party_size" type="number" min="1" value="${esc(guest.party_size || 1)}"></label><label>Type${select('list_type', listTypes, guest.list_type)}</label><label>Guest of<input name="guest_of" placeholder="Guest of" value="${esc(guest.guest_of || '')}"></label><label>Notes<input name="notes" placeholder="Notes" value="${esc(guest.notes || '')}"></label><button>Save</button><button type="button" class="small danger" data-delete="${esc(guest.id)}">Delete</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
+    const editForm = (guest) => `<form data-api="/events/${data.event.id}/guest-list/${guest.id}" data-method="PATCH" class="row-form record-form guest-row"><label>Name<input name="name" value="${esc(guest.name)}"></label><label>Email<input name="email" type="email" placeholder="For comp delivery" value="${esc(guest.email || '')}"></label><label>Party<input name="party_size" type="number" min="1" value="${esc(guest.party_size || 1)}"></label><label>Type${select('list_type', listTypes, guest.list_type)}</label><label>Guest of<input name="guest_of" placeholder="Guest of" value="${esc(guest.guest_of || '')}"></label><label>Notes<input name="notes" placeholder="Notes" value="${esc(guest.notes || '')}"></label><button>Save</button><button type="button" class="small danger" data-delete="${esc(guest.id)}">Delete</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
 
     const sections = sectionOrder
       .filter((key) => grouped[key])
@@ -400,6 +416,7 @@ class GuestListManager extends HTMLElement {
 
     const addForm = editable ? `<form data-api="/events/${data.event.id}/guest-list" data-method="POST" data-add-form hidden class="row-form guest-add">
       <label>Name<input name="name" required placeholder="Guest name"></label>
+      <label>Email<input name="email" type="email" placeholder="For comp delivery"></label>
       <label>Party<input name="party_size" type="number" min="1" value="1"></label>
       <label>Type${select('list_type', listTypes, 'guest')}</label>
       <label>Guest of<input name="guest_of" placeholder="Guest of (band/promoter)"></label>
@@ -448,6 +465,29 @@ class GuestListManager extends HTMLElement {
       await api(`/events/${this.eventData.event.id}/guest-list/${id}`, { method: 'DELETE' });
       await refreshSection(this);
       publish('toast.show', { message: 'Guest removed.' });
+    }));
+    const eventId = this.eventData.event.id;
+    $$('[data-issue-comp]', this).forEach((button) => button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const res = await api(`/events/${eventId}/ticketing/comp`, { method: 'POST', body: JSON.stringify({ guest_list_id: button.dataset.issueComp }) });
+        publish('toast.show', { message: `Issued ${res.issued} comp ticket(s)${res.emailed ? `, emailed ${res.emailed}` : ''}.` });
+        await refreshSection(this);
+      } catch (error) {
+        publish('toast.show', { tone: 'error', message: error.message || 'Could not issue comp.' });
+        button.disabled = false;
+      }
+    }));
+    $$('[data-resend-comp]', this).forEach((button) => button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const res = await api(`/events/${eventId}/ticketing/comp`, { method: 'POST', body: JSON.stringify({ guest_list_id: button.dataset.resendComp, resend: 1 }) });
+        publish('toast.show', { message: `Resent ${res.emailed} ticket(s).` });
+      } catch (error) {
+        publish('toast.show', { tone: 'error', message: error.message || 'Could not resend.' });
+      } finally {
+        button.disabled = false;
+      }
     }));
   }
 }

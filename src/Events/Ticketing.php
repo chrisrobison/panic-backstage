@@ -51,12 +51,93 @@ final class Ticketing extends BaseEndpoint
         $childId = $this->params['childId'] ?? null;
 
         return match ($child) {
-            ''       => $this->root($request, $eventId),
-            'types'  => $this->types($request, $eventId, $childId ? (int) $childId : null),
-            'comp'   => $request->method() === 'POST' ? $this->comp($request, $eventId) : Response::methodNotAllowed(),
-            'refund' => $request->method() === 'POST' ? $this->refundCancel($request, $eventId) : Response::methodNotAllowed(),
-            default  => $this->notFound(),
+            ''        => $this->root($request, $eventId),
+            'types'   => $this->types($request, $eventId, $childId ? (int) $childId : null),
+            'tickets' => $this->tickets($request, $eventId, $childId ? (int) $childId : null),
+            'comp'    => $request->method() === 'POST' ? $this->comp($request, $eventId) : Response::methodNotAllowed(),
+            'refund'  => $request->method() === 'POST' ? $this->refundCancel($request, $eventId) : Response::methodNotAllowed(),
+            default   => $this->notFound(),
         };
+    }
+
+    // ─── /ticketing/tickets — individual issued tickets ────────────────────────────
+
+    /**
+     *   GET    /ticketing/tickets        list every issued ticket (paid + comp)
+     *   POST   /ticketing/tickets/{id}   resend the QR link to the holder's email
+     *   DELETE /ticketing/tickets/{id}   void (invalidate) the ticket
+     */
+    private function tickets(Request $request, int $eventId, ?int $ticketId): Response
+    {
+        if ($ticketId === null) {
+            return $request->method() === 'GET' ? $this->listTickets($eventId) : Response::methodNotAllowed();
+        }
+        $ticket = $this->db->one('SELECT * FROM tickets WHERE id = ? AND event_id = ?', [$ticketId, $eventId]);
+        if (!$ticket) {
+            return $this->notFound('Ticket not found');
+        }
+        return match ($request->method()) {
+            'POST'   => $this->resendTicket($eventId, $ticket),
+            'DELETE' => $this->voidIssuedTicket($eventId, $ticket),
+            default  => Response::methodNotAllowed(),
+        };
+    }
+
+    private function listTickets(int $eventId): Response
+    {
+        $rows = $this->db->all(
+            "SELECT t.id, t.code, t.token, t.holder_name, t.holder_email, t.status, t.redeemed_at,
+                    tt.name AS tier_name, COALESCE(o.is_comp, 0) AS is_comp
+               FROM tickets t
+               JOIN ticket_types tt ON tt.id = t.ticket_type_id
+               LEFT JOIN ticket_orders o ON o.id = t.order_id
+              WHERE t.event_id = ?
+              ORDER BY t.id DESC",
+            [$eventId]
+        );
+        $tickets = array_map(fn (array $r) => [
+            'id'           => (int) $r['id'],
+            'code'         => (string) $r['code'],
+            'tier'         => (string) $r['tier_name'],
+            'holder_name'  => $r['holder_name'],
+            'holder_email' => $r['holder_email'],
+            'status'       => (string) $r['status'],
+            'is_comp'      => (bool) (int) $r['is_comp'],
+            'redeemed_at'  => $r['redeemed_at'],
+            'url'          => $r['token'] !== null ? $this->ticketUrl((string) $r['token']) : null,
+        ], $rows);
+        return $this->ok(['tickets' => $tickets]);
+    }
+
+    private function resendTicket(int $eventId, array $ticket): Response
+    {
+        $email = trim((string) ($ticket['holder_email'] ?? ''));
+        if ($email === '') {
+            return Response::json(['error' => 'This ticket has no holder email to send to.'], 422);
+        }
+        if (empty($ticket['token'])) {
+            return Response::json(['error' => 'This ticket predates token storage and cannot be resent.'], 409);
+        }
+        $emailed = $this->emailTickets($eventId, $email, $ticket['holder_name'], [[
+            'id'    => (int) $ticket['id'],
+            'code'  => (string) $ticket['code'],
+            'token' => (string) $ticket['token'],
+        ]]);
+        log_activity($this->db, $eventId, $this->userId(), 'ticket resent', ['ticket_id' => (int) $ticket['id']]);
+        return $this->ok(['emailed' => $emailed]);
+    }
+
+    private function voidIssuedTicket(int $eventId, array $ticket): Response
+    {
+        if ((string) $ticket['status'] === 'void') {
+            return $this->ok(['ok' => true]);
+        }
+        (new TicketingService())->voidTicket($this->db, (int) $ticket['id'], $this->userId());
+        log_activity($this->db, $eventId, $this->userId(), 'ticket voided', [
+            'ticket_id' => (int) $ticket['id'],
+            'code'      => (string) $ticket['code'],
+        ]);
+        return $this->ok(['ok' => true]);
     }
 
     // ─── /ticketing ──────────────────────────────────────────────────────────────
@@ -297,6 +378,14 @@ final class Ticketing extends BaseEndpoint
     private function comp(Request $request, int $eventId): Response
     {
         $b = $request->body();
+
+        // Guest-list-driven comp: issue (or resend) comps for a guest entry.
+        $guestId = (int) ($b['guest_list_id'] ?? 0);
+        if ($guestId > 0) {
+            return $this->compGuest($eventId, $guestId, !empty($b['resend']));
+        }
+
+        // Direct comp from the admin form: explicit tier + quantity.
         $typeId = (int) ($b['ticket_type_id'] ?? 0);
         $quantity = max(1, (int) ($b['quantity'] ?? 1));
         $holderName = isset($b['holder_name']) ? trim((string) $b['holder_name']) ?: null : null;
@@ -307,19 +396,12 @@ final class Ticketing extends BaseEndpoint
             return $this->notFound('Ticket type not found');
         }
 
-        $service = new TicketingService();
         try {
-            $tickets = $service->issueComp($this->db, $typeId, $quantity, $holderName, $holderEmail, $this->userId());
+            $tickets = (new TicketingService())->issueComp($this->db, $typeId, $quantity, $holderName, $holderEmail, $this->userId());
         } catch (\RuntimeException $e) {
             return Response::json(['error' => $e->getMessage()], 409);
         }
-
-        // Deliver QR/links by email when a holder address was supplied. The
-        // plaintext token is returned by issueComp exactly once — email it now.
-        $emailed = 0;
-        if ($holderEmail) {
-            $emailed = $this->emailTickets($eventId, $holderEmail, $holderName, $tickets);
-        }
+        $emailed = $holderEmail ? $this->emailTickets($eventId, $holderEmail, $holderName, $tickets) : 0;
 
         log_activity($this->db, $eventId, $this->userId(), 'comp tickets issued', [
             'ticket_type_id' => $typeId,
@@ -330,8 +412,109 @@ final class Ticketing extends BaseEndpoint
         return $this->ok([
             'issued'  => count($tickets),
             'emailed' => $emailed,
-            'tickets' => array_map(static fn (array $t) => ['id' => $t['id'], 'code' => $t['code']], $tickets),
+            'tickets' => $this->ticketSummaries($tickets),
         ]);
+    }
+
+    /**
+     * Issue (or resend) complimentary tickets for a guest-list entry. Sized to
+     * the guest's party_size, drawn from the event's comp tier, mailed to the
+     * guest's email, and linked back to the guest row via comp_order_id so the
+     * QR can be re-viewed and resent later.
+     */
+    private function compGuest(int $eventId, int $guestId, bool $resend): Response
+    {
+        $guest = $this->db->one(
+            'SELECT id, name, email, party_size, comp_order_id FROM event_guest_list WHERE id = ? AND event_id = ?',
+            [$guestId, $eventId]
+        );
+        if (!$guest) {
+            return $this->notFound('Guest not found');
+        }
+        $email = trim((string) ($guest['email'] ?? ''));
+        if ($email === '') {
+            return Response::json(['error' => 'Add an email to this guest before comping.'], 422);
+        }
+        $name = (string) ($guest['name'] ?? '') ?: null;
+
+        // Already comped (or explicit resend): re-email the existing tickets.
+        if ($resend || !empty($guest['comp_order_id'])) {
+            $orderId = (int) ($guest['comp_order_id'] ?? 0);
+            if ($orderId <= 0) {
+                return Response::json(['error' => 'This guest has not been comped yet.'], 422);
+            }
+            $tickets = $this->ticketsForOrder($orderId);
+            $emailed = $this->emailTickets($eventId, $email, $name, $tickets);
+            log_activity($this->db, $eventId, $this->userId(), 'guest comp resent', ['guest_list_id' => $guestId, 'count' => count($tickets)]);
+            return $this->ok(['issued' => 0, 'emailed' => $emailed, 'resent' => true, 'tickets' => $this->ticketSummaries($tickets)]);
+        }
+
+        $typeId = $this->compTierId($eventId);
+        if ($typeId === null) {
+            return Response::json(['error' => 'No ticket type to comp from — turn on in-house ticketing first.'], 409);
+        }
+        $quantity = max(1, (int) ($guest['party_size'] ?? 1));
+
+        try {
+            $tickets = (new TicketingService())->issueComp($this->db, $typeId, $quantity, $name, $email, $this->userId());
+        } catch (\RuntimeException $e) {
+            return Response::json(['error' => $e->getMessage()], 409);
+        }
+
+        $orderId = (int) ($this->db->one('SELECT order_id FROM tickets WHERE id = ?', [$tickets[0]['id']])['order_id'] ?? 0);
+        $this->db->run('UPDATE event_guest_list SET comp_order_id = ? WHERE id = ? AND event_id = ?', [$orderId, $guestId, $eventId]);
+        $emailed = $this->emailTickets($eventId, $email, $name, $tickets);
+
+        log_activity($this->db, $eventId, $this->userId(), 'guest comped', [
+            'guest_list_id' => $guestId,
+            'quantity'      => count($tickets),
+        ]);
+
+        return $this->ok(['issued' => count($tickets), 'emailed' => $emailed, 'tickets' => $this->ticketSummaries($tickets)]);
+    }
+
+    /** Preferred comp source: the seeded "Comps" tier, else any tier. */
+    private function compTierId(int $eventId): ?int
+    {
+        $row = $this->db->one(
+            "SELECT id FROM ticket_types WHERE event_id = ?
+             ORDER BY (name = 'Comps') DESC, sort_order ASC, id ASC LIMIT 1",
+            [$eventId]
+        );
+        return $row ? (int) $row['id'] : null;
+    }
+
+    /** Non-void tickets for an order, with stored tokens for resend/view. */
+    private function ticketsForOrder(int $orderId): array
+    {
+        $rows = $this->db->all(
+            "SELECT id, code, token, holder_email, holder_name
+               FROM tickets WHERE order_id = ? AND status <> 'void' ORDER BY id ASC",
+            [$orderId]
+        );
+        return array_map(static fn (array $r) => [
+            'id'           => (int) $r['id'],
+            'code'         => (string) $r['code'],
+            'token'        => $r['token'] !== null ? (string) $r['token'] : null,
+            'holder_email' => $r['holder_email'],
+            'holder_name'  => $r['holder_name'],
+        ], $rows);
+    }
+
+    /** Shape issued/looked-up tickets for the client, with a viewable QR URL. */
+    private function ticketSummaries(array $tickets): array
+    {
+        return array_map(fn (array $t) => [
+            'id'   => $t['id'],
+            'code' => $t['code'],
+            'url'  => !empty($t['token']) ? $this->ticketUrl((string) $t['token']) : null,
+        ], $tickets);
+    }
+
+    /** Public ticket-view URL (carries the scannable token) for a ticket. */
+    private function ticketUrl(string $token): string
+    {
+        return rtrim((string) (getenv('APP_URL') ?: ''), '/') . '/t/' . rawurlencode($token);
     }
 
     /**

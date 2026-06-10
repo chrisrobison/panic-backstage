@@ -324,10 +324,10 @@ final class TicketingService
             try {
                 $id = $db->insert(
                     "INSERT INTO tickets
-                        (event_id, ticket_type_id, order_id, code, token_hash,
+                        (event_id, ticket_type_id, order_id, code, token_hash, token,
                          holder_name, holder_email, status)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, 'issued')",
-                    [$eventId, $ticketTypeId, $orderId, $code, $secret['hash'], $holderName, $holderEmail]
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'issued')",
+                    [$eventId, $ticketTypeId, $orderId, $code, $secret['hash'], $secret['token'], $holderName, $holderEmail]
                 );
             } catch (Throwable $e) {
                 // Unique collision on code/token_hash — regenerate and retry.
@@ -351,15 +351,16 @@ final class TicketingService
     }
 
     /**
-     * Previously-issued tickets for an order (idempotent return path). Tokens
-     * are intentionally null — plaintext secrets are unrecoverable post-issue.
+     * Previously-issued tickets for an order (idempotent return path). The
+     * stored plaintext token is included so callers can re-display or resend the
+     * QR; it is null only for legacy tickets issued before tokens were stored.
      *
      * @return array<int,array{id:int,code:string,token:?string,ticket_type_id:int,holder_email:?string,holder_name:?string}>
      */
     private function existingTickets(Database $db, int $orderId): array
     {
         $rows = $db->all(
-            'SELECT id, code, ticket_type_id, holder_email, holder_name
+            'SELECT id, code, token, ticket_type_id, holder_email, holder_name
                FROM tickets WHERE order_id = ? ORDER BY id ASC',
             [$orderId]
         );
@@ -368,7 +369,7 @@ final class TicketingService
             $out[] = [
                 'id'             => (int) $r['id'],
                 'code'           => (string) $r['code'],
-                'token'          => null,
+                'token'          => $r['token'] !== null ? (string) $r['token'] : null,
                 'ticket_type_id' => (int) $r['ticket_type_id'],
                 'holder_email'   => $r['holder_email'] !== null ? (string) $r['holder_email'] : null,
                 'holder_name'    => $r['holder_name'] !== null ? (string) $r['holder_name'] : null,

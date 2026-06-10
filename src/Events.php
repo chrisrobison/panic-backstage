@@ -119,13 +119,13 @@ final class Events extends BaseEndpoint
                  ORDER BY FIELD(ec.role,"venue_admin","event_owner","promoter","staff","designer","band","artist","viewer"), u.name',
                 [$id]
             ),
-            'guests' => $this->db->all(
+            'guests' => \Panic\Events\GuestList::attachCompTickets($this->db, $this->db->all(
                 'SELECT g.*, u.name created_by_name
                  FROM event_guest_list g LEFT JOIN users u ON u.id = g.created_by_user_id
                  WHERE g.event_id = ?
                  ORDER BY g.list_type, g.name',
                 [$id]
-            ),
+            )),
             'staffing' => $this->db->all(
                 'SELECT es.*, sm.name staff_name, sm.email staff_email, sm.phone staff_phone, sm.default_role staff_default_role
                  FROM event_staffing es

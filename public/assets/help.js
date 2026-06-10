@@ -518,6 +518,10 @@ const HELP_CONTENT = {
 
     <h3>Comp tickets</h3>
     <p>Use the <em>Comp tickets</em> section to issue free tickets (guests, press, trade) without a payment. Enter the recipient's name, email, tier, and quantity, and Backstage emails them a real scannable QR just like a paid ticket. Comps still count against the tier's inventory, so they can't push you into an oversell.</p>
+    <p>You can also comp straight from the <a href="#help-guest-list">guest list</a>: give a guest an email and click <em>Issue comp</em>, and Backstage issues one ticket per seat in their party, emails the QR, and links the tickets back to that guest so you can re-view or resend them later.</p>
+
+    <h3>Issued tickets</h3>
+    <p>The <em>Issued tickets</em> list shows every ticket for the event — sold and comped — with its holder, tier, and live status. From each row you can <strong>View</strong> the QR (the same page the buyer got), <strong>Resend</strong> the link to the holder's email, or <strong>Void</strong> a ticket to invalidate it. The status is the source of truth at the door: a <em>Valid</em> ticket admits once and then flips to <em>Scanned in</em>, so the same QR can never get two people in; a <em>Void</em> ticket won't scan at all.</p>
 
     <h3>Refunds</h3>
     <p>The <em>Refund / cancel</em> action is the cancel-the-show path: it refunds buyers through the original processor and voids every ticket for the event so none of them scan at the door. (Per-ticket partial refunds aren't in this version.)</p>

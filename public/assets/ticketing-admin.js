@@ -47,12 +47,14 @@ class TicketingAdmin extends PanicElement {
     if (!this.eventId) return;
     this.setLoading('Loading ticketing');
     try {
-      const [dash, links] = await Promise.all([
+      const [dash, links, tickets] = await Promise.all([
         api(`/events/${this.eventId}/ticketing`),
         this.loadScannerLinks(),
+        this.loadTickets(),
       ]);
       this.dash = dash;
       this.links = links;
+      this.tickets = tickets;
       this.render();
     } catch (error) {
       this.showError(error);
@@ -65,6 +67,17 @@ class TicketingAdmin extends PanicElement {
     try {
       const res = await api(`/events/${this.eventId}/scanner-links`);
       return res?.links || res?.scanner_links || [];
+    } catch {
+      return null;
+    }
+  }
+
+  // Every issued ticket (paid + comp) for the event — drives the issued-tickets
+  // table. Tolerate absence so ticketing still renders if unavailable.
+  async loadTickets() {
+    try {
+      const res = await api(`/events/${this.eventId}/ticketing/tickets`);
+      return res?.tickets || [];
     } catch {
       return null;
     }
@@ -144,6 +157,7 @@ class TicketingAdmin extends PanicElement {
       <div class="ticketing-tiers padded">${this.tiersHtml()}</div>
 
       ${editable ? this.compSectionHtml() : ''}
+      ${this.issuedTicketsHtml()}
       ${this.scannerSectionHtml()}
 
       ${editable ? `<div class="padded danger-zone">
@@ -280,6 +294,10 @@ class TicketingAdmin extends PanicElement {
     $('form[data-form="comp"]', this)?.addEventListener('submit', (e) => this.issueComps(e));
     $('[data-cancel-comp]', this)?.addEventListener('click', () => this.collapseForm('form[data-form="comp"]'));
 
+    // Issued-ticket row actions
+    $$('[data-resend-ticket]', this).forEach((btn) => btn.addEventListener('click', () => this.resendTicket(btn)));
+    $$('[data-void-ticket]', this).forEach((btn) => btn.addEventListener('click', () => this.voidTicket(Number(btn.dataset.voidTicket))));
+
     // Refund all
     $('[data-refund-all]', this)?.addEventListener('click', () => this.refundAll());
 
@@ -304,6 +322,63 @@ class TicketingAdmin extends PanicElement {
     $$('[data-add-target]', this).forEach((btn) => {
       if (btn.dataset.addTarget === selector) btn.classList.remove('active');
     });
+  }
+
+  // ── Issued tickets (paid + comp) ───────────────────────────────────────────
+  // A flat list of every ticket with its live status and per-row actions:
+  // View the QR, resend the link by email, or void (invalidate) it. "Scanned in"
+  // means the ticket was already redeemed at the door and won't admit again.
+  issuedTicketsHtml() {
+    const tickets = this.tickets || [];
+    const editable = this.editable;
+    const rows = tickets.map((t) => `<tr class="ticket-row ticket-${esc(t.status)}">
+      <td data-label="Code">${esc(t.code)}</td>
+      <td data-label="Holder">${esc(t.holder_name || '—')}${t.holder_email ? `<br><span class="muted small">${esc(t.holder_email)}</span>` : ''}</td>
+      <td data-label="Tier">${esc(t.tier)}${t.is_comp ? ' <span class="comp-badge">comp</span>' : ''}</td>
+      <td data-label="Status">${this.ticketStatusBadge(t)}</td>
+      <td class="row-actions">
+        ${t.url ? `<a class="small secondary" href="${esc(t.url)}" target="_blank" rel="noopener">View</a>` : ''}
+        ${editable && t.url && t.holder_email && t.status !== 'void' ? `<button type="button" class="small secondary" data-resend-ticket="${esc(t.id)}">Resend</button>` : ''}
+        ${editable && t.status === 'issued' ? `<button type="button" class="small danger" data-void-ticket="${esc(t.id)}">Void</button>` : ''}
+      </td>
+    </tr>`).join('');
+    return `<div class="section-head padded sub-head"><h3>Issued tickets <span class="muted">${tickets.length}</span></h3></div>
+      <div class="ticketing-tickets padded">${tickets.length
+        ? `<table class="data-table tickets-table"><thead><tr><th>Code</th><th>Holder</th><th>Tier</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        : '<p class="ticket-note">No tickets issued yet — sold and comped tickets show up here with their QR, status, and resend/void controls.</p>'}</div>`;
+  }
+
+  ticketStatusBadge(t) {
+    const map = {
+      issued:   ['Valid', 'status-published'],
+      redeemed: ['Scanned in', 'status-confirmed'],
+      void:     ['Void', 'status-canceled'],
+    };
+    const [label, cls] = map[t.status] || [t.status, ''];
+    return `<span class="badge ${cls}">${esc(label)}</span>`;
+  }
+
+  async resendTicket(btn) {
+    btn.disabled = true;
+    try {
+      const res = await api(`/events/${this.eventId}/ticketing/tickets/${btn.dataset.resendTicket}`, { method: 'POST' });
+      publish('toast.show', { message: `Resent ${res.emailed || 0} ticket(s).` });
+    } catch (error) {
+      publish('toast.show', { tone: 'error', message: error.message });
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async voidTicket(id) {
+    if (!confirm('Void this ticket? It will no longer scan at the door.')) return;
+    try {
+      await api(`/events/${this.eventId}/ticketing/tickets/${id}`, { method: 'DELETE' });
+      publish('toast.show', { message: 'Ticket voided.' });
+      await this.load();
+    } catch (error) {
+      publish('toast.show', { tone: 'error', message: error.message });
+    }
   }
 
   async saveMode(e) {
@@ -377,10 +452,11 @@ class TicketingAdmin extends PanicElement {
     if (out) {
       out.hidden = false;
       out.innerHTML = `<p>Issued <strong>${esc(res.issued)}</strong> comp ticket(s)${res.emailed ? `, emailed ${esc(res.emailed)}.` : '.'}</p>
-        <div class="comp-codes">${(res.tickets || []).map((t) => `<span class="ticket-code">${esc(t.code)}</span>`).join('')}</div>`;
+        <div class="comp-codes">${(res.tickets || []).map((t) => `<span class="ticket-code">${esc(t.code)}</span>${t.url ? ` <a class="comp-view" href="${esc(t.url)}" target="_blank" rel="noopener">QR</a>` : ''}`).join('')}</div>`;
     }
     publish('toast.show', { message: `Issued ${res.issued} comp ticket(s).` });
-    await this.refreshSummary();
+    // New tickets exist now — refresh the whole panel so the issued-tickets list updates.
+    await this.load();
   }
 
   async refundAll() {
