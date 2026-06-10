@@ -59,6 +59,7 @@ class AppShell extends PanicElement {
 
   renderShell() {
     this.innerHTML = `<aside class="sidebar">
+      <button class="drawer-close" data-drawer-close type="button" aria-label="Close navigation"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
       <a class="brand" href="#dashboard" aria-label="Panic Backstage home"><span class="brand-mark" aria-hidden="true"></span><span>Panic Backstage</span></a>
       <nav class="side-nav" aria-label="Main navigation">
         <a data-nav="dashboard" href="#dashboard" title="Dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
@@ -96,6 +97,7 @@ class AppShell extends PanicElement {
       <p class="copyright">&copy; 2026 Panic Backstage</p>
     </aside>
     <header class="topbar">
+      <button class="drawer-toggle" data-drawer-open type="button" aria-label="Open navigation menu" aria-expanded="false" title="Menu"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
       <button class="nav-toggle" data-nav-toggle type="button" aria-label="Toggle navigation" aria-expanded="true" title="Toggle navigation"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
       <a class="mobile-brand" href="#dashboard"><span class="brand-mark"></span><span>Panic Backstage</span></a>
       <label class="search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input data-search placeholder="Search events..." aria-label="Search events"></label>
@@ -109,11 +111,11 @@ class AppShell extends PanicElement {
     <nav class="mobile-tabs" aria-label="Mobile navigation">
       <a data-nav="dashboard" href="#dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
       <a data-nav="calendar" href="#calendar"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Calendar</a>
-      <a data-nav="pipeline" href="#pipeline"><i class="fa-solid fa-table-columns" aria-hidden="true"></i>Pipeline</a>
       <a data-nav="events" href="#events"><i class="fa-solid fa-ticket" aria-hidden="true"></i>Events</a>
       <a data-nav="admin-users" href="#admin-users" data-nav-admin><i class="fa-solid fa-user-shield" aria-hidden="true"></i>Admin</a>
       <a data-nav="help" href="#help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i>Help</a>
     </nav>
+    <div class="drawer-backdrop" data-drawer-close aria-hidden="true"></div>
     <pb-toast-stack></pb-toast-stack>`;
     $('#logout', this).addEventListener('click', async () => {
       const refreshToken = getRefreshToken();
@@ -127,6 +129,28 @@ class AppShell extends PanicElement {
     $('[data-action="new-event"]', this).addEventListener('click', () => openEventQuickCreate());
     this.setupNavCollapse();
     this.setupNavGroups();
+    this.setupMobileDrawer();
+  }
+
+  // Mobile slide-in navigation drawer. The drawer IS the desktop sidebar
+  // (same markup, same collapsible groups + active states) — on mobile it is
+  // positioned off-screen and slid in. Opened by the topbar menu button; closed
+  // by the backdrop, the close button, Escape, or any navigation.
+  setupMobileDrawer() {
+    const setOpen = (open) => {
+      this.classList.toggle('drawer-open', open);
+      $('[data-drawer-open]', this)?.setAttribute('aria-expanded', String(open));
+    };
+    this._setDrawer = setOpen;
+    $('[data-drawer-open]', this)?.addEventListener('click', () => setOpen(true));
+    $$('[data-drawer-close]', this).forEach((el) => el.addEventListener('click', () => setOpen(false)));
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && this.classList.contains('drawer-open')) setOpen(false);
+    }, { signal: this.abort.signal });
+  }
+
+  closeDrawer() {
+    this._setDrawer?.(false);
   }
 
   // Collapsible parent nav groups (Events / Settings / Admin). Each parent
@@ -246,6 +270,7 @@ class AppShell extends PanicElement {
   async route() {
     const route = location.hash.replace(/^#/, '') || this.user?.default_landing || 'dashboard';
     publish('app.route.changed', { route });
+    this.closeDrawer();
     const activeKey = this.navKeyForRoute(route);
     $$('[data-nav]', this).forEach((link) => link.classList.toggle('active', link.dataset.nav === activeKey));
     // Mark + auto-open the group that owns the active leaf.

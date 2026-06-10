@@ -164,6 +164,17 @@ export function makePage(cdp, base) {
     async goto(hash) { await cdp.eval(`location.hash=${JSON.stringify(hash)}`); await sleep(300); },
     async navigate(url) { await cdp.send('Page.navigate', { url }); await cdp.onceEvent('Page.loadEventFired'); },
 
+    // Override the layout viewport (CSS media queries respond immediately, no
+    // reload). Use for responsive tests; resetViewport() returns to desktop.
+    async setViewport(width, height, mobile = true) {
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile });
+      await sleep(150);
+    },
+    async resetViewport() {
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+      await sleep(150);
+    },
+
     exists: (sel) => cdp.eval(`!!document.querySelector(${q(sel)})`),
     count: (sel) => cdp.eval(`document.querySelectorAll(${q(sel)}).length`),
     // Rendered (display:none / [hidden] → not visible). Offscreen still counts as visible.

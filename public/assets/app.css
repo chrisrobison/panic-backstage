@@ -244,6 +244,8 @@ h3 { margin-bottom: 8px; font-size: 15px; }
 }
 .mobile-brand { display: none; margin-right: auto; font-size: 28px; }
 .nav-toggle { display: none; }
+/* Mobile navigation drawer affordances — shown only in the ≤860 layout. */
+.drawer-toggle, .drawer-close, .drawer-backdrop { display: none; }
 .search {
   width: min(420px, 38vw);
   position: relative;
@@ -1296,17 +1298,99 @@ pb-event-summary, pb-event-readiness, pb-event-next-action { display: contents; 
     padding-bottom: 82px;
     background: #f4f5f7;
   }
-  .sidebar, .search, .logout, .app-footer { display: none; }
+  .search, .logout, .app-footer { display: none; }
+  /* The drawer header carries the brand on mobile, so the topbar drops it and
+     leads with the menu button instead (avoids a crowded, overflowing row). */
+  .mobile-brand { display: none; }
   .topbar {
-    min-height: 106px;
-    padding: 16px 28px;
+    min-height: 88px;
+    padding: 14px 18px;
     justify-content: flex-end;
+    gap: 14px;
     position: sticky;
     top: 0;
     z-index: 10;
   }
-  .mobile-brand { display: flex; font-size: 32px; }
-  .mobile-brand .brand-mark { width: 58px; height: 58px; }
+
+  /* ── Slide-in navigation drawer ──────────────────────────────────────────
+     Reuses the desktop sidebar markup (full labelled nav + collapsible
+     groups). Off-screen by default; slid in when .app-shell.drawer-open. */
+  .drawer-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    margin-right: auto;           /* anchor left; push the actions to the right */
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--ink);
+    font-size: 22px;
+    flex: 0 0 auto;
+  }
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(86vw, 330px);
+    padding: 18px 16px;
+    overflow-y: auto;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    z-index: 60;
+    justify-items: stretch;
+  }
+  .app-shell.drawer-open .sidebar {
+    transform: translateX(0);
+    box-shadow: 0 0 50px rgba(3, 7, 11, .55);
+  }
+  .drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(3, 7, 11, .5);
+    z-index: 50;
+  }
+  .app-shell.drawer-open .drawer-backdrop { display: block; }
+  .drawer-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .1);
+    color: #fff;
+    font-size: 20px;
+  }
+  /* Restore the full labelled nav inside the drawer (override the ≤1100 rail). */
+  .sidebar .brand { justify-content: flex-start; font-size: 24px; padding-right: 46px; }
+  .sidebar .brand span:last-child { display: inline; font-size: 24px; }
+  .side-nav a {
+    font-size: 16px;
+    width: auto;
+    min-height: 46px;
+    justify-content: flex-start;
+    padding: 0 12px;
+    gap: 12px;
+  }
+  .side-nav a i { font-size: 18px; }
+  .side-nav a.active:before { left: -16px; }
+  .nav-parent-label { font-size: 15px; }
+  .venue-switch {
+    font-size: 14px;
+    width: auto;
+    gap: 10px;
+    justify-content: flex-start;
+  }
+  .venue-switch i { font-size: 18px; }
+  .copyright { display: none; }
   .workspace { padding: 18px; }
   h1 { font-size: 34px; }
   .page-head, .event-top {
