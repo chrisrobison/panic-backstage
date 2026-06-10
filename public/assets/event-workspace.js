@@ -1,0 +1,290 @@
+// ── Event workspace shell ────────────────────────────────────────────────────
+// The event workspace (tabs, print menu, publish toggle) plus the read-only
+// summary/readiness/next-action bus cards and the autosaving details form.
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
+import { openPrintWindow } from './print.js';
+
+function factCell(label, value) {
+  return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
+}
+
+// Base for read-only workspace cards that re-render whenever fresh event data
+// arrives — pushed via `.data` from the workspace on first render, or broadcast
+// on the page bus as `event.changed` after any in-section edit/add/autosave.
+// Subclasses implement render(); the host uses `display: contents` so its inner
+// markup lays out exactly where the card sits.
+class EventBusCard extends PanicElement {
+  connect() {
+    subscribe('event.changed', ({ data }) => { this.data = data; }, this.abort.signal);
+    if (this._data) this.render();
+  }
+
+  set data(value) {
+    this._data = value;
+    if (this.abort) this.render();
+  }
+
+  get data() {
+    return this._data;
+  }
+}
+
+
+// At-a-glance facts + live counts for an event.
+class EventSummary extends EventBusCard {
+  render() {
+    const data = this._data;
+    if (!data?.event) return;
+    const event = data.event;
+    const openItems = (data.blockers || []).filter((item) => ['open', 'waiting'].includes(item.status)).length;
+    const tasksLeft = (data.tasks || []).filter((task) => !['done', 'canceled'].includes(task.status)).length;
+    this.innerHTML = `<article class="event-summary">
+      <div class="flyer">${esc(event.title)}</div>
+      <div class="facts-grid">
+        ${factCell('Date', shortDate(eventDate(event)))}
+        ${factCell('Doors', timeLabel(event.doors_time))}
+        ${factCell('Show', timeLabel(event.show_time))}
+        ${factCell('Status', badge(event.status))}
+        ${factCell('Owner', esc(event.owner_name || 'Unassigned'))}
+        ${factCell('Public Page', Number(event.public_visibility) ? 'Live' : 'Hidden')}
+      </div>
+      <div class="event-stats">
+        <div class="event-stat">Open Items<strong>${openItems}</strong><a href="#open-items">View</a></div>
+        <div class="event-stat">Tasks Left<strong>${tasksLeft}</strong><a href="#tasks">View</a></div>
+      </div>
+    </article>`;
+  }
+}
+
+
+// Readiness checklist (derived server-side from tasks, assets, blockers, …).
+class EventReadiness extends EventBusCard {
+  render() {
+    const data = this._data;
+    if (!data) return;
+    const readiness = data.readiness || [];
+    this.innerHTML = `<article class="panel"><div class="section-head padded"><h2>Readiness ${helpLink('overview', 'Overview &amp; Readiness')}</h2></div><div class="health-row">${readiness.map((item) => `<div class="health-item">${item.ok ? '<span class="check">OK</span>' : '<span class="warn-mark">!</span>'}<span><strong>${esc(item.label)}</strong><br>${esc(item.state)}</span></div>`).join('')}</div></article>`;
+  }
+}
+
+
+// "Next Recommended Action" card. Its Refresh button re-broadcasts fresh data
+// (recomputing this card, readiness, and the summary) without a page reload.
+class EventNextAction extends EventBusCard {
+  render() {
+    const data = this._data;
+    if (!data) return;
+    this.innerHTML = `<article class="next-action"><span class="icon-bubble amber">!</span><span><strong>Next Recommended Action</strong><p>${esc(data.nextAction)}</p></span><button class="secondary small" data-next-action>Refresh</button></article>`;
+    $('[data-next-action]', this).addEventListener('click', () => this.refresh());
+  }
+
+  async refresh() {
+    const id = this._data?.event?.id;
+    if (!id) return;
+    broadcastEventData(await api(`/events/${id}`));
+  }
+}
+
+class EventWorkspace extends PanicElement {
+  async connect() {
+    await this.load();
+  }
+
+  async load() {
+    this.setLoading('Loading event workspace');
+    try {
+      this.data = await api(`/events/${this.eventId}`);
+      publish('event.selected', { event: this.data.event });
+      this.render();
+    } catch (error) {
+      this.showError(error);
+    }
+  }
+
+  render() {
+    const data = this.data;
+    const event = data.event;
+    const tabs = ['overview', 'details', 'tasks', 'lineup', 'schedule', 'staffing', 'guest-list', 'open-items', 'assets', 'activity'];
+    if (can(data, 'manage_invites')) tabs.splice(8, 0, 'invites');
+    if (can(data, 'view_settlement')) tabs.splice(tabs.length - 1, 0, 'settlement');
+    if (can(data, 'view_contracts')) tabs.splice(tabs.indexOf('assets') + 1, 0, 'contracts');
+    if (can(data, 'manage_ticketing')) tabs.splice(tabs.length - 1, 0, 'ticketing');
+    this.innerHTML = `<section class="event-top">
+      <div><a class="back-link" href="#events">&lt;- Back to Events</a><h1>${esc(event.title)}</h1><p class="subtle">${esc(shortDate(eventDate(event)))} at ${esc(event.venue_name)}</p></div>
+      <div class="event-actions">
+        <a class="button secondary" href="${esc(appUrl(data.links.public_page))}" target="_blank" rel="noreferrer">Public Page</a>
+        ${can(data, 'read_event') ? `<details class="print-menu">
+          <summary class="button secondary">Print &#9662;</summary>
+          <div class="print-menu-items">
+            <button type="button" data-print="lineup">Band Lineup</button>
+            <button type="button" data-print="staffing">Staffing Schedule</button>
+            <button type="button" data-print="run-of-show">Run of Show</button>
+            <button type="button" data-print="guest-list">Door / Guest List</button>
+            <button type="button" data-print="one-sheet">One Sheet</button>
+            <button type="button" data-print="contract">Contract</button>
+            <button type="button" data-print="master">Master Event Packet</button>
+          </div>
+        </details>` : ''}
+        ${can(data, 'publish_event') ? `<button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>` : ''}
+      </div>
+    </section>
+    <nav class="workspace-tabs tabs">${tabs.map((tab, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${tab}">${esc(titleCase(tab))}</a>`).join('')}</nav>
+    <pb-event-summary></pb-event-summary>
+    <pb-event-next-action></pb-event-next-action>
+    <section id="overview" class="overview-grid">
+      <pb-event-readiness></pb-event-readiness>
+      <article class="panel"><div class="section-head padded"><h2>Internal Notes</h2></div><div class="notes">${esc(event.description_internal || 'No internal notes yet.')}</div></article>
+    </section>
+    <pb-event-details-form id="details"></pb-event-details-form>
+    <pb-task-list id="tasks"></pb-task-list>
+    <pb-lineup-editor id="lineup"></pb-lineup-editor>
+    <pb-run-sheet id="schedule"></pb-run-sheet>
+    <pb-staffing-manager id="staffing"></pb-staffing-manager>
+    <pb-guest-list-manager id="guest-list"></pb-guest-list-manager>
+    <pb-open-items id="open-items"></pb-open-items>
+    <pb-asset-manager id="assets"></pb-asset-manager>
+    ${can(data, 'view_contracts') ? '<pb-event-contracts id="contracts"></pb-event-contracts>' : ''}
+    ${can(data, 'manage_invites') ? '<pb-invite-manager id="invites"></pb-invite-manager>' : ''}
+    ${can(data, 'view_settlement') ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
+    ${can(data, 'manage_ticketing') ? '<pb-ticketing-admin id="ticketing"></pb-ticketing-admin>' : ''}
+    <section id="activity" class="panel"><div class="section-head padded"><h2>Activity ${helpLink('activity', 'Activity Log')}</h2></div><ul class="timeline">${data.activity.map((entry) => `<li><strong>${esc(entry.action)}</strong> by ${esc(entry.user_name || 'system')} <span class="muted">${esc(entry.created_at)}</span></li>`).join('')}</ul></section>`;
+    $('pb-event-summary', this).data = data;
+    $('pb-event-next-action', this).data = data;
+    $('pb-event-readiness', this).data = data;
+    $('pb-event-details-form', this).data = data;
+    $('pb-task-list', this).data = data;
+    $('pb-lineup-editor', this).data = data;
+    $('pb-run-sheet', this).data = data;
+    $('pb-staffing-manager', this).data = data;
+    $('pb-guest-list-manager', this).data = data;
+    $('pb-open-items', this).data = data;
+    $('pb-asset-manager', this).data = data;
+    if ($('pb-event-contracts', this)) $('pb-event-contracts', this).data = data;
+    if ($('pb-invite-manager', this)) $('pb-invite-manager', this).data = data;
+    if ($('pb-settlement-form', this)) $('pb-settlement-form', this).data = data;
+    if ($('pb-ticketing-admin', this)) $('pb-ticketing-admin', this).data = data;
+    $('[data-publish]', this)?.addEventListener('click', () => this.togglePublic());
+    $$('[data-print]', this).forEach((button) => button.addEventListener('click', () => {
+      $('details.print-menu', this)?.removeAttribute('open');
+      openPrintWindow(button.dataset.print, this.data);
+    }));
+    $$('.workspace-tabs a', this).forEach((tab) => tab.addEventListener('click', (event) => {
+      event.preventDefault();
+      const target = (tab.getAttribute('href') || '').slice(1);
+      const section = target ? this.querySelector(`#${CSS.escape(target)}`) : null;
+      if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      $$('.workspace-tabs a', this).forEach((other) => other.classList.toggle('active', other === tab));
+    }));
+  }
+
+  async togglePublic() {
+    const event = this.data.event;
+    const body = { ...event, public_visibility: Number(event.public_visibility) ? 0 : 1 };
+    await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+    // Update in place via the bus instead of re-mounting the workspace.
+    this.data.event.public_visibility = body.public_visibility;
+    const publishButton = $('[data-publish]', this);
+    if (publishButton) publishButton.textContent = body.public_visibility ? 'Hide Public Page' : 'Publish Public Page';
+    broadcastEventData(this.data);
+    publish('toast.show', { message: body.public_visibility ? 'Public page is live.' : 'Public page hidden.' });
+  }
+}
+
+// Convenience: when one of the Doors / Show / End time fields is set, fill in
+// whichever of the others are still empty using a sensible default running
+// order — Show is 1h after Doors, End is 5h after Doors (so Doors 6:00pm →
+// Show 7:00pm, End 11:00pm). Works from any field (e.g. setting Show back-fills
+// Doors). Existing values are never overwritten. Times are <input type="time">
+// 24h "HH:MM" strings; End wraps past midnight (e.g. 10:00pm → 3:00am).
+const TIME_OFFSETS = { doors_time: 0, show_time: 60, end_time: 300 }; // minutes after doors
+function autofillEventTimes(form, changed) {
+  const valueOf = (name) => (form[name]?.value || '').trim();
+  const toMinutes = (value) => { const m = /^(\d{1,2}):(\d{2})/.exec(value); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const toTime = (mins) => { const m = ((mins % 1440) + 1440) % 1440; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
+
+  const base = toMinutes(valueOf(changed));
+  if (base === null) return;
+  const doorsBaseline = base - TIME_OFFSETS[changed];
+
+  Object.keys(TIME_OFFSETS).forEach((name) => {
+    if (name === changed) return;
+    const field = form[name];
+    if (!field || field.disabled || valueOf(name) !== '') return; // keep existing values
+    field.value = toTime(doorsBaseline + TIME_OFFSETS[name]);
+  });
+}
+
+class EventDetailsForm extends HTMLElement {
+  set data(data) {
+    this.eventData = data;
+    const event = data.event;
+    const editable = can(data, 'edit_event');
+    const disabled = editable ? '' : ' disabled';
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Event Details ${helpLink('details', 'Event Details')}</h2></div><form class="grid-form padded">
+      <label>Title <input name="title" required value="${esc(event.title)}"${disabled}></label>
+      <label>Date <input type="date" name="date" required value="${esc(event.date)}"${disabled}></label>
+      <label>Venue <select name="venue_id"${disabled}>${data.venues.map((venue) => option(venue.id, event.venue_id, venue.name)).join('')}</select></label>
+      <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
+      <label>Status ${select('status', statuses, event.status, statusLabel).replace('<select ', `<select${disabled} `)}</label>
+      <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
+      <label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>
+      <label>Show <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
+      <label>End <input type="time" name="end_time" value="${esc(event.end_time || '')}"${disabled}></label>
+      <label>Age <input name="age_restriction" value="${esc(event.age_restriction || '')}"${disabled}></label>
+      <label>Ticket price <input type="number" step="0.01" name="ticket_price" value="${esc(event.ticket_price || 0)}"${disabled}></label>
+      <label>Paid deposit <input type="number" step="0.01" min="0" name="deposit_amount" value="${esc(event.deposit_amount ?? '')}" placeholder="0.00"${disabled}></label>
+      <label>Potential revenue <input type="number" step="0.01" min="0" name="potential_revenue" value="${esc(event.potential_revenue ?? '')}" placeholder="0.00"${disabled}></label>
+      <label>Capacity <input type="number" name="capacity" value="${esc(event.capacity || '')}"${disabled}></label>
+      <label>Ticket system <input name="ticket_system" value="${esc(event.ticket_system || '')}" placeholder="TIXR / Eventbrite / Door"${disabled}></label>
+      <label class="wide">Ticket URL <input type="url" name="ticket_url" value="${esc(event.ticket_url || '')}"${disabled}></label>
+      <label class="wide">Contract link <input name="contract_url" value="${esc(event.contract_url || '')}" placeholder="URL or note (e.g. 'Verbal contract')"${disabled}></label>
+      <label class="check-label"><input type="checkbox" name="walkthrough_done" value="1" ${Number(event.walkthrough_done) ? 'checked' : ''}${disabled}> Walk-through happened</label>
+      <label class="wide">Public description <textarea name="description_public"${disabled}>${esc(event.description_public || '')}</textarea></label>
+      <label class="wide">Internal notes <textarea name="description_internal"${disabled}>${esc(event.description_internal || '')}</textarea></label>
+      <label class="check-label"><input type="checkbox" name="public_visibility" value="1" ${Number(event.public_visibility) ? 'checked' : ''}${disabled}> Public page visible</label>
+      ${editable ? '<p class="save-status wide" data-save-status data-state="saved" aria-live="polite">All changes saved</p>' : ''}
+    </form></section>`;
+    if (!editable) return;
+    const form = $('form', this);
+    const statusEl = $('[data-save-status]', this);
+    const setStatus = (state, text) => { if (statusEl) { statusEl.dataset.state = state; statusEl.textContent = text; } };
+    // Autosave: PATCH the whole detail form whenever a field changes. Text and
+    // number inputs fire `change` on blur; checkboxes and selects fire
+    // immediately. We deliberately do NOT publish `event.saved` here, so the
+    // section is never torn down/reloaded while the user is working in it.
+    // Fields mirrored in the workspace summary (pb-event-summary). When one of
+    // these changes we re-broadcast fresh event data on the bus so the summary
+    // facts update live; other fields skip the extra round-trip.
+    const summaryFields = new Set(['title', 'date', 'doors_time', 'show_time', 'status', 'owner_user_id', 'public_visibility']);
+    const save = async (changedName) => {
+      const body = formData(form);
+      body.public_visibility = form.public_visibility.checked ? 1 : 0;
+      body.walkthrough_done  = form.walkthrough_done.checked ? 1 : 0;
+      setStatus('saving', 'Saving…');
+      try {
+        await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        setStatus('saved', 'All changes saved');
+        if (!changedName || summaryFields.has(changedName)) {
+          broadcastEventData(await api(`/events/${event.id}`));
+        }
+      } catch (err) {
+        setStatus('error', err.message || 'Save failed — change a field to retry');
+        publish('toast.show', { message: err.message || 'Save failed.', tone: 'error' });
+      }
+    };
+    $$('input, select, textarea', form).forEach((field) => field.addEventListener('change', () => {
+      // Setting any one show-time back-fills the empty others before we save,
+      // so all three persist in the same PATCH.
+      if (field.name in TIME_OFFSETS) autofillEventTimes(form, field.name);
+      save(field.name);
+    }));
+    // Pressing Enter in a field still saves, but never reloads the page.
+    form.addEventListener('submit', (submitEvent) => { submitEvent.preventDefault(); save(); });
+  }
+}
+
+customElements.define('pb-event-workspace', EventWorkspace);
+customElements.define('pb-event-summary', EventSummary);
+customElements.define('pb-event-readiness', EventReadiness);
+customElements.define('pb-event-next-action', EventNextAction);
+customElements.define('pb-event-details-form', EventDetailsForm);
