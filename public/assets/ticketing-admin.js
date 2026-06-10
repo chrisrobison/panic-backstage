@@ -317,8 +317,12 @@ class TicketingAdmin extends PanicElement {
       body.ticket_url = values.ticket_url || '';
       body.ticket_system = values.ticket_system || '';
     }
-    await api(`/events/${this.eventId}/ticketing`, { method: 'PATCH', body: JSON.stringify(body) });
-    publish('toast.show', { message: 'Ticketing settings saved.' });
+    const res = await api(`/events/${this.eventId}/ticketing`, { method: 'PATCH', body: JSON.stringify(body) });
+    publish('toast.show', {
+      message: res?.seeded_default_type
+        ? 'In-house ticketing on — added a General Admission type at the event price.'
+        : 'Ticketing settings saved.',
+    });
     await this.load();
   }
 

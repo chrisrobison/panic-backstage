@@ -474,11 +474,12 @@ final class Ticketing extends BaseEndpoint
         $b = $request->body();
         $sets = [];
         $params = [];
+        $newMode = null;
 
         if (array_key_exists('ticketing_mode', $b)) {
-            $mode = $b['ticketing_mode'] === 'internal' ? 'internal' : 'external';
+            $newMode = $b['ticketing_mode'] === 'internal' ? 'internal' : 'external';
             $sets[] = 'ticketing_mode = ?';
-            $params[] = $mode;
+            $params[] = $newMode;
         }
         if (array_key_exists('ticket_url', $b)) {
             $sets[] = 'ticket_url = ?';
@@ -497,8 +498,54 @@ final class Ticketing extends BaseEndpoint
         $this->db->run('UPDATE events SET ' . implode(', ', $sets) . ' WHERE id = ?', $params);
         log_activity($this->db, $eventId, $this->userId(), 'ticketing settings updated', array_intersect_key($b, array_flip(['ticketing_mode', 'ticket_url', 'ticket_system'])));
 
+        // Turning on in-house ticketing for a fresh event seeds a default
+        // "General Admission" type so the operator has something to sell.
+        $seeded = $newMode === 'internal' ? $this->seedDefaultTicketType($eventId) : false;
+
         // Re-read for the caller.
         $event = $this->db->one('SELECT ticketing_mode, ticket_url, ticket_system FROM events WHERE id = ?', [$eventId]);
-        return $this->ok(['event' => $event]);
+        return $this->ok(['event' => $event, 'seeded_default_type' => $seeded]);
+    }
+
+    /**
+     * Seed a default "General Admission" ticket type for an event the first
+     * time it switches to in-house ticketing. Priced from the event's
+     * ticket_price, sized to capacity (fallback 100), on sale from today
+     * through the end of the event date. No-op — returns false — if any ticket
+     * type already exists, so it never duplicates on re-save.
+     */
+    private function seedDefaultTicketType(int $eventId): bool
+    {
+        $existing = $this->db->one('SELECT COUNT(*) AS n FROM ticket_types WHERE event_id = ?', [$eventId]);
+        if ((int) ($existing['n'] ?? 0) > 0) {
+            return false;
+        }
+
+        $event = $this->db->one('SELECT ticket_price, capacity, `date` FROM events WHERE id = ?', [$eventId]);
+        if ($event === null) {
+            return false;
+        }
+
+        $priceCents = (int) round(((float) ($event['ticket_price'] ?? 0)) * 100);
+        $capacity   = (int) ($event['capacity'] ?? 0);
+        $quantity   = $capacity > 0 ? $capacity : 100;
+
+        // Sales open today and close at the end of the event day.
+        $salesStart = date('Y-m-d') . ' 00:00:00';
+        $salesEnd   = !empty($event['date']) ? $event['date'] . ' 23:59:59' : null;
+
+        $id = $this->db->insert(
+            'INSERT INTO ticket_types
+                (event_id, name, description, price_cents, currency, quantity_total,
+                 sales_start, sales_end, status, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [$eventId, 'General Admission', null, $priceCents, 'USD', $quantity, $salesStart, $salesEnd, 'on_sale', 0]
+        );
+        log_activity($this->db, $eventId, $this->userId(), 'default ticket type seeded', [
+            'ticket_type_id' => $id,
+            'price_cents'    => $priceCents,
+            'quantity_total' => $quantity,
+        ]);
+        return true;
     }
 }
