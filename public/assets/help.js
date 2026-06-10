@@ -62,6 +62,7 @@ export const HELP_SECTIONS = [
     items: [
       { slug: 'admin',        title: 'Admin overview' },
       { slug: 'admin-users',  title: 'Managing login accounts' },
+      { slug: 'contacts',     title: 'Contacts (CRM)' },
       { slug: 'admin-staff',  title: 'Staff roster' },
       { slug: 'admin-templates', title: 'Editing event templates' },
       { slug: 'admin-contracts', title: 'Contract library &amp; templates' },
@@ -601,6 +602,25 @@ const HELP_CONTENT = {
     <p>A user's global role determines what they can do across the whole app (admins see every event; others only see what they own or collaborate on). Per-event collaborator roles are managed from each event's <a href="#help-invites">Invites</a> panel. See <a href="#help-roles">Roles &amp; permissions</a> for the full breakdown.</p>
     <h3>Deleting a user</h3>
     <p>You cannot delete yourself. You cannot delete a user who currently owns events — reassign their events first (via each event's <em>Owner</em> field). Deleting a user removes their <code>event_collaborators</code> rows; their authored activity-log entries remain but show as orphaned.</p>
+  `,
+
+  contacts: `
+    <h2>Contacts (CRM)</h2>
+    <p>The <strong>Contacts</strong> page is the venue's audience list — the people who have bought tickets and can receive event email. It is a separate top-level section (not the same as login <a href="#help-admin-users">Users</a> or the <a href="#help-admin-staff">Staff roster</a>) and is visible to venue admins only.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/contacts.png" alt="The Contacts page: four summary cards across the top, then a search bar and a table of people with email, phone, tickets, spend, and a marketing opt-in badge" loading="lazy">
+      <figcaption>Contacts — summary cards up top, then a searchable, sortable, paged table of the audience.</figcaption>
+    </figure>
+    <h3>Where the data comes from</h3>
+    <p>Contacts are seeded from the ticketing provider's <em>Fan View</em> export. An admin runs <code>php scripts/import-fanview.php</code> with the CSV; the importer keys on each person's provider ID, so re-running it updates existing contacts (ticket counts, spend, last interaction) instead of creating duplicates. You can also add people by hand. The raw export holds real customer details and is never committed to the codebase.</p>
+    <h3>The summary cards</h3>
+    <p>The four cards at the top read the whole list, independent of any search or filter: total <strong>Contacts</strong>, how many are <strong>Opted in</strong> to marketing email (with the percentage), <strong>Tickets sold</strong>, and <strong>Lifetime spend</strong>.</p>
+    <h3>Searching, sorting, and segmenting</h3>
+    <p>The search box matches across name, email, and phone. The <em>Marketing</em> dropdown segments the list to <em>Opted in</em> or <em>Not opted in</em>. Click a column header (Name, Email, Tickets, Spend, Last seen) to sort, and click again to flip the direction. Results are paged 50 at a time — use <em>Prev</em> / <em>Next</em> below the table.</p>
+    <h3>Marketing opt-in</h3>
+    <p>The <em>Opted in</em> badge reflects whether the person agreed to receive marketing email. Only contacts opted in should be included when you send a promotional blast; respect the segment. Editing a contact and turning opt-in on stamps an opt-in date automatically.</p>
+    <h3>Adding and editing</h3>
+    <p>Use <em>Add contact</em> for a one-off, or <em>Edit</em> on any row to correct a name, email, phone, birthday, marketing status, or notes. Provider-sourced figures (tickets, spend, last seen) are shown for context on the edit form but are maintained by the import, not edited here. <em>Delete</em> removes a contact permanently.</p>
   `,
 
   'admin-staff': `

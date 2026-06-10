@@ -67,6 +67,25 @@ async function main() {
     await sleep(1500);
     await shoot('dashboard');
 
+    await gotoHash('#contacts');
+    if (await cdp.until(`document.querySelector('pb-contacts-page .contacts-table tbody tr')`, 8000)) {
+      // Redact real customer PII before capture — the help screenshot must not
+      // ship real names/emails/phones. Aggregate KPIs + anonymous stats stay.
+      await cdp.eval(`(()=>{
+        const F=['Jordan Rivera','Sam Okafor','Alex Chen','Priya Nair','Mateo Cruz','Dana Brooks','Noah Kim','Lena Petrova','Omar Haddad','Grace Lin','Theo Walsh','Ruby Santos','Ivan Petrov','Maya Johnson','Eli Foster'];
+        document.querySelectorAll('.contacts-table tbody tr').forEach((tr,i)=>{
+          const name=F[i%F.length], [f,l]=name.split(' ');
+          const nm=tr.querySelector('[data-label="Name"] strong'); if(nm) nm.textContent=name;
+          const em=tr.querySelector('[data-label="Email"]'); if(em) em.innerHTML='<a href="#">'+f.toLowerCase()+'.'+l.toLowerCase()+'@example.com</a>';
+          const ph=tr.querySelector('[data-label="Phone"]'); if(ph) ph.textContent='(415) 555-0'+String(100+i).slice(-3);
+        });
+      })()`);
+      await sleep(400); await cdp.eval(`window.scrollTo(0,0)`); await sleep(200);
+      await shoot('contacts');
+    } else {
+      log('WARN: contacts page did not load — skipping contacts.png');
+    }
+
     await gotoHash(`#event-${EVENT_ID}`);
     await cdp.until(`document.querySelector('pb-event-workspace .workspace-tabs')`);
     await sleep(1600); await cdp.eval(`window.scrollTo(0,0)`); await sleep(300);

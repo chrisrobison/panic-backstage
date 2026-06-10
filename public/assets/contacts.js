@@ -2,7 +2,7 @@
 // Top-level admin page for the audience/customer list seeded from the ticketing
 // provider's "Fan View" export. Server-side search, sort, filter and paging
 // (the table can grow large), plus add/edit/delete via a modal.
-import { esc, api, PanicElement, formData, money, publish, $, $$ } from './core.js';
+import { esc, api, PanicElement, formData, money, publish, helpLink, $, $$ } from './core.js';
 
 const fmtDate = (value) => {
   if (!value) return '—';
@@ -43,7 +43,7 @@ class ContactsPage extends PanicElement {
 
   renderShell(data) {
     this.innerHTML = `<section class="page-head">
-        <div><h1>Contacts</h1><p class="subtle">Your audience from ticketing &mdash; search, segment, and keep details current for event email.</p></div>
+        <div><h1>Contacts ${helpLink('contacts', 'Contacts')}</h1><p class="subtle">Your audience from ticketing &mdash; search, segment, and keep details current for event email.</p></div>
         <button class="button" data-add type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add contact</button>
       </section>
       <section class="contacts-kpis" data-kpis></section>
