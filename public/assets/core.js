@@ -200,8 +200,8 @@ function money(value) {
 
 function statusTone(status) {
   if (status === 'published') return 'blue';
-  if (['advanced', 'ready_to_announce', 'settled'].includes(status)) return 'green';
-  if (['needs_assets', 'confirmed', 'completed'].includes(status)) return 'amber';
+  if (['confirmed', 'advanced', 'ready_to_announce', 'settled'].includes(status)) return 'green';
+  if (['needs_assets', 'completed'].includes(status)) return 'amber';
   if (['hold', 'canceled'].includes(status)) return 'red';
   return 'gray';
 }

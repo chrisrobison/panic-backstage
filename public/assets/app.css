@@ -462,7 +462,7 @@ h3 { margin-bottom: 8px; font-size: 15px; }
 .status-empty { background: #eef0f3; color: #5a606b; }
 .status-proposed { background: #efe5ff; color: #6a2bb7; }
 .status-hold { background: #ffd7d7; color: #ae1f1f; }
-.status-confirmed { background: #e5e7eb; color: #4b5563; }
+.status-confirmed { background: #d3f1df; color: #0c7a3c; }
 .status-needs_assets { background: #ffedc2; color: #a06400; }
 .status-ready_to_announce { background: #d9f3ef; color: #0b766b; }
 .status-published { background: #d9ebff; color: #1466bd; }
