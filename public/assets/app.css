@@ -2018,8 +2018,27 @@ body.lightbox-open { overflow: hidden; }
   column-gap: 6px;
   padding: 8px 16px;
   border-top: 1px solid var(--line);
+  transition: background 0.1s;
+}
+.contract-module-list.is-manage li {
+  grid-template-columns: 18px 1fr auto auto;
 }
 .contract-module-list li.excluded { opacity: .5; }
+.contract-module-list li.dragging { opacity: 0.4; }
+.contract-module-list li.drag-over { background: var(--soft); outline: 2px dashed var(--blue); outline-offset: -2px; border-radius: 4px; }
+.contract-mod-drag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  cursor: grab;
+  font-size: 11px;
+  padding-top: 3px;
+  opacity: 0.3;
+  transition: opacity 0.12s;
+}
+.contract-mod-drag:active { cursor: grabbing; }
+.contract-module-list li:hover .contract-mod-drag { opacity: 0.7; }
 .contract-mod-toggle {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -2034,6 +2053,12 @@ body.lightbox-open { overflow: hidden; }
 }
 .contract-mod-tags { display: flex; align-items: center; gap: 5px; padding-top: 1px; }
 .contract-mod-actions { display: flex; gap: 2px; padding-top: 1px; }
+/* Hide action buttons until the row is hovered (pointer devices only) */
+@media (hover: hover) {
+  .contract-mod-actions { opacity: 0; transition: opacity 0.12s; }
+  .contract-module-list li:hover .contract-mod-actions,
+  .contract-module-list li:focus-within .contract-mod-actions { opacity: 1; }
+}
 .auto-tag { font-size: 10px; background: var(--soft); color: var(--muted); padding: 1px 5px; border-radius: 4px; }
 .icon-btn { border: 1px solid var(--line); background: #fff; border-radius: 6px; width: 26px; height: 26px; cursor: pointer; line-height: 1; color: var(--ink); }
 .icon-btn:hover { background: var(--soft); }

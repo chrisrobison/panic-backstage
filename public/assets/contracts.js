@@ -244,18 +244,16 @@ class ContractEditor extends PanicElement {
     const addable = (data.available_modules || []).filter((m) => !present.has(String(m.id)));
     return `<section class="panel">
       <div class="section-head padded"><h3 class="contract-h3">Clauses</h3>${manage ? '<button class="small secondary" data-act="reevaluate" title="Re-run smart selection against the current deal terms">Smart re-check</button>' : ''}</div>
-      <ul class="contract-module-list">
-      ${sections.map((s, i) => `<li class="${Number(s.included) ? '' : 'excluded'}">
+      <ul class="contract-module-list${manage ? ' is-manage' : ''}">
+      ${sections.map((s) => `<li class="${Number(s.included) ? '' : 'excluded'}"${manage ? ` data-sid="${s.id}" draggable="true"` : ''}>
+        ${manage ? '<span class="contract-mod-drag" title="Drag to reorder"><i class="fa-solid fa-grip-vertical"></i></span>' : ''}
         <label class="contract-mod-toggle">
           <input type="checkbox" data-toggle="${s.id}" ${Number(s.included) ? 'checked' : ''} ${(!manage || (Number(s.is_locked) && !data.capabilities.manage)) ? 'disabled' : ''}>
           <span>${esc(s.title)}</span>
         </label>
         <span class="contract-mod-tags">${riskBadge(s.risk_level)}${Number(s.is_locked) ? '<i class="fa-solid fa-lock" title="Locked clause"></i>' : ''}${Number(s.auto_selected) ? '<span class="auto-tag" title="Auto-selected by smart rules">auto</span>' : ''}</span>
         ${manage ? `<span class="contract-mod-actions">
-          <button class="icon-btn" data-up="${s.id}" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button>
-          <button class="icon-btn" data-down="${s.id}" ${i === sections.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
-          <button class="icon-btn" data-edit="${s.id}" title="Edit text">✎</button>
-          ${(Number(s.is_locked) && !data.capabilities.manage) ? '' : `<button class="icon-btn danger" data-remove="${s.id}" title="Remove">✕</button>`}
+          <button class="icon-btn" data-edit="${s.id}" title="Edit clause">✎</button>
         </span>` : ''}
       </li>`).join('')}
       </ul>
@@ -288,10 +286,43 @@ class ContractEditor extends PanicElement {
     $('[data-form="deal"]', this)?.addEventListener('submit', (event) => { event.preventDefault(); this.saveDeal(event.target); });
     $$('[data-status]', this).forEach((b) => b.addEventListener('click', () => this.changeStatus(b.dataset.status)));
     $$('[data-toggle]', this).forEach((cb) => cb.addEventListener('change', () => this.patchSections([{ id: Number(cb.dataset.toggle), included: cb.checked ? 1 : 0 }])));
-    $$('[data-up]', this).forEach((b) => b.addEventListener('click', () => this.reorder(Number(b.dataset.up), -1)));
-    $$('[data-down]', this).forEach((b) => b.addEventListener('click', () => this.reorder(Number(b.dataset.down), 1)));
-    $$('[data-remove]', this).forEach((b) => b.addEventListener('click', () => this.removeSection(Number(b.dataset.remove))));
     $$('[data-edit]', this).forEach((b) => b.addEventListener('click', () => this.editSection(Number(b.dataset.edit))));
+
+    // ── drag-and-drop clause reordering ──────────────────────────────────────
+    if (this.manage) {
+      const ul = $('.contract-module-list', this);
+      if (ul) {
+        let dragSrc = null;
+        $$('li[data-sid]', ul).forEach((li) => {
+          li.addEventListener('dragstart', (e) => {
+            dragSrc = li;
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => li.classList.add('dragging'), 0);
+          });
+          li.addEventListener('dragend', () => {
+            li.classList.remove('dragging');
+            dragSrc = null;
+            $$('li', ul).forEach((x) => x.classList.remove('drag-over'));
+          });
+          li.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+          li.addEventListener('dragenter', (e) => { e.preventDefault(); if (li !== dragSrc) li.classList.add('drag-over'); });
+          li.addEventListener('dragleave', (e) => { if (!li.contains(e.relatedTarget)) li.classList.remove('drag-over'); });
+          li.addEventListener('drop', (e) => {
+            e.preventDefault();
+            li.classList.remove('drag-over');
+            if (!dragSrc || dragSrc === li) return;
+            const items = [...$$('li[data-sid]', ul)];
+            const srcIdx = items.indexOf(dragSrc);
+            const tgtIdx = items.indexOf(li);
+            if (srcIdx < 0 || tgtIdx < 0) return;
+            items.splice(srcIdx, 1);
+            items.splice(tgtIdx, 0, dragSrc);
+            const patches = items.map((el, newIdx) => ({ id: Number(el.dataset.sid), sort_order: newIdx + 1 }));
+            this.patchSections(patches);
+          });
+        });
+      }
+    }
     $$('[data-version]', this).forEach((b) => b.addEventListener('click', () => this.viewVersion(Number(b.dataset.version))));
     $('[data-act="add-module"]', this)?.addEventListener('click', () => {
       const sel = $('[data-add-module]', this);
@@ -444,9 +475,10 @@ class ContractEditor extends PanicElement {
   editSection(sectionId) {
     const section = (this.data.sections || []).find((x) => Number(x.id) === sectionId);
     if (!section) return;
+    const canDelete = !(Number(section.is_locked) && !this.data.capabilities.manage);
     const dialog = document.createElement('div');
     dialog.className = 'modal-backdrop';
-    dialog.innerHTML = `<div class="modal-card wide-modal"><div class="section-head padded"><h2>Edit clause</h2><button class="small secondary" data-close>Close</button></div>
+    dialog.innerHTML = `<div class="modal-card wide-modal"><div class="section-head padded"><h2>Edit clause</h2><div class="section-head-actions">${canDelete ? '<button class="small danger" data-delete>Remove clause</button>' : ''}<button class="small secondary" data-close>Close</button></div></div>
       <form class="grid-form padded" data-form="edit">
         <label class="wide">Title <input name="title" value="${esc(section.title)}"></label>
         <label class="wide">Body <textarea name="body_template" rows="12">${esc(section.body_template)}</textarea></label>
@@ -457,6 +489,7 @@ class ContractEditor extends PanicElement {
     const close = () => dialog.remove();
     $('[data-close]', dialog).addEventListener('click', close);
     dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
+    $('[data-delete]', dialog)?.addEventListener('click', () => { close(); this.removeSection(sectionId); });
     $('[data-form="edit"]', dialog).addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = formData(e.target);
