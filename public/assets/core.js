@@ -30,7 +30,7 @@ const scriptUrl = new URL((document.currentScript || $$('script[src*="assets/app
 
 const appBaseUrl = /\/public\/assets\/app\.js$/i.test(scriptUrl.pathname) ? new URL('../..', scriptUrl) : new URL('..', scriptUrl);
 
-const statuses = ['empty', 'proposed', 'hold', 'confirmed', 'needs_assets', 'ready_to_announce', 'published', 'advanced', 'completed', 'settled', 'canceled'];
+const statuses = ['empty', 'proposed', 'hold', 'confirmed', 'booked', 'needs_assets', 'ready_to_announce', 'published', 'advanced', 'completed', 'settled', 'canceled'];
 
 
 function appUrl(path = '') {
@@ -200,9 +200,18 @@ function money(value) {
 
 function statusTone(status) {
   if (status === 'published') return 'blue';
-  if (['confirmed', 'advanced', 'ready_to_announce', 'settled'].includes(status)) return 'green';
+  if (['confirmed', 'booked', 'advanced', 'ready_to_announce', 'settled'].includes(status)) return 'green';
   if (['needs_assets', 'completed'].includes(status)) return 'amber';
   if (['hold', 'canceled'].includes(status)) return 'red';
+  return 'gray';
+}
+
+
+/** Returns a CSS modifier class for a calendar event dot coloured by venue floor. */
+function roomTone(zone) {
+  if (zone === 'up')   return 'room-up';
+  if (zone === 'down') return 'room-down';
+  if (zone === 'both') return 'room-both';
   return 'gray';
 }
 
@@ -214,7 +223,8 @@ function statusTone(status) {
 const STATUS_LABELS = {
   proposed:  'Prospect',
   hold:      'In Negotiations',
-  confirmed: 'Booked',
+  confirmed: 'Intake Complete',
+  booked:    'Booked',
   canceled:  'Cancelled',
   completed: 'Archived',
 };
@@ -406,4 +416,4 @@ function bindAddToggle(root) {
 customElements.define('pb-loading-state', LoadingState);
 customElements.define('pb-toast-stack', ToastStack);
 
-export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, isoDate, addDays, timeLabel, money, statusTone, STATUS_LABELS, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle };
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle };

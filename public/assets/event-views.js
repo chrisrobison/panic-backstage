@@ -2,25 +2,23 @@
 // Dashboard, Calendar, Pipeline, Events list, Template picker, and the two
 // public/unauthenticated pages (public event page + invite acceptance). Also
 // owns the quick-create event modal (shared by the calendar and the topbar).
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
 
-// On the calendar a day cell is split by floor: On Broadway (upstairs) sits in
-// the top half, The Mab (downstairs) in the bottom half, and a whole-building
-// "Both Rooms" booking straddles the divider. The dot colour itself denotes the
-// event's status (see the legend), not the room. Zones are keyed by stable
-// slug; an unrecognised venue falls to the main downstairs room. `label` strips
-// the shared "Mabuhay Gardens:" prefix so tooltips stay short.
+// On the calendar a day cell is split by floor: Upstairs sits in the top half,
+// Downstairs in the bottom half, and a whole-building "Both Rooms" booking
+// straddles the divider. The dot colour denotes the venue floor (see legend).
+// Zones are keyed by stable slug; an unrecognised venue falls to downstairs.
 const VENUE_ZONE = {
-  'mabuhay-upstairs': 'up',   // On Broadway (upstairs)
-  'mabuhay-gardens':  'down', // The Mab (downstairs)
-  'mabuhay-both':     'both', // Both Rooms (whole building)
+  'mabuhay-upstairs': { zone: 'up',   label: 'Upstairs' },
+  'mabuhay-gardens':  { zone: 'down', label: 'Downstairs (21+)' },
+  'mabuhay-both':     { zone: 'both', label: 'Both Rooms' },
 };
 function venueZoneMap(venues) {
   const map = new Map();
-  (venues || []).forEach((venue) => map.set(Number(venue.id), {
-    zone: VENUE_ZONE[venue.slug] || 'down',
-    label: String(venue.name || 'Venue').replace(/^Mabuhay Gardens:\s*/i, ''),
-  }));
+  (venues || []).forEach((venue) => {
+    const cfg = VENUE_ZONE[venue.slug] || { zone: 'down', label: String(venue.name || 'Venue') };
+    map.set(Number(venue.id), cfg);
+  });
   return map;
 }
 
@@ -88,6 +86,7 @@ async function openEventQuickCreate({ date = null } = {}) {
       <label>Type <select name="event_type">${types.map((t) => `<option value="${esc(t)}">${esc(titleCase(t))}</option>`).join('')}</select></label>
     </fieldset>
 
+    <p class="info-note wide">Venue costs (full day): <strong>Downstairs (21+)</strong> — $2,000 · <strong>Upstairs</strong> — $3,000. Events must not lose money.</p>
     <div class="wide quick-create-actions">
       <button type="submit" class="primary">Create event</button>
       <button type="button" class="secondary" data-close>Cancel</button>
@@ -221,17 +220,17 @@ class EventCalendar extends PanicElement {
     const zoneMap = venueZoneMap(venues);
     const zoneOf = (event) => zoneMap.get(Number(event.venue_id)) || { zone: 'down', label: 'Unassigned' };
 
-    // The dot colour denotes status — legend lists only the statuses present.
-    const present = statuses.filter((status) => events.some((event) => event.status === status));
-    const legend = present.length
-      ? `<div class="calendar-legend" aria-label="Status colour key">${present.map((status) =>
-          `<span class="legend-item"><span class="status-dot ${statusTone(status)}"></span>${esc(statusLabel(status))}</span>`).join('')}</div>`
-      : '';
+    // The dot colour denotes venue floor — legend is always visible.
+    const legend = `<div class="calendar-legend" aria-label="Venue floor colour key">`
+      + `<span class="legend-item"><span class="status-dot room-up"></span>Upstairs</span>`
+      + `<span class="legend-item"><span class="status-dot room-down"></span>Downstairs (21+)</span>`
+      + `<span class="legend-item"><span class="status-dot room-both"></span>Both Rooms</span>`
+      + `</div>`;
 
     const miniEvent = (event) => {
       const meta = zoneOf(event);
       const tip = `${statusLabel(event.status)} · ${meta.label}`;
-      return `<a class="mini-event" href="#event-${esc(event.id)}" title="${esc(tip)}"><span class="status-dot ${statusTone(event.status)}"></span><span class="mini-event-title">${esc(event.title)}</span></a>`;
+      return `<a class="mini-event" href="#event-${esc(event.id)}" title="${esc(tip)}"><span class="status-dot ${roomTone(meta.zone)}"></span><span class="mini-event-title">${esc(event.title)}</span></a>`;
     };
     // Vertical position = floor: upstairs above the divider, downstairs below,
     // whole-building bookings straddling it.
@@ -240,9 +239,9 @@ class EventCalendar extends PanicElement {
       const up = dayEvents.filter((event) => zoneOf(event).zone === 'up');
       const both = dayEvents.filter((event) => zoneOf(event).zone === 'both');
       const down = dayEvents.filter((event) => zoneOf(event).zone === 'down');
-      return `<div class="cell-zone zone-up" data-floor="On Broadway">${up.map(miniEvent).join('')}</div>`
+      return `<div class="cell-zone zone-up" data-floor="Upstairs">${up.map(miniEvent).join('')}</div>`
         + (both.length ? `<div class="zone-both">${both.map(miniEvent).join('')}</div>` : '')
-        + `<div class="cell-zone zone-down" data-floor="The Mab">${down.map(miniEvent).join('')}</div>`;
+        + `<div class="cell-zone zone-down" data-floor="Downstairs (21+)">${down.map(miniEvent).join('')}</div>`;
     };
 
     this.innerHTML = `<section class="calendar-page">
@@ -339,7 +338,7 @@ class PipelineBoard extends PanicElement {
     this.innerHTML = `<section class="calendar-page">
       <div class="page-head"><div><h1>Pipeline</h1><p class="subtle">Move events from holds to settlement.</p></div></div>
       ${controls}
-      <section class="pipeline-board">${statuses.slice(0, 10).map((status) => {
+      <section class="pipeline-board">${statuses.filter((s) => !['settled', 'canceled'].includes(s)).map((status) => {
         const items = events.filter((event) => event.status === status);
         return `<article class="pipe-col"><h3>${esc(statusLabel(status))} <span class="pipe-count">${items.length}</span></h3>${items.map((event) => {
           const editable = Boolean(event.capabilities?.edit_event);
