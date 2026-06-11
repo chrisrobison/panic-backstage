@@ -75,15 +75,16 @@ class EventContracts extends HTMLElement {
     const templates = this.list.templates || [];
     this.innerHTML = `<section class="panel">
       <div class="section-head padded"><h2>Contracts ${helpLink('contracts', 'Contracts')}</h2><div class="section-head-actions"><span class="muted">${contracts.length} total</span>${addToggle('Create contract', manage)}</div></div>
-      <table class="data-table">
-        <thead><tr><th>Title</th><th>Type</th><th>Counterparty</th><th>Status</th><th>Updated</th></tr></thead>
-        <tbody>${contracts.map((c) => `<tr>
-          <td><a href="#contract-${esc(c.id)}">${esc(c.title)}</a></td>
+      <table class="data-table contracts-table">
+        <thead><tr><th>Title</th><th>Type</th><th>Counterparty</th><th>Status</th><th>Updated</th><th></th></tr></thead>
+        <tbody>${contracts.map((c) => `<tr class="clickable-row" data-contract-href="#contract-${esc(c.id)}">
+          <td><strong>${esc(c.title)}</strong></td>
           <td>${esc(titleCase(c.contract_type))}</td>
           <td>${esc(c.counterparty_name || '—')}</td>
           <td>${contractStatusBadge(c.status)}</td>
           <td class="muted">${esc((c.updated_at || '').slice(0, 10))}</td>
-        </tr>`).join('') || '<tr><td colspan="5"><div class="empty-state">No contracts yet for this event.</div></td></tr>'}</tbody>
+          <td class="row-action-cell"><a class="button small secondary" href="#contract-${esc(c.id)}">Open →</a></td>
+        </tr>`).join('') || '<tr><td colspan="6"><div class="empty-state">No contracts yet for this event.</div></td></tr>'}</tbody>
       </table>
       ${manage ? `<form class="row-form" data-form="new" data-add-form hidden>
         <label>Deal type <select name="template_id" required><option value="">Choose a template…</option>${templates.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
@@ -105,6 +106,14 @@ class EventContracts extends HTMLElement {
         }
       });
     }
+    // Make the entire row clickable — clicking anywhere except a button/link
+    // navigates to the contract editor.
+    $$('tr[data-contract-href]', this).forEach((row) => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('a, button')) return;
+        location.hash = row.dataset.contractHref;
+      });
+    });
   }
 }
 
