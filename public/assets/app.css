@@ -1950,6 +1950,36 @@ body.lightbox-open { overflow: hidden; }
 .contract-section h2 { font-size: 15px; margin: 0 0 6px; }
 .contract-section-body p { margin: 0 0 8px; text-align: justify; }
 .contract-token-missing { background: #ffe2a8; color: #7a4b00; padding: 0 4px; border-radius: 3px; font-style: italic; }
+/* Clickable tokens and missing-field links */
+.contract-token-missing[data-token] { cursor: pointer; }
+.contract-token-missing[data-token]:hover { background: #ffcc66; text-decoration: underline; }
+.missing-field-link {
+  cursor: pointer;
+  transition: color .12s;
+}
+.missing-field-link:hover { color: var(--blue); text-decoration: underline; }
+/* Inline-editable section bodies */
+.contract-section-body[contenteditable] { cursor: text; border-radius: 4px; transition: outline .12s, background .12s; }
+.contract-section-body[contenteditable]:hover { outline: 1px dashed #c8d5e8; }
+.contract-section-body[contenteditable]:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  background: #fafcff;
+  padding: 2px 4px;
+}
+.contract-section-body[contenteditable][data-dirty]:not(:focus)::after {
+  content: ' ●';
+  color: #f5b21b;
+  font-size: 10px;
+  vertical-align: middle;
+}
+/* Field flash highlight — triggered on focusDealField */
+@keyframes field-highlight {
+  0%   { box-shadow: 0 0 0 0   rgba(66,133,244,.55); }
+  50%  { box-shadow: 0 0 0 6px rgba(66,133,244,.22); }
+  100% { box-shadow: 0 0 0 0   rgba(66,133,244,0); }
+}
+.field-highlight { animation: field-highlight 1.2s ease-out; }
 .contract-pdf-holder { position: fixed; left: -10000px; top: 0; width: 760px; background: #fff; padding: 8px; }
 
 /* Status track */

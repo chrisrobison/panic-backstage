@@ -224,7 +224,8 @@ final class ContractRenderer
             $n++;
             $title = (string) ($section['title'] ?? 'Section');
             $body = (string) ($section['body_template'] ?? '');
-            $htmlParts[] = '<section class="contract-section"><h2>' . $n . '. ' . self::e($title) . '</h2>'
+            $sectionId = (int) ($section['id'] ?? 0);
+            $htmlParts[] = '<section class="contract-section" data-section-id="' . $sectionId . '"><h2>' . $n . '. ' . self::e($title) . '</h2>'
                 . '<div class="contract-section-body">' . self::renderBodyHtml($body, $tokens) . '</div></section>';
             $textParts[] = "$n. " . strtoupper($title) . "\n\n" . self::renderBodyText($body, $tokens);
         }
@@ -363,7 +364,8 @@ final class ContractRenderer
             $value = $tokens[$key] ?? '';
             if ($value === '' || $value === null) {
                 $label = self::label($key);
-                return $html ? '<span class="contract-token-missing">[ ' . self::e($label) . ' ]</span>' : '[[ ' . $label . ' ]]';
+                // data-token lets the JS click handler map the span back to its form field.
+                return $html ? '<span class="contract-token-missing" data-token="' . self::e($key) . '">[ ' . self::e($label) . ' ]</span>' : '[[ ' . $label . ' ]]';
             }
             return $html ? $value : $value; // value already escaped for html path (text passes raw)
         }, $text) ?? $text;

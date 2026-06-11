@@ -222,7 +222,7 @@ class ContractEditor extends PanicElement {
     }
     return `<section class="panel padded">
       <h3 class="contract-h3">Review</h3>
-      ${missing.length ? `<div class="contract-missing-list"><strong>Missing required terms</strong><ul>${missing.map((m) => `<li>${esc(m.label)} <span class="muted">(${esc(m.section)})</span></li>`).join('')}</ul></div>` : ''}
+      ${missing.length ? `<div class="contract-missing-list"><strong>Missing required terms</strong><ul>${missing.map((m) => `<li class="missing-field-link" data-field="${esc(m.key)}" title="Click to go to this field">${esc(m.label)} <span class="muted">(${esc(m.section)})</span></li>`).join('')}</ul></div>` : ''}
       ${risks.length ? `<div class="contract-risk-list"><strong>Risk warnings</strong><ul>${risks.map((r) => `<li>${riskBadge(r.level)} ${esc(r.message)}</li>`).join('')}</ul></div>` : ''}
     </section>`;
   }
@@ -294,6 +294,37 @@ class ContractEditor extends PanicElement {
         this.action(() => api(`/contracts/${id}/apply-template`, { method: 'POST', body: JSON.stringify({ template_id: Number(sel.value) }) }), 'Template applied.');
       }
     });
+
+    // ── token click: missing token span → focus its deal form field ───────────
+    $$('[data-token]', this).forEach((span) => {
+      span.addEventListener('click', () => this.focusDealField(span.dataset.token));
+    });
+
+    // ── review click: missing required term → focus its deal form field ───────
+    $$('[data-field]', this).forEach((li) => {
+      li.addEventListener('click', () => this.focusDealField(li.dataset.field));
+    });
+
+    // ── contenteditable: section bodies (managers only) ───────────────────────
+    if (this.manage) {
+      $$('.contract-section-body', this).forEach((div) => {
+        div.contentEditable = 'true';
+        div.setAttribute('spellcheck', 'true');
+        div.addEventListener('input', () => { div.dataset.dirty = '1'; });
+        div.addEventListener('blur', () => {
+          if (!div.dataset.dirty) return;
+          const sid = Number(div.closest('[data-section-id]')?.dataset?.sectionId ?? 0);
+          if (sid) this.saveSectionBody(sid, div);
+        });
+        // Prevent Enter from inserting <div> wrappers; use <p> behavior instead
+        div.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            document.execCommand('insertParagraph');
+          }
+        });
+      });
+    }
   }
 
   async action(fn, message) {
@@ -343,6 +374,62 @@ class ContractEditor extends PanicElement {
     const nv = form.querySelector('[data-newvar-val]')?.value;
     if (nk) body.variables[nk] = nv ?? '';
     this.action(() => api(`/contracts/${this.contractId}`, { method: 'PATCH', body: JSON.stringify(body) }), 'Deal terms saved.');
+  }
+
+  /** Find the deal-form field for `key`, open its <details> group, scroll to it, and flash it. */
+  focusDealField(key) {
+    const form = $('[data-form="deal"]', this);
+    if (!form) return;
+    // Deal columns use name="key"; custom variables use name="var:key"
+    const field = form.querySelector(`[name="${CSS.escape(key)}"]`)
+               ?? form.querySelector(`[name="var:${CSS.escape(key)}"]`);
+    if (!field) {
+      // Variable not in the form yet — open the Other variables section and hint
+      const otherDetails = $$('details.contract-fieldset', form)
+        .find((d) => $('summary', d)?.textContent?.trim().startsWith('Other'));
+      if (otherDetails) {
+        otherDetails.open = true;
+        otherDetails.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      publish('toast.show', { message: `Add "${key}" in the Other variables section.` });
+      return;
+    }
+    field.closest('details.contract-fieldset')?.setAttribute('open', '');
+    field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    requestAnimationFrame(() => {
+      field.focus();
+      field.select?.();
+      field.classList.add('field-highlight');
+      setTimeout(() => field.classList.remove('field-highlight'), 1400);
+    });
+  }
+
+  /** Save an inline-edited section body back to the server as its new body_template. */
+  async saveSectionBody(sectionId, divEl) {
+    const clone = divEl.cloneNode(true);
+    // Restore {{token}} placeholders for any missing-token spans still in the text
+    clone.querySelectorAll('.contract-token-missing[data-token]').forEach((span) => {
+      span.replaceWith(`{{${span.dataset.token}}}`);
+    });
+    // Extract paragraphs; replace <br> within each with \n
+    const ps = [...clone.querySelectorAll('p')];
+    if (ps.length) {
+      ps.forEach((p) => [...p.querySelectorAll('br')].forEach((br) => br.replaceWith('\n')));
+    }
+    const bodyTemplate = (ps.length
+      ? ps.map((p) => p.textContent).join('\n\n')
+      : clone.textContent
+    ).trim();
+    try {
+      await api(`/contracts/${this.contractId}/sections`, {
+        method: 'PATCH',
+        body: JSON.stringify({ sections: [{ id: sectionId, body_template: bodyTemplate }] }),
+      });
+      delete divEl.dataset.dirty;
+      publish('toast.show', { message: 'Section saved.' });
+    } catch (error) {
+      publish('toast.show', { message: error.message, tone: 'error' });
+    }
   }
 
   editSection(sectionId) {
