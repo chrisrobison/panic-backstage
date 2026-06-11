@@ -88,7 +88,11 @@ class TaskList extends HTMLElement {
     ];
     const editForm = (task) => `<form data-api="/events/${data.event.id}/tasks/${task.id}" data-method="PATCH" class="row-form record-form"><label>Task<input name="title" value="${esc(task.title)}"></label><label>Status${select('status', ['todo','in_progress','blocked','done','canceled'], task.status)}</label><label>Assigned${userSelect(users, task.assigned_user_id)}</label><label>Due<input type="date" name="due_date" value="${esc(task.due_date || '')}"></label><label>Priority${select('priority', ['low','normal','high','urgent'], task.priority)}</label><label>Details<input name="description" value="${esc(task.description || '')}"></label><button>Save</button><button type="button" class="secondary" data-complete="${esc(task.id)}">Done</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
     const addForm = editable ? `<form data-api="/events/${data.event.id}/tasks" data-method="POST" class="row-form" data-add-form hidden><label>Task<input name="title" required placeholder="Confirm door count"></label><label>Assigned${userSelect(users)}</label><label>Due<input type="date" name="due_date"></label><label>Priority${select('priority', ['low','normal','high','urgent'], 'normal')}</label><input type="hidden" name="status" value="todo"><label>Details<input name="description" placeholder="Details"></label><button>Add task</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : '';
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Tasks ${helpLink('tasks', 'Tasks')}</h2><div class="section-head-actions">${addToggle('Add task', editable)}</div></div><div class="record-body">${addForm}${recordList(tasks, cols, editForm, editable, 'No tasks for this event.')}</div></section>`;
+    const templates = data.taskTemplates || [];
+    const templateDropdown = editable && templates.length > 0
+      ? `<details class="print-menu"><summary class="button secondary">Add Tasks &#9662;</summary><div class="print-menu-items">${templates.map((t) => `<button type="button" data-tmpl-id="${esc(String(t.id))}">${esc(t.name)}</button>`).join('')}</div></details>`
+      : '';
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Tasks ${helpLink('tasks', 'Tasks')}</h2><div class="section-head-actions">${templateDropdown}${addToggle('Add task', editable)}</div></div><div class="record-body">${addForm}${recordList(tasks, cols, editForm, editable, 'No tasks for this event.')}</div></section>`;
     if (!editable) return;
     this.bind();
   }
@@ -108,6 +112,14 @@ class TaskList extends HTMLElement {
       await api(form.dataset.api, { method: 'PATCH', body: JSON.stringify(body) });
       await refreshSection(this);
       publish('toast.show', { message: 'Task completed.' });
+    }));
+    $$('[data-tmpl-id]', this).forEach((btn) => btn.addEventListener('click', async () => {
+      const tmplId = btn.dataset.tmplId;
+      btn.closest('details')?.removeAttribute('open');
+      const result = await api(`/events/${this.eventData.event.id}/tasks/from-template/${tmplId}`, { method: 'POST' });
+      await refreshSection(this);
+      const added = result?.added ?? 0;
+      publish('toast.show', { message: added === 1 ? '1 task added.' : `${added} tasks added.` });
     }));
   }
 }

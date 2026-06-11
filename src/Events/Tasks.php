@@ -13,6 +13,13 @@ final class Tasks extends BaseEndpoint
     public function handle(Request $request): Response
     {
         $eventId = $this->requireEventId();
+        // Apply a predefined task checklist from an event template
+        if (isset($this->params['fromTemplateId'])) {
+            if ($denied = $this->requireEventCapability($eventId, 'manage_tasks')) {
+                return $denied;
+            }
+            return $this->applyTemplate($request, $eventId, (int) $this->params['fromTemplateId']);
+        }
         $taskId = $this->params['taskId'] ?? null;
         if ($denied = $this->requireEventCapability($eventId, $request->method() === 'GET' ? 'read_event' : 'manage_tasks')) {
             return $denied;
@@ -58,5 +65,35 @@ final class Tasks extends BaseEndpoint
     {
         $this->db->run('DELETE FROM event_tasks WHERE id=? AND event_id=?', [$taskId, $eventId]);
         return Response::noContent();
+    }
+
+    private function applyTemplate(Request $request, int $eventId, int $templateId): Response
+    {
+        if ($request->method() !== 'POST') {
+            return Response::methodNotAllowed();
+        }
+        $template = $this->db->one('SELECT * FROM event_templates WHERE id = ?', [$templateId]);
+        if (!$template) {
+            return $this->notFound('Template not found');
+        }
+        $checklist = json_decode($template['checklist_json'] ?? '[]', true);
+        if (!is_array($checklist)) {
+            $checklist = [];
+        }
+        $count = 0;
+        foreach ($checklist as $task) {
+            $title    = is_array($task) ? ($task['title'] ?? '') : (string) $task;
+            $priority = is_array($task) ? ($task['priority'] ?? 'normal') : 'normal';
+            if ($title === '') {
+                continue;
+            }
+            $this->db->run(
+                'INSERT INTO event_tasks (event_id, title, priority) VALUES (?, ?, ?)',
+                [$eventId, $title, $priority]
+            );
+            $count++;
+        }
+        log_activity($this->db, $eventId, $this->userId(), 'tasks applied from template', ['template_id' => $templateId, 'count' => $count]);
+        return $this->ok(['added' => $count]);
     }
 }

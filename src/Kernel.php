@@ -184,6 +184,10 @@ final class Kernel
             $eventId = $this->intOrNull($segments[1] ?? null);
             $child   = $segments[2] ?? null;
             $childId = $this->intOrNull($segments[3] ?? null);
+            // Apply a task template to an existing event
+            if ($child === 'tasks' && ($segments[3] ?? '') === 'from-template') {
+                return [Events\Tasks::class, ['eventId' => $eventId, 'fromTemplateId' => $this->intOrNull($segments[4] ?? null)]];
+            }
             return match ($child) {
                 'tasks'      => [Events\Tasks::class,    ['eventId' => $eventId, 'taskId'     => $childId]],
                 'blockers',
