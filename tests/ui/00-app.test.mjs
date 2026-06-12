@@ -24,11 +24,10 @@ test('Help nav is a collapsible group built from the help sections', async (page
   assert.atLeast(await page.count('.nav-group[data-group="help"] .nav-children a'), 2, 'Help group has child links');
 });
 
-test('Promote nav is a collapsible group with workspace children', async (page) => {
+test('Promote is a top-level nav link and has a Settings entry under Settings', async (page) => {
   await page.goto('#dashboard');
-  await page.until(`document.querySelector('.nav-group[data-group="promote"]')`);
-  assert.ok(await page.exists('.nav-group[data-group="promote"] .nav-parent[title="Promote"]'), 'Promote group has a parent toggle');
-  assert.equal(await page.count('.nav-group[data-group="promote"] .nav-children a'), 7, 'Promote group has the expected child links');
-  assert.ok(await page.exists('.nav-group[data-group="promote"] a[data-nav="promote-campaigns"]'), 'Campaigns child is present');
-  assert.ok(await page.exists('.nav-group[data-group="promote"] a[data-nav="promote-broadcasts"]'), 'Broadcasts child is present');
+  await page.until(`document.querySelector('.side-nav a[data-nav="promote"]')`);
+  assert.ok(await page.exists('.side-nav > a[data-nav="promote"][href="#promote"]'), 'Promote is a flat top-level link');
+  assert.notOk(await page.exists('.nav-group[data-group="promote"]'), 'Promote is not wrapped in a nav-group');
+  assert.ok(await page.exists('.nav-group[data-group="settings"] a[data-nav="promote-settings"]'), 'Promote Settings lives under the Settings group');
 });
