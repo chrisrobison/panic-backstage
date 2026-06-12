@@ -356,7 +356,9 @@ class PromoteCampaignOverview extends PanicElement {
         </article>
 
         <!-- Posts -->
-        <pb-promote-post-list></pb-promote-post-list>
+        <div data-promote-section-target="broadcasts">
+          <pb-promote-post-list></pb-promote-post-list>
+        </div>
 
       </div>
       <div class="promote-rail-col">
@@ -365,10 +367,14 @@ class PromoteCampaignOverview extends PanicElement {
         <pb-promote-health-card></pb-promote-health-card>
 
         <!-- Assets -->
-        <pb-promote-assets-card></pb-promote-assets-card>
+        <div data-promote-section-target="assets">
+          <pb-promote-assets-card></pb-promote-assets-card>
+        </div>
 
         <!-- Analytics -->
-        <pb-promote-analytics-card></pb-promote-analytics-card>
+        <div data-promote-section-target="analytics">
+          <pb-promote-analytics-card></pb-promote-analytics-card>
+        </div>
 
       </div>
     </div>
@@ -415,6 +421,16 @@ class PromoteCampaignOverview extends PanicElement {
     $('[data-broadcast-all]', this)?.addEventListener('click', () => {
       const bm = $('pb-promote-broadcast-modal', this);
       if (bm) bm.open(this.campaignId, null, destinations || []);
+    });
+
+    this.scrollToSection();
+  }
+
+  scrollToSection() {
+    if (!this.section) return;
+    requestAnimationFrame(() => {
+      const target = $(`[data-promote-section-target="${this.section}"]`, this);
+      target?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
   }
 

@@ -23,3 +23,12 @@ test('Help nav is a collapsible group built from the help sections', async (page
   assert.ok(await page.exists('.nav-group[data-group="help"] .nav-parent'), 'Help group has a parent toggle');
   assert.atLeast(await page.count('.nav-group[data-group="help"] .nav-children a'), 2, 'Help group has child links');
 });
+
+test('Promote nav is a collapsible group with workspace children', async (page) => {
+  await page.goto('#dashboard');
+  await page.until(`document.querySelector('.nav-group[data-group="promote"]')`);
+  assert.ok(await page.exists('.nav-group[data-group="promote"] .nav-parent[title="Promote"]'), 'Promote group has a parent toggle');
+  assert.equal(await page.count('.nav-group[data-group="promote"] .nav-children a'), 7, 'Promote group has the expected child links');
+  assert.ok(await page.exists('.nav-group[data-group="promote"] a[data-nav="promote-campaigns"]'), 'Campaigns child is present');
+  assert.ok(await page.exists('.nav-group[data-group="promote"] a[data-nav="promote-broadcasts"]'), 'Broadcasts child is present');
+});

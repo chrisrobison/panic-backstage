@@ -12,7 +12,7 @@ use function Panic\log_activity;
 /**
  * Routes for event-scoped campaign access:
  *
- *   GET  /api/promote/events/{eventId}           → overview for event (auto-creates if needed? No — just returns campaign or 404)
+ *   GET  /api/promote/events/{eventId}           → overview for event, or event payload with campaign = null
  *   POST /api/promote/events/{eventId}/campaign  → create or return existing campaign
  */
 final class CampaignForEvent extends BaseEndpoint
@@ -39,7 +39,7 @@ final class CampaignForEvent extends BaseEndpoint
             }
             $campaign = $this->db->one('SELECT * FROM promote_campaigns WHERE event_id = ?', [$eventId]);
             if (!$campaign) {
-                return $this->notFound('No campaign for this event. POST to /api/promote/events/' . $eventId . '/campaign to create one.');
+                return $this->ok($this->buildNoCampaignPayload($eventId));
             }
             return $this->ok($this->buildOverview($campaign));
         }
@@ -110,6 +110,36 @@ final class CampaignForEvent extends BaseEndpoint
             'destinations' => $destinations,
             'health'       => $health,
             'analytics'    => $analytics,
+        ];
+    }
+
+    private function buildNoCampaignPayload(int $eventId): array
+    {
+        $event = $this->db->one(
+            'SELECT e.*, v.name venue_name, v.city venue_city, v.state venue_state
+             FROM events e LEFT JOIN venues v ON v.id = e.venue_id WHERE e.id = ?',
+            [$eventId]
+        );
+        if (!$event) {
+            return [
+                'campaign'     => null,
+                'event'        => null,
+                'posts'        => [],
+                'assets'       => [],
+                'destinations' => [],
+                'health'       => null,
+                'analytics'    => Analytics::stub(),
+            ];
+        }
+
+        return [
+            'campaign'     => null,
+            'event'        => $event,
+            'posts'        => [],
+            'assets'       => [],
+            'destinations' => [],
+            'health'       => null,
+            'analytics'    => Analytics::stub(),
         ];
     }
 }

@@ -11,6 +11,22 @@ test('event workspace mounts with tabs and core panels', async (page) => {
   assert.ok(await page.exists('#assets'), 'Assets panel present');
 });
 
+test('event workspace exposes a Promote action for the event campaign', async (page) => {
+  if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
+  await page.openEvent();
+  const selector = '.event-actions a[href="#promote-event-' + page.eventId + '"]';
+  assert.ok(await page.exists(selector), 'Promote action links to the event campaign workspace');
+});
+
+test('event Promote action opens campaign workspace or create prompt', async (page) => {
+  if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
+  await page.openEvent();
+  await page.click('.event-actions a[href="#promote-event-' + page.eventId + '"]');
+  const ok = await page.until(`document.querySelector('pb-promote-campaign-overview [data-create-campaign], pb-promote-campaign-overview .promote-overview-layout')`);
+  assert.ok(ok, 'Promote route renders instead of an error for events without campaigns');
+  assert.notOk(await page.exists('pb-promote-campaign-overview .error-text'), 'Promote route does not show the generic API error state');
+});
+
 test('Event Details form drops ticket + contract fields (now in their own sections)', async (page) => {
   if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
   await page.openEvent();

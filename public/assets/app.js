@@ -66,7 +66,18 @@ class AppShell extends PanicElement {
       <nav class="side-nav" aria-label="Main navigation">
         <a data-nav="dashboard" href="#dashboard" title="Dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
         <a data-nav="contacts" href="#contacts" title="Contacts" data-nav-contacts><i class="fa-solid fa-address-book" aria-hidden="true"></i>Contacts</a>
-        <a data-nav="promote" href="#promote" title="Panic Promote"><i class="fa-solid fa-megaphone" aria-hidden="true"></i>Promote</a>
+        <div class="nav-group" data-group="promote">
+          <button class="nav-parent" type="button" data-group-toggle="promote" aria-expanded="false" title="Promote"><i class="fa-solid fa-megaphone" aria-hidden="true"></i><span class="nav-parent-label">Promote</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+          <div class="nav-children">
+            <a data-nav="promote-campaigns" href="#promote" title="Campaigns"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i>Campaigns</a>
+            <a data-nav="promote-calendar" href="#promote-calendar" title="Calendar"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Calendar</a>
+            <a data-nav="promote-assets" href="#promote" title="Assets" data-promote-section="assets"><i class="fa-solid fa-images" aria-hidden="true"></i>Assets</a>
+            <a data-nav="promote-contacts" href="#promote-contacts" title="Contacts" data-nav-contacts><i class="fa-solid fa-address-book" aria-hidden="true"></i>Contacts</a>
+            <a data-nav="promote-broadcasts" href="#promote" title="Broadcasts" data-promote-section="broadcasts"><i class="fa-solid fa-satellite-dish" aria-hidden="true"></i>Broadcasts</a>
+            <a data-nav="promote-analytics" href="#promote" title="Analytics" data-promote-section="analytics"><i class="fa-solid fa-chart-line" aria-hidden="true"></i>Analytics</a>
+            <a data-nav="promote-settings" href="#promote-settings" title="Settings"><i class="fa-solid fa-gear" aria-hidden="true"></i>Settings</a>
+          </div>
+        </div>
         <div class="nav-group" data-group="events">
           <button class="nav-parent" type="button" data-group-toggle="events" aria-expanded="false" title="Events"><i class="fa-solid fa-ticket" aria-hidden="true"></i><span class="nav-parent-label">Events</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
           <div class="nav-children">
@@ -116,7 +127,6 @@ class AppShell extends PanicElement {
       <a data-nav="dashboard" href="#dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
       <a data-nav="calendar" href="#calendar"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Calendar</a>
       <a data-nav="events" href="#events"><i class="fa-solid fa-ticket" aria-hidden="true"></i>Events</a>
-      <a data-nav="promote" href="#promote"><i class="fa-solid fa-megaphone" aria-hidden="true"></i>Promote</a>
       <a data-nav="admin-users" href="#admin-users" data-nav-admin><i class="fa-solid fa-user-shield" aria-hidden="true"></i>Admin</a>
       <a data-nav="help" href="#help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i>Help</a>
     </nav>
@@ -149,6 +159,11 @@ class AppShell extends PanicElement {
     this._setDrawer = setOpen;
     $('[data-drawer-open]', this)?.addEventListener('click', () => setOpen(true));
     $$('[data-drawer-close]', this).forEach((el) => el.addEventListener('click', () => setOpen(false)));
+    $$('[data-promote-section]', this).forEach((link) => {
+      link.addEventListener('click', () => {
+        this.updatePromoteSectionLinks(this.currentPromoteEventId || null);
+      });
+    });
     window.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && this.classList.contains('drawer-open')) setOpen(false);
     }, { signal: this.abort.signal });
@@ -267,7 +282,12 @@ class AppShell extends PanicElement {
   // Event-workspace deep links (event-<id>) light up the Events ▸ List leaf.
   navKeyForRoute(route) {
     if (route.startsWith('event-')) return 'events';
-    if (route === 'promote' || route.startsWith('promote-event-')) return 'promote';
+    if (route === 'promote') return 'promote-campaigns';
+    if (route === 'promote-calendar' || route === 'promote-contacts' || route === 'promote-settings') return route;
+    if (route.startsWith('promote-event-')) {
+      const parsed = this.parsePromoteRoute(route);
+      return parsed?.section ? `promote-${parsed.section}` : 'promote-campaigns';
+    }
     if (route === 'admin' || route.startsWith('admin-') || route.startsWith('admin/')) {
       const tab = route === 'admin' ? 'users' : route.replace(/^admin[-/]/, '');
       return `admin-${tab}`;
@@ -276,10 +296,29 @@ class AppShell extends PanicElement {
     return route;
   }
 
+  parsePromoteRoute(route) {
+    const match = route.match(/^promote-event-(\d+)(?:-(assets|broadcasts|analytics))?$/);
+    if (!match) return null;
+    return {
+      eventId: Number(match[1]),
+      section: match[2] || '',
+    };
+  }
+
+  updatePromoteSectionLinks(eventId) {
+    $$('[data-promote-section]', this).forEach((link) => {
+      const section = link.dataset.promoteSection;
+      link.href = eventId ? `#promote-event-${eventId}-${section}` : '#promote';
+    });
+  }
+
   async route() {
     const route = location.hash.replace(/^#/, '') || this.user?.default_landing || 'dashboard';
     publish('app.route.changed', { route });
     this.closeDrawer();
+    const promoteRoute = this.parsePromoteRoute(route);
+    if (promoteRoute?.eventId) this.currentPromoteEventId = promoteRoute.eventId;
+    this.updatePromoteSectionLinks(this.currentPromoteEventId || null);
     const activeKey = this.navKeyForRoute(route);
     $$('[data-nav]', this).forEach((link) => link.classList.toggle('active', link.dataset.nav === activeKey));
     // Mark + auto-open the group that owns the active leaf.
@@ -293,9 +332,11 @@ class AppShell extends PanicElement {
     });
     const outlet = $('#app', this);
     if (route === 'promote') return this.mount(outlet, 'pb-promote-campaign-list');
-    if (route.startsWith('promote-event-')) {
-      const eventId = Number(route.slice('promote-event-'.length));
-      return this.mount(outlet, 'pb-promote-campaign-overview', { eventId });
+    if (route === 'promote-calendar') return this.mount(outlet, 'pb-event-calendar');
+    if (route === 'promote-contacts') return this.mount(outlet, 'pb-contacts-page');
+    if (route === 'promote-settings') return this.mount(outlet, 'pb-preferences');
+    if (promoteRoute) {
+      return this.mount(outlet, 'pb-promote-campaign-overview', promoteRoute);
     }
     if (route.startsWith('event-')) return this.mount(outlet, 'pb-event-workspace', { eventId: Number(route.slice(6)) });
     if (route.startsWith('contract-')) return this.mount(outlet, 'pb-contract-editor', { contractId: Number(route.slice(9)) });
