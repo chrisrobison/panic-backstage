@@ -106,6 +106,13 @@ final class Broadcasts extends BaseEndpoint
         $sendMode    = ($body['send_mode'] ?? 'now') === 'scheduled' ? 'scheduled' : 'now';
         $scheduledAt = ($sendMode === 'scheduled' && !empty($body['scheduled_at'])) ? $body['scheduled_at'] : null;
 
+        // Fetch the full event row (with venue join) so adapters have all the data they need
+        $event = $this->db->one(
+            'SELECT e.*, v.name venue_name, v.city venue_city, v.state venue_state
+             FROM events e LEFT JOIN venues v ON v.id = e.venue_id WHERE e.id = ?',
+            [$eventId]
+        ) ?? [];
+
         // Fetch destination records for the requested keys
         $placeholders = implode(',', array_fill(0, count($destinations), '?'));
         $destRecords  = $this->db->all(
@@ -133,21 +140,30 @@ final class Broadcasts extends BaseEndpoint
                 $destGroup  = $dest ? (string) $dest['destination_group'] : 'unknown';
                 $destStatus = $dest ? (string) $dest['status'] : 'manual_submission';
 
-                $resultStatus = $adapter->resolveStatus($destStatus, $sendMode);
+                $dispatched = $adapter->dispatch($destKey, $destStatus, $sendMode, $event, $post);
 
                 $resultId = $this->db->insert(
-                    'INSERT INTO promote_broadcast_results (broadcast_id, destination_key, destination_group, status)
-                     VALUES (?, ?, ?, ?)',
-                    [$broadcastId, $destKey, $destGroup, $resultStatus]
+                    'INSERT INTO promote_broadcast_results
+                        (broadcast_id, destination_key, destination_group, status, external_url, error_message, response_json)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [
+                        $broadcastId,
+                        $destKey,
+                        $destGroup,
+                        $dispatched['status'],
+                        $dispatched['external_url'],
+                        $dispatched['error_message'],
+                        $dispatched['response_json'],
+                    ]
                 );
                 $results[] = [
                     'id'                => $resultId,
                     'broadcast_id'      => $broadcastId,
                     'destination_key'   => $destKey,
                     'destination_group' => $destGroup,
-                    'status'            => $resultStatus,
-                    'external_url'      => null,
-                    'error_message'     => null,
+                    'status'            => $dispatched['status'],
+                    'external_url'      => $dispatched['external_url'],
+                    'error_message'     => $dispatched['error_message'],
                 ];
             }
 

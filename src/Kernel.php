@@ -178,6 +178,10 @@ final class Kernel
 
         // Panic Promote — /api/promote/...
         if ($segments[0] === 'promote') {
+            // GET /api/promote/eventbrite/org — one-time setup helper
+            if (($segments[1] ?? '') === 'eventbrite' && ($segments[2] ?? '') === 'org') {
+                return [Promote\EventbriteSetup::class, []];
+            }
             if (($segments[1] ?? '') === 'events') {
                 // GET  /api/promote/events/{eventId}           → fetch campaign overview for event
                 // POST /api/promote/events/{eventId}/campaign  → create or return existing campaign
