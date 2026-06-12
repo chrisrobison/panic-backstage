@@ -11,6 +11,7 @@ import './ticketing-admin.js';
 import './tickets-public.js';
 import './help.js';
 import { HELP_SECTIONS } from './help.js';
+import './promote.js';
 
 
 class AppShell extends PanicElement {
@@ -65,6 +66,7 @@ class AppShell extends PanicElement {
       <nav class="side-nav" aria-label="Main navigation">
         <a data-nav="dashboard" href="#dashboard" title="Dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
         <a data-nav="contacts" href="#contacts" title="Contacts" data-nav-contacts><i class="fa-solid fa-address-book" aria-hidden="true"></i>Contacts</a>
+        <a data-nav="promote" href="#promote" title="Panic Promote"><i class="fa-solid fa-megaphone" aria-hidden="true"></i>Promote</a>
         <div class="nav-group" data-group="events">
           <button class="nav-parent" type="button" data-group-toggle="events" aria-expanded="false" title="Events"><i class="fa-solid fa-ticket" aria-hidden="true"></i><span class="nav-parent-label">Events</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
           <div class="nav-children">
@@ -114,6 +116,7 @@ class AppShell extends PanicElement {
       <a data-nav="dashboard" href="#dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
       <a data-nav="calendar" href="#calendar"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Calendar</a>
       <a data-nav="events" href="#events"><i class="fa-solid fa-ticket" aria-hidden="true"></i>Events</a>
+      <a data-nav="promote" href="#promote"><i class="fa-solid fa-megaphone" aria-hidden="true"></i>Promote</a>
       <a data-nav="admin-users" href="#admin-users" data-nav-admin><i class="fa-solid fa-user-shield" aria-hidden="true"></i>Admin</a>
       <a data-nav="help" href="#help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i>Help</a>
     </nav>
@@ -264,6 +267,7 @@ class AppShell extends PanicElement {
   // Event-workspace deep links (event-<id>) light up the Events ▸ List leaf.
   navKeyForRoute(route) {
     if (route.startsWith('event-')) return 'events';
+    if (route === 'promote' || route.startsWith('promote-event-')) return 'promote';
     if (route === 'admin' || route.startsWith('admin-') || route.startsWith('admin/')) {
       const tab = route === 'admin' ? 'users' : route.replace(/^admin[-/]/, '');
       return `admin-${tab}`;
@@ -288,6 +292,11 @@ class AppShell extends PanicElement {
       }
     });
     const outlet = $('#app', this);
+    if (route === 'promote') return this.mount(outlet, 'pb-promote-campaign-list');
+    if (route.startsWith('promote-event-')) {
+      const eventId = Number(route.slice('promote-event-'.length));
+      return this.mount(outlet, 'pb-promote-campaign-overview', { eventId });
+    }
     if (route.startsWith('event-')) return this.mount(outlet, 'pb-event-workspace', { eventId: Number(route.slice(6)) });
     if (route.startsWith('contract-')) return this.mount(outlet, 'pb-contract-editor', { contractId: Number(route.slice(9)) });
     if (route === 'calendar')    return this.mount(outlet, 'pb-event-calendar');

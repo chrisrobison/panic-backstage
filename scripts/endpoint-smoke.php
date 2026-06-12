@@ -140,7 +140,8 @@ try {
         throw new RuntimeException('No templates returned');
     }
 
-    $date    = (new DateTimeImmutable('+21 days'))->format('Y-m-d');
+    // Use a random offset so re-runs don't conflict with previous smoke events.
+    $date    = (new DateTimeImmutable('+' . (21 + random_int(0, 300)) . ' days'))->format('Y-m-d');
     $created = $admin->request('POST', "/api/events/from-template/$templateId", [
         'date'       => $date,
         'doors_time' => '19:00',
@@ -232,6 +233,14 @@ try {
     $eventData = $detail['event'];
     $eventData['status']             = 'published';
     $eventData['public_visibility']  = 1;
+    // Booking-workflow fields required to advance to published (migration 005)
+    $eventData['end_time']         = '23:00';
+    $eventData['promoter_name']    = 'Smoke Promoter';
+    $eventData['promoter_email']   = 'smoke-promoter@example.com';
+    $eventData['promoter_phone']   = '415-555-0100';
+    $eventData['booker_name']      = 'Smoke Booker';
+    $eventData['booker_email']     = 'smoke-booker@example.com';
+    $eventData['booker_phone']     = '415-555-0101';
     $admin->request('PATCH', "/api/events/$eventId", $eventData);
     $admin->request('GET', '/api/public/events/' . rawurlencode((string) $eventData['slug']));
     ok('public event page visible');
