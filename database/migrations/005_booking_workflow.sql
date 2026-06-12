@@ -22,10 +22,10 @@ UPDATE venues SET name = 'Downstairs Mabuhay Gardens (21+)' WHERE slug = 'mabuha
 
 -- ── 3. Producer / booker contact columns ──────────────────────
 ALTER TABLE events
-  ADD COLUMN promoter_email VARCHAR(255) NULL AFTER promoter_name,
-  ADD COLUMN promoter_phone VARCHAR(50)  NULL AFTER promoter_email,
-  ADD COLUMN booker_name    VARCHAR(255) NULL AFTER promoter_phone,
-  ADD COLUMN booker_email   VARCHAR(255) NULL AFTER booker_name,
-  ADD COLUMN booker_phone   VARCHAR(50)  NULL AFTER booker_email;
+  ADD COLUMN IF NOT EXISTS promoter_email VARCHAR(255) NULL AFTER promoter_name,
+  ADD COLUMN IF NOT EXISTS promoter_phone VARCHAR(50)  NULL AFTER promoter_email,
+  ADD COLUMN IF NOT EXISTS booker_name    VARCHAR(255) NULL AFTER promoter_phone,
+  ADD COLUMN IF NOT EXISTS booker_email   VARCHAR(255) NULL AFTER booker_name,
+  ADD COLUMN IF NOT EXISTS booker_phone   VARCHAR(50)  NULL AFTER booker_email;
 
 COMMIT;
