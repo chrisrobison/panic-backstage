@@ -1939,6 +1939,8 @@ body.lightbox-open { overflow: hidden; }
 .contract-fieldset > summary::before { content: "▸"; margin-right: 8px; color: var(--muted); }
 .contract-fieldset[open] > summary::before { content: "▾"; }
 .contract-newvar { padding: 0 16px 12px; border-top: 1px dashed var(--line); margin-top: 8px; }
+.contract-save-row { display: flex; align-items: center; gap: 12px; }
+.autosave-status { transition: opacity .3s; }
 
 /* Preview document */
 .contract-preview {

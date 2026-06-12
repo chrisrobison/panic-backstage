@@ -197,7 +197,7 @@ class ContractEditor extends PanicElement {
       <form data-form="deal" class="contract-deal-form">
         ${groups.map(([title, fields, open]) => `<details class="contract-fieldset"${open ? ' open' : ''}><summary>${esc(title)}</summary><div class="grid-form">${fields.map(field).join('')}</div></details>`).join('')}
         <details class="contract-fieldset"${varKeys.length ? ' open' : ''}><summary>Other variables</summary><div class="grid-form">${varHtml || '<p class="muted">No extra variables required by the current clauses.</p>'}</div><div class="contract-newvar grid-form"><label>New variable key <input data-newvar-key placeholder="e.g. ticket_platform"></label><label>Value <input data-newvar-val></label></div></details>
-        <div class="padded"><button>Save deal terms</button></div>
+        <div class="padded contract-save-row"><button>Save deal terms</button> <span class="autosave-status muted small" data-autosave-status></span></div>
       </form>
     </section>`;
   }
@@ -227,9 +227,9 @@ class ContractEditor extends PanicElement {
     const missing = this.data.missing || [];
     const risks = this.data.risk_flags || [];
     if (!missing.length && !risks.length) {
-      return `<section class="panel padded contract-ok"><h3 class="contract-h3">Checks</h3><p class="muted small">No missing required terms.${this.data.versions.length ? '' : ' Generate a version to enable sending.'}</p></section>`;
+      return `<section class="panel padded contract-ok" data-panel="warnings"><h3 class="contract-h3">Checks</h3><p class="muted small">No missing required terms.${this.data.versions.length ? '' : ' Generate a version to enable sending.'}</p></section>`;
     }
-    return `<section class="panel padded">
+    return `<section class="panel padded" data-panel="warnings">
       <h3 class="contract-h3">Review</h3>
       ${missing.length ? `<div class="contract-missing-list"><strong>Missing required terms</strong><ul>${missing.map((m) => `<li class="missing-field-link" data-field="${esc(m.key)}" title="Click to go to this field">${esc(m.label)} <span class="muted">(${esc(m.section)})</span></li>`).join('')}</ul></div>` : ''}
       ${risks.length ? `<div class="contract-risk-list"><strong>Risk warnings</strong><ul>${risks.map((r) => `<li>${riskBadge(r.level)} ${esc(r.message)}</li>`).join('')}</ul></div>` : ''}
@@ -283,7 +283,22 @@ class ContractEditor extends PanicElement {
     });
     $('[data-act="render"]', this)?.addEventListener('click', () => this.action(() => api(`/contracts/${id}/render`, { method: 'POST' }), 'Version generated.'));
     $('[data-act="reevaluate"]', this)?.addEventListener('click', () => this.action(() => api(`/contracts/${id}/reevaluate`, { method: 'POST' }), 'Smart selection refreshed.'));
-    $('[data-form="deal"]', this)?.addEventListener('submit', (event) => { event.preventDefault(); this.saveDeal(event.target); });
+    const dealForm = $('[data-form="deal"]', this);
+    dealForm?.addEventListener('submit', (event) => { event.preventDefault(); this.saveDeal(event.target); });
+    // Auto-save: on any field change, immediately update missing token spans in the
+    // preview, then debounce a silent PATCH + scroll-preserving preview refresh.
+    if (this.manage && dealForm) {
+      dealForm.addEventListener('change', (e) => {
+        if (e.target.matches('[data-newvar-key], [data-newvar-val]')) return;
+        const { name } = e.target;
+        if (name) {
+          const key = name.startsWith('var:') ? name.slice(4) : name;
+          this.applyTokenToPreview(key, e.target.value);
+        }
+        clearTimeout(this._dealSaveTimer);
+        this._dealSaveTimer = setTimeout(() => this.saveDealSilent(dealForm), 800);
+      });
+    }
     $$('[data-status]', this).forEach((b) => b.addEventListener('click', () => this.changeStatus(b.dataset.status)));
     $$('[data-toggle]', this).forEach((cb) => cb.addEventListener('change', () => this.patchSections([{ id: Number(cb.dataset.toggle), included: cb.checked ? 1 : 0 }])));
     $$('[data-edit]', this).forEach((b) => b.addEventListener('click', () => this.editSection(Number(b.dataset.edit))));
@@ -403,7 +418,8 @@ class ContractEditor extends PanicElement {
     }
   }
 
-  saveDeal(form) {
+  /** Extract the PATCH body from the deal form. Shared by explicit save and auto-save. */
+  buildDealBody(form) {
     const body = { variables: {} };
     form.querySelectorAll('[name]').forEach((el) => {
       const name = el.name;
@@ -413,7 +429,72 @@ class ContractEditor extends PanicElement {
     const nk = form.querySelector('[data-newvar-key]')?.value?.trim();
     const nv = form.querySelector('[data-newvar-val]')?.value;
     if (nk) body.variables[nk] = nv ?? '';
-    this.action(() => api(`/contracts/${this.contractId}`, { method: 'PATCH', body: JSON.stringify(body) }), 'Deal terms saved.');
+    return body;
+  }
+
+  /** Immediately swap any matching missing-token spans in the preview with the new value. */
+  applyTokenToPreview(key, value) {
+    const preview = $('[data-preview]', this);
+    if (!preview) return;
+    preview.querySelectorAll(`.contract-token-missing[data-token]`).forEach((span) => {
+      if (span.dataset.token === key && value && value.trim()) {
+        span.replaceWith(document.createTextNode(value));
+      }
+    });
+  }
+
+  /** Auto-save triggered by field changes: save silently then do a scroll-preserving preview refresh. */
+  async saveDealSilent(form) {
+    const body = this.buildDealBody(form);
+    const statusEl = $('[data-autosave-status]', this);
+    if (statusEl) statusEl.textContent = 'Saving…';
+    try {
+      await api(`/contracts/${this.contractId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      if (statusEl) {
+        statusEl.textContent = 'Saved ✓';
+        setTimeout(() => { statusEl.textContent = ''; }, 2500);
+      }
+      await this.refreshPreviewOnly();
+    } catch (error) {
+      if (statusEl) statusEl.textContent = '';
+      publish('toast.show', { message: error.message, tone: 'error' });
+    }
+  }
+
+  /** Fetch updated contract data and replace only the preview div + warnings panel (scroll preserved). */
+  async refreshPreviewOnly() {
+    const previewEl = $('[data-preview]', this);
+    const scrollTop = previewEl?.scrollTop ?? 0;
+    try {
+      const updated = await api(`/contracts/${this.contractId}`);
+      this.data = updated;
+      // Refresh preview HTML, restoring scroll position
+      if (previewEl) {
+        previewEl.innerHTML = updated.preview_html;
+        requestAnimationFrame(() => { previewEl.scrollTop = scrollTop; });
+      }
+      // Re-bind token click → deal field for newly rendered preview tokens
+      $$('[data-token]', previewEl).forEach((span) => {
+        span.addEventListener('click', () => this.focusDealField(span.dataset.token));
+      });
+      // Refresh warnings panel (missing fields / risk flags may have changed)
+      const oldWarnings = $('[data-panel="warnings"]', this);
+      if (oldWarnings) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = this.warningsHtml();
+        const newWarnings = tmp.firstElementChild;
+        oldWarnings.replaceWith(newWarnings);
+        $$('[data-field]', newWarnings).forEach((li) => {
+          li.addEventListener('click', () => this.focusDealField(li.dataset.field));
+        });
+      }
+    } catch {
+      // Silently swallow refresh errors — data was already saved
+    }
+  }
+
+  saveDeal(form) {
+    this.action(() => api(`/contracts/${this.contractId}`, { method: 'PATCH', body: JSON.stringify(this.buildDealBody(form)) }), 'Deal terms saved.');
   }
 
   /** Find the deal-form field for `key`, open its <details> group, scroll to it, and flash it. */
