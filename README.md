@@ -556,6 +556,117 @@ schema is part of the baseline `database/schema.sql`.
 See [`docs/ticketing.md`](docs/ticketing.md) for the full data model, API,
 payment/fulfillment flow, door-scanner details, and an operating checklist.
 
+## Panic Promote
+
+Panic Promote is a campaign command center for event promotion. Each event can have one campaign. A campaign organises marketing posts, channel-specific post variants, broadcast destinations, broadcast history, promotion-health checklists, and stub analytics.
+
+### Concepts
+
+- **Campaign** — one per event; inherits event title, date, times, venue, and ticket URL. Optional `goal_tickets` override.
+- **Post** — master copy belonging to a campaign; statuses: `draft`, `approved`, `scheduled`, `sent`, `archived`.
+- **Post variant** — platform-specific version of a post for one of nine channels: `instagram`, `facebook`, `tiktok`, `email`, `eventbrite`, `luma`, `funcheap`, `foopee`, `press`.
+- **Destination** — a place a post can be sent or tracked, grouped into Direct Posts, Event Platforms, Editorial Submissions, and Email.
+- **Broadcast** — records an attempt to send one post to one or more destinations; per-destination results are stored as `promote_broadcast_results` rows.
+- **Promotion Health** — a computed checklist score (`score`, `complete`, `total`, `items[]`) derived from event visibility, approved assets, approved variants, and broadcast history.
+- **Analytics** — returns stub zeros in MVP until real platform integrations are wired in.
+
+### Endpoint Reference
+
+```text
+GET    /api/promote/campaigns                                     → list all campaigns
+POST   /api/promote/campaigns                                     → create a campaign directly
+GET    /api/promote/campaigns/{campaignId}                        → fetch one campaign + posts + health + analytics
+PATCH  /api/promote/campaigns/{campaignId}                        → update campaign fields
+
+GET    /api/promote/events/{eventId}                              → fetch or describe campaign for an event
+POST   /api/promote/events/{eventId}/campaign                     → create campaign for event (idempotent)
+
+GET    /api/promote/campaigns/{campaignId}/posts                  → list posts
+POST   /api/promote/campaigns/{campaignId}/posts                  → create post
+GET    /api/promote/campaigns/{campaignId}/posts/{postId}         → fetch one post + variants
+PATCH  /api/promote/campaigns/{campaignId}/posts/{postId}         → update post
+DELETE /api/promote/campaigns/{campaignId}/posts/{postId}         → delete post
+
+POST   /api/promote/campaigns/{campaignId}/posts/{postId}/variants/generate  → generate all 9 variants (local, no AI)
+PATCH  /api/promote/campaigns/{campaignId}/posts/{postId}/variants/{variantId} → update a single variant
+
+GET    /api/promote/campaigns/{campaignId}/destinations           → list destinations with current status
+GET    /api/promote/campaigns/{campaignId}/health                 → promotion-health score + checklist
+GET    /api/promote/campaigns/{campaignId}/analytics              → stub analytics (zeros)
+
+GET    /api/promote/campaigns/{campaignId}/broadcasts             → list broadcasts + results
+POST   /api/promote/campaigns/{campaignId}/broadcasts             → create broadcast (records results per destination)
+GET    /api/promote/campaigns/{campaignId}/broadcasts/{broadcastId} → fetch one broadcast + results
+```
+
+All routes require an authenticated user. Access is gated the same way as event sub-resources: venue admins have full access; event owners and collaborators can read and create; `viewer` collaborators get 403 on mutating requests.
+
+### Database
+
+Migration: `database/migrations/006_panic_promote.sql`. Apply with:
+
+```bash
+php scripts/migrate.php
+```
+
+Tables added:
+
+| Table | Purpose |
+|---|---|
+| `promote_campaigns` | One campaign per event |
+| `promote_posts` | Marketing posts belonging to a campaign |
+| `promote_post_variants` | Per-channel variant of a post |
+| `promote_destinations` | Broadcast target registry (seeded by migration) |
+| `promote_broadcasts` | One broadcast attempt per post/send action |
+| `promote_broadcast_results` | Per-destination result row within a broadcast |
+
+The migration also seeds 11 default destinations:
+
+| Key | Group | Default status |
+|---|---|---|
+| `facebook_page`, `instagram`, `tiktok` | Direct Posts | `needs_auth` |
+| `eventbrite`, `luma` | Event Platforms | `needs_auth` |
+| `bandsintown` | Event Platforms | `manual_submission` |
+| `funcheap`, `foopee`, `press_list` | Editorial Submissions | `manual_submission` |
+| `email_general`, `email_press` | Email | `connected` |
+
+### Local Smoke Test
+
+Start the server:
+
+```bash
+php -S localhost:8000 -t public public/router.php
+```
+
+Run the promote smoke script:
+
+```bash
+php scripts/promote-smoke.php http://localhost:8000 storage/mail
+```
+
+The script logs in via magic-link, creates an event and campaign, creates a post, generates variants, fires a broadcast across all four destination groups, fetches health and analytics, verifies a viewer gets 403 on mutations, and asserts 401 for unauthenticated requests.
+
+If you need to run both `endpoint-smoke.php` and `promote-smoke.php` back-to-back, wait about 2 seconds between them. Both scripts mint magic-link tokens and a rapid second request can hit a token-table race condition.
+
+### MVP Stub Status
+
+Platform integrations are stubs in this release — no external API calls are made:
+
+- Destinations with status `needs_auth` produce result status `needs_auth`.
+- Destinations with status `manual_submission` produce result status `manual_required`.
+- Destinations with status `connected` (the two email destinations) produce `sent` (send_mode `now`) or `queued` (send_mode `scheduled`).
+- Variant generation is deterministic local text — no AI or third-party API is called.
+- Analytics returns stub zeros for website clicks, RSVPs, ticket conversions, and email opens.
+
+### Frontend
+
+The Promote workspace is loaded by `public/assets/promote.js` (native Web Components, no framework). Navigation routes:
+
+- `#promote` — campaigns list, showing upcoming events with health score and days out.
+- `#promote-event-{id}` — campaign overview: hero, promotion health, posts, assets, analytics, and broadcast modal.
+
+A **Panic Promote** nav item is added to the staff shell navigation alongside the existing top-level sections.
+
 ## MVP Limitations
 
 - Email delivery relies on the host MTA via `/usr/sbin/sendmail`; there is no queue, retry, or bounce handling beyond what the MTA provides.
