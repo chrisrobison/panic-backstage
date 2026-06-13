@@ -139,18 +139,14 @@ final class Users extends BaseEndpoint
         $link   = "{$appUrl}/login.html?token={$token}";
         $name   = (string) $user['name'];
 
-        $body = "Hi {$name},\n\n"
-              . "Your request for access to Mabuhay Gardens Backstage has been approved.\n\n"
-              . "Click the link below to log in. The link is good for 7 days — once you click it, "
-              . "you'll be signed in and can set a password or add a passkey from your account menu so "
-              . "you don't need a magic link next time.\n\n"
-              . "  {$link}\n\n"
-              . "— Backstage\n";
-
-        (new Mailer($this->root))->send(
+        (new Mailer($this->root))->sendTemplate(
             (string) $user['email'],
             'Your Backstage access has been approved',
-            $body
+            'access-approved',
+            [
+                'name'      => htmlspecialchars($name, ENT_QUOTES, 'UTF-8'),
+                'login_url' => htmlspecialchars($link, ENT_QUOTES, 'UTF-8'),
+            ]
         );
 
         return $this->ok(['ok' => true]);

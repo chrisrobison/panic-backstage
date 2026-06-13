@@ -579,19 +579,49 @@ final class Events extends BaseEndpoint
         try {
             $admins = $this->db->all("SELECT name, email FROM users WHERE role = 'venue_admin' AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'");
             if (!$admins) return;
-            $event = $this->db->one('SELECT title, date, promoter_name, booker_name FROM events WHERE id = ? LIMIT 1', [$eventId]);
+            $event = $this->db->one(
+                'SELECT e.title, e.date, e.show_time, e.promoter_name, e.booker_name, v.name AS venue_name
+                   FROM events e
+              LEFT JOIN venues v ON v.id = e.venue_id
+                  WHERE e.id = ? LIMIT 1',
+                [$eventId]
+            );
             if (!$event) return;
+
             $label   = $newStatus === 'confirmed' ? 'Intake Complete' : 'Booked (contract signed)';
             $subject = "[Backstage] {$label}: {$event['title']}";
             $link    = rtrim((string) (getenv('APP_URL') ?: ''), '/') . "/#event-{$eventId}";
-            $body    = '<p>Event <strong>' . htmlspecialchars((string) $event['title'], ENT_QUOTES, 'UTF-8') . '</strong>'
-                     . ' (' . htmlspecialchars((string) $event['date'], ENT_QUOTES, 'UTF-8') . ') is now <strong>' . $label . '</strong>.</p>'
-                     . ($event['promoter_name'] ? '<p>Producer: ' . htmlspecialchars((string) $event['promoter_name'], ENT_QUOTES, 'UTF-8') . '</p>' : '')
-                     . ($event['booker_name']   ? '<p>Booked by: ' . htmlspecialchars((string) $event['booker_name'],   ENT_QUOTES, 'UTF-8') . '</p>' : '')
-                     . '<p><a href="' . htmlspecialchars($link, ENT_QUOTES, 'UTF-8') . '">View in Backstage</a></p>';
-            $mailer  = new Mailer($this->root);
+
+            // Map status → badge colour for the HTML template.
+            $statusColor = match ($newStatus) {
+                'confirmed' => '#2563eb',
+                'booked'    => '#16a34a',
+                default     => '#6b7280',
+            };
+
+            // Format show time if present.
+            $showTime = '';
+            if (!empty($event['show_time'])) {
+                $t = strtotime((string) $event['show_time']);
+                $showTime = $t ? date('g:i A', $t) : (string) $event['show_time'];
+            }
+
+            $vars = [
+                'event_name'      => htmlspecialchars((string) $event['title'],         ENT_QUOTES, 'UTF-8'),
+                'old_status'      => htmlspecialchars(ucwords(str_replace('_', ' ', $oldStatus)), ENT_QUOTES, 'UTF-8'),
+                'new_status'      => htmlspecialchars($label,                           ENT_QUOTES, 'UTF-8'),
+                'status_color'    => $statusColor,
+                'event_date'      => htmlspecialchars((string) $event['date'],          ENT_QUOTES, 'UTF-8'),
+                'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
+                'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),
+                'promoter_name'   => htmlspecialchars((string) ($event['promoter_name'] ?? '—'), ENT_QUOTES, 'UTF-8'),
+                'booker_name'     => htmlspecialchars((string) ($event['booker_name']   ?? '—'), ENT_QUOTES, 'UTF-8'),
+                'event_admin_url' => htmlspecialchars($link,                            ENT_QUOTES, 'UTF-8'),
+            ];
+
+            $mailer = new Mailer($this->root);
             foreach ($admins as $admin) {
-                $mailer->send($admin['email'], $subject, $body);
+                $mailer->sendTemplate($admin['email'], $subject, 'status-changed', $vars);
             }
         } catch (\Throwable $e) {
             @error_log("status-change notification failed for event {$eventId}: {$e->getMessage()}");

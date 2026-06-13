@@ -1,0 +1,10 @@
+Your Backstage Login Link
+
+Here is your login link — it expires in 24 hours and can be used once.
+
+  {{login_url}}
+
+If you did not request this you can safely ignore this email.
+
+---
+Mabuhay Gardens · 443 Broadway, San Francisco, CA

@@ -193,15 +193,12 @@ final class Webhooks extends BaseEndpoint
             return;
         }
 
-        $title  = (string) ($order['event_title'] ?? 'your event');
-        $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        $title     = (string) ($order['event_title'] ?? 'your event');
+        $buyerName = (string) ($order['buyer_name']  ?? '');
+        $appUrl    = rtrim((string) (getenv('APP_URL') ?: ''), '/');
 
-        $lines = [];
-        $lines[] = 'Thanks for your purchase! Your ticket(s) for ' . $title . ' are below.';
-        $lines[] = '';
-        $lines[] = 'Show each QR code at the door. Tap a link to open the live ticket:';
-        $lines[] = '';
-
+        $textLines = [];
+        $htmlItems = [];
         $n = 0;
         foreach ($tickets as $ticket) {
             $token = (string) ($ticket['token'] ?? '');
@@ -209,20 +206,40 @@ final class Webhooks extends BaseEndpoint
                 continue;
             }
             $n++;
-            $viewUrl = $appUrl . '/t/' . rawurlencode($token);
-            $qrUrl   = $appUrl . '/assets/qr.svg?text=' . rawurlencode($token);
-            $lines[] = 'Ticket ' . $n . '  (' . (string) $ticket['code'] . ')';
-            $lines[] = '  View / QR: ' . $viewUrl;
-            $lines[] = '  QR image:  ' . $qrUrl;
-            $lines[] = '';
+            $viewUrl  = $appUrl . '/t/' . rawurlencode($token);
+            $code     = htmlspecialchars((string) $ticket['code'], ENT_QUOTES, 'UTF-8');
+            $safeView = htmlspecialchars($viewUrl, ENT_QUOTES, 'UTF-8');
+
+            $textLines[] = 'Ticket ' . $n . '  (' . (string) $ticket['code'] . ')';
+            $textLines[] = '  View / QR: ' . $viewUrl;
+            $textLines[] = '';
+
+            $htmlItems[] = '<div style="padding:12px 0;border-bottom:1px solid #2e2929;">'
+                . '<div style="font-size:13px;color:#a9a097;letter-spacing:1px;text-transform:uppercase;">Ticket ' . $n . '</div>'
+                . '<div style="margin-top:4px;font-size:16px;font-weight:bold;color:#fff;">' . $code . '</div>'
+                . '<div style="margin-top:6px;">'
+                . '<a href="' . $safeView . '" style="color:#c9b27e;font-size:14px;word-break:break-all;">'
+                . $safeView . '</a></div></div>';
         }
 
-        $lines[] = 'See you there!';
+        if ($n === 0) {
+            return;
+        }
 
-        (new Mailer($this->root))->send(
+        $greeting     = $buyerName !== ''
+            ? 'Hi <strong style="color:#fff;">' . htmlspecialchars($buyerName, ENT_QUOTES, 'UTF-8') . '</strong>,'
+            : 'Hello,';
+
+        (new Mailer($this->root))->sendTemplate(
             $to,
             'Your tickets for ' . $title,
-            implode("\n", $lines)
+            'ticket-purchase',
+            [
+                'event_title'  => htmlspecialchars($title, ENT_QUOTES, 'UTF-8'),
+                'greeting'     => $greeting,
+                'tickets_html' => implode('', $htmlItems),
+                'tickets_text' => implode("\n", $textLines),
+            ]
         );
     }
 }

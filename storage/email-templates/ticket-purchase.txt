@@ -1,0 +1,13 @@
+Your Tickets for {{event_title}}
+
+{{greeting}} Your ticket(s) for {{event_title}} are below.
+
+Show each QR code at the door. Tap a link to open the live ticket:
+
+{{tickets_text}}
+Each link admits one person and can be scanned once.
+
+See you there!
+
+---
+Mabuhay Gardens · 443 Broadway, San Francisco, CA

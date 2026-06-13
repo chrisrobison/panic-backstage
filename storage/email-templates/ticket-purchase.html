@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Your Tickets</title>
+</head>
+
+<body style="margin:0;padding:0;background:#151515;font-family:Arial,Helvetica,sans-serif;color:#f5f0e8;">
+  <!-- Hidden preheader -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+    Thanks for your purchase! Your tickets for {{event_title}} are inside.
+  </div>
+
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#151515;padding:24px 0;">
+    <tr>
+      <td align="center" style="padding:0 14px;">
+
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:680px;background:#211f1f;border:1px solid #3a3434;border-radius:18px;overflow:hidden;">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:#111;padding:28px 32px;border-bottom:4px solid #c1121f;">
+              <div style="font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#c9b27e;font-weight:bold;">
+                Mabuhay Gardens
+              </div>
+              <h1 style="margin:10px 0 0;font-size:28px;line-height:1.2;color:#fff;font-weight:800;">
+                Your Tickets
+              </h1>
+              <div style="margin-top:8px;font-size:15px;color:#bdb6ac;">
+                Thanks for your purchase. See you there!
+              </div>
+            </td>
+          </tr>
+
+          <!-- Main Content -->
+          <tr>
+            <td style="padding:32px;">
+
+              <div style="font-size:16px;line-height:1.6;color:#f5f0e8;">
+                {{greeting}} Your ticket(s) for
+                <strong style="color:#ffffff;">{{event_title}}</strong>
+                are below.
+              </div>
+
+              <div style="margin-top:8px;font-size:14px;line-height:1.5;color:#b5aba2;">
+                Show each QR code at the door. Tap a link to open the live ticket.
+                Each link admits one person and can be scanned once.
+              </div>
+
+              <!-- Tickets -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0;background:#171717;border:1px solid #3b3636;border-radius:14px;">
+                <tr>
+                  <td style="padding:22px;">
+                    {{tickets_html}}
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#171717;padding:20px 32px;border-top:1px solid #342e2e;">
+              <div style="font-size:12px;line-height:1.5;color:#80766e;">
+                Mabuhay Gardens &middot; 443 Broadway &middot; San Francisco, CA<br>
+                Punk rock, paperwork, and the occasional miracle.
+              </div>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

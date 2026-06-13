@@ -1,0 +1,16 @@
+Your Backstage Access Has Been Approved
+
+Hi {{name}},
+
+Your request for access to Mabuhay Gardens Backstage has been approved.
+
+Click the link below to log in. The link is good for 7 days — once you click it,
+you'll be signed in and can set a password or add a passkey from your account
+menu so you don't need a magic link next time.
+
+  {{login_url}}
+
+— Backstage
+
+---
+Mabuhay Gardens · 443 Broadway, San Francisco, CA

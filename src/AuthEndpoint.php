@@ -117,12 +117,11 @@ final class AuthEndpoint extends BaseEndpoint
         $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
         $link   = "{$appUrl}/login.html?token={$token}";
 
-        (new Mailer($this->root))->send(
+        (new Mailer($this->root))->sendTemplate(
             $email,
             'Your Backstage login link',
-            "Here is your login link — it expires in 24 hours and can be used once.\n\n"
-            . "  {$link}\n\n"
-            . "If you did not request this you can safely ignore this email.\n"
+            'magic-link',
+            ['login_url' => $link]
         );
 
         return $this->ok(['ok' => true]);
@@ -420,16 +419,33 @@ final class AuthEndpoint extends BaseEndpoint
         $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
         $link   = "{$appUrl}/index.html#admin-users";
 
-        $body = "A new account request is waiting for review on Backstage.\n\n"
-              . "  Name:  {$name}\n"
-              . "  Email: {$email}\n"
-              . ($phone !== '' ? "  Phone: {$phone}\n" : '')
-              . ($notes !== '' ? "\n  Situation:\n  {$notes}\n" : '')
-              . "\nReview and approve it here:\n  {$link}\n";
+        // Build optional inline snippets for plain-text and HTML templates.
+        $phoneLine  = $phone !== '' ? "  Phone: {$phone}\n" : '';
+        $notesBlock = $notes !== '' ? "\n  Situation:\n  {$notes}\n" : '';
+
+        // For HTML: conditional table row for phone; conditional notes row.
+        $phoneRowBorder = $notes !== '' ? '1px solid #2e2929' : 'none';
+        $notesRowHtml   = $notes !== '' ? '<tr>'
+            . '<td style="padding:10px 0;color:#a9a097;font-size:14px;">Situation</td>'
+            . '<td style="padding:10px 0;color:#fff;font-size:14px;">'
+            . htmlspecialchars($notes, ENT_QUOTES, 'UTF-8')
+            . '</td></tr>'
+            : '';
+
+        $vars = [
+            'applicant_name'       => htmlspecialchars($name,  ENT_QUOTES, 'UTF-8'),
+            'applicant_email'      => htmlspecialchars($email, ENT_QUOTES, 'UTF-8'),
+            'applicant_phone'      => $phone !== '' ? htmlspecialchars($phone, ENT_QUOTES, 'UTF-8') : '—',
+            'phone_row_border'     => $phoneRowBorder,
+            'notes_row'            => $notesRowHtml,
+            'admin_url'            => htmlspecialchars($link, ENT_QUOTES, 'UTF-8'),
+            'applicant_phone_line' => $phoneLine,
+            'applicant_notes_block'=> $notesBlock,
+        ];
 
         $mailer = new Mailer($this->root);
         foreach ($admins as $admin) {
-            $mailer->send((string) $admin['email'], 'Backstage — new access request', $body);
+            $mailer->sendTemplate((string) $admin['email'], 'Backstage — new access request', 'access-request', $vars);
         }
     }
 

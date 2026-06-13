@@ -124,18 +124,19 @@ final class Invites extends BaseEndpoint
     /** Build and dispatch the standard invite email via the shared Mailer. */
     private function sendInviteEmail(int $eventId, string $email, string $token): void
     {
-        $event   = $this->db->one('SELECT title FROM events WHERE id = ?', [$eventId]);
-        $title   = $event['title'] ?? 'an event';
-        $appUrl  = rtrim((string) (getenv('APP_URL') ?: ''), '/');
-        $url     = "{$appUrl}/invite.html?token={$token}";
+        $event  = $this->db->one('SELECT title FROM events WHERE id = ?', [$eventId]);
+        $title  = (string) ($event['title'] ?? 'an event');
+        $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        $url    = "{$appUrl}/invite.html?token={$token}";
 
-        (new Mailer($this->root))->send(
+        (new Mailer($this->root))->sendTemplate(
             $email,
             "You're invited to collaborate on {$title}",
-            "You've been invited to join the team for {$title}.\n\n"
-            . "Click the link below to accept your invitation:\n\n"
-            . "  {$url}\n\n"
-            . "This invitation expires in 14 days.\n"
+            'event-invite',
+            [
+                'event_title' => htmlspecialchars($title, ENT_QUOTES, 'UTF-8'),
+                'invite_url'  => htmlspecialchars($url,   ENT_QUOTES, 'UTF-8'),
+            ]
         );
     }
 

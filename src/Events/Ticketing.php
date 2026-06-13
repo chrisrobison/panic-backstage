@@ -524,31 +524,49 @@ final class Ticketing extends BaseEndpoint
      */
     private function emailTickets(int $eventId, string $email, ?string $name, array $tickets): int
     {
-        $event = $this->db->one('SELECT title FROM events WHERE id = ?', [$eventId]);
-        $title = (string) ($event['title'] ?? 'the event');
+        $event  = $this->db->one('SELECT title FROM events WHERE id = ?', [$eventId]);
+        $title  = (string) ($event['title'] ?? 'the event');
         $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
 
-        $lines = [];
+        $textLines = [];
+        $htmlItems = [];
         foreach ($tickets as $t) {
             if (empty($t['token'])) {
                 continue; // idempotent re-issue: no plaintext token to deliver.
             }
-            $link = "{$appUrl}/t/{$t['token']}";
-            $lines[] = "  {$t['code']}  ->  {$link}";
+            $link      = "{$appUrl}/t/{$t['token']}";
+            $code      = htmlspecialchars((string) $t['code'], ENT_QUOTES, 'UTF-8');
+            $safeLink  = htmlspecialchars($link, ENT_QUOTES, 'UTF-8');
+
+            $textLines[] = "  {$t['code']}  ->  {$link}";
+            $htmlItems[] = '<div style="padding:12px 0;border-bottom:1px solid #2e2929;">'
+                . '<div style="font-size:13px;color:#a9a097;letter-spacing:1px;text-transform:uppercase;">Ticket</div>'
+                . '<div style="margin-top:4px;font-size:16px;font-weight:bold;color:#fff;">' . $code . '</div>'
+                . '<div style="margin-top:6px;">'
+                . '<a href="' . $safeLink . '" style="color:#c9b27e;font-size:14px;word-break:break-all;">'
+                . $safeLink . '</a></div></div>';
         }
-        if ($lines === []) {
+        if ($textLines === []) {
             return 0;
         }
 
-        $greeting = $name ? "Hi {$name}," : 'Hello,';
-        $body = "{$greeting}\n\n"
-            . "You have complimentary ticket(s) for {$title}.\n\n"
-            . "Present the QR/link below at the door:\n\n"
-            . implode("\n", $lines) . "\n\n"
-            . "Each link admits one person and can be scanned once.\n";
+        $greeting     = $name ? "Hi {$name}," : 'Hello,';
+        $greetingHtml = $name
+            ? 'Hi <strong style="color:#fff;">' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</strong>,'
+            : 'Hello,';
 
-        (new Mailer($this->root))->send($email, "Your comp tickets for {$title}", $body);
-        return count($lines);
+        (new Mailer($this->root))->sendTemplate(
+            $email,
+            "Your comp tickets for {$title}",
+            'comp-tickets',
+            [
+                'event_title'  => htmlspecialchars($title, ENT_QUOTES, 'UTF-8'),
+                'greeting'     => $greetingHtml,
+                'tickets_html' => implode('', $htmlItems),
+                'tickets_text' => implode("\n", $textLines) . "\n",
+            ]
+        );
+        return count($textLines);
     }
 
     // ─── /ticketing/refund (cancel-event refund) ───────────────────────────────────

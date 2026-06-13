@@ -1,0 +1,12 @@
+You're Invited to Collaborate on {{event_title}}
+
+You've been invited to join the team for {{event_title}}.
+
+Click the link below to accept your invitation:
+
+  {{invite_url}}
+
+This invitation expires in 14 days.
+
+---
+Mabuhay Gardens · 443 Broadway, San Francisco, CA

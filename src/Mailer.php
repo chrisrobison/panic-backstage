@@ -4,17 +4,21 @@ declare(strict_types=1);
 namespace Panic;
 
 /**
- * Thin mailer: builds an RFC 5322 message and pipes it directly into Exim
- * via /usr/sbin/sendmail (which is the standard sendmail-compatible interface
- * to exim4 on this server). A copy is always written to storage/mail/ for
- * local inspection. Delivery failures are logged but never thrown so a
- * mail problem never breaks an auth flow.
+ * Thin mailer: builds RFC 5322 multipart/alternative MIME messages and pipes
+ * them directly into Exim via /usr/sbin/sendmail. When an HTML body (or a
+ * named template) is provided the message is a proper multipart/alternative
+ * envelope containing both a plain-text part and an HTML part. Plain-text-only
+ * messages fall through to a simple text/plain message as before.
+ *
+ * A copy is always written to storage/mail/ for local inspection. Delivery
+ * failures are logged but never thrown so a mail problem never breaks an auth flow.
  */
 final class Mailer
 {
     private const SENDMAIL = '/usr/sbin/sendmail';
 
     private string $logDir;
+    private string $templateDir;
     private string $fromAddress;
     private string $fromName;
     /** @var string[] Extra envelope-only recipients (blind copies). */
@@ -23,6 +27,7 @@ final class Mailer
     public function __construct(string $root)
     {
         $this->logDir      = $root . '/storage/mail';
+        $this->templateDir = $root . '/storage/email-templates';
         $this->fromAddress = getenv('MAIL_FROM_ADDRESS') ?: ('noreply@' . (getenv('APP_HOST') ?: 'localhost'));
         $this->fromName    = getenv('MAIL_FROM_NAME') ?: 'Backstage';
         $this->bcc         = $this->parseBcc(getenv('MAIL_BCC') ?: '');
@@ -51,28 +56,66 @@ final class Mailer
         return $out;
     }
 
-    public function send(string $to, string $subject, string $body): void
+    // ─── Public API ────────────────────────────────────────────────────────────
+
+    /**
+     * Send a message using a named template pair from storage/email-templates/.
+     * Loads <template>.html and <template>.txt, replaces {{key}} placeholders
+     * with values from $vars, then delivers as multipart/alternative MIME.
+     *
+     * If only a .txt file exists the message falls back to plain-text.
+     *
+     * @param array<string,string> $vars  Replacement map: key => value for {{key}} tokens.
+     */
+    public function sendTemplate(string $to, string $subject, string $template, array $vars): void
+    {
+        $htmlFile = "{$this->templateDir}/{$template}.html";
+        $textFile = "{$this->templateDir}/{$template}.txt";
+
+        $html = is_file($htmlFile) ? (string) file_get_contents($htmlFile) : null;
+        $text = is_file($textFile) ? (string) file_get_contents($textFile) : '';
+
+        foreach ($vars as $key => $value) {
+            if ($html !== null) {
+                $html = str_replace('{{' . $key . '}}', $value, $html);
+            }
+            $text = str_replace('{{' . $key . '}}', $value, $text);
+        }
+
+        $this->send($to, $subject, $text, $html);
+    }
+
+    /**
+     * Send an email directly.
+     *
+     * When $htmlBody is provided the message is wrapped in a multipart/alternative
+     * MIME envelope (plain-text part first, HTML part second). When omitted the
+     * message is a simple text/plain message.
+     */
+    public function send(string $to, string $subject, string $textBody, ?string $htmlBody = null): void
     {
         // Strip header injection attempts from anything that ends up in headers.
         $to      = $this->sanitizeHeaderValue($to);
         $subject = $this->sanitizeHeaderValue($subject);
 
-        $message = $this->buildMessage($to, $subject, $body);
+        $message = $this->buildMessage($to, $subject, $textBody, $htmlBody);
 
         $this->writeToFile($to, $message);
         $this->pipeToSendmail($to, $message);
     }
 
-    private function buildMessage(string $to, string $subject, string $body): string
-    {
+    // ─── Message builder ───────────────────────────────────────────────────────
+
+    private function buildMessage(
+        string  $to,
+        string  $subject,
+        string  $textBody,
+        ?string $htmlBody,
+    ): string {
         $domain = substr(strrchr($this->fromAddress, '@') ?: '@localhost', 1);
         $msgId  = sprintf('<%s.%s@%s>', date('YmdHis'), bin2hex(random_bytes(8)), $domain);
 
-        // Normalize body line endings to CRLF and dot-stuff any line beginning
-        // with a single dot (defense in depth — -i already disables dot-EOT).
-        $body = preg_replace("/\r\n|\r|\n/", "\r\n", $body);
-
-        $headers = [
+        $baseHeaders = [
             "From: {$this->fromName} <{$this->fromAddress}>",
             "To: {$to}",
             "Reply-To: {$this->fromName} <{$this->fromAddress}>",
@@ -80,14 +123,51 @@ final class Mailer
             "Message-ID: {$msgId}",
             'Date: ' . date('r'),
             'MIME-Version: 1.0',
-            'Content-Type: text/plain; charset=UTF-8',
-            'Content-Transfer-Encoding: 8bit',
             'Auto-Submitted: auto-generated',
             'X-Mailer: Backstage',
         ];
 
+        if ($htmlBody !== null) {
+            // Unique boundary — random so it never accidentally appears in body text.
+            $boundary = '=_Part_' . bin2hex(random_bytes(12));
+
+            // Normalize line endings to CRLF for both parts.
+            $textBody = (string) preg_replace("/\r\n|\r|\n/", "\r\n", $textBody);
+            $htmlBody = (string) preg_replace("/\r\n|\r|\n/", "\r\n", $htmlBody);
+
+            $headers = array_merge($baseHeaders, [
+                "Content-Type: multipart/alternative; boundary=\"{$boundary}\"",
+            ]);
+
+            $body = "--{$boundary}\r\n"
+                  . "Content-Type: text/plain; charset=UTF-8\r\n"
+                  . "Content-Transfer-Encoding: 8bit\r\n"
+                  . "\r\n"
+                  . $textBody . "\r\n"
+                  . "\r\n"
+                  . "--{$boundary}\r\n"
+                  . "Content-Type: text/html; charset=UTF-8\r\n"
+                  . "Content-Transfer-Encoding: 8bit\r\n"
+                  . "\r\n"
+                  . $htmlBody . "\r\n"
+                  . "\r\n"
+                  . "--{$boundary}--";
+        } else {
+            // Plain-text only — normalize CRLF and dot-stuff for safety.
+            $textBody = (string) preg_replace("/\r\n|\r|\n/", "\r\n", $textBody);
+
+            $headers = array_merge($baseHeaders, [
+                'Content-Type: text/plain; charset=UTF-8',
+                'Content-Transfer-Encoding: 8bit',
+            ]);
+
+            $body = $textBody;
+        }
+
         return implode("\r\n", $headers) . "\r\n\r\n" . $body;
     }
+
+    // ─── Delivery ──────────────────────────────────────────────────────────────
 
     private function pipeToSendmail(string $to, string $message): void
     {
@@ -148,6 +228,8 @@ final class Mailer
 
         @file_put_contents($path, $message);
     }
+
+    // ─── Helpers ───────────────────────────────────────────────────────────────
 
     private function logError(string $to, int $exit, string $detail): void
     {

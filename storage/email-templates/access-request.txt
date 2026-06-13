@@ -1,0 +1,12 @@
+Backstage — New Access Request
+
+A new account request is waiting for review.
+
+  Name:  {{applicant_name}}
+  Email: {{applicant_email}}
+{{applicant_phone_line}}{{applicant_notes_block}}
+Review and approve it here:
+  {{admin_url}}
+
+---
+Mabuhay Gardens · 443 Broadway, San Francisco, CA

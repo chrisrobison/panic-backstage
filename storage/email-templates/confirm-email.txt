@@ -1,0 +1,11 @@
+Confirm Your Backstage Email
+
+Please confirm this email address so it can be used to sign in to Backstage.
+
+  {{confirm_url}}
+
+This link expires in 7 days and can be used once.
+If you did not request this you can safely ignore this email.
+
+---
+Mabuhay Gardens · 443 Broadway, San Francisco, CA

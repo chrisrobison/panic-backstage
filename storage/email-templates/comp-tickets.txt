@@ -1,0 +1,13 @@
+Your Comp Tickets for {{event_title}}
+
+{{greeting}}
+
+You have complimentary ticket(s) for {{event_title}}.
+
+Present the QR/link below at the door:
+
+{{tickets_text}}
+Each link admits one person and can be scanned once.
+
+---
+Mabuhay Gardens · 443 Broadway, San Francisco, CA
