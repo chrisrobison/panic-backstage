@@ -1043,13 +1043,6 @@ customElements.define('pb-promote-assets-card', PromoteAssetsCard);
 // Broadcast metrics from the DB + null-placeholder tiles for platform-specific
 // data (Eventbrite ticket sales, email opens, Luma RSVPs).
 
-const DEST_GROUP_LABELS = {
-  direct_post:          'Direct Posts',
-  event_platform:       'Event Platforms',
-  editorial_submission: 'Editorial Submissions',
-  email:                'Email',
-};
-
 const DEST_STATUS_ICONS = {
   sent:             '<i class="fa-solid fa-circle-check" style="color:var(--color-success)"></i>',
   queued:           '<i class="fa-solid fa-clock" style="color:var(--color-info)"></i>',
