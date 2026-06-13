@@ -100,7 +100,7 @@ final class CampaignForEvent extends BaseEndpoint
         );
 
         $health    = (new PromotionHealth($this->db))->compute($campaign, $event, $posts, $assets);
-        $analytics = Analytics::stub();
+        $analytics = Analytics::compute($this->db, $campaignId);
 
         return [
             'campaign'     => $campaign,

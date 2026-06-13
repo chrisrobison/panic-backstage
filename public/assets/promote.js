@@ -1027,10 +1027,36 @@ class PromoteAssetsCard extends PanicElement {
 customElements.define('pb-promote-assets-card', PromoteAssetsCard);
 
 // ── pb-promote-analytics-card ─────────────────────────────────────────────────
-// 4 stub metric tiles with sparkline placeholders.
+// Broadcast metrics from the DB + null-placeholder tiles for platform-specific
+// data (Eventbrite ticket sales, email opens, Luma RSVPs).
+
+const DEST_GROUP_LABELS = {
+  direct_post:          'Direct Posts',
+  event_platform:       'Event Platforms',
+  editorial_submission: 'Editorial Submissions',
+  email:                'Email',
+};
+
+const DEST_STATUS_ICONS = {
+  sent:             '<i class="fa-solid fa-circle-check" style="color:var(--color-success)"></i>',
+  queued:           '<i class="fa-solid fa-clock" style="color:var(--color-info)"></i>',
+  manual_required:  '<i class="fa-solid fa-clipboard-list" style="color:var(--color-warning)"></i>',
+  needs_auth:       '<i class="fa-solid fa-key" style="color:var(--color-warning)"></i>',
+  failed:           '<i class="fa-solid fa-circle-xmark" style="color:var(--color-danger)"></i>',
+  skipped:          '<i class="fa-solid fa-minus-circle" style="color:var(--color-muted)"></i>',
+};
+
+const DEST_STATUS_LABELS = {
+  sent:            'Sent',
+  queued:          'Queued',
+  manual_required: 'Manual to-do',
+  needs_auth:      'Needs setup',
+  failed:          'Failed',
+  skipped:         'Skipped',
+};
 
 class PromoteAnalyticsCard extends PanicElement {
-  // analytics object set by parent
+  // analytics object set by parent component
   connectedCallback() {
     super.connectedCallback();
     this.render();
@@ -1038,30 +1064,93 @@ class PromoteAnalyticsCard extends PanicElement {
 
   render() {
     const a = this.analytics || {};
+    const fmt = (n) => n == null ? '—' : String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
-    const tiles = [
-      { key: 'website_clicks',     label: 'Website Clicks',      icon: 'fa-arrow-pointer',     value: a.website_clicks ?? 0 },
-      { key: 'rsvps',              label: 'RSVPs',               icon: 'fa-calendar-check',    value: a.rsvps ?? 0 },
-      { key: 'ticket_conversions', label: 'Ticket Conversions',  icon: 'fa-ticket',            value: a.ticket_conversions ?? 0 },
-      { key: 'email_opens',        label: 'Email Opens',         icon: 'fa-envelope-open-text', value: a.email_opens ?? 0 },
+    // Row 1 — broadcast metrics derived from our DB (always real)
+    const broadcastTiles = [
+      { label: 'Platforms Reached', icon: 'fa-share-nodes',        value: fmt(a.destinations_reached ?? 0), note: null },
+      { label: 'Live Listings',     icon: 'fa-link',               value: fmt(a.listings_live       ?? 0), note: null },
+      { label: 'Manual To-Do',      icon: 'fa-clipboard-list',     value: fmt(a.manual_pending      ?? 0), note: null },
+      { label: 'Issues',            icon: 'fa-triangle-exclamation', value: fmt(a.failed_count       ?? 0), note: null },
     ];
+
+    // Row 2 — platform-specific data (null = not yet connected)
+    const platformTiles = [
+      { label: 'Ticket Sales',  icon: 'fa-ticket',            value: fmt(a.ticket_sales),  note: 'via Eventbrite' },
+      { label: 'RSVPs',         icon: 'fa-calendar-check',    value: fmt(a.luma_rsvps),    note: 'via Luma' },
+      { label: 'Email Opens',   icon: 'fa-envelope-open-text', value: fmt(a.email_opens),  note: 'via Mailchimp/SG' },
+      { label: 'Email Clicks',  icon: 'fa-arrow-pointer',     value: fmt(a.email_clicks),  note: 'via Mailchimp/SG' },
+    ];
+
+    const tileHtml = (tiles) => tiles.map((t) => `
+      <div class="promote-analytics-tile${t.value === '—' ? ' promote-analytics-tile--na' : ''}">
+        <div class="promote-analytics-tile-head">
+          <i class="fa-solid ${esc(t.icon)}" aria-hidden="true"></i>
+          <span class="promote-analytics-label">${esc(t.label)}</span>
+        </div>
+        <strong class="promote-analytics-value">${esc(t.value)}</strong>
+        ${t.note ? `<span class="promote-analytics-note">${esc(t.note)}</span>` : ''}
+      </div>`).join('');
+
+    const destResults = a.destination_results || [];
+    const destHtml = destResults.length === 0
+      ? '<p class="muted padded" style="font-size:0.85rem">No broadcasts sent yet.</p>'
+      : this.renderDestTable(destResults);
 
     this.innerHTML = `<article class="panel promote-analytics-card">
       <div class="section-head padded">
         <h3><i class="fa-solid fa-chart-line" aria-hidden="true"></i> Analytics</h3>
-        <span class="badge info muted">All time</span>
+        ${a.broadcast_count ? `<span class="badge info">${esc(String(a.broadcast_count))} broadcast${a.broadcast_count === 1 ? '' : 's'}</span>` : '<span class="badge muted">No broadcasts yet</span>'}
+      </div>
+
+      <div class="promote-analytics-section-label padded-x">Broadcast reach</div>
+      <div class="promote-analytics-tiles padded">
+        ${tileHtml(broadcastTiles)}
+      </div>
+
+      <div class="promote-analytics-section-label padded-x">Platform metrics
+        <span class="muted" style="font-size:0.8rem;font-weight:400"> — connect platforms to unlock</span>
       </div>
       <div class="promote-analytics-tiles padded">
-        ${tiles.map((t) => `<div class="promote-analytics-tile">
-          <div class="promote-analytics-tile-head">
-            <i class="fa-solid ${esc(t.icon)}" aria-hidden="true"></i>
-            <span class="promote-analytics-label">${esc(t.label)}</span>
-          </div>
-          <strong class="promote-analytics-value">${esc(String(t.value).replace(/\B(?=(\d{3})+(?!\d))/g, ','))}</strong>
-          ${sparkline()}
-        </div>`).join('')}
+        ${tileHtml(platformTiles)}
       </div>
+
+      <div class="promote-analytics-section-label padded-x">Destination status</div>
+      ${destHtml}
     </article>`;
+  }
+
+  renderDestTable(results) {
+    // Group by destination_group
+    const groups = {};
+    for (const r of results) {
+      const g = r.destination_group || 'other';
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(r);
+    }
+
+    const groupOrder = ['direct_post', 'event_platform', 'editorial_submission', 'email'];
+    const sortedGroups = [
+      ...groupOrder.filter((g) => groups[g]),
+      ...Object.keys(groups).filter((g) => !groupOrder.includes(g)),
+    ];
+
+    return `<div class="promote-dest-results padded">
+      ${sortedGroups.map((g) => `
+        <div class="promote-dest-group-label">${esc(DEST_GROUP_LABELS[g] || g)}</div>
+        ${groups[g].map((r) => `
+          <div class="promote-dest-result-row">
+            <span class="promote-dest-result-icon">${DEST_STATUS_ICONS[r.status] || ''}</span>
+            <span class="promote-dest-result-key">${esc(r.destination_key.replace(/_/g, ' '))}</span>
+            <span class="promote-dest-result-status muted">${esc(DEST_STATUS_LABELS[r.status] || r.status)}</span>
+            ${r.external_url
+              ? `<a class="promote-dest-result-link" href="${esc(r.external_url)}" target="_blank" rel="noopener">
+                   <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> View
+                 </a>`
+              : ''}
+          </div>`).join('')}
+      `).join('')}
+    </div>`;
   }
 }
 
