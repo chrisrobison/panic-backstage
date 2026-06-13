@@ -44,7 +44,8 @@ pb-promote-post-list,
 pb-promote-post-editor,
 pb-promote-broadcast-modal,
 pb-promote-assets-card,
-pb-promote-analytics-card {
+pb-promote-analytics-card,
+pb-promote-settings {
   display: block;
 }
 body {
@@ -2776,4 +2777,175 @@ button.promote-accent:hover,
   .promote-tab { padding: 6px 9px; font-size: 11.5px; }
   .promote-dest-row { flex-wrap: wrap; }
   .promote-dest-status { margin-left: 0; }
+}
+
+/* ── Promote Settings page ──────────────────────────────────────────────────── */
+
+.promote-settings-page {
+  max-width: 1100px;
+  padding: 24px;
+}
+
+.promote-settings-header {
+  margin-bottom: 28px;
+}
+.promote-settings-header h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.promote-settings-header h2 i { color: var(--promote-accent); }
+.promote-settings-header p   { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+
+.promote-settings-venue label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.promote-settings-venue select {
+  font-size: 13px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+/* Group headings (Direct Posts / Event Platforms / Email) */
+.promote-settings-group { margin-bottom: 32px; }
+.promote-settings-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--muted);
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Card grid — 2 columns on wide, 1 on narrow */
+.promote-settings-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+/* Individual platform card */
+.promote-settings-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: box-shadow .15s;
+}
+.promote-settings-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+
+/* Card header: platform name + status badge */
+.promote-settings-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--soft, #f6f7f8);
+  gap: 8px;
+}
+.promote-settings-platform-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 700;
+  font-size: 15px;
+}
+.promote-settings-platform-name i {
+  font-size: 18px;
+  color: var(--promote-accent);
+  width: 22px;
+  text-align: center;
+}
+
+/* Fields area */
+.promote-settings-fields {
+  padding: 14px 16px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+.promote-settings-fields .form-row { margin: 0; }
+.promote-settings-fields .form-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.promote-settings-fields .form-input {
+  margin-top: 3px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--panel);
+  color: var(--ink);
+  box-sizing: border-box;
+  transition: border-color .15s;
+}
+.promote-settings-fields .form-input:focus {
+  outline: none;
+  border-color: var(--promote-accent);
+  box-shadow: 0 0 0 3px var(--promote-accent-soft);
+}
+.promote-settings-fields .form-hint {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Inline error below card header */
+.promote-settings-error {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--danger, #dc2626);
+  background: #fff5f5;
+  border-bottom: 1px solid #fecaca;
+}
+
+/* Action row: Save / Disconnect / Docs */
+.promote-settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 14px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  margin-top: auto;
+}
+.promote-settings-actions .button { font-size: 13px; }
+
+/* Status badge tweaks inside settings cards */
+.promote-settings-card-head .badge {
+  font-size: 11px;
+  padding: 3px 8px;
+  flex-shrink: 0;
+}
+.promote-settings-card-head .badge.success { background: #d3f1df; color: #0c7a3c; }
+.promote-settings-card-head .badge.warning { background: #ffedc2; color: #a06400; }
+.promote-settings-card-head .badge.danger  { background: #fde2e1; color: #b42318; }
+
+/* Responsive: single column on small screens */
+@media (max-width: 700px) {
+  .promote-settings-page    { padding: 16px; }
+  .promote-settings-cards   { grid-template-columns: 1fr; }
 }
