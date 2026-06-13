@@ -1,0 +1,18 @@
+Mabuhay Gardens Event Status Changed
+
+{{event_name}} changed from {{old_status}} to {{new_status}}.
+
+Date: {{event_date}}
+Time: {{event_time}}
+Room: {{event_room}}
+Updated by: {{updated_by}}
+Updated at: {{updated_at}}
+
+Note:
+{{status_note}}
+
+View event:
+{{event_admin_url}}
+
+Mabuhay Gardens
+443 Broadway, San Francisco
