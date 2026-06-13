@@ -16,6 +16,7 @@ final class CopyGenerator
         'facebook',
         'tiktok',
         'email',
+        'email_adhoc',
         'eventbrite',
         'luma',
         'funcheap',
@@ -28,7 +29,7 @@ final class CopyGenerator
         'jambase',
     ];
 
-    /** Generate variants for all 9 channels. */
+    /** Generate variants for all channels. */
     public function generate(array $post, array $event): array
     {
         $variants = [];
@@ -129,6 +130,29 @@ final class CopyGenerator
                 'warnings' => [
                     'Review subject line for deliverability — avoid spam trigger words.',
                     'Personalize the greeting if your email platform supports merge fields.',
+                ],
+            ],
+
+            'email_adhoc' => [
+                'channel'  => 'email_adhoc',
+                'title'    => "Upcoming: $eventTitle — $dateShort",
+                'body'     => $this->trimTo(
+                    "Hi,\n\n" .
+                    "We wanted to personally let you know about: $eventTitle\n\n" .
+                    "$shortDesc\n\n" .
+                    "When: $dateFormatted$doorsText$showText\n" .
+                    "Where: $venue\n" .
+                    ($ageText ? "Age: $ageRestr\n" : '') .
+                    $ticketLine . "\n\n" .
+                    "Hope to see you there!\n" .
+                    "— The Mabuhay Gardens Team",
+                    0
+                ),
+                'warnings' => [
+                    'Enter recipient addresses manually in your email client.',
+                    'Use BCC for multiple recipients to protect privacy.',
+                    'Review the subject line before sending — avoid spam trigger words.',
+                    'Personalize the greeting for VIPs or press contacts.',
                 ],
             ],
 

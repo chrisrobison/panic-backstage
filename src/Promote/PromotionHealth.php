@@ -191,6 +191,59 @@ final class PromotionHealth
             'detail'   => $jambaseDone ? 'Broadcast created' : 'JamBase not yet submitted',
         ];
 
+        // 18. Ad-hoc email sent
+        $adhocDone = $this->broadcastResultExists((int) $campaign['id'], 'email_adhoc');
+        $items[] = [
+            'key'      => 'email_adhoc_sent',
+            'label'    => 'Ad-hoc press / VIP emails sent',
+            'status'   => $adhocDone ? 'done' : 'missing',
+            'severity' => $adhocDone ? 'success' : 'info',
+            'detail'   => $adhocDone ? 'Ad-hoc broadcast created' : 'No ad-hoc email broadcast yet',
+        ];
+
+        // 19. Day-before reminder scheduled
+        $eventDate    = !empty($event['date']) ? $event['date'] : null;
+        $reminderDone = false;
+        if ($eventDate) {
+            // Look for any broadcast scheduled within the 36-hour window before the show date
+            $windowStart = date('Y-m-d H:i:s', strtotime($eventDate . ' -36 hours'));
+            $windowEnd   = date('Y-m-d H:i:s', strtotime($eventDate . ' 23:59:59'));
+            $row = $this->db->one(
+                "SELECT b.id FROM promote_broadcasts b
+                 WHERE b.campaign_id = ? AND b.send_mode = 'scheduled'
+                   AND b.scheduled_at BETWEEN ? AND ?
+                 LIMIT 1",
+                [(int) $campaign['id'], $windowStart, $windowEnd]
+            );
+            $reminderDone = $row !== null;
+        }
+        $items[] = [
+            'key'      => 'day_before_reminder',
+            'label'    => 'Day-before reminder scheduled',
+            'status'   => $reminderDone ? 'done' : 'missing',
+            'severity' => $reminderDone ? 'success' : 'info',
+            'detail'   => $reminderDone
+                ? 'Scheduled broadcast found within 36 h of show date'
+                : 'No day-before reminder broadcast scheduled yet',
+        ];
+
+        // 20. Band assets collected
+        $bandAssets  = array_filter(
+            $assets,
+            fn ($a) => in_array($a['asset_type'], ['band_photo', 'logo'], true)
+                    && $a['approval_status'] === 'approved'
+        );
+        $hasBandAssets = !empty($bandAssets);
+        $items[] = [
+            'key'      => 'band_assets_collected',
+            'label'    => 'Band assets collected',
+            'status'   => $hasBandAssets ? 'done' : 'missing',
+            'severity' => $hasBandAssets ? 'success' : 'info',
+            'detail'   => $hasBandAssets
+                ? count($bandAssets) . ' approved band photo(s)/logo(s) on file'
+                : 'No approved band photos or logos uploaded',
+        ];
+
         $total    = count($items);
         $complete = count(array_filter($items, fn ($i) => $i['status'] === 'done'));
         $score    = $total > 0 ? (int) round(($complete / $total) * 100) : 0;

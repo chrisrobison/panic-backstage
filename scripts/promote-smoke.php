@@ -17,11 +17,11 @@ declare(strict_types=1);
  *  4.  Fetch campaign overview — assert event, posts, health, destinations, analytics
  *  5.  Create post
  *  6.  Update post
- *  7.  Generate variants — assert 9 channels + warnings present
+ *  7.  Generate variants — assert all 15 channels + warnings present
  *  8.  Create broadcast with destinations from all 4 groups (send_mode=now)
- *       — facebook_page/instagram/tiktok → needs_auth
+ *       — facebook_page/instagram/tiktok → needs_auth (no credentials in test env)
  *       — funcheap/foopee/press_list     → manual_required
- *       — email_general/email_press      → sent
+ *       — email_general/email_press      → needs_auth (real adapter, no credentials in test env)
  *  9.  Fetch campaign broadcasts list
  *  10. Fetch health — assert {score, complete, total, items[]}
  *  11. Fetch analytics — assert stub zeros
@@ -216,8 +216,15 @@ try {
         throw new RuntimeException('Variant generate returned no variants array');
     }
     $channels = array_column($generated['variants'], 'channel');
-    $expected9 = ['instagram', 'facebook', 'tiktok', 'email', 'eventbrite', 'luma', 'funcheap', 'foopee', 'press'];
-    $missing = array_diff($expected9, $channels);
+    $expectedChannels = [
+        'instagram', 'facebook', 'tiktok',
+        'email', 'email_adhoc',
+        'eventbrite', 'luma',
+        'funcheap', 'foopee', 'press',
+        'sf_chronicle', 'sf_station', 'dothebay',
+        'songkick', 'jambase',
+    ];
+    $missing = array_diff($expectedChannels, $channels);
     if ($missing) {
         throw new RuntimeException('Variant generate missing channels: ' . implode(', ', $missing));
     }
@@ -230,14 +237,12 @@ try {
     });
     if (!empty($noWarnings)) {
         $channelsWithoutWarnings = array_column(array_values($noWarnings), 'channel');
-        // Press and email always have warnings; allow social channels to have none only if body is populated
-        // But we assert warnings exist for all channels per PROMOTE-PLAN.md
         throw new RuntimeException(
             'Variants without warnings (expected at least one warning per channel): '
             . implode(', ', $channelsWithoutWarnings)
         );
     }
-    ok('variants generated — 9 channels with warnings');
+    ok('variants generated — ' . count($channels) . ' channels with warnings');
 
     // ── 8. Create broadcast (multi-destination, send_mode=now) ───────────────
     $broadcast = $admin->request('POST', "/api/promote/campaigns/$campaignId/broadcasts", [
@@ -288,15 +293,18 @@ try {
         }
     }
 
-    $expectSent = ['email_general', 'email_press'];
-    foreach ($expectSent as $dest) {
-        if (($resultMap[$dest] ?? null) !== 'sent') {
+    // email_general / email_press now route through the real EmailAdapter.
+    // Without credentials configured in the test environment they return needs_auth.
+    $expectEmailNeeds = ['email_general', 'email_press'];
+    foreach ($expectEmailNeeds as $dest) {
+        $got = $resultMap[$dest] ?? 'missing';
+        if (!in_array($got, ['needs_auth', 'sent', 'queued'], true)) {
             throw new RuntimeException(
-                "Expected $dest → sent, got: " . ($resultMap[$dest] ?? 'missing')
+                "Expected $dest → needs_auth|sent|queued (real adapter), got: $got"
             );
         }
     }
-    ok('broadcast created with correct per-destination statuses (needs_auth/manual_required/sent)');
+    ok('broadcast created with correct per-destination statuses (needs_auth/manual_required/email-adapter)');
 
     // ── 9. Fetch broadcasts list ──────────────────────────────────────────────
     $broadcasts = $admin->request('GET', "/api/promote/campaigns/$campaignId/broadcasts");
@@ -334,15 +342,23 @@ try {
         throw new RuntimeException('Analytics endpoint missing analytics key');
     }
     $a = $analytics['analytics'];
-    foreach (['website_clicks', 'rsvps', 'ticket_conversions', 'email_opens'] as $key) {
+    // website_clicks / rsvps / ticket_conversions are legacy-compat keys, always int 0.
+    // email_opens / email_clicks are null (platform metric placeholders) — (int)null === 0.
+    $requiredKeys = ['website_clicks', 'rsvps', 'ticket_conversions', 'email_opens',
+                     'broadcast_count', 'destinations_reached', 'listings_live',
+                     'manual_pending', 'needs_setup', 'failed_count', 'status_counts'];
+    foreach ($requiredKeys as $key) {
         if (!array_key_exists($key, $a)) {
             throw new RuntimeException("Analytics missing key: $key");
         }
+    }
+    // Legacy numeric keys should all be zero (no broadcasts sent successfully in test env)
+    foreach (['website_clicks', 'rsvps', 'ticket_conversions'] as $key) {
         if ((int) $a[$key] !== 0) {
-            throw new RuntimeException("Analytics $key expected 0 stub, got: " . $a[$key]);
+            throw new RuntimeException("Analytics $key expected 0, got: " . $a[$key]);
         }
     }
-    ok('analytics returned stub zeros');
+    ok('analytics returned with required keys and zero legacy counters');
 
     // ── 12. Fetch destinations ────────────────────────────────────────────────
     $dests = $admin->request('GET', "/api/promote/campaigns/$campaignId/destinations");
@@ -350,8 +366,8 @@ try {
         throw new RuntimeException('Destinations endpoint missing destinations array');
     }
     $destCount = count($dests['destinations']);
-    if ($destCount < 8) {
-        throw new RuntimeException("Expected at least 8 destinations, got $destCount");
+    if ($destCount < 17) {
+        throw new RuntimeException("Expected at least 17 destinations, got $destCount");
     }
     ok("destinations listed ($destCount destinations)");
 

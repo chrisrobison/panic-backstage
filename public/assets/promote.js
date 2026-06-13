@@ -8,7 +8,7 @@
 //   pb-promote-campaign-overview — #promote-event-{id}: rich single-campaign view
 //   pb-promote-health-card       — checklist with done/warn/missing, expandable
 //   pb-promote-post-list         — post cards with Edit/Preview/Broadcast buttons
-//   pb-promote-post-editor       — modal: post CRUD + 9-channel variant tabs
+//   pb-promote-post-editor       — modal: post CRUD + 15-channel variant tabs
 //   pb-promote-broadcast-modal   — 4 destination groups + schedule + send
 //   pb-promote-assets-card       — approved assets + aspect ratio placeholders
 //   pb-promote-analytics-card    — 4 stub metric tiles with sparkline placeholders
@@ -30,18 +30,31 @@ import {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const CHANNELS = ['instagram', 'facebook', 'tiktok', 'email', 'eventbrite', 'luma', 'funcheap', 'foopee', 'press'];
+const CHANNELS = [
+  'instagram', 'facebook', 'tiktok',
+  'email', 'email_adhoc',
+  'eventbrite', 'luma',
+  'funcheap', 'foopee', 'press',
+  'sf_chronicle', 'sf_station', 'dothebay',
+  'songkick', 'jambase',
+];
 
 const CHANNEL_LABELS = {
-  instagram: 'Instagram',
-  facebook: 'Facebook',
-  tiktok: 'TikTok',
-  email: 'Email',
-  eventbrite: 'Eventbrite',
-  luma: 'Luma',
-  funcheap: 'Funcheap',
-  foopee: 'Foopee',
-  press: 'Press',
+  instagram:    'Instagram',
+  facebook:     'Facebook',
+  tiktok:       'TikTok',
+  email:        'Email List',
+  email_adhoc:  'Ad-hoc Email',
+  eventbrite:   'Eventbrite',
+  luma:         'Luma',
+  funcheap:     'Funcheap',
+  foopee:       'Foopee',
+  press:        'Press',
+  sf_chronicle: 'SF Chronicle',
+  sf_station:   'SF Station',
+  dothebay:     'DoTheBay',
+  songkick:     'SongKick',
+  jambase:      'JamBase',
 };
 
 const DEST_GROUP_LABELS = {
@@ -1248,6 +1261,15 @@ const PLATFORM_FIELDS = {
       { key: 'config.from_name', label: 'From Name', type: 'text', hint: 'e.g. Mabuhay Gardens Press' },
       { key: 'config.from_email', label: 'From Email', type: 'text', hint: 'Reply-to address, e.g. press@mabuhaygardens.com' },
       { key: 'config.sender_id', label: 'Sender ID (SendGrid only)', type: 'text', hint: 'Numeric Sender Authentication ID from SendGrid — leave blank for Mailchimp' },
+    ],
+  },
+  email_adhoc: {
+    label: 'Ad-hoc Email Recipients',
+    icon: 'fa-solid fa-at',
+    group: 'Email',
+    docs: null,
+    fields: [
+      { key: 'config.default_bcc', label: 'Default BCC (optional)', type: 'text', hint: 'Comma-separated addresses to always BCC (e.g. archive inbox) — leave blank if not needed' },
     ],
   },
   songkick: {
