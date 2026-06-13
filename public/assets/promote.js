@@ -1142,6 +1142,8 @@ const PLATFORM_FIELDS = {
       { key: 'access_token', label: 'API Key', type: 'password', hint: 'Mailchimp or SendGrid API key' },
       { key: 'config.list_id', label: 'List / Audience ID', type: 'text', hint: 'Mailchimp audience ID or SendGrid list ID' },
       { key: 'config.from_name', label: 'From Name', type: 'text', hint: 'e.g. Mabuhay Gardens' },
+      { key: 'config.from_email', label: 'From Email', type: 'text', hint: 'Reply-to address, e.g. hello@mabuhaygardens.com' },
+      { key: 'config.sender_id', label: 'Sender ID (SendGrid only)', type: 'text', hint: 'Numeric Sender Authentication ID from SendGrid — leave blank for Mailchimp' },
     ],
   },
   email_press: {
@@ -1154,6 +1156,8 @@ const PLATFORM_FIELDS = {
       { key: 'access_token', label: 'API Key', type: 'password', hint: 'Mailchimp or SendGrid API key' },
       { key: 'config.list_id', label: 'List / Audience ID', type: 'text', hint: 'Mailchimp audience ID or SendGrid list ID' },
       { key: 'config.from_name', label: 'From Name', type: 'text', hint: 'e.g. Mabuhay Gardens Press' },
+      { key: 'config.from_email', label: 'From Email', type: 'text', hint: 'Reply-to address, e.g. press@mabuhaygardens.com' },
+      { key: 'config.sender_id', label: 'Sender ID (SendGrid only)', type: 'text', hint: 'Numeric Sender Authentication ID from SendGrid — leave blank for Mailchimp' },
     ],
   },
   songkick: {

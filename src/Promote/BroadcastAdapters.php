@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Panic\Promote;
 
 use Panic\Database;
+use Panic\Promote\Adapters\EmailAdapter;
 use Panic\Promote\Adapters\EventbriteAdapter;
 
 /**
@@ -43,8 +44,9 @@ final class BroadcastAdapters
         array  $post,
     ): array {
         return match ($destKey) {
-            'eventbrite' => $this->eventbrite($sendMode, $event, $post),
-            default      => $this->stub($destStatus, $sendMode),
+            'eventbrite'                    => $this->eventbrite($sendMode, $event, $post),
+            'email_general', 'email_press'  => $this->email($destKey, $sendMode, $event, $post),
+            default                         => $this->stub($destStatus, $sendMode),
         };
     }
 
@@ -74,6 +76,61 @@ final class BroadcastAdapters
         }
 
         return (new EventbriteAdapter($apiKey, $orgId, $ebVid))->dispatch($event, $post, $sendMode);
+    }
+
+    private function email(string $destKey, string $sendMode, array $event, array $post): array
+    {
+        $cred   = $this->loadCredential($destKey, (int) ($event['venue_id'] ?? 1));
+        $apiKey = $cred['access_token'] ?? '';
+        $config = $cred['config'] ?? [];
+
+        if (!$apiKey) {
+            return $this->noCredential(
+                $destKey === 'email_press' ? 'Press Email' : 'General Email',
+                '#promote-settings'
+            );
+        }
+
+        $provider   = (string) ($config['provider'] ?? '');
+        $listId     = (string) ($config['list_id'] ?? '');
+        $fromName   = (string) ($config['from_name'] ?? 'Mabuhay Gardens');
+        $fromEmail  = (string) ($config['from_email'] ?? 'hello@mabuhaygardens.com');
+        $senderId   = (int)    ($config['sender_id'] ?? 0);
+
+        if (!$provider) {
+            return [
+                'status'        => 'failed',
+                'external_url'  => null,
+                'error_message' => 'Email provider not configured. Set provider to "mailchimp" or "sendgrid" in Promote Settings.',
+                'response_json' => null,
+            ];
+        }
+        if (!$listId) {
+            return [
+                'status'        => 'failed',
+                'external_url'  => null,
+                'error_message' => 'Email list/audience ID not configured. Add it in Promote Settings.',
+                'response_json' => null,
+            ];
+        }
+
+        // Fetch the email variant for subject + body (channel = 'email')
+        $variant = $this->db->one(
+            'SELECT title, body FROM promote_post_variants WHERE post_id = ? AND channel = ?',
+            [(int) $post['id'], 'email']
+        );
+
+        $subject  = $variant['title'] ?? (string) ($post['title'] ?? '');
+        $bodyText = $variant['body']  ?? (string) ($post['master_text'] ?? '');
+
+        if (!$subject) {
+            $subject = 'Upcoming event at Mabuhay Gardens';
+        }
+
+        $scheduledAt = ($sendMode === 'scheduled') ? ($post['scheduled_at'] ?? null) : null;
+
+        return (new EmailAdapter($provider, $apiKey, $listId, $fromName, $fromEmail, $senderId))
+            ->dispatch($event, $post, $subject, $bodyText, $sendMode, $scheduledAt);
     }
 
     // ── Credential loader ─────────────────────────────────────────────────────
