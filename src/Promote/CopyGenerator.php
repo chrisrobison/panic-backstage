@@ -21,6 +21,11 @@ final class CopyGenerator
         'funcheap',
         'foopee',
         'press',
+        'sf_chronicle',
+        'sf_station',
+        'dothebay',
+        'songkick',
+        'jambase',
     ];
 
     /** Generate variants for all 9 channels. */
@@ -212,6 +217,103 @@ final class CopyGenerator
                     'Add a press contact email before sending.',
                     'Include a hi-res image attachment when distributing.',
                     'Personalize for each press outlet when possible.',
+                ],
+            ],
+
+            'sf_chronicle' => [
+                'channel'  => 'sf_chronicle',
+                'title'    => "FOR IMMEDIATE RELEASE: $eventTitle — $dateShort at $venue",
+                'body'     => $this->trimTo(
+                    "FOR IMMEDIATE RELEASE\n\n" .
+                    "$eventTitle\n" .
+                    "$dateFormatted at $venue$doorsText$showText\n" .
+                    ($ageText ? "$ageRestr\n" : '') .
+                    "\n" .
+                    "$shortDesc\n" .
+                    $ticketLine . "\n\n" .
+                    "Media contact: press@mabuhaygardens.com",
+                    0
+                ),
+                'warnings' => [
+                    'SF Chronicle Datebook accepts email pitches — personalize the opening paragraph.',
+                    'Attach a hi-res 1200×675 flyer image to the email.',
+                    'Send at least 2–3 weeks before the show date for calendar consideration.',
+                ],
+            ],
+
+            'sf_station' => [
+                'channel'  => 'sf_station',
+                'title'    => $eventTitle,
+                'body'     => $this->trimTo(
+                    "$eventTitle\n" .
+                    "$dateFormatted · $venue\n" .
+                    "$doorsText$showText\n" .
+                    ($ageText ? "$ageRestr\n" : '') .
+                    "\n" .
+                    $shortDesc .
+                    $ticketLine,
+                    400
+                ),
+                'warnings' => [
+                    'SF Station requires manual submission via sfstation.com/submit.',
+                    'Keep the description under 400 characters.',
+                    'A flyer image (JPG/PNG) improves listing visibility.',
+                ],
+            ],
+
+            'dothebay' => [
+                'channel'  => 'dothebay',
+                'title'    => $eventTitle,
+                'body'     => $this->trimTo(
+                    "$eventTitle\n" .
+                    "$dateFormatted · $venue$doorsText$showText\n" .
+                    ($ageText ? "$ageRestr · " : '') .
+                    "Bay Area live music\n\n" .
+                    $shortDesc .
+                    $ticketLine,
+                    500
+                ),
+                'warnings' => [
+                    'DoTheBay requires manual submission at dothebay.com/submit-event.',
+                    'Select the "Music" category for best placement.',
+                ],
+            ],
+
+            'songkick' => [
+                'channel'  => 'songkick',
+                'title'    => $eventTitle,
+                'body'     => $this->trimTo(
+                    "$eventTitle\n" .
+                    "$dateFormatted\n" .
+                    "$venue — San Francisco, CA$doorsText$showText\n" .
+                    ($ageText ? "$ageRestr\n" : '') .
+                    "\n" .
+                    $shortDesc .
+                    $ticketLine,
+                    500
+                ),
+                'warnings' => [
+                    'SongKick listings are artist-managed — ensure the artist has claimed their page.',
+                    'Submit through the artist\'s SongKick manager dashboard.',
+                ],
+            ],
+
+            'jambase' => [
+                'channel'  => 'jambase',
+                'title'    => $eventTitle,
+                'body'     => $this->trimTo(
+                    "$eventTitle\n" .
+                    "$dateFormatted · $venue · San Francisco, CA\n" .
+                    "$doorsText$showText\n" .
+                    ($ageText ? "$ageRestr\n" : '') .
+                    "\n" .
+                    $shortDesc .
+                    $ticketLine,
+                    500
+                ),
+                'warnings' => [
+                    'JamBase listings require a registered artist or venue account.',
+                    'Submit at jambase.com/submit or through the artist manager portal.',
                 ],
             ],
 

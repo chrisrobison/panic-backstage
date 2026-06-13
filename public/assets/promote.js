@@ -1156,6 +1156,51 @@ const PLATFORM_FIELDS = {
       { key: 'config.from_name', label: 'From Name', type: 'text', hint: 'e.g. Mabuhay Gardens Press' },
     ],
   },
+  songkick: {
+    label: 'SongKick',
+    icon: 'fa-solid fa-music',
+    group: 'Event Platforms',
+    docs: 'https://www.songkick.com/artist-claim',
+    fields: [
+      { key: 'config.artist_url', label: 'Artist / Venue Page URL', type: 'text', hint: 'Your SongKick artist or venue page URL — used for link tracking' },
+    ],
+  },
+  jambase: {
+    label: 'JamBase',
+    icon: 'fa-solid fa-compact-disc',
+    group: 'Event Platforms',
+    docs: 'https://www.jambase.com/submit',
+    fields: [
+      { key: 'config.artist_url', label: 'Artist / Venue Page URL', type: 'text', hint: 'Your JamBase artist or venue page URL — used for link tracking' },
+    ],
+  },
+  sf_chronicle: {
+    label: 'SF Chronicle',
+    icon: 'fa-solid fa-pen-nib',
+    group: 'Editorial Submissions',
+    docs: 'https://www.sfchronicle.com/entertainment/music/',
+    fields: [
+      { key: 'config.contact_email', label: 'Submission Email', type: 'text', hint: 'e.g. datebook@sfchronicle.com — for manual pitch tracking' },
+    ],
+  },
+  sf_station: {
+    label: 'SF Station',
+    icon: 'fa-solid fa-tower-broadcast',
+    group: 'Editorial Submissions',
+    docs: 'https://www.sfstation.com/submit/',
+    fields: [
+      { key: 'config.submission_url', label: 'Submission URL', type: 'text', hint: 'SF Station event submission form URL' },
+    ],
+  },
+  dothebay: {
+    label: 'DoTheBay',
+    icon: 'fa-solid fa-calendar-days',
+    group: 'Editorial Submissions',
+    docs: 'https://dothebay.com/submit-event',
+    fields: [
+      { key: 'config.submission_url', label: 'Submission URL', type: 'text', hint: 'DoTheBay event submission form URL' },
+    ],
+  },
 };
 
 class PromoteSettings extends PanicElement {

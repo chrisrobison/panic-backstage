@@ -141,6 +141,56 @@ final class PromotionHealth
             'detail'   => $hasGoal ? 'Goal: ' . $campaign['goal_tickets'] . ' tickets' : 'No ticket goal configured',
         ];
 
+        // 13. SF Chronicle pitch sent
+        $chronicleDone = $this->broadcastResultExists((int) $campaign['id'], 'sf_chronicle');
+        $items[] = [
+            'key'      => 'sf_chronicle_submitted',
+            'label'    => 'SF Chronicle pitch sent',
+            'status'   => $chronicleDone ? 'done' : 'missing',
+            'severity' => $chronicleDone ? 'success' : 'info',
+            'detail'   => $chronicleDone ? 'Broadcast created' : 'SF Chronicle not yet pitched',
+        ];
+
+        // 14. SF Station submitted
+        $sfStationDone = $this->broadcastResultExists((int) $campaign['id'], 'sf_station');
+        $items[] = [
+            'key'      => 'sf_station_submitted',
+            'label'    => 'SF Station listing submitted',
+            'status'   => $sfStationDone ? 'done' : 'missing',
+            'severity' => $sfStationDone ? 'success' : 'info',
+            'detail'   => $sfStationDone ? 'Broadcast created' : 'SF Station not yet submitted',
+        ];
+
+        // 15. DoTheBay submitted
+        $dothebayDone = $this->broadcastResultExists((int) $campaign['id'], 'dothebay');
+        $items[] = [
+            'key'      => 'dothebay_submitted',
+            'label'    => 'DoTheBay listing submitted',
+            'status'   => $dothebayDone ? 'done' : 'missing',
+            'severity' => $dothebayDone ? 'success' : 'info',
+            'detail'   => $dothebayDone ? 'Broadcast created' : 'DoTheBay not yet submitted',
+        ];
+
+        // 16. SongKick submitted
+        $songkickDone = $this->broadcastResultExists((int) $campaign['id'], 'songkick');
+        $items[] = [
+            'key'      => 'songkick_submitted',
+            'label'    => 'SongKick listing submitted',
+            'status'   => $songkickDone ? 'done' : 'missing',
+            'severity' => $songkickDone ? 'success' : 'info',
+            'detail'   => $songkickDone ? 'Broadcast created' : 'SongKick not yet submitted',
+        ];
+
+        // 17. JamBase submitted
+        $jambaseDone = $this->broadcastResultExists((int) $campaign['id'], 'jambase');
+        $items[] = [
+            'key'      => 'jambase_submitted',
+            'label'    => 'JamBase listing submitted',
+            'status'   => $jambaseDone ? 'done' : 'missing',
+            'severity' => $jambaseDone ? 'success' : 'info',
+            'detail'   => $jambaseDone ? 'Broadcast created' : 'JamBase not yet submitted',
+        ];
+
         $total    = count($items);
         $complete = count(array_filter($items, fn ($i) => $i['status'] === 'done'));
         $score    = $total > 0 ? (int) round(($complete / $total) * 100) : 0;
