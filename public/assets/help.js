@@ -70,6 +70,32 @@ export const HELP_SECTIONS = [
     ],
   },
   {
+    group: 'Panic Promote',
+    key: 'promote',
+    icon: 'fa-solid fa-bullhorn',
+    items: [
+      { slug: 'promote-overview',     title: 'What is Panic Promote?' },
+      { slug: 'promote-campaigns',    title: 'Campaigns' },
+      { slug: 'promote-posts',        title: 'Posts &amp; copy generation' },
+      { slug: 'promote-broadcasting', title: 'Broadcasting to platforms' },
+      { slug: 'promote-manual',       title: 'Manual submission destinations' },
+      { slug: 'promote-health',       title: 'Campaign health checklist' },
+    ],
+  },
+  {
+    group: 'Promote Administration',
+    key: 'promote-admin',
+    icon: 'fa-solid fa-plug',
+    items: [
+      { slug: 'promote-setup',     title: 'Setup &amp; credentials overview' },
+      { slug: 'promote-eventbrite',title: 'Connecting Eventbrite' },
+      { slug: 'promote-facebook',  title: 'Connecting Facebook &amp; Instagram' },
+      { slug: 'promote-luma',      title: 'Connecting Luma' },
+      { slug: 'promote-email-cfg', title: 'Connecting email lists' },
+      { slug: 'promote-manual-cfg',title: 'Manual destinations &amp; copy' },
+    ],
+  },
+  {
     group: 'Reference',
     key: 'reference',
     icon: 'fa-solid fa-book',
@@ -785,6 +811,282 @@ const HELP_CONTENT = {
     <h3>Asset won't approve</h3>
     <p>Only promoters and admins can approve assets. Bands and designers can upload but not approve.</p>
   `,
+
+  // ── Panic Promote — user guide ──────────────────────────────────────────────
+
+  'promote-overview': `
+    <h2>What is Panic Promote?</h2>
+    <p>Panic Promote is the built-in marketing engine for Mabuhay Gardens. Once you have an event in Backstage, Promote helps you write, approve, and push announcements to every platform you use — Facebook, Instagram, Eventbrite, Luma, Foopee, Funcheap, your email list, and more — without leaving the app.</p>
+    <h3>The core workflow</h3>
+    <ol>
+      <li><strong>Open the event</strong> in the event workspace and click the <em>Promote</em> button in the top-right action bar.</li>
+      <li><strong>Create a campaign</strong> — one campaign per event. Backstage creates it the first time you click Promote.</li>
+      <li><strong>Write a post</strong> — a title, a master description, and an optional ticket URL. Backstage generates channel-specific copy for all 9 channels from that one description.</li>
+      <li><strong>Approve the variants</strong> you're happy with. Only Approved variants can be broadcast.</li>
+      <li><strong>Broadcast</strong> — pick destinations, choose Send now or Schedule, and fire.</li>
+      <li>Watch the <strong>campaign health score</strong> in the right rail tick upward as each checklist item is completed.</li>
+    </ol>
+    <h3>Campaigns vs posts vs broadcasts</h3>
+    <ul>
+      <li>A <strong>campaign</strong> is the container for one event's entire marketing effort — goal, posts, assets, and broadcast history.</li>
+      <li>A <strong>post</strong> is a piece of source content (title + description + link) that spawns up to 9 channel-specific variants.</li>
+      <li>A <strong>broadcast</strong> is a single send action: one post sent to one or more destinations at a point in time.</li>
+    </ul>
+  `,
+
+  'promote-campaigns': `
+    <h2>Campaigns</h2>
+    <p>Every promoted event has exactly one campaign, created the first time you click <em>Promote</em> from the event workspace.</p>
+    <h3>Opening a campaign</h3>
+    <p>From any event, click the pink <em>Promote</em> button in the event action bar. If no campaign exists yet, Backstage creates one automatically. You can also browse all campaigns via the <strong>Promote</strong> nav item — it shows a card grid of upcoming events sorted by date with a health badge on each.</p>
+    <h3>Campaign overview layout</h3>
+    <ul>
+      <li><strong>Main column</strong> — event hero (flyer, date, venue), metric tiles, and the posts list.</li>
+      <li><strong>Rail column</strong> — health checklist, assets card, and analytics.</li>
+    </ul>
+    <h3>Goal tickets</h3>
+    <p>Set a numeric ticket-sales goal in the campaign header. This populates the health score and gives the analytics tile a target to track against.</p>
+  `,
+
+  'promote-posts': `
+    <h2>Posts &amp; copy generation</h2>
+    <p>A post is the source material for all your channel variants. Write it once, generate nine versions automatically.</p>
+    <h3>Creating a post</h3>
+    <ol>
+      <li>In the campaign overview click <em>+ New Post</em>.</li>
+      <li>Enter a <strong>Title</strong> (internal label), <strong>Master description</strong> (the core blurb), and an optional <strong>Target URL</strong> (ticket link).</li>
+      <li>Click <em>Generate variants</em> — Backstage creates channel-specific copy for all 9 channels.</li>
+    </ol>
+    <h3>The 9 channels</h3>
+    <ul>
+      <li><strong>Instagram</strong> — up to 2,200 chars; links not clickable; ends with hashtags. Direct followers to link in bio.</li>
+      <li><strong>Facebook</strong> — key info above the ~477-char "See more" fold.</li>
+      <li><strong>TikTok</strong> — punchy caption under 150 chars; pair with vertical video.</li>
+      <li><strong>Email</strong> — subject line + full body; personalise the greeting before sending.</li>
+      <li><strong>Eventbrite</strong> — structured listing: title, description, venue, age restriction, ticket link.</li>
+      <li><strong>Luma</strong> — concise listing format.</li>
+      <li><strong>Funcheap</strong> — under 500 chars; paste into their web form.</li>
+      <li><strong>Foopee</strong> — Bay Area calendar listing; paste into their web form.</li>
+      <li><strong>Press</strong> — "FOR IMMEDIATE RELEASE" format with contact placeholder; attach a hi-res flyer before sending.</li>
+    </ul>
+    <h3>Approving variants</h3>
+    <p>Click a variant tab in the post editor, read and edit the copy, then set the status to <strong>Approved</strong>. Regenerating overwrites Draft variants but leaves Approved ones untouched.</p>
+    <h3>Post statuses</h3>
+    <ul>
+      <li><strong>Draft</strong> — in progress.</li>
+      <li><strong>Approved</strong> — signed off; eligible for broadcast.</li>
+      <li><strong>Scheduled / Sent / Archived</strong> — lifecycle states after broadcasting.</li>
+    </ul>
+  `,
+
+  'promote-broadcasting': `
+    <h2>Broadcasting to platforms</h2>
+    <p>A broadcast takes an approved post and sends it to one or more destinations in a single action.</p>
+    <h3>Opening the broadcast modal</h3>
+    <p>From a post card click <em>Broadcast</em>. The modal groups destinations into four sections:</p>
+    <ul>
+      <li><strong>Direct Posts</strong> — Facebook Page, Instagram, TikTok (require OAuth credentials in Settings → Promote).</li>
+      <li><strong>Event Platforms</strong> — Eventbrite, Luma, Bandsintown.</li>
+      <li><strong>Editorial Submissions</strong> — Funcheap, Foopee, Press List (manual — Backstage prepares copy; you paste it into the site).</li>
+      <li><strong>Email</strong> — General Email List, Press Email List (require an ESP connected in Settings → Promote).</li>
+    </ul>
+    <h3>Destination status badges</h3>
+    <ul>
+      <li><span style="color:#0c7a3c;font-weight:600">Connected</span> — posts automatically.</li>
+      <li><span style="color:#d97706;font-weight:600">Needs auth</span> — go to Settings → Promote to connect.</li>
+      <li><span style="color:#1466bd;font-weight:600">Manual</span> — no API; Backstage prepares the copy and you submit the form.</li>
+    </ul>
+    <h3>Result statuses</h3>
+    <ul>
+      <li><strong>Sent</strong> — posted; click the external link to view it live.</li>
+      <li><strong>Queued</strong> — scheduled for later.</li>
+      <li><strong>Manual required</strong> — copy is ready; submit at the platform's form.</li>
+      <li><strong>Needs auth</strong> — no credentials; visit Settings → Promote.</li>
+      <li><strong>Failed</strong> — API error; error message shown inline.</li>
+    </ul>
+  `,
+
+  'promote-manual': `
+    <h2>Manual submission destinations</h2>
+    <p>When no public write API exists, Backstage prepares copy and records the broadcast — you paste the text into the platform's web form.</p>
+    <h3>How it works</h3>
+    <ol>
+      <li>Select the manual destination(s) in the broadcast modal and click <em>Send</em>.</li>
+      <li>Backstage marks the result <em>Manual required</em> and saves it to broadcast history.</li>
+      <li>Use the <em>Copy</em> button on the variant tab to grab the formatted copy.</li>
+      <li>Open the submission link below and paste.</li>
+    </ol>
+    <h3>Submission links</h3>
+    <ul>
+      <li><strong>Foopee</strong> — <a href="https://foopee.com" target="_blank" rel="noreferrer">foopee.com</a></li>
+      <li><strong>Funcheap SF</strong> — <a href="https://funcheap.com/submit-event" target="_blank" rel="noreferrer">funcheap.com/submit-event</a></li>
+      <li><strong>Bandsintown</strong> — <a href="https://manager.bandsintown.com" target="_blank" rel="noreferrer">manager.bandsintown.com</a></li>
+      <li><strong>SF Chronicle / Datebook</strong> — <a href="https://datebook.sfchronicle.com" target="_blank" rel="noreferrer">datebook.sfchronicle.com</a></li>
+      <li><strong>SongKick</strong> — <a href="https://tourbox.songkick.com" target="_blank" rel="noreferrer">tourbox.songkick.com</a></li>
+      <li><strong>JamBase</strong> — <a href="https://www.jambase.com/submit" target="_blank" rel="noreferrer">jambase.com/submit</a></li>
+      <li><strong>SF Station</strong> — <a href="https://www.sfstation.com/submit-event" target="_blank" rel="noreferrer">sfstation.com/submit-event</a></li>
+      <li><strong>DoTheBay</strong> — <a href="https://dothebay.com/submit" target="_blank" rel="noreferrer">dothebay.com/submit</a></li>
+    </ul>
+    <h3>Tips</h3>
+    <ul>
+      <li>Submit 2–4 weeks before the show date for best placement on editorial calendars.</li>
+      <li>The Press variant includes a "FOR IMMEDIATE RELEASE" header — personalise it for each outlet and attach a hi-res flyer.</li>
+    </ul>
+  `,
+
+  'promote-health': `
+    <h2>Campaign health checklist</h2>
+    <p>The health card scores a campaign from 0–100% across 12 items. It's a quick at-a-glance view of what's done and what still needs attention before the show.</p>
+    <h3>The 12 items</h3>
+    <ul>
+      <li><strong>Panic event page published</strong> — Public visibility is on (event Details tab).</li>
+      <li><strong>Approved flyer</strong> — an asset of type Flyer with status Approved in the event Assets section.</li>
+      <li><strong>Instagram post approved</strong> — an Instagram variant marked Approved.</li>
+      <li><strong>Facebook post approved</strong> — a Facebook variant marked Approved.</li>
+      <li><strong>Eventbrite listing prepared</strong> — any broadcast to Eventbrite created.</li>
+      <li><strong>Luma listing prepared</strong> — any broadcast to Luma created.</li>
+      <li><strong>Funcheap submitted</strong> — any broadcast to Funcheap created.</li>
+      <li><strong>Foopee submitted</strong> — any broadcast to Foopee created.</li>
+      <li><strong>Press email prepared</strong> — a Press variant marked Approved.</li>
+      <li><strong>Email blast scheduled</strong> — a broadcast to the General Email List created.</li>
+      <li><strong>At least one post</strong> — any post exists in the campaign.</li>
+      <li><strong>Ticket goal set</strong> — a numeric goal saved on the campaign.</li>
+    </ul>
+    <h3>Severity colours</h3>
+    <ul>
+      <li><span style="color:#16a34a;font-weight:600">Green</span> — done.</li>
+      <li><span style="color:#d97706;font-weight:600">Amber</span> — important but not blocking.</li>
+      <li><span style="color:#9ca3af;font-weight:600">Grey</span> — nice to have.</li>
+      <li><span style="color:#dc2626;font-weight:600">Red</span> — blocking (e.g. event page not published).</li>
+    </ul>
+  `,
+
+  // ── Promote Administration ──────────────────────────────────────────────────
+
+  'promote-setup': `
+    <h2>Promote setup &amp; credentials overview</h2>
+    <p>Platform credentials are stored in the <code>promote_credentials</code> database table, scoped per venue. Manage them at <strong>Settings → Promote</strong> in the sidebar.</p>
+    <h3>Destination types</h3>
+    <ul>
+      <li><strong>Connected (API)</strong> — credentials saved; Backstage posts automatically.</li>
+      <li><strong>Manual submission</strong> — no write API; Backstage prepares copy and records the broadcast, you submit the form.</li>
+    </ul>
+    <h3>What is stored</h3>
+    <ul>
+      <li><code>access_token</code> — primary secret (API key or OAuth token). Never returned by the API after saving.</li>
+      <li><code>refresh_token</code> — for OAuth flows that support token refresh.</li>
+      <li><code>config</code> — JSON for platform-specific IDs (org ID, page ID, list ID, etc.).</li>
+    </ul>
+    <h3>Credential lookup order</h3>
+    <p>When dispatching a broadcast, Backstage first checks <code>promote_credentials</code> for a <em>connected</em> row matching the venue + destination key. If nothing is found it falls back to <code>.env</code> variables — useful for initial setup before using the Settings UI.</p>
+    <h3>Adding a new adapter (for developers)</h3>
+    <ol>
+      <li>Create <code>src/Promote/Adapters/FooAdapter.php</code> with a <code>dispatch(array $event, array $post, string $sendMode): array</code> method.</li>
+      <li>Add a <code>match</code> case in <code>BroadcastAdapters::dispatch()</code> calling your new adapter.</li>
+      <li>Add field definitions to <code>PLATFORM_FIELDS</code> in <code>promote.js</code> — the Settings UI picks them up automatically.</li>
+    </ol>
+  `,
+
+  'promote-eventbrite': `
+    <h2>Connecting Eventbrite</h2>
+    <p>When connected, broadcasting to Eventbrite automatically creates and publishes a live Eventbrite event with title, description, start/end times, doors time, age restriction, and a ticket class pointing to your ticket URL.</p>
+    <h3>Step 1 — Create an Organizer on eventbrite.com</h3>
+    <ol>
+      <li>Log in to <a href="https://www.eventbrite.com" target="_blank" rel="noreferrer">eventbrite.com</a> with the account whose API key you have.</li>
+      <li>Click <em>Create event</em> — Eventbrite prompts you to create an Organizer profile on the first use. Name it <strong>Mabuhay Gardens</strong>.</li>
+    </ol>
+    <h3>Step 2 — Save credentials in Backstage</h3>
+    <ol>
+      <li>Go to <strong>Settings → Promote</strong>.</li>
+      <li>In the <strong>Eventbrite</strong> card, enter the API Key (private token from <a href="https://www.eventbrite.com/account-settings/apps" target="_blank" rel="noreferrer">eventbrite.com/account-settings/apps</a>).</li>
+      <li>Click <em>Fetch Org ID</em> — Backstage calls the API and auto-fills the Organizer ID.</li>
+      <li>Optionally enter a pre-created Eventbrite Venue ID for Mabuhay Gardens.</li>
+      <li>Click <em>Save</em>.</li>
+    </ol>
+    <h3>Troubleshooting</h3>
+    <ul>
+      <li><em>"EVENTBRITE_ORG_ID not configured"</em> — complete step 1 and re-fetch.</li>
+      <li><em>"NOT_AUTHORIZED"</em> — the account has no Organizer; follow step 1.</li>
+      <li><em>"Event is missing a date"</em> — set a date in the event Details tab.</li>
+    </ul>
+  `,
+
+  'promote-facebook': `
+    <h2>Connecting Facebook &amp; Instagram</h2>
+    <p>Both platforms use the same Facebook Developer App. Facebook posts to your Page; Instagram publishes image + caption to your Business account.</p>
+    <h3>Requirements</h3>
+    <ul>
+      <li>A <strong>Facebook Page</strong> for Mabuhay Gardens (not a personal profile).</li>
+      <li>An <strong>Instagram Business or Creator account</strong> linked to that Page.</li>
+      <li>A <strong>Facebook Developer App</strong> at <a href="https://developers.facebook.com" target="_blank" rel="noreferrer">developers.facebook.com</a>.</li>
+    </ul>
+    <h3>Required App permissions</h3>
+    <p><code>pages_manage_posts</code>, <code>pages_read_engagement</code>, <code>instagram_basic</code>, <code>instagram_content_publish</code></p>
+    <h3>Getting a Page Access Token</h3>
+    <ol>
+      <li>In the Developer App → <em>Tools → Graph API Explorer</em>, generate an access token with the permissions above.</li>
+      <li>Exchange for a long-lived token: <code>GET /oauth/access_token?grant_type=fb_exchange_token&amp;…</code></li>
+      <li>Fetch the Page token: <code>GET /me/accounts?access_token=&lt;long-lived&gt;</code> — copy the token for your Page.</li>
+    </ol>
+    <h3>Saving in Backstage</h3>
+    <p>Go to <strong>Settings → Promote</strong>. In the Facebook card paste the Page Access Token and Page ID. In the Instagram card paste the same User Access Token and your Instagram Business Account ID (found via <code>GET /{page-id}?fields=instagram_business_account</code>). Save each card separately.</p>
+    <h3>Instagram image requirement</h3>
+    <p>Instagram requires images at a public HTTPS URL at post time. Backstage will use the approved flyer from the event's Assets section — make sure the flyer is uploaded and marked Approved before broadcasting to Instagram.</p>
+  `,
+
+  'promote-luma': `
+    <h2>Connecting Luma</h2>
+    <h3>Getting an API key</h3>
+    <ol>
+      <li>Log in to <a href="https://lu.ma" target="_blank" rel="noreferrer">lu.ma</a>.</li>
+      <li>Go to <em>Dashboard → Settings → API</em> and generate a key.</li>
+    </ol>
+    <h3>Saving in Backstage</h3>
+    <ol>
+      <li>Go to <strong>Settings → Promote</strong>, find the <strong>Luma</strong> card.</li>
+      <li>Paste the API key and click <em>Save</em>.</li>
+    </ol>
+    <p class="muted small">The Luma adapter is on the roadmap. The key is saved and ready; until the adapter ships, use the Luma copy variant and submit manually at <a href="https://lu.ma/create" target="_blank" rel="noreferrer">lu.ma/create</a>.</p>
+  `,
+
+  'promote-email-cfg': `
+    <h2>Connecting email lists</h2>
+    <p>Backstage supports <strong>Mailchimp</strong> and <strong>SendGrid</strong> for the General and Press email lists.</p>
+    <h3>Mailchimp</h3>
+    <ol>
+      <li><em>Account → Extras → API keys</em> — create a key.</li>
+      <li><em>Audience → Manage Audience → Settings</em> — note the Audience ID.</li>
+      <li>In Backstage <strong>Settings → Promote</strong> → email card: Provider = <code>mailchimp</code>, paste the API key, Audience ID, and From Name. Save.</li>
+    </ol>
+    <h3>SendGrid</h3>
+    <ol>
+      <li><em>Settings → API Keys</em> — create a key with Mail Send access.</li>
+      <li><em>Marketing → Contacts → Lists</em> — note the List ID.</li>
+      <li>In Backstage: Provider = <code>sendgrid</code>, paste API key, List ID, and From Name. Save.</li>
+    </ol>
+    <p class="muted small">The email adapter is on the roadmap. Credentials are saved and ready; until it ships, export the Email variant copy from the post editor and paste it into your ESP manually.</p>
+  `,
+
+  'promote-manual-cfg': `
+    <h2>Manual destinations &amp; copy</h2>
+    <p>Destinations with no public write API are marked <em>manual_submission</em> in the database. Backstage prepares copy and records the broadcast; you submit the web form.</p>
+    <h3>Adding a new manual destination</h3>
+    <ol>
+      <li>Insert a row:<br>
+        <code>INSERT INTO promote_destinations (destination_key, destination_group, label, status)<br>
+        VALUES ('sf_chronicle', 'editorial_submission', 'SF Chronicle', 'manual_submission');</code></li>
+      <li>Add a copy variant to <code>CopyGenerator.php</code> — add the key to <code>CHANNELS</code> and a <code>match</code> case returning <code>title</code>, <code>body</code>, and <code>warnings</code>.</li>
+      <li>Optionally add a health-check item in <code>PromotionHealth.php</code>.</li>
+      <li>Optionally add config field definitions to <code>PLATFORM_FIELDS</code> in <code>promote.js</code>.</li>
+    </ol>
+    <h3>Upgrading a manual destination to a connected one</h3>
+    <ol>
+      <li>Create <code>src/Promote/Adapters/FooAdapter.php</code>.</li>
+      <li>Add a <code>match</code> case in <code>BroadcastAdapters::dispatch()</code>.</li>
+      <li>Save credentials via Settings → Promote — the destination status flips to <em>connected</em> automatically.</li>
+    </ol>
+  `,
+
 };
 
 
