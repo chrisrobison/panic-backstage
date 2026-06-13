@@ -35,6 +35,19 @@ POST   /api/events/{id}/assets         -> src/Events/Assets.php
 PATCH  /api/events/{id}/assets/{id}    -> src/Events/Assets.php
 
 GET    /api/public/events/{slug}       -> src/PublicEvents.php
+
+GET    /api/promote/events/{id}        -> src/Promote/CampaignForEvent.php
+POST   /api/promote/events/{id}/campaign
+GET    /api/promote/campaigns/{id}     -> src/Promote.php
+PATCH  /api/promote/campaigns/{id}
+GET/POST/PATCH/DELETE /api/promote/campaigns/{id}/posts[/{postId}]
+POST   /api/promote/campaigns/{id}/posts/{postId}/variants/generate
+GET    /api/promote/campaigns/{id}/broadcasts -> src/Promote/Broadcasts.php
+POST   /api/promote/campaigns/{id}/broadcasts
+GET    /api/promote/campaigns/{id}/health     -> src/Promote/PromotionHealth.php
+GET    /api/promote/campaigns/{id}/analytics  -> src/Promote/Analytics.php
+GET    /api/promote/credentials               -> src/Promote/Credentials.php
+POST/DELETE /api/promote/credentials[/{id}]
 ```
 
 Each endpoint receives a `Request`, returns a `Response`, and uses shared services such as `Database` and `Auth`.
@@ -51,7 +64,8 @@ public/
   .htaccess               Apache rewrite for /api
   api/index.php           API entrypoint
   assets/app.css          Venue-ops UI styling
-  assets/app.js           Web Components client
+  assets/app.js           Web Components client (shell, events, dashboard)
+  assets/promote.js       Panic Promote Web Components (15-channel editor, broadcast modal, settings)
   uploads -> ../storage/uploads
 
 src/
@@ -67,6 +81,7 @@ src/
   Templates.php
   PublicEvents.php
   Invites.php
+  Promote.php             Campaign CRUD top-level endpoint
   Events/
     Tasks.php
     Blockers.php
@@ -75,6 +90,23 @@ src/
     Assets.php
     Settlement.php
     Invites.php
+  Promote/
+    Analytics.php         Broadcast metrics from DB + null platform placeholders
+    Broadcasts.php        Broadcast creation + adapter dispatch
+    BroadcastAdapters.php Routes destination_key → platform adapter
+    CampaignForEvent.php  GET/POST campaign for a given event
+    CopyGenerator.php     Deterministic 15-channel variant text generator
+    Credentials.php       Per-venue platform credential store
+    Destinations.php      Destination list endpoint
+    Posts.php             Post CRUD + variant generation
+    PromotionHealth.php   20-item promotion checklist
+    Adapters/
+      EmailAdapter.php      Mailchimp v3 + SendGrid v3 Marketing
+      EventbriteAdapter.php Eventbrite API v3
+      FacebookAdapter.php   Graph API v21.0 page posts
+      InstagramAdapter.php  Graph API v21.0 container → publish
+      LumaAdapter.php       Luma Public API event creation
+      TikTokAdapter.php     TikTok Content Posting API v2
 
 database/
   schema.sql              Canonical full schema (single source of truth)
@@ -558,17 +590,17 @@ payment/fulfillment flow, door-scanner details, and an operating checklist.
 
 ## Panic Promote
 
-Panic Promote is a campaign command center for event promotion. Each event can have one campaign. A campaign organises marketing posts, channel-specific post variants, broadcast destinations, broadcast history, promotion-health checklists, and stub analytics.
+Panic Promote is a campaign command center for event promotion. Each event can have one campaign. A campaign organises marketing posts, channel-specific post variants, broadcast destinations, broadcast history, a 20-item promotion-health checklist, and real broadcast analytics.
 
 ### Concepts
 
 - **Campaign** — one per event; inherits event title, date, times, venue, and ticket URL. Optional `goal_tickets` override.
 - **Post** — master copy belonging to a campaign; statuses: `draft`, `approved`, `scheduled`, `sent`, `archived`.
-- **Post variant** — platform-specific version of a post for one of nine channels: `instagram`, `facebook`, `tiktok`, `email`, `eventbrite`, `luma`, `funcheap`, `foopee`, `press`.
-- **Destination** — a place a post can be sent or tracked, grouped into Direct Posts, Event Platforms, Editorial Submissions, and Email.
+- **Post variant** — platform-specific version of a post for one of 15 channels (see [Channels](#channels) below).
+- **Destination** — a place a post can be sent or tracked, grouped into Direct Posts, Event Platforms, Editorial Submissions, and Email (17 destinations; see [Destinations](#destinations)).
 - **Broadcast** — records an attempt to send one post to one or more destinations; per-destination results are stored as `promote_broadcast_results` rows.
-- **Promotion Health** — a computed checklist score (`score`, `complete`, `total`, `items[]`) derived from event visibility, approved assets, approved variants, and broadcast history.
-- **Analytics** — returns stub zeros in MVP until real platform integrations are wired in.
+- **Promotion Health** — a computed 20-item checklist (`score`, `complete`, `total`, `items[]`) derived from event visibility, approved assets, approved variants, broadcast history, and scheduled reminders.
+- **Analytics** — real broadcast metrics from the DB (destinations reached, live listings, manual to-dos, failures); platform-specific metrics (ticket sales, email opens, RSVPs) are `null` pending future API read-back integrations.
 
 ### Endpoint Reference
 
@@ -587,48 +619,158 @@ GET    /api/promote/campaigns/{campaignId}/posts/{postId}         → fetch one 
 PATCH  /api/promote/campaigns/{campaignId}/posts/{postId}         → update post
 DELETE /api/promote/campaigns/{campaignId}/posts/{postId}         → delete post
 
-POST   /api/promote/campaigns/{campaignId}/posts/{postId}/variants/generate  → generate all 9 variants (local, no AI)
+POST   /api/promote/campaigns/{campaignId}/posts/{postId}/variants/generate  → generate all 15 variants (local, no AI)
 PATCH  /api/promote/campaigns/{campaignId}/posts/{postId}/variants/{variantId} → update a single variant
 
 GET    /api/promote/campaigns/{campaignId}/destinations           → list destinations with current status
-GET    /api/promote/campaigns/{campaignId}/health                 → promotion-health score + checklist
-GET    /api/promote/campaigns/{campaignId}/analytics              → stub analytics (zeros)
+GET    /api/promote/campaigns/{campaignId}/health                 → promotion-health score + 20-item checklist
+GET    /api/promote/campaigns/{campaignId}/analytics              → real broadcast metrics + null platform placeholders
 
 GET    /api/promote/campaigns/{campaignId}/broadcasts             → list broadcasts + results
-POST   /api/promote/campaigns/{campaignId}/broadcasts             → create broadcast (records results per destination)
+POST   /api/promote/campaigns/{campaignId}/broadcasts             → create broadcast (fires real adapters)
 GET    /api/promote/campaigns/{campaignId}/broadcasts/{broadcastId} → fetch one broadcast + results
+
+GET    /api/promote/credentials                                   → list per-venue platform credentials
+POST   /api/promote/credentials                                   → save / update a credential
+DELETE /api/promote/credentials/{id}                             → remove a credential
 ```
 
 All routes require an authenticated user. Access is gated the same way as event sub-resources: venue admins have full access; event owners and collaborators can read and create; `viewer` collaborators get 403 on mutating requests.
 
+### Channels
+
+The copy generator produces a tailored variant for each of these 15 channels when `POST …/variants/generate` is called (deterministic local text — no AI or third-party API):
+
+| Channel | Type | Notes |
+|---|---|---|
+| `instagram` | Social | Caption ≤ 2,200 chars, hashtags, "link in bio" reminder |
+| `facebook` | Social | Up to 63,206 chars; warn if > 477 (truncated in feed) |
+| `tiktok` | Social | Short punchy caption, portrait-crop note |
+| `email` | Email | Subject + body for Mailchimp / SendGrid list blast |
+| `email_adhoc` | Email | Same format, intended for manual BCC send to custom recipients |
+| `eventbrite` | Platform | Event description + metadata |
+| `luma` | Platform | Markdown description + venue address JSON |
+| `funcheap` | Editorial | Calendar listing ≤ 500 chars |
+| `foopee` | Editorial | Concise Bay Area calendar copy |
+| `press` | Editorial | FOR IMMEDIATE RELEASE press blurb |
+| `sf_chronicle` | Editorial | Datebook pitch with media contact line |
+| `sf_station` | Editorial | Listing ≤ 400 chars |
+| `dothebay` | Editorial | Listing ≤ 500 chars, "Music" category note |
+| `songkick` | Platform | Artist-centric show format |
+| `jambase` | Platform | Live music database format |
+
+### Destinations
+
+17 destinations are seeded across four groups. Real API adapters are implemented for the six marked **live**; the rest produce the appropriate stub status with no external calls.
+
+| Key | Group | Default status | Adapter |
+|---|---|---|---|
+| `facebook_page` | Direct Posts | `needs_auth` | **live** — Graph API v21.0, `/photos` or `/feed` |
+| `instagram` | Direct Posts | `needs_auth` | **live** — Graph API v21.0, container → publish flow |
+| `tiktok` | Direct Posts | `needs_auth` | **live** — Content Posting API v2, photo PULL_FROM_URL |
+| `eventbrite` | Event Platforms | `needs_auth` | **live** — Eventbrite API v3, creates listing |
+| `luma` | Event Platforms | `needs_auth` | **live** — Luma Public API, creates event |
+| `bandsintown` | Event Platforms | `manual_submission` | stub → `manual_required` |
+| `songkick` | Event Platforms | `manual_submission` | stub → `manual_required` |
+| `jambase` | Event Platforms | `manual_submission` | stub → `manual_required` |
+| `funcheap` | Editorial Submissions | `manual_submission` | stub → `manual_required` |
+| `foopee` | Editorial Submissions | `manual_submission` | stub → `manual_required` |
+| `press_list` | Editorial Submissions | `manual_submission` | stub → `manual_required` |
+| `sf_chronicle` | Editorial Submissions | `manual_submission` | stub → `manual_required` |
+| `sf_station` | Editorial Submissions | `manual_submission` | stub → `manual_required` |
+| `dothebay` | Editorial Submissions | `manual_submission` | stub → `manual_required` |
+| `email_general` | Email | `connected` | **live** — Mailchimp v3 or SendGrid v3 Marketing |
+| `email_press` | Email | `connected` | **live** — same email adapter, separate list/credentials |
+| `email_adhoc` | Email | `manual_submission` | stub → `manual_required` (copy-and-BCC workflow) |
+
+#### Broadcast result statuses
+
+| Status | Meaning |
+|---|---|
+| `sent` | Real adapter call succeeded; `external_url` may be set |
+| `queued` | Adapter accepted a scheduled send |
+| `needs_auth` | No credentials configured, or adapter returned an auth error |
+| `manual_required` | Destination is `manual_submission`; copy was generated for staff to send |
+| `failed` | Adapter attempted a call and received an error |
+| `skipped` | Destination was `disabled` at broadcast time |
+
+### Platform Credentials
+
+Platform credentials are stored per-venue in the `promote_credentials` table (never in `.env`). Connect platforms from the staff app under **Panic Promote → Settings** (`#promote-settings`).
+
+Required fields per platform:
+
+| Platform | Required | Optional |
+|---|---|---|
+| Facebook Page | Page Access Token, Page ID | — |
+| Instagram | User Access Token, IG Business Account ID | — |
+| TikTok | OAuth Access Token | Privacy Level (default `PUBLIC_TO_EVERYONE`) |
+| Eventbrite | Private API Key, Organizer ID | Eventbrite Venue ID |
+| Luma | API Key | — |
+| Email (general / press) | Provider (`mailchimp` or `sendgrid`), API Key, List / Audience ID, From Name, From Email | Sender ID (SendGrid only) |
+
+Notes:
+- Facebook and Instagram share a Graph API app; the access token is a **Page token** (Facebook) or a **User token with `instagram_content_publish` scope** (Instagram).
+- TikTok access tokens expire; re-authenticate in Settings if a broadcast fails with `access_token_expired`.
+- Luma cover images cannot be served from external URLs; after a Luma broadcast, upload the flyer manually in the Luma dashboard.
+- Mailchimp datacenter is parsed from the API key suffix (e.g. `-us21`).
+- SendGrid uses a single-send (Marketing Campaigns) flow; `sender_id` must match a verified Sender Identity.
+
+### Promotion Health
+
+Health is computed from 20 deterministic checklist items. Items with `severity: 'info'` are informational and do not heavily penalise the score when missing.
+
+| # | Key | Checks |
+|---|---|---|
+| 1 | `panic_page_published` | `events.public_visibility = 1` |
+| 2 | `approved_flyer` | Approved flyer asset exists |
+| 3 | `instagram_approved` | Approved Instagram variant exists |
+| 4 | `facebook_approved` | Approved Facebook variant exists |
+| 5 | `eventbrite_listing` | Any Eventbrite broadcast result exists |
+| 6 | `luma_listing` | Any Luma broadcast result exists |
+| 7 | `funcheap_submitted` | Any Funcheap broadcast result exists |
+| 8 | `foopee_submitted` | Any Foopee broadcast result exists |
+| 9 | `press_email_prepared` | Approved press variant exists |
+| 10 | `email_blast` | Any `email_general` broadcast result exists |
+| 11 | `posts_created` | At least one post exists |
+| 12 | `goal_set` | `goal_tickets` is set on the campaign |
+| 13 | `sf_chronicle_submitted` | Any SF Chronicle broadcast result exists |
+| 14 | `sf_station_submitted` | Any SF Station broadcast result exists |
+| 15 | `dothebay_submitted` | Any DoTheBay broadcast result exists |
+| 16 | `songkick_submitted` | Any SongKick broadcast result exists |
+| 17 | `jambase_submitted` | Any JamBase broadcast result exists |
+| 18 | `email_adhoc_sent` | Any `email_adhoc` broadcast result exists |
+| 19 | `day_before_reminder` | Any scheduled broadcast within 36 h of the show date |
+| 20 | `band_assets_collected` | Approved `band_photo` or `logo` asset exists |
+
 ### Database
 
-Migration: `database/migrations/006_panic_promote.sql`. Apply with:
+Apply all migrations with:
 
 ```bash
 php scripts/migrate.php
 ```
 
-Tables added:
+Promote-specific migrations:
+
+| File | What it adds |
+|---|---|
+| `006_panic_promote.sql` | Core tables + seeds 11 original destinations |
+| `007_promote_credentials.sql` | `promote_credentials` per-venue credential store |
+| `008_add_missing_destinations.sql` | Adds `sf_chronicle`, `sf_station`, `dothebay`, `songkick`, `jambase` |
+| `009_add_email_adhoc_destination.sql` | Adds `email_adhoc` (17th destination) |
+
+Tables:
 
 | Table | Purpose |
 |---|---|
 | `promote_campaigns` | One campaign per event |
 | `promote_posts` | Marketing posts belonging to a campaign |
-| `promote_post_variants` | Per-channel variant of a post |
-| `promote_destinations` | Broadcast target registry (seeded by migration) |
+| `promote_post_variants` | Per-channel variant of a post (15 channels) |
+| `promote_destinations` | Broadcast target registry (seeded, 17 rows) |
 | `promote_broadcasts` | One broadcast attempt per post/send action |
 | `promote_broadcast_results` | Per-destination result row within a broadcast |
-
-The migration also seeds 11 default destinations:
-
-| Key | Group | Default status |
-|---|---|---|
-| `facebook_page`, `instagram`, `tiktok` | Direct Posts | `needs_auth` |
-| `eventbrite`, `luma` | Event Platforms | `needs_auth` |
-| `bandsintown` | Event Platforms | `manual_submission` |
-| `funcheap`, `foopee`, `press_list` | Editorial Submissions | `manual_submission` |
-| `email_general`, `email_press` | Email | `connected` |
+| `promote_credentials` | Platform API keys and config, per venue |
 
 ### Local Smoke Test
 
@@ -644,19 +786,16 @@ Run the promote smoke script:
 php scripts/promote-smoke.php http://localhost:8000 storage/mail
 ```
 
-The script logs in via magic-link, creates an event and campaign, creates a post, generates variants, fires a broadcast across all four destination groups, fetches health and analytics, verifies a viewer gets 403 on mutations, and asserts 401 for unauthenticated requests.
+The script logs in via magic-link, creates an event and campaign, creates a post, generates all 15 variants, fires a broadcast across all four destination groups, verifies per-destination result statuses, fetches health and analytics, asserts all analytics keys are present, verifies a viewer gets 403 on mutations, and asserts 401 for unauthenticated requests.
 
-If you need to run both `endpoint-smoke.php` and `promote-smoke.php` back-to-back, wait about 2 seconds between them. Both scripts mint magic-link tokens and a rapid second request can hit a token-table race condition.
+> If you run both `endpoint-smoke.php` and `promote-smoke.php` back-to-back, wait about 2 seconds between them — both scripts mint magic-link tokens and a rapid second request can hit a token-table race.
 
-### MVP Stub Status
+### Known Limitations / Future Work
 
-Platform integrations are stubs in this release — no external API calls are made:
-
-- Destinations with status `needs_auth` produce result status `needs_auth`.
-- Destinations with status `manual_submission` produce result status `manual_required`.
-- Destinations with status `connected` (the two email destinations) produce `sent` (send_mode `now`) or `queued` (send_mode `scheduled`).
-- Variant generation is deterministic local text — no AI or third-party API is called.
-- Analytics returns stub zeros for website clicks, RSVPs, ticket conversions, and email opens.
+- **Platform analytics read-back** — Eventbrite ticket sales, Mailchimp/SendGrid email opens/clicks, and Luma RSVPs are returned as `null`. Wiring these up requires scheduled API polling or webhook handlers per platform.
+- **Scheduled broadcast runner** — broadcasts created with `send_mode = 'scheduled'` are stored as `queued` but no cron/queue worker exists yet to process them at the scheduled time.
+- **Luma cover image** — the Luma API only accepts images hosted on `images.lumacdn.com`; upload the event flyer manually in the Luma dashboard after an automated broadcast creates the listing.
+- **TikTok token refresh** — TikTok access tokens expire; re-authenticate in Promote Settings when a broadcast fails with `access_token_expired`.
 
 ### Frontend
 
@@ -664,6 +803,7 @@ The Promote workspace is loaded by `public/assets/promote.js` (native Web Compon
 
 - `#promote` — campaigns list, showing upcoming events with health score and days out.
 - `#promote-event-{id}` — campaign overview: hero, promotion health, posts, assets, analytics, and broadcast modal.
+- `#promote-settings` — platform credentials manager; connect and test each destination.
 
 A **Panic Promote** nav item is added to the staff shell navigation alongside the existing top-level sections.
 
