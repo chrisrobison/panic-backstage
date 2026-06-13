@@ -158,7 +158,7 @@ class PromoteCampaignList extends PanicElement {
   render(campaigns) {
     this.innerHTML = `<section class="page-head">
       <div>
-        <h1><i class="fa-solid fa-megaphone" aria-hidden="true"></i> Panic Promote</h1>
+        <h1><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Panic Promote</h1>
         <p class="subtle">Campaign command center &mdash; turn upcoming shows into coordinated promotions.</p>
       </div>
     </section>
@@ -1211,7 +1211,7 @@ class PromoteSettings extends PanicElement {
     this.innerHTML = `
       <div class="promote-settings-page">
         <div class="promote-settings-header">
-          <h2><i class="fa-solid fa-megaphone" aria-hidden="true"></i> Promote Settings</h2>
+          <h2><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Promote Settings</h2>
           <p class="subtle">Connect platforms so Panic Promote can post automatically. API keys and tokens are stored securely per venue and never exposed after saving.</p>
           ${venueSel}
         </div>

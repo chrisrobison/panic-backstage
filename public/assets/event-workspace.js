@@ -116,7 +116,7 @@ class EventWorkspace extends PanicElement {
     this.innerHTML = `<section class="event-top">
       <div><a class="back-link" href="#events">&lt;- Back to Events</a><h1>${esc(event.title)}</h1><p class="subtle">${esc(shortDate(eventDate(event)))} at ${esc(event.venue_name)}</p></div>
       <div class="event-actions">
-        <a class="button promote-accent" href="#promote-event-${esc(String(event.id))}"><i class="fa-solid fa-megaphone" aria-hidden="true"></i> Promote</a>
+        <a class="button promote-accent" href="#promote-event-${esc(String(event.id))}"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Promote</a>
         <a class="button secondary" href="${esc(appUrl(data.links.public_page))}" target="_blank" rel="noreferrer">Public Page</a>
         ${can(data, 'read_event') ? `<details class="print-menu">
           <summary class="button secondary">Print &#9662;</summary>

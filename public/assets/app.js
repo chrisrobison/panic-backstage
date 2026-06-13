@@ -66,7 +66,7 @@ class AppShell extends PanicElement {
       <nav class="side-nav" aria-label="Main navigation">
         <a data-nav="dashboard" href="#dashboard" title="Dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
         <a data-nav="contacts" href="#contacts" title="Contacts" data-nav-contacts><i class="fa-solid fa-address-book" aria-hidden="true"></i>Contacts</a>
-        <a data-nav="promote" href="#promote" title="Promote"><i class="fa-solid fa-megaphone" aria-hidden="true"></i>Promote</a>
+        <a data-nav="promote" href="#promote" title="Promote"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i>Promote</a>
         <div class="nav-group" data-group="events">
           <button class="nav-parent" type="button" data-group-toggle="events" aria-expanded="false" title="Events"><i class="fa-solid fa-ticket" aria-hidden="true"></i><span class="nav-parent-label">Events</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
           <div class="nav-children">
@@ -81,7 +81,7 @@ class AppShell extends PanicElement {
             <a data-nav="account" href="#account" title="Account"><i class="fa-solid fa-user" aria-hidden="true"></i>Account</a>
             <a data-nav="templates" href="#templates" title="Templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
             <a data-nav="preferences" href="#preferences" title="Preferences"><i class="fa-solid fa-sliders" aria-hidden="true"></i>Preferences</a>
-            <a data-nav="promote-settings" href="#promote-settings" title="Promote Settings"><i class="fa-solid fa-megaphone" aria-hidden="true"></i>Promote</a>
+            <a data-nav="promote-settings" href="#promote-settings" title="Promote Settings"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i>Promote</a>
           </div>
         </div>
         <div class="nav-group" data-group="admin" data-nav-admin>
