@@ -6,6 +6,8 @@ namespace Panic\Promote;
 use Panic\Database;
 use Panic\Promote\Adapters\EmailAdapter;
 use Panic\Promote\Adapters\EventbriteAdapter;
+use Panic\Promote\Adapters\FacebookAdapter;
+use Panic\Promote\Adapters\InstagramAdapter;
 use Panic\Promote\Adapters\LumaAdapter;
 
 /**
@@ -47,6 +49,8 @@ final class BroadcastAdapters
         return match ($destKey) {
             'eventbrite'                    => $this->eventbrite($sendMode, $event, $post),
             'luma'                          => $this->luma($sendMode, $event, $post),
+            'facebook_page'                 => $this->facebook($sendMode, $event, $post),
+            'instagram'                     => $this->instagram($sendMode, $event, $post),
             'email_general', 'email_press'  => $this->email($destKey, $sendMode, $event, $post),
             default                         => $this->stub($destStatus, $sendMode),
         };
@@ -92,6 +96,60 @@ final class BroadcastAdapters
         return (new LumaAdapter($apiKey))->dispatch($event, $post, $sendMode);
     }
 
+    private function facebook(string $sendMode, array $event, array $post): array
+    {
+        $cred   = $this->loadCredential('facebook_page', (int) ($event['venue_id'] ?? 1));
+        $token  = $cred['access_token'] ?? '';
+        $config = $cred['config'] ?? [];
+        $pageId = (string) ($config['page_id'] ?? '');
+
+        if (!$token) {
+            return $this->noCredential('Facebook Page', '#promote-settings');
+        }
+        if (!$pageId) {
+            return [
+                'status'        => 'failed',
+                'external_url'  => null,
+                'error_message' => 'Facebook Page ID not configured. Add it in Promote Settings → Facebook Page.',
+                'response_json' => null,
+            ];
+        }
+
+        $variant  = $this->fetchVariant((int) $post['id'], 'facebook');
+        $message  = $variant['body'] ?? (string) ($post['master_text'] ?? $post['title'] ?? '');
+        $imageUrl = $this->resolveImageUrl($post, (int) ($event['id'] ?? 0));
+
+        return (new FacebookAdapter($token, $pageId))
+            ->dispatch($event, $post, $message, $imageUrl, $sendMode);
+    }
+
+    private function instagram(string $sendMode, array $event, array $post): array
+    {
+        $cred      = $this->loadCredential('instagram', (int) ($event['venue_id'] ?? 1));
+        $token     = $cred['access_token'] ?? '';
+        $config    = $cred['config'] ?? [];
+        $igAcctId  = (string) ($config['ig_account_id'] ?? '');
+
+        if (!$token) {
+            return $this->noCredential('Instagram', '#promote-settings');
+        }
+        if (!$igAcctId) {
+            return [
+                'status'        => 'failed',
+                'external_url'  => null,
+                'error_message' => 'Instagram Business Account ID not configured. Add it in Promote Settings → Instagram.',
+                'response_json' => null,
+            ];
+        }
+
+        $variant  = $this->fetchVariant((int) $post['id'], 'instagram');
+        $caption  = $variant['body'] ?? (string) ($post['master_text'] ?? $post['title'] ?? '');
+        $imageUrl = $this->resolveImageUrl($post, (int) ($event['id'] ?? 0));
+
+        return (new InstagramAdapter($token, $igAcctId))
+            ->dispatch($event, $post, $caption, $imageUrl, $sendMode);
+    }
+
     private function email(string $destKey, string $sendMode, array $event, array $post): array
     {
         $cred   = $this->loadCredential($destKey, (int) ($event['venue_id'] ?? 1));
@@ -129,10 +187,7 @@ final class BroadcastAdapters
         }
 
         // Fetch the email variant for subject + body (channel = 'email')
-        $variant = $this->db->one(
-            'SELECT title, body FROM promote_post_variants WHERE post_id = ? AND channel = ?',
-            [(int) $post['id'], 'email']
-        );
+        $variant = $this->fetchVariant((int) $post['id'], 'email');
 
         $subject  = $variant['title'] ?? (string) ($post['title'] ?? '');
         $bodyText = $variant['body']  ?? (string) ($post['master_text'] ?? '');
@@ -145,6 +200,67 @@ final class BroadcastAdapters
 
         return (new EmailAdapter($provider, $apiKey, $listId, $fromName, $fromEmail, $senderId))
             ->dispatch($event, $post, $subject, $bodyText, $sendMode, $scheduledAt);
+    }
+
+    // ── Shared helpers ────────────────────────────────────────────────────────
+
+    /**
+     * Fetch a post variant row for the given channel.
+     * Returns the DB row (with title + body) or null.
+     */
+    private function fetchVariant(int $postId, string $channel): ?array
+    {
+        return $this->db->one(
+            'SELECT title, body FROM promote_post_variants WHERE post_id = ? AND channel = ?',
+            [$postId, $channel]
+        );
+    }
+
+    /**
+     * Resolve the public HTTPS URL of the post's attached approved asset (flyer).
+     *
+     * The asset's file_path is stored relative to /public/, e.g.
+     *   "uploads/events/42/flyer-abc123.jpg"
+     * Combined with APP_URL this becomes the public image URL that external
+     * platforms (Instagram, Facebook) can fetch.
+     *
+     * Returns null if no approved asset is attached to the post.
+     */
+    private function resolveImageUrl(array $post, int $eventId): ?string
+    {
+        $assetId = (int) ($post['asset_id'] ?? 0);
+
+        // Try post's directly attached asset first
+        if ($assetId) {
+            $asset = $this->db->one(
+                "SELECT file_path FROM event_assets WHERE id = ? AND approval_status = 'approved'",
+                [$assetId]
+            );
+            if ($asset && !empty($asset['file_path'])) {
+                return $this->filePathToUrl((string) $asset['file_path']);
+            }
+        }
+
+        // Fall back to any approved flyer for the event
+        if ($eventId > 0) {
+            $asset = $this->db->one(
+                "SELECT file_path FROM event_assets
+                 WHERE event_id = ? AND asset_type = 'flyer' AND approval_status = 'approved'
+                 ORDER BY created_at DESC LIMIT 1",
+                [$eventId]
+            );
+            if ($asset && !empty($asset['file_path'])) {
+                return $this->filePathToUrl((string) $asset['file_path']);
+            }
+        }
+
+        return null;
+    }
+
+    private function filePathToUrl(string $filePath): string
+    {
+        $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        return $appUrl . '/' . ltrim($filePath, '/');
     }
 
     // ── Credential loader ─────────────────────────────────────────────────────
