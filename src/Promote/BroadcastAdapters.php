@@ -9,6 +9,7 @@ use Panic\Promote\Adapters\EventbriteAdapter;
 use Panic\Promote\Adapters\FacebookAdapter;
 use Panic\Promote\Adapters\InstagramAdapter;
 use Panic\Promote\Adapters\LumaAdapter;
+use Panic\Promote\Adapters\TikTokAdapter;
 
 /**
  * Broadcast adapter dispatcher.
@@ -51,6 +52,7 @@ final class BroadcastAdapters
             'luma'                          => $this->luma($sendMode, $event, $post),
             'facebook_page'                 => $this->facebook($sendMode, $event, $post),
             'instagram'                     => $this->instagram($sendMode, $event, $post),
+            'tiktok'                        => $this->tiktok($sendMode, $event, $post),
             'email_general', 'email_press'  => $this->email($destKey, $sendMode, $event, $post),
             default                         => $this->stub($destStatus, $sendMode),
         };
@@ -147,6 +149,25 @@ final class BroadcastAdapters
         $imageUrl = $this->resolveImageUrl($post, (int) ($event['id'] ?? 0));
 
         return (new InstagramAdapter($token, $igAcctId))
+            ->dispatch($event, $post, $caption, $imageUrl, $sendMode);
+    }
+
+    private function tiktok(string $sendMode, array $event, array $post): array
+    {
+        $cred   = $this->loadCredential('tiktok', (int) ($event['venue_id'] ?? 1));
+        $token  = $cred['access_token'] ?? '';
+        $config = $cred['config'] ?? [];
+
+        if (!$token) {
+            return $this->noCredential('TikTok', '#promote-settings');
+        }
+
+        $privacyLevel = (string) ($config['privacy_level'] ?? 'PUBLIC_TO_EVERYONE');
+        $variant      = $this->fetchVariant((int) $post['id'], 'tiktok');
+        $caption      = $variant['body'] ?? (string) ($post['master_text'] ?? $post['title'] ?? '');
+        $imageUrl     = $this->resolveImageUrl($post, (int) ($event['id'] ?? 0));
+
+        return (new TikTokAdapter($token, $privacyLevel))
             ->dispatch($event, $post, $caption, $imageUrl, $sendMode);
     }
 

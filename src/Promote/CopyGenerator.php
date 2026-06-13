@@ -104,9 +104,10 @@ final class CopyGenerator
                     2200
                 ),
                 'warnings' => [
-                    'TikTok performs best with short punchy captions under 150 characters.',
-                    'Pair with vertical video (9:16) for best reach.',
-                    'Links in captions are not clickable — use link in bio.',
+                    'TikTok performs best with short punchy captions under 150 characters — edit before broadcasting.',
+                    'The flyer image posts in portrait crop — ensure the key art is centred vertically.',
+                    'Links in captions are not clickable on TikTok — direct followers to the link in bio.',
+                    'TikTok access tokens expire; re-authenticate in Promote Settings if the broadcast fails.',
                 ],
             ],
 

@@ -1098,9 +1098,10 @@ const PLATFORM_FIELDS = {
     label: 'TikTok',
     icon: 'fa-brands fa-tiktok',
     group: 'Direct Posts',
-    docs: 'https://developers.tiktok.com',
+    docs: 'https://developers.tiktok.com/doc/content-posting-api-reference-direct-post',
     fields: [
-      { key: 'access_token', label: 'Access Token', type: 'password', hint: 'OAuth access token from TikTok for Business' },
+      { key: 'access_token', label: 'Access Token', type: 'password', hint: 'OAuth user access token from your TikTok Developer App' },
+      { key: 'config.privacy_level', label: 'Privacy Level', type: 'text', hint: 'PUBLIC_TO_EVERYONE (default), MUTUAL_FOLLOW_FRIENDS, FOLLOWER_OF_CREATOR, or SELF_ONLY' },
     ],
   },
   eventbrite: {
