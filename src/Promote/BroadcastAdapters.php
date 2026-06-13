@@ -6,6 +6,7 @@ namespace Panic\Promote;
 use Panic\Database;
 use Panic\Promote\Adapters\EmailAdapter;
 use Panic\Promote\Adapters\EventbriteAdapter;
+use Panic\Promote\Adapters\LumaAdapter;
 
 /**
  * Broadcast adapter dispatcher.
@@ -45,6 +46,7 @@ final class BroadcastAdapters
     ): array {
         return match ($destKey) {
             'eventbrite'                    => $this->eventbrite($sendMode, $event, $post),
+            'luma'                          => $this->luma($sendMode, $event, $post),
             'email_general', 'email_press'  => $this->email($destKey, $sendMode, $event, $post),
             default                         => $this->stub($destStatus, $sendMode),
         };
@@ -76,6 +78,18 @@ final class BroadcastAdapters
         }
 
         return (new EventbriteAdapter($apiKey, $orgId, $ebVid))->dispatch($event, $post, $sendMode);
+    }
+
+    private function luma(string $sendMode, array $event, array $post): array
+    {
+        $cred   = $this->loadCredential('luma', (int) ($event['venue_id'] ?? 1));
+        $apiKey = $cred['access_token'] ?? '';
+
+        if (!$apiKey) {
+            return $this->noCredential('Luma', '#promote-settings');
+        }
+
+        return (new LumaAdapter($apiKey))->dispatch($event, $post, $sendMode);
     }
 
     private function email(string $destKey, string $sendMode, array $event, array $post): array

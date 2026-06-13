@@ -143,8 +143,8 @@ final class CopyGenerator
                     0
                 ),
                 'warnings' => [
-                    'Eventbrite listing requires manual submission — check destination status.',
-                    'Ensure the Eventbrite URL matches your ticket link.',
+                    'Ensure your Eventbrite Organizer is configured in Promote Settings before broadcasting.',
+                    'Eventbrite publishes the listing immediately — review the event page after broadcast.',
                 ],
             ],
 
@@ -159,7 +159,8 @@ final class CopyGenerator
                     0
                 ),
                 'warnings' => [
-                    'Luma listing requires manual submission — check destination status.',
+                    'Luma publishes the event immediately on create — review the listing after broadcast.',
+                    'Cover image must be hosted on the Luma CDN; upload one manually in the Luma dashboard after creation.',
                 ],
             ],
 
