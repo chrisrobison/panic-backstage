@@ -304,7 +304,7 @@ class AppShell extends PanicElement {
     });
     const outlet = $('#app', this);
     if (route === 'promote') return this.mount(outlet, 'pb-promote-campaign-list');
-    if (route === 'promote-settings') return this.mount(outlet, 'pb-preferences');
+    if (route === 'promote-settings') return this.mount(outlet, 'pb-promote-settings');
     if (promoteRoute) {
       return this.mount(outlet, 'pb-promote-campaign-overview', promoteRoute);
     }

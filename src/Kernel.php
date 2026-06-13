@@ -182,6 +182,10 @@ final class Kernel
             if (($segments[1] ?? '') === 'eventbrite' && ($segments[2] ?? '') === 'org') {
                 return [Promote\EventbriteSetup::class, []];
             }
+            // GET|PUT|DELETE /api/promote/credentials[/{destKey}]
+            if (($segments[1] ?? '') === 'credentials') {
+                return [Promote\CredentialSettings::class, ['destKey' => $segments[2] ?? null]];
+            }
             if (($segments[1] ?? '') === 'events') {
                 // GET  /api/promote/events/{eventId}           → fetch campaign overview for event
                 // POST /api/promote/events/{eventId}/campaign  → create or return existing campaign

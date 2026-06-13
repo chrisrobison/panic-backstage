@@ -133,7 +133,7 @@ final class Broadcasts extends BaseEndpoint
                 [$campaignId, $postId, $this->userId(), $sendMode, $scheduledAt, 'queued']
             );
 
-            $adapter = new BroadcastAdapters();
+            $adapter = new BroadcastAdapters($this->db);
             $results = [];
             foreach ($destinations as $destKey) {
                 $dest       = $destMap[$destKey] ?? null;

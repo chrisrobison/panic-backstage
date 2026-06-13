@@ -34,9 +34,15 @@ final class EventbriteAdapter
     private const BASE    = 'https://www.eventbriteapi.com/v3';
     private const TIMEOUT = 15;
 
+    /**
+     * @param string $apiKey  Eventbrite private token
+     * @param string $orgId   Numeric organizer/org ID
+     * @param string $ebVenueId  Optional pre-created Eventbrite venue ID
+     */
     public function __construct(
         private readonly string $apiKey,
         private readonly string $orgId,
+        private readonly string $ebVenueId = '',
     ) {}
 
     /**
@@ -107,7 +113,8 @@ final class EventbriteAdapter
             ],
         ];
 
-        $venueId = (string) (getenv('EVENTBRITE_VENUE_ID') ?: '');
+        // Prefer constructor-injected venue ID, fall back to env
+        $venueId = $this->ebVenueId ?: (string) (getenv('EVENTBRITE_VENUE_ID') ?: '');
         if ($venueId) {
             $payload['event']['venue_id'] = $venueId;
         }

@@ -1065,3 +1065,322 @@ class PromoteAnalyticsCard extends PanicElement {
 }
 
 customElements.define('pb-promote-analytics-card', PromoteAnalyticsCard);
+
+// ── pb-promote-settings ───────────────────────────────────────────────────────
+// Per-venue platform credential manager. Shows each connectable destination as
+// a card with status badge, platform-specific fields, and Save/Disconnect actions.
+
+// Field definitions for each connectable destination.
+// Each entry: { key, label, type ('password'|'text'), hint }
+const PLATFORM_FIELDS = {
+  facebook_page: {
+    label: 'Facebook Page',
+    icon: 'fa-brands fa-facebook',
+    group: 'Direct Posts',
+    docs: 'https://developers.facebook.com/docs/pages/access-tokens',
+    fields: [
+      { key: 'access_token', label: 'Page Access Token', type: 'password', hint: 'Long-lived page token from Facebook Developer App' },
+      { key: 'config.page_id', label: 'Page ID', type: 'text', hint: 'Numeric Facebook Page ID' },
+    ],
+  },
+  instagram: {
+    label: 'Instagram',
+    icon: 'fa-brands fa-instagram',
+    group: 'Direct Posts',
+    docs: 'https://developers.facebook.com/docs/instagram-api',
+    fields: [
+      { key: 'access_token', label: 'User Access Token', type: 'password', hint: 'From Facebook Developer App with instagram_content_publish scope' },
+      { key: 'config.ig_account_id', label: 'Instagram Business Account ID', type: 'text', hint: 'Numeric IG Business Account ID (not username)' },
+    ],
+  },
+  tiktok: {
+    label: 'TikTok',
+    icon: 'fa-brands fa-tiktok',
+    group: 'Direct Posts',
+    docs: 'https://developers.tiktok.com',
+    fields: [
+      { key: 'access_token', label: 'Access Token', type: 'password', hint: 'OAuth access token from TikTok for Business' },
+    ],
+  },
+  eventbrite: {
+    label: 'Eventbrite',
+    icon: 'fa-solid fa-ticket',
+    group: 'Event Platforms',
+    docs: 'https://www.eventbrite.com/platform/api',
+    fields: [
+      { key: 'access_token', label: 'API Key (Private Token)', type: 'password', hint: 'From eventbrite.com/account-settings/apps' },
+      { key: 'config.org_id', label: 'Organizer ID', type: 'text', hint: 'Numeric org ID — create an Organizer on eventbrite.com first, then fetch via the org lookup button' },
+      { key: 'config.eb_venue_id', label: 'Venue ID (optional)', type: 'text', hint: 'Pre-created Eventbrite venue ID for Mabuhay Gardens — leave blank to embed venue text instead' },
+    ],
+  },
+  luma: {
+    label: 'Luma',
+    icon: 'fa-solid fa-calendar-star',
+    group: 'Event Platforms',
+    docs: 'https://lu.ma/developers',
+    fields: [
+      { key: 'access_token', label: 'API Key', type: 'password', hint: 'From lu.ma/dashboard → Settings → API' },
+    ],
+  },
+  bandsintown: {
+    label: 'Bandsintown',
+    icon: 'fa-solid fa-guitar',
+    group: 'Event Platforms',
+    docs: 'https://manager.bandsintown.com',
+    fields: [
+      { key: 'config.artist_name', label: 'Artist / Venue Name', type: 'text', hint: 'Your artist or venue name on Bandsintown (used for manager portal link)' },
+    ],
+  },
+  email_general: {
+    label: 'General Email List',
+    icon: 'fa-solid fa-envelope',
+    group: 'Email',
+    docs: 'https://mailchimp.com/developer',
+    fields: [
+      { key: 'config.provider', label: 'Provider', type: 'text', hint: 'mailchimp or sendgrid' },
+      { key: 'access_token', label: 'API Key', type: 'password', hint: 'Mailchimp or SendGrid API key' },
+      { key: 'config.list_id', label: 'List / Audience ID', type: 'text', hint: 'Mailchimp audience ID or SendGrid list ID' },
+      { key: 'config.from_name', label: 'From Name', type: 'text', hint: 'e.g. Mabuhay Gardens' },
+    ],
+  },
+  email_press: {
+    label: 'Press Email List',
+    icon: 'fa-solid fa-newspaper',
+    group: 'Email',
+    docs: 'https://mailchimp.com/developer',
+    fields: [
+      { key: 'config.provider', label: 'Provider', type: 'text', hint: 'mailchimp or sendgrid' },
+      { key: 'access_token', label: 'API Key', type: 'password', hint: 'Mailchimp or SendGrid API key' },
+      { key: 'config.list_id', label: 'List / Audience ID', type: 'text', hint: 'Mailchimp audience ID or SendGrid list ID' },
+      { key: 'config.from_name', label: 'From Name', type: 'text', hint: 'e.g. Mabuhay Gardens Press' },
+    ],
+  },
+};
+
+class PromoteSettings extends PanicElement {
+  async connect() {
+    this.venueId = 1;
+    this.saving = {};
+    await this.load();
+  }
+
+  async load() {
+    this.innerHTML = '<div class="loading-state padded">Loading platform connections…</div>';
+    try {
+      const data = await api(`/promote/credentials?venue_id=${this.venueId}`);
+      this.venues = data.venues || [];
+      this.credentials = data.credentials || [];
+      this.render();
+    } catch (err) {
+      this.innerHTML = `<div class="error-text padded">Failed to load credentials: ${esc(String(err?.message || err))}</div>`;
+    }
+  }
+
+  render() {
+    // Build a map of destKey → credential row
+    const credMap = {};
+    for (const c of this.credentials) credMap[c.destination_key] = c;
+
+    // Group platforms
+    const groups = {};
+    for (const [destKey, def] of Object.entries(PLATFORM_FIELDS)) {
+      if (!groups[def.group]) groups[def.group] = [];
+      const cred = credMap[destKey] || { destination_key: destKey, cred_status: 'needs_auth', config: null };
+      groups[def.group].push({ destKey, def, cred });
+    }
+
+    const venueSel = this.venues.length > 1
+      ? `<div class="promote-settings-venue">
+          <label>Venue:
+            <select data-venue-select>
+              ${this.venues.map((v) => `<option value="${esc(String(v.id))}" ${v.id === this.venueId ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}
+            </select>
+          </label>
+        </div>`
+      : '';
+
+    const groupsHtml = Object.entries(groups).map(([groupName, items]) => `
+      <section class="promote-settings-group">
+        <h3 class="promote-settings-group-title">${esc(groupName)}</h3>
+        <div class="promote-settings-cards">
+          ${items.map(({ destKey, def, cred }) => this.renderCard(destKey, def, cred)).join('')}
+        </div>
+      </section>
+    `).join('');
+
+    this.innerHTML = `
+      <div class="promote-settings-page">
+        <div class="promote-settings-header">
+          <h2><i class="fa-solid fa-megaphone" aria-hidden="true"></i> Promote Settings</h2>
+          <p class="subtle">Connect platforms so Panic Promote can post automatically. API keys and tokens are stored securely per venue and never exposed after saving.</p>
+          ${venueSel}
+        </div>
+        ${groupsHtml}
+      </div>`;
+
+    // Venue selector
+    this.$('[data-venue-select]')?.addEventListener('change', (e) => {
+      this.venueId = Number(e.target.value);
+      this.load();
+    });
+
+    // Wire up card forms
+    for (const [destKey] of Object.entries(PLATFORM_FIELDS)) {
+      this.wireCard(destKey);
+    }
+  }
+
+  renderCard(destKey, def, cred) {
+    const status = cred.cred_status || 'needs_auth';
+    const statusTone = status === 'connected' ? 'success' : status === 'error' ? 'danger' : 'warning';
+    const statusLabel = status === 'connected' ? 'Connected' : status === 'error' ? 'Error' : 'Not connected';
+    const config = cred.config || {};
+
+    const fieldsHtml = def.fields.map((f) => {
+      const isConfig = f.key.startsWith('config.');
+      const configKey = isConfig ? f.key.slice(7) : null;
+      const val = isConfig ? (config[configKey] || '') : (cred.has_token ? '••••••••' : '');
+      return `<div class="form-row">
+        <label class="form-label">${esc(f.label)}
+          <input
+            type="${esc(f.type)}"
+            data-field="${esc(f.key)}"
+            data-dest="${esc(destKey)}"
+            value="${esc(String(val))}"
+            placeholder="${esc(f.hint)}"
+            autocomplete="off"
+            class="form-input"
+          >
+        </label>
+        <p class="form-hint">${esc(f.hint)}</p>
+      </div>`;
+    }).join('');
+
+    const extraButton = destKey === 'eventbrite'
+      ? `<button type="button" class="button secondary small" data-eb-org-lookup>
+           <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Fetch Org ID
+         </button>`
+      : '';
+
+    return `<div class="promote-settings-card" data-card="${esc(destKey)}">
+      <div class="promote-settings-card-head">
+        <span class="promote-settings-platform-name">
+          <i class="${esc(def.icon)}" aria-hidden="true"></i>
+          ${esc(def.label)}
+        </span>
+        <span class="badge ${esc(statusTone)}">${esc(statusLabel)}</span>
+      </div>
+      ${cred.error_message ? `<p class="promote-settings-error">${esc(cred.error_message)}</p>` : ''}
+      <div class="promote-settings-fields">
+        ${fieldsHtml}
+      </div>
+      <div class="promote-settings-actions">
+        ${extraButton}
+        <button type="button" class="button primary small" data-save="${esc(destKey)}" ${this.saving[destKey] ? 'disabled' : ''}>
+          ${this.saving[destKey] ? '<i class="fa-solid fa-spinner fa-spin"></i> Saving…' : '<i class="fa-solid fa-floppy-disk"></i> Save'}
+        </button>
+        ${status === 'connected' ? `<button type="button" class="button danger-outline small" data-disconnect="${esc(destKey)}">Disconnect</button>` : ''}
+        <a href="${esc(def.docs)}" target="_blank" rel="noreferrer" class="button ghost small">Docs <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>
+      </div>
+    </div>`;
+  }
+
+  wireCard(destKey) {
+    const card = this.$(`[data-card="${destKey}"]`);
+    if (!card) return;
+
+    card.querySelector(`[data-save="${destKey}"]`)?.addEventListener('click', () => this.save(destKey));
+    card.querySelector(`[data-disconnect="${destKey}"]`)?.addEventListener('click', () => this.disconnect(destKey));
+    card.querySelector('[data-eb-org-lookup]')?.addEventListener('click', () => this.fetchEventbriteOrg(destKey));
+  }
+
+  async save(destKey) {
+    const def = PLATFORM_FIELDS[destKey];
+    if (!def) return;
+
+    const body = { venue_id: this.venueId, config: {} };
+
+    for (const f of def.fields) {
+      const input = this.$(`[data-field="${f.key}"][data-dest="${destKey}"]`);
+      if (!input) continue;
+      const val = input.value.trim();
+      if (!val || val === '••••••••') continue; // skip blanks and masked placeholders
+
+      if (f.key.startsWith('config.')) {
+        body.config[f.key.slice(7)] = val;
+      } else if (f.key === 'access_token') {
+        body.access_token = val;
+      } else if (f.key === 'refresh_token') {
+        body.refresh_token = val;
+      }
+    }
+
+    this.saving[destKey] = true;
+    this.rerenderCard(destKey);
+
+    try {
+      await api(`/promote/credentials/${destKey}`, { method: 'PUT', body: JSON.stringify(body) });
+      publish('toast.show', { message: `${def.label} credentials saved`, tone: 'success' });
+      await this.load();
+    } catch (err) {
+      publish('toast.show', { message: `Save failed: ${err?.message || err}`, tone: 'error' });
+      this.saving[destKey] = false;
+      this.rerenderCard(destKey);
+    }
+  }
+
+  async disconnect(destKey) {
+    const def = PLATFORM_FIELDS[destKey];
+    if (!def) return;
+    if (!confirm(`Disconnect ${def.label}? This will remove the stored credentials.`)) return;
+
+    try {
+      await api(`/promote/credentials/${destKey}`, { method: 'DELETE' });
+      publish('toast.show', { message: `${def.label} disconnected`, tone: 'info' });
+      await this.load();
+    } catch (err) {
+      publish('toast.show', { message: `Disconnect failed: ${err?.message || err}`, tone: 'error' });
+    }
+  }
+
+  async fetchEventbriteOrg(destKey) {
+    try {
+      const data = await api('/promote/eventbrite/org');
+      const orgs = data.organizations || [];
+      if (!orgs.length) {
+        publish('toast.show', { message: data.instructions || 'No organizations found — set up an Organizer on eventbrite.com first.', tone: 'warning' });
+        return;
+      }
+      // Auto-fill the org_id field with the first org, prompt if multiple
+      const org = orgs.length === 1 ? orgs[0] : orgs.find((o) => o.name) || orgs[0];
+      const input = this.$(`[data-field="config.org_id"][data-dest="${destKey}"]`);
+      if (input) {
+        input.value = org.id;
+        publish('toast.show', { message: `Org ID fetched: ${org.name} (${org.id})`, tone: 'success' });
+        if (orgs.length > 1) {
+          publish('toast.show', { message: `${orgs.length} organizations found — verify the correct one is filled in.`, tone: 'info' });
+        }
+      }
+    } catch (err) {
+      publish('toast.show', { message: `Could not fetch org ID: ${err?.message || err}`, tone: 'error' });
+    }
+  }
+
+  rerenderCard(destKey) {
+    const def = PLATFORM_FIELDS[destKey];
+    if (!def) return;
+    const cred = (this.credentials || []).find((c) => c.destination_key === destKey)
+      || { destination_key: destKey, cred_status: 'needs_auth', config: null };
+    const card = this.$(`[data-card="${destKey}"]`);
+    if (!card) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = this.renderCard(destKey, def, cred);
+    card.replaceWith(tmp.firstElementChild);
+    this.wireCard(destKey);
+  }
+
+  // Scoped querySelector helper
+  $(sel) { return this.querySelector(sel); }
+}
+
+customElements.define('pb-promote-settings', PromoteSettings);

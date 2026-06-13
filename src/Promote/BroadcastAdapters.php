@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Panic\Promote;
 
+use Panic\Database;
 use Panic\Promote\Adapters\EventbriteAdapter;
 
 /**
@@ -12,13 +13,18 @@ use Panic\Promote\Adapters\EventbriteAdapter;
  * platform adapter (real API) or falls back to the status-stub for
  * manual / unconfigured / disabled destinations.
  *
+ * Credentials are loaded from promote_credentials (per-venue DB table),
+ * with a fallback to .env vars for backwards compatibility.
+ *
  * Adding a new real adapter:
  *   1. Create  src/Promote/Adapters/FooAdapter.php  implementing ::dispatch()
- *   2. Add a case for the destination_key here in dispatch()
- *   3. Add the required env vars to .env (and document them in the adapter)
+ *   2. Add a match case for the destination_key in dispatch() below
+ *   3. Add a private loader method that reads from DB (+ env fallback)
  */
 final class BroadcastAdapters
 {
+    public function __construct(private readonly Database $db) {}
+
     /**
      * Attempt a single broadcast result for one destination.
      *
@@ -46,24 +52,57 @@ final class BroadcastAdapters
 
     private function eventbrite(string $sendMode, array $event, array $post): array
     {
-        $apiKey = (string) (getenv('EVENTBRITE_API_KEY') ?: '');
-        $orgId  = (string) (getenv('EVENTBRITE_ORG_ID') ?: '');
+        $cred   = $this->loadCredential('eventbrite', (int) ($event['venue_id'] ?? 1));
+        $apiKey = $cred['access_token'] ?? (string) (getenv('EVENTBRITE_API_KEY') ?: '');
+        $config = $cred['config'] ?? [];
+        $orgId  = (string) ($config['org_id'] ?? getenv('EVENTBRITE_ORG_ID') ?: '');
+        $ebVid  = (string) ($config['eb_venue_id'] ?? getenv('EVENTBRITE_VENUE_ID') ?: '');
 
         if (!$apiKey) {
-            return $this->stub('needs_auth', $sendMode);
+            return $this->noCredential('Eventbrite', '#promote-settings');
         }
 
         if (!$orgId) {
             return [
                 'status'        => 'needs_auth',
                 'external_url'  => null,
-                'error_message' => 'EVENTBRITE_ORG_ID not set. Log in to eventbrite.com, create an Organizer, '
-                                 . 'then call GET /api/promote/eventbrite/org to retrieve and store your org ID.',
+                'error_message' => 'Eventbrite Org ID not configured. '
+                                 . 'Log in to eventbrite.com, create an Organizer, '
+                                 . 'then save it in Promote › Settings.',
                 'response_json' => null,
             ];
         }
 
-        return (new EventbriteAdapter($apiKey, $orgId))->dispatch($event, $post, $sendMode);
+        return (new EventbriteAdapter($apiKey, $orgId, $ebVid))->dispatch($event, $post, $sendMode);
+    }
+
+    // ── Credential loader ─────────────────────────────────────────────────────
+
+    /**
+     * Load a promote_credentials row for the given destination + venue.
+     * Returns an array with 'access_token', 'config' (decoded), etc., or [].
+     */
+    private function loadCredential(string $destKey, int $venueId): array
+    {
+        $row = $this->db->one(
+            'SELECT access_token, refresh_token, token_expires_at, config, status
+             FROM promote_credentials
+             WHERE destination_key = ? AND venue_id = ? AND status = ?',
+            [$destKey, $venueId, 'connected']
+        );
+
+        if (!$row) {
+            return [];
+        }
+
+        // Decode the JSON config field
+        if (!empty($row['config'])) {
+            $row['config'] = json_decode((string) $row['config'], true) ?? [];
+        } else {
+            $row['config'] = [];
+        }
+
+        return $row;
     }
 
     // ── Stub fallback ─────────────────────────────────────────────────────────
@@ -86,6 +125,16 @@ final class BroadcastAdapters
             'status'        => $status,
             'external_url'  => null,
             'error_message' => null,
+            'response_json' => null,
+        ];
+    }
+
+    private function noCredential(string $label, string $settingsPath): array
+    {
+        return [
+            'status'        => 'needs_auth',
+            'external_url'  => null,
+            'error_message' => "$label credentials not configured. Visit $settingsPath to connect.",
             'response_json' => null,
         ];
     }

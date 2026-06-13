@@ -31,8 +31,8 @@ final class EventbriteSetup extends BaseEndpoint
             return Response::methodNotAllowed();
         }
 
-        // Only admins / users with manage_users capability may use this
-        if ($denied = $this->requireCapability('manage_users')) {
+        // Only venue admins may use this
+        if ($denied = $this->requireGlobalCapability('manage_users')) {
             return $denied;
         }
 
