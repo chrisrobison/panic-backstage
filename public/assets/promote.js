@@ -31,30 +31,35 @@ import {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const CHANNELS = [
-  'instagram', 'facebook', 'tiktok',
+  'instagram', 'facebook', 'tiktok', 'twitter', 'threads', 'bluesky',
   'email', 'email_adhoc',
-  'eventbrite', 'luma',
+  'eventbrite', 'luma', 'dice', 'resident_advisor',
   'funcheap', 'foopee', 'press',
   'sf_chronicle', 'sf_station', 'dothebay',
   'songkick', 'jambase',
 ];
 
 const CHANNEL_LABELS = {
-  instagram:    'Instagram',
-  facebook:     'Facebook',
-  tiktok:       'TikTok',
-  email:        'Email List',
-  email_adhoc:  'Ad-hoc Email',
-  eventbrite:   'Eventbrite',
-  luma:         'Luma',
-  funcheap:     'Funcheap',
-  foopee:       'Foopee',
-  press:        'Press',
-  sf_chronicle: 'SF Chronicle',
-  sf_station:   'SF Station',
-  dothebay:     'DoTheBay',
-  songkick:     'SongKick',
-  jambase:      'JamBase',
+  instagram:       'Instagram',
+  facebook:        'Facebook',
+  tiktok:          'TikTok',
+  twitter:         'Twitter / X',
+  threads:         'Threads',
+  bluesky:         'Bluesky',
+  email:           'Email List',
+  email_adhoc:     'Ad-hoc Email',
+  eventbrite:      'Eventbrite',
+  luma:            'Luma',
+  dice:            'Dice.fm',
+  resident_advisor:'Resident Advisor',
+  funcheap:        'Funcheap',
+  foopee:          'Foopee',
+  press:           'Press',
+  sf_chronicle:    'SF Chronicle',
+  sf_station:      'SF Station',
+  dothebay:        'DoTheBay',
+  songkick:        'SongKick',
+  jambase:         'JamBase',
 };
 
 const DEST_GROUP_LABELS = {
@@ -757,7 +762,12 @@ class PromotePostEditor extends PanicElement {
     const v = this.variants[channel] || {};
     const warnings = (typeof v.warnings_json === 'string' ? JSON.parse(v.warnings_json || '[]') : v.warnings_json) || [];
     const charCount = (v.body || '').length;
-    const charLimits = { instagram: 2200, facebook: 63206, tiktok: 2200, email: null, eventbrite: 15000, luma: 5000, funcheap: 500, foopee: 500, press: 800 };
+    const charLimits = {
+      instagram: 2200, facebook: 63206, tiktok: 2200,
+      twitter: 280, threads: 500, bluesky: 300,
+      email: null, eventbrite: 15000, luma: 5000,
+      funcheap: 500, foopee: 500, press: 800,
+    };
     const limit = charLimits[channel];
 
     return `<div class="promote-variant-panel" data-variant-panel data-vc="${esc(channel)}">
@@ -787,7 +797,12 @@ class PromotePostEditor extends PanicElement {
     const charDisplay = $('[data-char-count]', panel);
     if (bodyArea && charDisplay) {
       bodyArea.addEventListener('input', () => {
-        const charLimits = { instagram: 2200, facebook: 63206, tiktok: 2200, email: null, eventbrite: 15000, luma: 5000, funcheap: 500, foopee: 500, press: 800 };
+        const charLimits = {
+          instagram: 2200, facebook: 63206, tiktok: 2200,
+          twitter: 280, threads: 500, bluesky: 300,
+          email: null, eventbrite: 15000, luma: 5000,
+          funcheap: 500, foopee: 500, press: 800,
+        };
         const limit = charLimits[channel];
         const count = bodyArea.value.length;
         charDisplay.textContent = `${count}${limit ? ` / ${limit}` : ''} chars`;
@@ -1146,6 +1161,66 @@ customElements.define('pb-promote-analytics-card', PromoteAnalyticsCard);
 // Field definitions for each connectable destination.
 // Each entry: { key, label, type ('password'|'text'), hint }
 const PLATFORM_FIELDS = {
+  twitter: {
+    label: 'Twitter / X',
+    icon: 'fa-brands fa-x-twitter',
+    group: 'Direct Posts',
+    docs: 'https://developer.twitter.com/en/docs/twitter-api/tweets/manage-tweets/api-reference/post-tweets',
+    fields: [
+      {
+        key: 'access_token',
+        label: 'OAuth 2.0 User Access Token',
+        type: 'password',
+        hint: 'From X Developer Portal → Your App → Keys & Tokens. Requires tweet.write + offline.access scopes via the OAuth 2.0 PKCE flow.',
+      },
+      {
+        key: 'refresh_token',
+        label: 'Refresh Token (recommended)',
+        type: 'password',
+        hint: 'Returned alongside the access token when offline.access scope is included. Used to renew expired tokens without re-authenticating.',
+      },
+    ],
+  },
+  threads: {
+    label: 'Threads',
+    icon: 'fa-brands fa-threads',
+    group: 'Direct Posts',
+    docs: 'https://developers.facebook.com/docs/threads',
+    fields: [
+      {
+        key: 'access_token',
+        label: 'Threads Access Token',
+        type: 'password',
+        hint: 'Long-lived token from the Meta Developer Portal (threads_content_publish scope). Exchange a short-lived token at graph.threads.net/access_token.',
+      },
+      {
+        key: 'config.threads_user_id',
+        label: 'Threads User ID',
+        type: 'text',
+        hint: 'Numeric Threads user ID — fetch via: GET https://graph.threads.net/v1.0/me?fields=id&access_token={token}',
+      },
+    ],
+  },
+  bluesky: {
+    label: 'Bluesky',
+    icon: 'fa-brands fa-bluesky',
+    group: 'Direct Posts',
+    docs: 'https://docs.bsky.app/docs/tutorials/creating-a-post',
+    fields: [
+      {
+        key: 'config.identifier',
+        label: 'Bluesky Handle',
+        type: 'text',
+        hint: 'Your full Bluesky handle, e.g. mabuhaygardens.bsky.social (or a custom domain if configured)',
+      },
+      {
+        key: 'access_token',
+        label: 'App Password',
+        type: 'password',
+        hint: 'From bsky.app → Settings → Privacy and Security → App Passwords. Use an App Password — NOT your main account password.',
+      },
+    ],
+  },
   facebook_page: {
     label: 'Facebook Page',
     icon: 'fa-brands fa-facebook',
@@ -1285,6 +1360,34 @@ const PLATFORM_FIELDS = {
     docs: 'https://dothebay.com/submit-event',
     fields: [
       { key: 'config.submission_url', label: 'Submission URL', type: 'text', hint: 'DoTheBay event submission form URL' },
+    ],
+  },
+  dice: {
+    label: 'Dice.fm',
+    icon: 'fa-solid fa-dice',
+    group: 'Event Platforms',
+    docs: 'https://dice.fm/partners',
+    fields: [
+      {
+        key: 'config.partner_url',
+        label: 'Dice Partner Dashboard URL',
+        type: 'text',
+        hint: 'Your Dice.fm partner/promoter dashboard URL — dice.fm/partners. Submissions are manual via the dashboard.',
+      },
+    ],
+  },
+  resident_advisor: {
+    label: 'Resident Advisor',
+    icon: 'fa-solid fa-headphones',
+    group: 'Event Platforms',
+    docs: 'https://ra.co/promoters',
+    fields: [
+      {
+        key: 'config.promoter_url',
+        label: 'RA Promoter Account URL',
+        type: 'text',
+        hint: 'Your Resident Advisor promoter login/dashboard URL — ra.co/promoters. Submissions are manual.',
+      },
     ],
   },
 };

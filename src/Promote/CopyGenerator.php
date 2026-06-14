@@ -15,10 +15,15 @@ final class CopyGenerator
         'instagram',
         'facebook',
         'tiktok',
+        'twitter',
+        'threads',
+        'bluesky',
         'email',
         'email_adhoc',
         'eventbrite',
         'luma',
+        'dice',
+        'resident_advisor',
         'funcheap',
         'foopee',
         'press',
@@ -112,6 +117,60 @@ final class CopyGenerator
                 ],
             ],
 
+            'twitter' => [
+                'channel'  => 'twitter',
+                'title'    => null,
+                'body'     => $this->trimTo(
+                    "🎶 $eventTitle | $dateShort @ $venue" .
+                    ($ageText ? $ageText : '') .
+                    ($ticketUrl ? "\n🎟️ $ticketUrl" : '') .
+                    "\n#LiveMusic #MabuhayGardens #SFMusic",
+                    280
+                ),
+                'warnings' => [
+                    'X (Twitter) hard limit is 280 characters — URLs count as 23 chars regardless of length.',
+                    'Free tier allows ~17 posts per 24 hours — Basic or Pro tier removes most rate limits.',
+                    'Access token expires after 2 hours without offline.access scope; use a refresh token or re-authenticate before broadcasting.',
+                    'Consider threading follow-up tweets with show details if the master text is long.',
+                ],
+            ],
+
+            'threads' => [
+                'channel'  => 'threads',
+                'title'    => null,
+                'body'     => $this->trimTo(
+                    "🎵 $eventTitle\n\n" .
+                    "$shortDesc\n\n" .
+                    "$dateFormatted @ $venue$doorsText$showText$ageText" .
+                    ($ticketUrl ? "\n\nTickets: $ticketUrl" : '') .
+                    "\n\n#LiveMusic #MabuhayGardens #SFMusic",
+                    500
+                ),
+                'warnings' => [
+                    'Threads does not display link previews for all URLs — include the full link in the body.',
+                    'Image posts require a publicly accessible flyer URL — attach an approved flyer to the post.',
+                    'Threads access tokens expire after 60 days — refresh or regenerate before they lapse.',
+                ],
+            ],
+
+            'bluesky' => [
+                'channel'  => 'bluesky',
+                'title'    => null,
+                'body'     => $this->trimTo(
+                    "🎵 $eventTitle\n" .
+                    "$dateShort @ $venue$doorsText$showText$ageText\n\n" .
+                    $shortDesc .
+                    ($ticketUrl ? "\n🎟️ $ticketUrl" : '') .
+                    "\n\n#LiveMusic #SFMusic",
+                    300
+                ),
+                'warnings' => [
+                    'Bluesky hard limit is 300 characters — URLs are counted in full, not shortened.',
+                    'The adapter injects URL facets automatically so ticket links appear clickable.',
+                    'Use an App Password (not your main password) — generate one in bsky.app → Settings → App Passwords.',
+                ],
+            ],
+
             'email' => [
                 'channel'  => 'email',
                 'title'    => "Upcoming: $eventTitle — $dateShort",
@@ -186,6 +245,47 @@ final class CopyGenerator
                 'warnings' => [
                     'Luma publishes the event immediately on create — review the listing after broadcast.',
                     'Cover image must be hosted on the Luma CDN; upload one manually in the Luma dashboard after creation.',
+                ],
+            ],
+
+            'dice' => [
+                'channel'  => 'dice',
+                'title'    => $eventTitle,
+                'body'     => $this->trimTo(
+                    "$eventTitle\n" .
+                    "$dateFormatted · $venue — San Francisco, CA$doorsText$showText\n" .
+                    ($ageText ? "$ageRestr\n" : '') .
+                    "\n" .
+                    $shortDesc .
+                    $ticketLine,
+                    0
+                ),
+                'warnings' => [
+                    'Dice.fm listings are managed through your Dice Artist/Promoter account — log in at dice.fm/partners.',
+                    'Dice requires event submission at least 7 days before the show date for editorial consideration.',
+                    'High-resolution flyer (minimum 1400×1400 px, JPG or PNG) is required for a Dice listing.',
+                    'Manual submission: copy this text into your Dice promoter dashboard.',
+                ],
+            ],
+
+            'resident_advisor' => [
+                'channel'  => 'resident_advisor',
+                'title'    => $eventTitle,
+                'body'     => $this->trimTo(
+                    "$eventTitle\n" .
+                    "$dateFormatted · $venue — San Francisco, CA$doorsText$showText\n" .
+                    ($ageText ? "$ageRestr\n" : '') .
+                    "\n" .
+                    $shortDesc .
+                    $ticketLine,
+                    0
+                ),
+                'warnings' => [
+                    'Resident Advisor is primarily artist-driven — ensure the headlining artist has claimed their RA page.',
+                    'Submit through ra.co/promoters after creating a Promoter account for Mabuhay Gardens.',
+                    'RA is strongest for electronic music events — effectiveness varies by genre.',
+                    'Manual submission: copy this text into the RA event submission form.',
+                    'Allow 24–48 hours for RA editorial review before the event goes live.',
                 ],
             ],
 

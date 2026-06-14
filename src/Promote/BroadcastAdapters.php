@@ -4,12 +4,15 @@ declare(strict_types=1);
 namespace Panic\Promote;
 
 use Panic\Database;
+use Panic\Promote\Adapters\BlueSkyAdapter;
 use Panic\Promote\Adapters\EmailAdapter;
 use Panic\Promote\Adapters\EventbriteAdapter;
 use Panic\Promote\Adapters\FacebookAdapter;
 use Panic\Promote\Adapters\InstagramAdapter;
 use Panic\Promote\Adapters\LumaAdapter;
+use Panic\Promote\Adapters\ThreadsAdapter;
 use Panic\Promote\Adapters\TikTokAdapter;
+use Panic\Promote\Adapters\TwitterAdapter;
 
 /**
  * Broadcast adapter dispatcher.
@@ -53,6 +56,9 @@ final class BroadcastAdapters
             'facebook_page'                 => $this->facebook($sendMode, $event, $post),
             'instagram'                     => $this->instagram($sendMode, $event, $post),
             'tiktok'                        => $this->tiktok($sendMode, $event, $post),
+            'twitter'                       => $this->twitter($sendMode, $event, $post),
+            'threads'                       => $this->threads($sendMode, $event, $post),
+            'bluesky'                       => $this->bluesky($sendMode, $event, $post),
             'email_general', 'email_press'  => $this->email($destKey, $sendMode, $event, $post),
             default                         => $this->stub($destStatus, $sendMode),
         };
@@ -169,6 +175,82 @@ final class BroadcastAdapters
 
         return (new TikTokAdapter($token, $privacyLevel))
             ->dispatch($event, $post, $caption, $imageUrl, $sendMode);
+    }
+
+    private function twitter(string $sendMode, array $event, array $post): array
+    {
+        $cred  = $this->loadCredential('twitter', (int) ($event['venue_id'] ?? 1));
+        $token = $cred['access_token'] ?? '';
+
+        if (!$token) {
+            return $this->noCredential('Twitter / X', '#promote-settings');
+        }
+
+        $variant = $this->fetchVariant((int) $post['id'], 'twitter');
+        $text    = $variant['body'] ?? (string) ($post['master_text'] ?? $post['title'] ?? '');
+
+        // Enforce 280-char hard limit (CopyGenerator already trims, but guard here too)
+        if (mb_strlen($text) > 280) {
+            $text = mb_substr($text, 0, 277) . '…';
+        }
+
+        return (new TwitterAdapter($token))->dispatch($event, $post, $text, $sendMode);
+    }
+
+    private function threads(string $sendMode, array $event, array $post): array
+    {
+        $cred   = $this->loadCredential('threads', (int) ($event['venue_id'] ?? 1));
+        $token  = $cred['access_token'] ?? '';
+        $config = $cred['config'] ?? [];
+        $userId = (string) ($config['threads_user_id'] ?? '');
+
+        if (!$token) {
+            return $this->noCredential('Threads', '#promote-settings');
+        }
+        if (!$userId) {
+            return [
+                'status'        => 'failed',
+                'external_url'  => null,
+                'error_message' => 'Threads User ID not configured. Add it in Promote Settings → Threads.',
+                'response_json' => null,
+            ];
+        }
+
+        $variant  = $this->fetchVariant((int) $post['id'], 'threads');
+        $text     = $variant['body'] ?? (string) ($post['master_text'] ?? $post['title'] ?? '');
+        $imageUrl = $this->resolveImageUrl($post, (int) ($event['id'] ?? 0));
+
+        return (new ThreadsAdapter($token, $userId))->dispatch($event, $post, $text, $imageUrl, $sendMode);
+    }
+
+    private function bluesky(string $sendMode, array $event, array $post): array
+    {
+        $cred       = $this->loadCredential('bluesky', (int) ($event['venue_id'] ?? 1));
+        $appPassword = $cred['access_token'] ?? '';   // stored in access_token field
+        $config     = $cred['config'] ?? [];
+        $identifier = (string) ($config['identifier'] ?? '');
+
+        if (!$appPassword) {
+            return $this->noCredential('Bluesky', '#promote-settings');
+        }
+        if (!$identifier) {
+            return [
+                'status'        => 'failed',
+                'external_url'  => null,
+                'error_message' => 'Bluesky handle not configured. Add it in Promote Settings → Bluesky.',
+                'response_json' => null,
+            ];
+        }
+
+        $variant = $this->fetchVariant((int) $post['id'], 'bluesky');
+        $text    = $variant['body'] ?? (string) ($post['master_text'] ?? $post['title'] ?? '');
+
+        // Enforce 300-char hard limit
+        if (mb_strlen($text) > 300) {
+            $text = mb_substr($text, 0, 297) . '…';
+        }
+
+        return (new BlueSkyAdapter($identifier, $appPassword))->dispatch($event, $post, $text, $sendMode);
     }
 
     private function email(string $destKey, string $sendMode, array $event, array $post): array
