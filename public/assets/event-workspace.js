@@ -9,6 +9,22 @@ function factCell(label, value) {
   return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
 }
 
+/** Render one activity-log entry, including an optional diff line for 'event updated' / 'status changed'. */
+function activityEntry(entry) {
+  let details = '';
+  try {
+    const parsed = entry.details_json ? JSON.parse(entry.details_json) : null;
+    if (parsed && Array.isArray(parsed.changes) && parsed.changes.length) {
+      const lines = parsed.changes.map(c => {
+        const trunc = s => String(s ?? '').slice(0, 100);
+        return `<span class="log-field">${esc(c.field)}:</span> <span class="log-from">${esc(trunc(c.from))}</span> → <span class="log-to">${esc(trunc(c.to))}</span>`;
+      });
+      details = `<ul class="log-changes">${lines.map(l => `<li>${l}</li>`).join('')}</ul>`;
+    }
+  } catch (_) { /* malformed JSON — skip diff */ }
+  return `<li><strong>${esc(entry.action)}</strong> by ${esc(entry.user_name || 'system')} <span class="muted">${esc(entry.created_at)}</span>${details}</li>`;
+}
+
 // Base for read-only workspace cards that re-render whenever fresh event data
 // arrives — pushed via `.data` from the workspace on first render, or broadcast
 // on the page bus as `event.changed` after any in-section edit/add/autosave.
@@ -157,7 +173,7 @@ class EventWorkspace extends PanicElement {
     ${can(data, 'manage_invites') ? '<pb-invite-manager id="invites"></pb-invite-manager>' : ''}
     ${can(data, 'view_settlement') ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
     ${can(data, 'manage_ticketing') ? '<pb-ticketing-admin id="ticketing"></pb-ticketing-admin>' : ''}
-    <section id="activity" class="panel"><div class="section-head padded"><h2>Activity ${helpLink('activity', 'Activity Log')}</h2></div><ul class="timeline">${data.activity.map((entry) => `<li><strong>${esc(entry.action)}</strong> by ${esc(entry.user_name || 'system')} <span class="muted">${esc(entry.created_at)}</span></li>`).join('')}</ul></section>`;
+    <section id="activity" class="panel"><div class="section-head padded"><h2>Activity ${helpLink('activity', 'Activity Log')}</h2></div><ul class="timeline">${data.activity.map(activityEntry).join('')}</ul></section>`;
     $('pb-event-summary', this).data = data;
     $('pb-event-next-action', this).data = data;
     $('pb-event-readiness', this).data = data;

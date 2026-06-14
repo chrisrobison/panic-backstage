@@ -16,6 +16,44 @@ final class Events extends BaseEndpoint
     private const BOOKING_CONFIRMED_STATUSES = ['confirmed','booked','needs_assets','ready_to_announce','published','advanced','completed','settled'];
     private const TYPES = ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'];
 
+    /** Human-readable labels for event fields — used in activity-log diff entries. */
+    private const EVENT_FIELD_LABELS = [
+        'title'                => 'Title',
+        'event_type'           => 'Event Type',
+        'status'               => 'Status',
+        'date'                 => 'Date',
+        'doors_time'           => 'Doors Time',
+        'show_time'            => 'Show Time',
+        'end_time'             => 'End Time',
+        'load_in_time'         => 'Load-In Time',
+        'age_restriction'      => 'Age Restriction',
+        'capacity'             => 'Capacity',
+        'estimated_guests'     => 'Estimated Guests',
+        'description_public'   => 'Public Description',
+        'description_internal' => 'Internal Notes',
+        'av_requirements'      => 'A/V Requirements',
+        'catering_notes'       => 'Catering Notes',
+        'ticket_price'         => 'Ticket Price',
+        'ticket_url'           => 'Ticket URL',
+        'ticket_system'        => 'Ticket System',
+        'deposit_amount'       => 'Deposit Amount',
+        'potential_revenue'    => 'Potential Revenue',
+        'contract_url'         => 'Contract URL',
+        'venue_contract_url'   => 'Venue Contract URL',
+        'settlement_doc_url'   => 'Settlement Doc URL',
+        'walkthrough_done'     => 'Walkthrough Done',
+        'public_visibility'    => 'Public Visibility',
+        'owner_user_id'        => 'Owner',
+        'venue_id'             => 'Venue',
+        'promoter_name'        => 'Producer / Artist',
+        'promoter_email'       => 'Producer Email',
+        'promoter_phone'       => 'Producer Phone',
+        'client_org'           => 'Client Organization',
+        'booker_name'          => 'Booker',
+        'booker_email'         => 'Booker Email',
+        'booker_phone'         => 'Booker Phone',
+    ];
+
     public function handle(Request $request): Response
     {
         if ($this->params['fromTemplateId'] ?? null) {
@@ -224,7 +262,9 @@ final class Events extends BaseEndpoint
                 }
             }
             $this->db->run('UPDATE events SET status = ? WHERE id = ?', [$newStatus, $id]);
-            log_activity($this->db, $id, $this->userId(), 'status changed', ['status' => $newStatus]);
+            log_activity($this->db, $id, $this->userId(), 'status changed', [
+                'changes' => [['field' => 'Status', 'from' => (string) $existing['status'], 'to' => $newStatus]],
+            ]);
             $this->notifyStatusChange($id, (string) $existing['status'], $newStatus);
             $this->pushToSheet($id);
             return $this->ok(['ok' => true]);
@@ -251,9 +291,16 @@ final class Events extends BaseEndpoint
         if (count($body) === 1) {
             $key = array_key_first($body);
             if (isset($partialAllowlist[$key])) {
+                $oldRow  = $this->db->one("SELECT `{$key}` FROM events WHERE id = ?", [$id]);
                 $coerced = $partialAllowlist[$key]($body[$key]);
                 $this->db->run("UPDATE events SET {$key} = ? WHERE id = ?", [$coerced, $id]);
-                log_activity($this->db, $id, $this->userId(), "field updated: {$key}");
+                $labels  = self::EVENT_FIELD_LABELS;
+                $label   = $labels[$key] ?? $key;
+                $oldStr  = (string) ($oldRow[$key] ?? '');
+                $newStr  = (string) ($coerced ?? '');
+                log_activity($this->db, $id, $this->userId(), 'event updated', [
+                    'changes' => [['field' => $label, 'from' => $oldStr, 'to' => $newStr]],
+                ]);
                 $this->pushToSheet($id);
                 return $this->ok(['ok' => true]);
             }
@@ -295,7 +342,7 @@ final class Events extends BaseEndpoint
         if (isset($body['status']) && $body['status'] !== $wasStatus) {
             $this->notifyStatusChange($id, $wasStatus, $body['status']);
         }
-        log_activity($this->db, $id, $this->userId(), 'event updated');
+        log_activity($this->db, $id, $this->userId(), 'event updated', $this->diffEvent($old, $body));
         $this->pushToSheet($id);
         return $this->ok(['id' => $id]);
     }
@@ -728,6 +775,45 @@ final class Events extends BaseEndpoint
         if ($eB <= $sB) $eB += 1440;
         // Conflict if NOT (endA+buffer ≤ startB OR endB+buffer ≤ startA)
         return !($eA + $buffer <= $sB || $eB + $buffer <= $sA);
+    }
+
+    /**
+     * Compare an old events DB row to the incoming request body and return a
+     * `['changes' => [...]]` array suitable for log_activity().
+     * Only fields present in EVENT_FIELD_LABELS are considered.
+     * Status changes are skipped here — they are logged separately in the
+     * status-only path.
+     */
+    private function diffEvent(array $old, array $body): array
+    {
+        $timeFields = ['doors_time', 'show_time', 'end_time', 'load_in_time'];
+        $boolFields = ['walkthrough_done', 'public_visibility'];
+        $changes    = [];
+
+        foreach (self::EVENT_FIELD_LABELS as $key => $label) {
+            if ($key === 'status') continue; // logged separately
+            if (!array_key_exists($key, $body)) continue;
+
+            $oldVal = (string) ($old[$key] ?? '');
+            $newVal = (string) ($body[$key] ?? '');
+
+            // DB stores HH:MM:SS; form sends HH:MM — normalise to 5 chars
+            if (in_array($key, $timeFields, true)) {
+                $oldVal = substr($oldVal, 0, 5);
+                $newVal = substr($newVal, 0, 5);
+            }
+
+            // Normalise booleans to '0'/'1'
+            if (in_array($key, $boolFields, true)) {
+                $oldVal = $oldVal === '1' || $oldVal === 'true'  ? '1' : '0';
+                $newVal = boolish($body[$key]) ? '1' : '0';
+            }
+
+            if ($oldVal === $newVal) continue;
+            $changes[] = ['field' => $label, 'from' => $oldVal, 'to' => $newVal];
+        }
+
+        return $changes ? ['changes' => $changes] : [];
     }
 
     /**
