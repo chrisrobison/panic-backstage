@@ -392,6 +392,7 @@ class PromoteCampaignOverview extends PanicElement {
 
     const assetsCard = $('pb-promote-assets-card', this);
     if (assetsCard) {
+      assetsCard.eventId = this.eventId;
       assetsCard.assets = assets || [];
       assetsCard.render();
     }
@@ -1041,10 +1042,10 @@ class PromoteBroadcastModal extends PanicElement {
 customElements.define('pb-promote-broadcast-modal', PromoteBroadcastModal);
 
 // ── pb-promote-assets-card ────────────────────────────────────────────────────
-// Approved event assets + 1:1/4:5/9:16/16:9 aspect placeholders.
+// Event assets + quick-upload button + 1:1/4:5/9:16/16:9 aspect placeholders.
+// eventId and assets[] are set by the parent (PromoteCampaignOverview).
 
 class PromoteAssetsCard extends PanicElement {
-  // assets[] set by parent
   connectedCallback() {
     super.connectedCallback();
     this.render();
@@ -1052,16 +1053,28 @@ class PromoteAssetsCard extends PanicElement {
 
   render() {
     const assets = this.assets || [];
-    const approvedAssets = assets.filter((a) => a.approval_status === 'approved');
+
+    // Show approved assets first, then pending/other — most-recently uploaded first
+    // within each group so a fresh upload appears at the top immediately.
+    const sorted = [
+      ...assets.filter((a) => a.approval_status === 'approved'),
+      ...assets.filter((a) => a.approval_status !== 'approved'),
+    ];
 
     this.innerHTML = `<article class="panel promote-assets-card">
       <div class="section-head padded">
         <h3><i class="fa-solid fa-images" aria-hidden="true"></i> Assets</h3>
-        ${assets.length ? `<a href="#" class="small muted" data-view-all-assets>View all ${esc(String(assets.length))}</a>` : ''}
+        <div class="section-head-actions">
+          <button class="small secondary" data-upload-asset
+            ${this.eventId ? '' : 'disabled title="Event ID not available"'}>
+            <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i> Upload
+          </button>
+          ${assets.length ? `<span class="muted small">View all ${esc(String(assets.length))}</span>` : ''}
+        </div>
       </div>
       <div class="promote-assets-grid padded">
-        ${approvedAssets.slice(0, 6).map((a) => this.assetTile(a)).join('')}
-        ${approvedAssets.length === 0 ? '<p class="muted">No approved assets yet.</p>' : ''}
+        ${sorted.slice(0, 6).map((a) => this.assetTile(a)).join('')}
+        ${assets.length === 0 ? '<p class="muted">No assets yet — upload a flyer to get started.</p>' : ''}
       </div>
       <div class="promote-ratio-row padded">
         <strong class="promote-ratio-label muted">Format placeholders</strong>
@@ -1073,16 +1086,107 @@ class PromoteAssetsCard extends PanicElement {
         </div>
       </div>
     </article>`;
+
+    // Wire the upload button → hidden file input (created fresh each render
+    // so it's not trapped inside the replaced innerHTML).
+    const uploadBtn = $('[data-upload-asset]', this);
+    if (uploadBtn && this.eventId) {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'image/png,image/jpeg,image/gif,image/webp,application/pdf';
+      fileInput.style.display = 'none';
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files?.[0];
+        if (file) this.handleUpload(file, uploadBtn);
+        fileInput.value = ''; // reset so re-selecting the same file still fires change
+      });
+      uploadBtn.addEventListener('click', () => fileInput.click());
+    }
   }
 
   assetTile(asset) {
+    const tone  = asset.approval_status === 'approved' ? 'success'
+      : asset.approval_status === 'rejected'           ? 'error'
+      : 'warning';
+    const label = asset.approval_status === 'approved' ? 'Approved'
+      : asset.approval_status === 'rejected'           ? 'Rejected'
+      : 'Pending';
     return `<div class="promote-asset-tile">
       ${assetThumb(asset, 'promote-asset-img')}
       <div class="promote-asset-meta">
         <span class="promote-asset-name">${esc(asset.title || asset.asset_type || 'Asset')}</span>
-        <span class="badge success">Approved</span>
+        <span class="badge ${esc(tone)}">${esc(label)}</span>
       </div>
     </div>`;
+  }
+
+  // ── Upload ──────────────────────────────────────────────────────────────────
+
+  async handleUpload(file, btn) {
+    const title = this.uniqueTitle(
+      file.name.replace(/\.[^/.]+$/, '').trim() || 'Asset'
+    );
+
+    // Loading state
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>';
+
+    try {
+      // 1. Upload the file
+      const fd = new FormData();
+      fd.append('asset', file);
+      fd.append('title', title);
+      fd.append('asset_type', 'flyer');
+      const result = await api(`/events/${this.eventId}/assets`, { method: 'POST', body: fd });
+
+      // 2. Auto-approve (best-effort — silently skipped if user lacks manage_assets)
+      let approvalStatus = 'needs_review';
+      try {
+        await api(`/events/${this.eventId}/assets/${result.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ approval_status: 'approved' }),
+        });
+        approvalStatus = 'approved';
+      } catch { /* stays needs_review */ }
+
+      // 3. Prepend new asset to local list and re-render
+      const newAsset = {
+        id: result.id,
+        title,
+        filename: file.name,
+        original_filename: file.name,
+        file_path: result.file_path,
+        asset_type: 'flyer',
+        approval_status: approvalStatus,
+        created_at: new Date().toISOString(),
+      };
+      this.assets = [newAsset, ...(this.assets || [])];
+
+      publish('toast.show', {
+        message: approvalStatus === 'approved'
+          ? `"${title}" uploaded.`
+          : `"${title}" uploaded — pending approval.`,
+        tone: 'success',
+      });
+
+      this.render(); // btn is recreated by render — no need to restore innerHTML
+
+    } catch (error) {
+      publish('toast.show', { message: error.message || 'Upload failed.', tone: 'error' });
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
+  }
+
+  // Return a title that doesn't already exist in this.assets.
+  // "My Flyer" → "My Flyer 2" → "My Flyer 3" → …
+  uniqueTitle(base) {
+    const taken = new Set((this.assets || []).map((a) => (a.title || '').toLowerCase()));
+    if (!taken.has(base.toLowerCase())) return base;
+    let n = 2;
+    while (taken.has(`${base} ${n}`.toLowerCase())) n++;
+    return `${base} ${n}`;
   }
 }
 
