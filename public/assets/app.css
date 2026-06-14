@@ -1920,6 +1920,35 @@ body.lightbox-open { overflow: hidden; }
   color: var(--muted, #6b7280);
   font-style: italic;
 }
+/* Callout tip box in help content */
+.help-section .help-tip {
+  background: #f0f7ff;
+  border-left: 3px solid #3b82f6;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 12px 0;
+}
+/* Data table in help content (private event status table, etc.) */
+.help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin: 12px 0 18px;
+}
+.help-table th {
+  text-align: left;
+  padding: 8px 12px;
+  background: #f4f5f8;
+  border: 1px solid var(--line, #e3e4e8);
+  font-weight: 700;
+}
+.help-table td {
+  padding: 8px 12px;
+  border: 1px solid var(--line, #e3e4e8);
+  vertical-align: top;
+  line-height: 1.45;
+}
+.help-table tr:nth-child(even) td { background: #fafafa; }
 .help-section .help-back {
   margin-top: 14px;
   font-size: 13px;
