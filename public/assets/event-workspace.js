@@ -125,9 +125,9 @@ class EventWorkspace extends PanicElement {
     const data = this.data;
     const event = data.event;
     const isPrivate = event.event_type === 'private_event';
-    const tabs = ['overview', 'details', 'tasks', 'lineup', 'schedule', 'staffing', 'guest-list', 'open-items', 'assets', 'activity'];
-    if (can(data, 'manage_invites')) tabs.splice(8, 0, 'invites');
-    if (can(data, 'view_settlement')) tabs.splice(tabs.length - 1, 0, 'settlement');
+    const tabs = ['overview', 'details', 'tasks', ...(isPrivate ? [] : ['lineup']), 'schedule', 'staffing', 'guest-list', 'open-items', 'assets', 'activity'];
+    if (can(data, 'manage_invites')) tabs.splice(tabs.indexOf('assets'), 0, 'invites');
+    if (can(data, 'view_settlement') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'settlement');
     if (can(data, 'view_contracts')) tabs.splice(tabs.indexOf('assets') + 1, 0, 'contracts');
     if (can(data, 'manage_ticketing') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'ticketing');
     this.innerHTML = `<section class="event-top">
@@ -163,7 +163,7 @@ class EventWorkspace extends PanicElement {
     </section>
     <pb-event-details-form id="details"></pb-event-details-form>
     <pb-task-list id="tasks"></pb-task-list>
-    <pb-lineup-editor id="lineup"></pb-lineup-editor>
+    ${isPrivate ? '' : '<pb-lineup-editor id="lineup"></pb-lineup-editor>'}
     <pb-run-sheet id="schedule"></pb-run-sheet>
     <pb-staffing-manager id="staffing"></pb-staffing-manager>
     <pb-guest-list-manager id="guest-list"></pb-guest-list-manager>
@@ -171,15 +171,15 @@ class EventWorkspace extends PanicElement {
     <pb-asset-manager id="assets"></pb-asset-manager>
     ${can(data, 'view_contracts') ? '<pb-event-contracts id="contracts"></pb-event-contracts>' : ''}
     ${can(data, 'manage_invites') ? '<pb-invite-manager id="invites"></pb-invite-manager>' : ''}
-    ${can(data, 'view_settlement') ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
-    ${can(data, 'manage_ticketing') ? '<pb-ticketing-admin id="ticketing"></pb-ticketing-admin>' : ''}
+    ${(!isPrivate && can(data, 'view_settlement')) ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
+    ${(!isPrivate && can(data, 'manage_ticketing')) ? '<pb-ticketing-admin id="ticketing"></pb-ticketing-admin>' : ''}
     <section id="activity" class="panel"><div class="section-head padded"><h2>Activity ${helpLink('activity', 'Activity Log')}</h2></div><ul class="timeline">${data.activity.map(activityEntry).join('')}</ul></section>`;
     $('pb-event-summary', this).data = data;
     $('pb-event-next-action', this).data = data;
     $('pb-event-readiness', this).data = data;
     $('pb-event-details-form', this).data = data;
     $('pb-task-list', this).data = data;
-    $('pb-lineup-editor', this).data = data;
+    if ($('pb-lineup-editor', this)) $('pb-lineup-editor', this).data = data;
     $('pb-run-sheet', this).data = data;
     $('pb-staffing-manager', this).data = data;
     $('pb-guest-list-manager', this).data = data;
