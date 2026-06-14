@@ -1,0 +1,40 @@
+NEW PRIVATE EVENT INQUIRY
+Mabuhay Gardens · 443 Broadway · San Francisco, CA
+==========================================================
+
+A venue rental request has been submitted and needs follow-up.
+
+EVENT DETAILS
+----------------------------------------------------------
+Event Name:    {{event_name}}
+Date:          {{event_date}}
+Time:          {{event_time}}
+Venue:         {{event_venue}}
+
+CLIENT CONTACT
+----------------------------------------------------------
+Name:          {{client_name}}
+Organization:  {{client_org}}
+Email:         {{client_email}}
+Phone:         {{client_phone}}
+Est. Guests:   {{estimated_guests}}
+
+EVENT REQUIREMENTS
+----------------------------------------------------------
+AV / Tech:
+{{av_requirements}}
+
+Catering / Bar:
+{{catering_notes}}
+
+----------------------------------------------------------
+This event has been assigned to Colleen and added as a Hold.
+Please review, contact the client, and advance the event through the booking workflow.
+
+Open in Backstage: {{event_admin_url}}
+
+For rental pricing questions, contact Tom Watson: tom@themab.org
+
+--
+This notification was sent to all Backstage admins.
+Mabuhay Gardens · Punk rock, paperwork, and the occasional miracle.

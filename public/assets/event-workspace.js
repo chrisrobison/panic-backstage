@@ -108,29 +108,34 @@ class EventWorkspace extends PanicElement {
   render() {
     const data = this.data;
     const event = data.event;
+    const isPrivate = event.event_type === 'private_event';
     const tabs = ['overview', 'details', 'tasks', 'lineup', 'schedule', 'staffing', 'guest-list', 'open-items', 'assets', 'activity'];
     if (can(data, 'manage_invites')) tabs.splice(8, 0, 'invites');
     if (can(data, 'view_settlement')) tabs.splice(tabs.length - 1, 0, 'settlement');
     if (can(data, 'view_contracts')) tabs.splice(tabs.indexOf('assets') + 1, 0, 'contracts');
-    if (can(data, 'manage_ticketing')) tabs.splice(tabs.length - 1, 0, 'ticketing');
+    if (can(data, 'manage_ticketing') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'ticketing');
     this.innerHTML = `<section class="event-top">
-      <div><a class="back-link" href="#events">&lt;- Back to Events</a><h1>${esc(event.title)}</h1><p class="subtle">${esc(shortDate(eventDate(event)))} at ${esc(event.venue_name)}</p></div>
+      <div>
+        <a class="back-link" href="#events">&lt;- Back to Events</a>
+        <h1>${esc(event.title)}${isPrivate ? ' <span class="badge-private" title="Private venue rental">🔒</span>' : ''}</h1>
+        <p class="subtle">${esc(shortDate(eventDate(event)))} at ${esc(event.venue_name)}</p>
+      </div>
       <div class="event-actions">
-        <a class="button promote-accent" href="#promote-event-${esc(String(event.id))}"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Promote</a>
-        <a class="button secondary" href="${esc(appUrl(data.links.public_page))}" target="_blank" rel="noreferrer">Public Page</a>
+        ${isPrivate ? '' : `<a class="button promote-accent" href="#promote-event-${esc(String(event.id))}"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Promote</a>`}
+        ${isPrivate ? '' : `<a class="button secondary" href="${esc(appUrl(data.links.public_page))}" target="_blank" rel="noreferrer">Public Page</a>`}
         ${can(data, 'read_event') ? `<details class="print-menu">
           <summary class="button secondary">Print &#9662;</summary>
           <div class="print-menu-items">
-            <button type="button" data-print="lineup">Band Lineup</button>
+            ${isPrivate ? '' : '<button type="button" data-print="lineup">Band Lineup</button>'}
             <button type="button" data-print="staffing">Staffing Schedule</button>
             <button type="button" data-print="run-of-show">Run of Show</button>
             <button type="button" data-print="guest-list">Door / Guest List</button>
-            <button type="button" data-print="one-sheet">One Sheet</button>
+            ${isPrivate ? '' : '<button type="button" data-print="one-sheet">One Sheet</button>'}
             <button type="button" data-print="contract">Contract</button>
             <button type="button" data-print="master">Master Event Packet</button>
           </div>
         </details>` : ''}
-        ${can(data, 'publish_event') ? `<button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>` : ''}
+        ${(!isPrivate && can(data, 'publish_event')) ? `<button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>` : ''}
       </div>
     </section>
     <nav class="workspace-tabs tabs">${tabs.map((tab, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${tab}">${esc(titleCase(tab))}</a>`).join('')}</nav>
@@ -223,46 +228,98 @@ function autofillEventTimes(form, changed) {
 // against a detached form. Inert for the running app.
 export { autofillEventTimes, TIME_OFFSETS };
 
+// Statuses available to private events — skips all public-promo stages.
+const PRIVATE_EVENT_STATUSES = ['empty', 'proposed', 'confirmed', 'booked', 'completed', 'settled', 'canceled'];
+
 class EventDetailsForm extends HTMLElement {
   set data(data) {
     this.eventData = data;
-    const event = data.event;
+    const event    = data.event;
     const editable = can(data, 'edit_event');
     const disabled = editable ? '' : ' disabled';
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Event Details ${helpLink('details', 'Event Details')}</h2></div><form class="grid-form padded">
-      <label>Title <input name="title" required value="${esc(event.title)}"${disabled}></label>
-      <label>Date <input type="date" name="date" required value="${esc(event.date)}"${disabled}></label>
-      <label>Location <select name="venue_id"${disabled}>${data.venues.map((venue) => option(venue.id, event.venue_id, venue.name)).join('')}</select></label>
-      <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
-      <label>Status ${select('status', statuses, event.status, statusLabel).replace('<select ', `<select${disabled} `)}</label>
-      <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
-      <label>Load-In / Tech <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>
-      <label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>
-      <label>Show <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
-      <label>End <input type="time" name="end_time" value="${esc(event.end_time || '')}"${disabled}></label>
-      <label>Age <input name="age_restriction" value="${esc(event.age_restriction || '')}"${disabled}></label>
-      <label>Ticket price <input type="number" step="0.01" name="ticket_price" value="${esc(event.ticket_price || 0)}"${disabled}></label>
-      <label>Paid deposit <input type="number" step="0.01" min="0" name="deposit_amount" value="${esc(event.deposit_amount ?? '')}" placeholder="0.00"${disabled}></label>
-      <label>Potential revenue <input type="number" step="0.01" min="0" name="potential_revenue" value="${esc(event.potential_revenue ?? '')}" placeholder="0.00"${disabled}></label>
-      <label>Capacity <input type="number" name="capacity" value="${esc(event.capacity || '')}"${disabled}></label>
-      <label class="check-label"><input type="checkbox" name="walkthrough_done" value="1" ${Number(event.walkthrough_done) ? 'checked' : ''}${disabled}> Walk-through happened</label>
-      <p class="form-section-head wide">Producer / Artist <span class="form-section-note">Required for Hold and above</span></p>
-      <label>Name <input name="promoter_name" value="${esc(event.promoter_name || '')}" placeholder="Full name"${disabled}></label>
-      <label>Email <input type="email" name="promoter_email" value="${esc(event.promoter_email || '')}" placeholder="email@example.com"${disabled}></label>
-      <label>Phone <input type="tel" name="promoter_phone" value="${esc(event.promoter_phone || '')}" placeholder="415-555-0100"${disabled}></label>
-      <p class="form-section-head wide">Booker <span class="form-section-note">Required for Hold and above</span></p>
-      <label>Name <input name="booker_name" value="${esc(event.booker_name || '')}" placeholder="Full name"${disabled}></label>
-      <label>Email <input type="email" name="booker_email" value="${esc(event.booker_email || '')}" placeholder="email@example.com"${disabled}></label>
-      <label>Phone <input type="tel" name="booker_phone" value="${esc(event.booker_phone || '')}" placeholder="415-555-0100"${disabled}></label>
-      <label class="wide">Public description <textarea name="description_public"${disabled}>${esc(event.description_public || '')}</textarea></label>
-      <label class="wide">Internal notes <textarea name="description_internal"${disabled}>${esc(event.description_internal || '')}</textarea></label>
-      <label class="check-label"><input type="checkbox" name="public_visibility" value="1" ${Number(event.public_visibility) ? 'checked' : ''}${disabled}> Public page visible</label>
-      ${editable ? '<p class="save-status wide" data-save-status data-state="saved" aria-live="polite">All changes saved</p>' : ''}
-    </form></section>`;
+    const isPrivate = event.event_type === 'private_event';
+
+    // Status dropdown is filtered for private events to prevent invalid transitions.
+    const availableStatuses = isPrivate ? PRIVATE_EVENT_STATUSES : statuses;
+    const statusSelect = select('status', availableStatuses, event.status, statusLabel)
+      .replace('<select ', `<select${disabled} `);
+
+    // ── Private event form ───────────────────────────────────────────────────
+    if (isPrivate) {
+      this.innerHTML = `<section class="panel">
+        <div class="section-head padded">
+          <h2>Event Details ${helpLink('details', 'Event Details')}</h2>
+          <span class="badge status-private" title="Private venue rental — not publicly listed">🔒 Private Event</span>
+        </div>
+        <form class="grid-form padded">
+          <label>Title <input name="title" required value="${esc(event.title)}"${disabled}></label>
+          <label>Date <input type="date" name="date" required value="${esc(event.date)}"${disabled}></label>
+          <label>Location <select name="venue_id"${disabled}>${data.venues.map((venue) => option(venue.id, event.venue_id, venue.name)).join('')}</select></label>
+          <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
+          <label>Status ${statusSelect}</label>
+          <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
+          <label>Load-In / Tech <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>
+          <label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>
+          <label>Show <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
+          <label>End <input type="time" name="end_time" value="${esc(event.end_time || '')}"${disabled}></label>
+          <label>Age restriction <input name="age_restriction" value="${esc(event.age_restriction || '')}"${disabled}></label>
+          <label>Estimated guests <input type="number" name="estimated_guests" value="${esc(event.estimated_guests || '')}" placeholder="Expected headcount"${disabled}></label>
+          <label>Capacity (max) <input type="number" name="capacity" value="${esc(event.capacity || '')}"${disabled}></label>
+          <label>Paid deposit <input type="number" step="0.01" min="0" name="deposit_amount" value="${esc(event.deposit_amount ?? '')}" placeholder="0.00"${disabled}></label>
+          <label class="check-label"><input type="checkbox" name="walkthrough_done" value="1" ${Number(event.walkthrough_done) ? 'checked' : ''}${disabled}> Walk-through happened</label>
+          <p class="form-section-head wide">Client / Primary Contact <span class="form-section-note">Required for Hold and above</span></p>
+          <label>Name <input name="promoter_name" value="${esc(event.promoter_name || '')}" placeholder="Client full name"${disabled}></label>
+          <label>Email <input type="email" name="promoter_email" value="${esc(event.promoter_email || '')}" placeholder="email@example.com"${disabled}></label>
+          <label>Phone <input type="tel" name="promoter_phone" value="${esc(event.promoter_phone || '')}" placeholder="415-555-0100"${disabled}></label>
+          <label class="wide">Organization <input name="client_org" value="${esc(event.client_org || '')}" placeholder="Company, band, family name…"${disabled}></label>
+          <p class="form-section-head wide">Event Requirements</p>
+          <label class="wide">AV / Tech requirements <textarea name="av_requirements" placeholder="Sound system, lighting, projector, microphones…"${disabled}>${esc(event.av_requirements || '')}</textarea></label>
+          <label class="wide">Catering / Bar notes <textarea name="catering_notes" placeholder="Bar service, catering vendors, alcohol requirements…"${disabled}>${esc(event.catering_notes || '')}</textarea></label>
+          <label class="wide">Internal notes <textarea name="description_internal" placeholder="Staff-only notes about this event"${disabled}>${esc(event.description_internal || '')}</textarea></label>
+          <p class="form-section-note wide">💰 For rental pricing, contact <strong>Tom Watson</strong>: <a href="mailto:tom@themab.org">tom@themab.org</a></p>
+          <input type="hidden" name="public_visibility" value="0">
+          ${editable ? '<p class="save-status wide" data-save-status data-state="saved" aria-live="polite">All changes saved</p>' : ''}
+        </form>
+      </section>`;
+    } else {
+      // ── Standard (public) event form ───────────────────────────────────────
+      this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Event Details ${helpLink('details', 'Event Details')}</h2></div><form class="grid-form padded">
+        <label>Title <input name="title" required value="${esc(event.title)}"${disabled}></label>
+        <label>Date <input type="date" name="date" required value="${esc(event.date)}"${disabled}></label>
+        <label>Location <select name="venue_id"${disabled}>${data.venues.map((venue) => option(venue.id, event.venue_id, venue.name)).join('')}</select></label>
+        <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
+        <label>Status ${statusSelect}</label>
+        <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
+        <label>Load-In / Tech <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>
+        <label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>
+        <label>Show <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
+        <label>End <input type="time" name="end_time" value="${esc(event.end_time || '')}"${disabled}></label>
+        <label>Age <input name="age_restriction" value="${esc(event.age_restriction || '')}"${disabled}></label>
+        <label>Ticket price <input type="number" step="0.01" name="ticket_price" value="${esc(event.ticket_price || 0)}"${disabled}></label>
+        <label>Paid deposit <input type="number" step="0.01" min="0" name="deposit_amount" value="${esc(event.deposit_amount ?? '')}" placeholder="0.00"${disabled}></label>
+        <label>Potential revenue <input type="number" step="0.01" min="0" name="potential_revenue" value="${esc(event.potential_revenue ?? '')}" placeholder="0.00"${disabled}></label>
+        <label>Capacity <input type="number" name="capacity" value="${esc(event.capacity || '')}"${disabled}></label>
+        <label class="check-label"><input type="checkbox" name="walkthrough_done" value="1" ${Number(event.walkthrough_done) ? 'checked' : ''}${disabled}> Walk-through happened</label>
+        <p class="form-section-head wide">Producer / Artist <span class="form-section-note">Required for Hold and above</span></p>
+        <label>Name <input name="promoter_name" value="${esc(event.promoter_name || '')}" placeholder="Full name"${disabled}></label>
+        <label>Email <input type="email" name="promoter_email" value="${esc(event.promoter_email || '')}" placeholder="email@example.com"${disabled}></label>
+        <label>Phone <input type="tel" name="promoter_phone" value="${esc(event.promoter_phone || '')}" placeholder="415-555-0100"${disabled}></label>
+        <p class="form-section-head wide">Booker <span class="form-section-note">Required for Hold and above</span></p>
+        <label>Name <input name="booker_name" value="${esc(event.booker_name || '')}" placeholder="Full name"${disabled}></label>
+        <label>Email <input type="email" name="booker_email" value="${esc(event.booker_email || '')}" placeholder="email@example.com"${disabled}></label>
+        <label>Phone <input type="tel" name="booker_phone" value="${esc(event.booker_phone || '')}" placeholder="415-555-0100"${disabled}></label>
+        <label class="wide">Public description <textarea name="description_public"${disabled}>${esc(event.description_public || '')}</textarea></label>
+        <label class="wide">Internal notes <textarea name="description_internal"${disabled}>${esc(event.description_internal || '')}</textarea></label>
+        <label class="check-label"><input type="checkbox" name="public_visibility" value="1" ${Number(event.public_visibility) ? 'checked' : ''}${disabled}> Public page visible</label>
+        ${editable ? '<p class="save-status wide" data-save-status data-state="saved" aria-live="polite">All changes saved</p>' : ''}
+      </form></section>`;
+    }
+
     if (!editable) return;
-    const form = $('form', this);
+    const form     = $('form', this);
     const statusEl = $('[data-save-status]', this);
     const setStatus = (state, text) => { if (statusEl) { statusEl.dataset.state = state; statusEl.textContent = text; } };
+
     // Autosave: PATCH the whole detail form whenever a field changes. Text and
     // number inputs fire `change` on blur; checkboxes and selects fire
     // immediately. We deliberately do NOT publish `event.saved` here, so the
@@ -273,8 +330,10 @@ class EventDetailsForm extends HTMLElement {
     const summaryFields = new Set(['title', 'date', 'doors_time', 'show_time', 'status', 'owner_user_id', 'public_visibility']);
     const save = async (changedName) => {
       const body = formData(form);
-      body.public_visibility = form.public_visibility.checked ? 1 : 0;
-      body.walkthrough_done  = form.walkthrough_done.checked ? 1 : 0;
+      // Private events are never publicly visible — the hidden input sends 0,
+      // but we double-enforce here in case of DOM manipulation.
+      body.public_visibility = isPrivate ? 0 : (form.public_visibility?.checked ? 1 : 0);
+      body.walkthrough_done  = form.walkthrough_done?.checked ? 1 : 0;
       setStatus('saving', 'Saving…');
       try {
         await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
