@@ -733,7 +733,8 @@ final class Events extends BaseEndpoint
     /**
      * Send email notifications when an event status changes.
      *
-     * - confirmed (Intake Complete): notify venue_admins that event is ready for contract
+     * - confirmed (Intake Complete): notify venue_admins + venue manager (Tom) with
+     *   actionable next-steps email so the contract can be drafted and co-signed.
      * - booked: notify venue_admins that contract is signed and booking is confirmed
      * - needs_assets: notify producer/artist and booker to submit promo materials
      *
@@ -765,23 +766,66 @@ final class Events extends BaseEndpoint
 
             $mailer = new Mailer($this->root);
 
-            // ── venue_admins notified on Intake Complete and Booked ──────────
-            if (in_array($newStatus, ['confirmed', 'booked'], true)) {
-                $admins = $this->db->all("SELECT name, email FROM users WHERE role = 'venue_admin' AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'");
+            // ── Intake Complete: notify venue_admins + venue manager (Tom) ───
+            // Uses a dedicated intake-complete template with clear next steps:
+            // draft contract → Tom co-signs → send to producer/client for signature
+            // → upload signed copy → advance to Booked.
+            if ($newStatus === 'confirmed') {
+                $admins = $this->db->all(
+                    "SELECT name, email FROM users
+                      WHERE role = 'venue_admin'
+                        AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'"
+                );
+
+                // Build recipient list: venue_admins + VENUE_MANAGER_EMAIL, deduped.
+                $recipients = [];
+                foreach ($admins as $a) {
+                    $recipients[strtolower(trim((string) $a['email']))] = $a;
+                }
+                $mgEmail = trim((string) (getenv('VENUE_MANAGER_EMAIL') ?: ''));
+                $mgName  = trim((string) (getenv('VENUE_MANAGER_NAME') ?: 'Venue Manager'));
+                if ($mgEmail && filter_var($mgEmail, FILTER_VALIDATE_EMAIL)) {
+                    $recipients[strtolower($mgEmail)] ??= ['name' => $mgName, 'email' => $mgEmail];
+                }
+
+                if ($recipients) {
+                    $contactLabel = $isPrivate ? 'Client' : 'Producer / Artist';
+                    $contactName  = htmlspecialchars((string) ($event['promoter_name'] ?? '—'), ENT_QUOTES, 'UTF-8');
+                    $contactEmail = htmlspecialchars((string) ($event['promoter_email'] ?? ''), ENT_QUOTES, 'UTF-8');
+                    $label        = $isPrivate ? 'Private Event — Intake Complete' : 'Intake Complete';
+                    $subject      = "[Backstage] {$label}: {$event['title']}";
+                    $vars = [
+                        'event_name'      => htmlspecialchars((string) $event['title'],         ENT_QUOTES, 'UTF-8'),
+                        'event_date'      => htmlspecialchars((string) $event['date'],          ENT_QUOTES, 'UTF-8'),
+                        'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
+                        'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),
+                        'contact_label'   => htmlspecialchars($contactLabel,                    ENT_QUOTES, 'UTF-8'),
+                        'contact_name'    => $contactName,
+                        'contact_email'   => $contactEmail,
+                        'is_private'      => $isPrivate ? 'yes' : 'no',
+                        'event_admin_url' => htmlspecialchars($link,                            ENT_QUOTES, 'UTF-8'),
+                    ];
+                    foreach ($recipients as $recipient) {
+                        $mailer->sendTemplate($recipient['email'], $subject, 'intake-complete', $vars);
+                    }
+                }
+            }
+
+            // ── Booked: notify venue_admins that contract is on file ─────────
+            if ($newStatus === 'booked') {
+                $admins = $this->db->all(
+                    "SELECT name, email FROM users
+                      WHERE role = 'venue_admin'
+                        AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'"
+                );
                 if ($admins) {
-                    $label = match (true) {
-                        $newStatus === 'confirmed' && $isPrivate => 'Private Event — Intake Complete',
-                        $newStatus === 'confirmed'               => 'Intake Complete',
-                        $newStatus === 'booked'   && $isPrivate => 'Private Event — Booked (contract signed)',
-                        default                                  => 'Booked (contract signed)',
-                    };
+                    $label       = $isPrivate ? 'Private Event — Booked (contract signed)' : 'Booked (contract signed)';
                     $subject     = "[Backstage] {$label}: {$event['title']}";
-                    $statusColor = $newStatus === 'confirmed' ? '#2563eb' : '#16a34a';
                     $vars = [
                         'event_name'      => htmlspecialchars((string) $event['title'],         ENT_QUOTES, 'UTF-8'),
                         'old_status'      => htmlspecialchars(ucwords(str_replace('_', ' ', $oldStatus)), ENT_QUOTES, 'UTF-8'),
                         'new_status'      => htmlspecialchars($label,                           ENT_QUOTES, 'UTF-8'),
-                        'status_color'    => $statusColor,
+                        'status_color'    => '#16a34a',
                         'event_date'      => htmlspecialchars((string) $event['date'],          ENT_QUOTES, 'UTF-8'),
                         'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
                         'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),

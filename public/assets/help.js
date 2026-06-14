@@ -356,7 +356,8 @@ const HELP_CONTENT = {
     <h3>Contacts and notifications</h3>
     <ul>
       <li><strong>On creation</strong> — all venue admins receive a <em>New Private Event Inquiry</em> email with the full client details, AV requirements, and a direct link to the event.</li>
-      <li><strong>When booked</strong> — the client (promoter_email) receives a confirmation email that their event is confirmed. All venue admins are also notified of the status change.</li>
+      <li><strong>When Intake Complete</strong> — Colleen and Tom Watson both receive an <em>Intake Complete — Contract Needed</em> email with the event details and a numbered checklist: Colleen drafts the contract → Tom co-signs → contract sent to client for signature → upload signed copy → advance to Booked.</li>
+      <li><strong>When booked</strong> — the client receives a confirmation email that their event is confirmed. All venue admins are also notified of the status change.</li>
     </ul>
 
     <h3>Calendar and pipeline display</h3>
@@ -868,7 +869,7 @@ const HELP_CONTENT = {
     <ol>
       <li><strong>Empty</strong> — the date slot exists but nothing is confirmed for it yet.</li>
       <li><strong>Hold</strong> — a show idea or inquiry is live; the band/promoter deal is not yet confirmed. The date is informally held. Requires title, date, venue, door/end times, and a producer/artist contact.</li>
-      <li><strong>Intake Complete</strong> — deal structure is agreed and a contract is being built. Age restriction, ticket price, capacity, and a deposit amount must be set.</li>
+      <li><strong>Intake Complete</strong> — deal structure is agreed and a contract is being built. Age restriction, ticket price, capacity, and a deposit amount must be set. When this status is set, Colleen and Tom Watson are automatically emailed with next steps for the contract.</li>
       <li><strong>Booked</strong> — a signed contract (or approved contract in the contract builder) plus a confirmed deposit. The show is locked.</li>
       <li><strong>Needs Assets</strong> — booked but blocked on flyer, artist photos, bio, or social content. An automatic email is sent to the producer/artist when this status is set.</li>
       <li><strong>Ready To Announce</strong> — the approved flyer is in, ticketing is set up, and the event is ready to flip public.</li>

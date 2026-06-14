@@ -1,0 +1,27 @@
+INTAKE COMPLETE — CONTRACT NEEDED
+Mabuhay Gardens · 443 Broadway · San Francisco, CA
+==========================================================
+
+All intake info is confirmed. Time to get the paperwork moving.
+
+EVENT DETAILS
+----------------------------------------------------------
+Event:      {{event_name}}
+Date:       {{event_date}}
+Show time:  {{event_time}}
+Venue:      {{event_venue}}
+{{contact_label}}: {{contact_name}} <{{contact_email}}>
+
+NEXT STEPS
+----------------------------------------------------------
+1. Colleen drafts the contract (Contracts tab in Backstage)
+2. Tom reviews and co-signs the contract
+3. Contract is sent to {{contact_name}} for their signature
+4. Upload the signed contract and advance the event to Booked
+
+Open event in Backstage: {{event_admin_url}}
+
+Once inside, click the Contracts tab to draft and manage the agreement.
+
+--
+Mabuhay Gardens · Punk rock, paperwork, and the occasional miracle.
