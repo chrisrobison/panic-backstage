@@ -1238,6 +1238,15 @@ pb-event-summary, pb-event-readiness, pb-event-next-action { display: contents; 
 .public-copy { font-size: 18px; line-height: 1.55; }
 .public-copy h1 { font-size: 44px; }
 .public-copy .muted, .public-copy .eyebrow { color: #cbd5e1; }
+/* Markdown-rendered public event description */
+.event-description { margin: 18px 0; }
+.event-description p { margin: 0 0 14px; }
+.event-description p:last-child { margin-bottom: 0; }
+.event-description h2.md-heading { font-size: 22px; margin: 22px 0 8px; }
+.event-description h3.md-heading { font-size: 18px; margin: 18px 0 6px; }
+.event-description ul.md-list,
+.event-description ol.md-list { margin: 0 0 14px 22px; padding: 0; line-height: 1.7; }
+.event-description a { color: #c9b27e; text-decoration: underline; }
 
 /* Font Awesome icon sizing — nav, sidebar, topbar */
 .side-nav a i,

@@ -1,4 +1,4 @@
-import { esc, titleCase, publish, eventDate, shortDate, timeLabel, money, statusLabel, can, table } from './core.js';
+import { esc, titleCase, publish, eventDate, shortDate, timeLabel, money, statusLabel, can, table, mdToHtml } from './core.js';
 
 
 // ── Print feature ────────────────────────────────────────────────────────────
@@ -313,9 +313,9 @@ function renderOneSheet(data) {
 
   if (Number(event.walkthrough_done)) blocks.push(`<p class="os-note">Walk through completed.</p>`);
 
-  // EVENT OVERVIEW — public description prose.
+  // EVENT OVERVIEW — public description rendered as Markdown.
   if (event.description_public) {
-    blocks.push(`<h2 class="os-section">Event Overview</h2>${esc(event.description_public).split(/\n{2,}/).map((p) => `<p class="os-para">${p.replace(/\n/g, '<br>')}</p>`).join('')}`);
+    blocks.push(`<h2 class="os-section">Event Overview</h2><div class="os-description">${mdToHtml(event.description_public)}</div>`);
   }
 
   // FEATURED MUSICIANS — lineup acts as bullets.
@@ -400,9 +400,9 @@ function renderContract(data) {
   ];
   blocks.push(meta.map(([label, value]) => `<p class="k-meta"><strong>${esc(label)}:</strong> ${value}</p>`).join(''));
 
-  // 1. EVENT OVERVIEW
+  // 1. EVENT OVERVIEW — rendered as Markdown.
   const overview = event.description_public
-    ? esc(event.description_public).split(/\n{2,}/).map((p) => `<p class="k-para">${p.replace(/\n/g, '<br>')}</p>`).join('')
+    ? `<div class="k-description">${mdToHtml(event.description_public)}</div>`
     : `<p class="k-para">${blank}</p>`;
   blocks.push(`<h2 class="k-section">1. Event Overview</h2>${overview}`);
 

@@ -421,4 +421,63 @@ function bindAddToggle(root) {
 customElements.define('pb-loading-state', LoadingState);
 customElements.define('pb-toast-stack', ToastStack);
 
-export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle };
+// ── Markdown renderer ─────────────────────────────────────────────────────────
+// Converts a small subset of Markdown to safe HTML. All raw text is HTML-escaped
+// before any Markdown patterns are applied, so the output is XSS-safe even when
+// the source is untrusted (event descriptions entered by bookers / promoters).
+//
+// Supported:
+//   # / ## / ### headings      **bold**  *italic*
+//   - / * unordered lists      1. ordered lists
+//   [text](url) links           blank lines → paragraph breaks
+//   single newlines → <br>
+//
+// javascript: link hrefs are stripped to '#' for safety.
+function mdToHtml(text) {
+  if (!text) return '';
+
+  // 1. Escape HTML entities so raw text can never inject markup.
+  const safe = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  // 2. Inline patterns — applied inside block elements.
+  const inline = (s) => s
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => {
+      // Strip javascript: and data: URIs.
+      const safe_href = /^(javascript|data):/i.test(href.trim()) ? '#' : href;
+      return `<a href="${safe_href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    });
+
+  // 3. Split on blank lines → blocks, then classify each block.
+  const blocks = safe.split(/\n{2,}/);
+  return blocks.map((block) => {
+    const lines = block.split('\n');
+
+    // Heading (only if the block is a single heading line)
+    const headingMatch = block.match(/^(#{1,3}) (.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      return `<h${level} class="md-heading">${inline(headingMatch[2])}</h${level}>`;
+    }
+
+    // Unordered list — every line starts with "- " or "* "
+    if (lines.every((l) => /^[-*] /.test(l))) {
+      return `<ul class="md-list">${lines.map((l) => `<li>${inline(l.replace(/^[-*] /, ''))}</li>`).join('')}</ul>`;
+    }
+
+    // Ordered list — every line starts with "N. "
+    if (lines.every((l) => /^\d+\. /.test(l))) {
+      return `<ol class="md-list">${lines.map((l) => `<li>${inline(l.replace(/^\d+\. /, ''))}</li>`).join('')}</ol>`;
+    }
+
+    // Default: paragraph, with single newlines becoming <br>
+    return `<p>${inline(lines.join('<br>'))}</p>`;
+  }).join('\n');
+}
+
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml };
