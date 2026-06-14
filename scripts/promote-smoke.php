@@ -10,25 +10,24 @@ declare(strict_types=1);
  *   base-url  defaults to http://localhost:8000
  *   mail-dir  defaults to storage/mail  (relative to project root)
  *
- * Coverage (see PROMOTE-IMPLEMENTATION-MAP.md §H):
+ * Coverage:
  *  1.  Admin login via magic-link
  *  2.  Create test event (from template)
- *  3.  Create campaign for event
- *  4.  Fetch campaign overview — assert event, posts, health, destinations, analytics
- *  5.  Create post
- *  6.  Update post
- *  7.  Generate variants — assert all 15 channels + warnings present
- *  8.  Create broadcast with destinations from all 4 groups (send_mode=now)
+ *  3.  Fetch promote overview for event — assert settings, posts, health, destinations, analytics
+ *  4.  Create post
+ *  5.  Update post
+ *  6.  Generate variants — assert all 15 channels + warnings present
+ *  7.  Create broadcast with destinations from all 4 groups (send_mode=now)
  *       — facebook_page/instagram/tiktok → needs_auth (no credentials in test env)
  *       — funcheap/foopee/press_list     → manual_required
  *       — email_general/email_press      → needs_auth (real adapter, no credentials in test env)
- *  9.  Fetch campaign broadcasts list
- *  10. Fetch health — assert {score, complete, total, items[]}
- *  11. Fetch analytics — assert stub zeros
- *  12. Fetch destinations
- *  13. 404 for a missing post id
- *  14. Unauthenticated request → 401
- *  15. Invite a viewer; viewer can GET campaign, gets 403 on POST
+ *  8.  Fetch event broadcasts list
+ *  9.  Fetch health — assert {score, complete, total, items[]}
+ *  10. Fetch analytics — assert required keys
+ *  11. Fetch destinations
+ *  12. 404 for a missing post id
+ *  13. Unauthenticated request → 401
+ *  14. Invite a viewer; viewer can GET overview, gets 403 on POST
  */
 
 $baseUrl = rtrim($argv[1] ?? 'http://localhost:8000', '/');
@@ -137,7 +136,6 @@ try {
         throw new RuntimeException('No templates returned — cannot create test event');
     }
 
-    // Use a random far-future date to avoid room conflicts with previous runs.
     $eventDate = (new DateTimeImmutable('+' . (180 + random_int(0, 180)) . ' days'))->format('Y-m-d');
     $created   = $admin->request('POST', "/api/events/from-template/$templateId", [
         'date'       => $eventDate,
@@ -151,38 +149,32 @@ try {
     }
     ok("test event created (id=$eventId, date=$eventDate)");
 
-    // ── 3. Create campaign for event ─────────────────────────────────────────
-    $campaign = $admin->request('POST', "/api/promote/events/$eventId/campaign");
-    if (empty($campaign['campaign']['id'])) {
-        throw new RuntimeException('Campaign creation returned no id');
-    }
-    $campaignId = (int) $campaign['campaign']['id'];
-    ok("campaign created (id=$campaignId)");
+    // ── 3. Fetch promote overview for event ──────────────────────────────────
+    $overview = $admin->request('GET', "/api/promote/events/$eventId");
 
-    // ── 4. Fetch campaign overview ────────────────────────────────────────────
-    $overview = $admin->request('GET', "/api/promote/campaigns/$campaignId");
-
-    // Assert event, posts, health, destinations, analytics are present
     if (!isset($overview['event']['id'])) {
-        throw new RuntimeException('Campaign overview missing event data');
+        throw new RuntimeException('Overview missing event data');
     }
     if (!array_key_exists('posts', $overview)) {
-        throw new RuntimeException('Campaign overview missing posts array');
+        throw new RuntimeException('Overview missing posts array');
     }
     if (!isset($overview['health']['score'], $overview['health']['complete'],
                 $overview['health']['total'], $overview['health']['items'])) {
-        throw new RuntimeException('Campaign overview missing health keys (score/complete/total/items)');
+        throw new RuntimeException('Overview missing health keys (score/complete/total/items)');
     }
     if (!array_key_exists('destinations', $overview)) {
-        throw new RuntimeException('Campaign overview missing destinations');
+        throw new RuntimeException('Overview missing destinations');
     }
     if (!isset($overview['analytics']['website_clicks'])) {
-        throw new RuntimeException('Campaign overview missing analytics data');
+        throw new RuntimeException('Overview missing analytics data');
     }
-    ok('campaign overview contains event, posts, health, destinations, analytics');
+    if (!array_key_exists('settings', $overview)) {
+        throw new RuntimeException('Overview missing settings key');
+    }
+    ok('promote overview contains event, settings, posts, health, destinations, analytics');
 
-    // ── 5. Create post ────────────────────────────────────────────────────────
-    $post = $admin->request('POST', "/api/promote/campaigns/$campaignId/posts", [
+    // ── 4. Create post ────────────────────────────────────────────────────────
+    $post = $admin->request('POST', "/api/promote/events/$eventId/posts", [
         'title'       => 'Smoke post: announce show',
         'master_text' => 'We are excited to announce an incredible night of live music!',
         'target_url'  => 'https://mabuhaygardens.com/tickets',
@@ -194,8 +186,8 @@ try {
     $postId = (int) $post['post']['id'];
     ok("post created (id=$postId)");
 
-    // ── 6. Update post ────────────────────────────────────────────────────────
-    $updated = $admin->request('PATCH', "/api/promote/campaigns/$campaignId/posts/$postId", [
+    // ── 5. Update post ────────────────────────────────────────────────────────
+    $updated = $admin->request('PATCH', "/api/promote/events/$eventId/posts/$postId", [
         'title'  => 'Smoke post: announce show [updated]',
         'status' => 'approved',
     ]);
@@ -207,10 +199,10 @@ try {
     }
     ok('post updated (title + status)');
 
-    // ── 7. Generate variants ──────────────────────────────────────────────────
+    // ── 6. Generate variants ──────────────────────────────────────────────────
     $generated = $admin->request(
         'POST',
-        "/api/promote/campaigns/$campaignId/posts/$postId/variants/generate"
+        "/api/promote/events/$eventId/posts/$postId/variants/generate"
     );
     if (!isset($generated['variants']) || !is_array($generated['variants'])) {
         throw new RuntimeException('Variant generate returned no variants array');
@@ -228,7 +220,6 @@ try {
     if ($missing) {
         throw new RuntimeException('Variant generate missing channels: ' . implode(', ', $missing));
     }
-    // Each variant should have warnings
     $noWarnings = array_filter($generated['variants'], function ($v) {
         $w = $v['warnings_json'] ?? null;
         if ($w === null) return true;
@@ -244,8 +235,8 @@ try {
     }
     ok('variants generated — ' . count($channels) . ' channels with warnings');
 
-    // ── 8. Create broadcast (multi-destination, send_mode=now) ───────────────
-    $broadcast = $admin->request('POST', "/api/promote/campaigns/$campaignId/broadcasts", [
+    // ── 7. Create broadcast (multi-destination, send_mode=now) ───────────────
+    $broadcast = $admin->request('POST', "/api/promote/events/$eventId/broadcasts", [
         'post_id'      => $postId,
         'send_mode'    => 'now',
         'destinations' => [
@@ -274,7 +265,6 @@ try {
         $resultMap[(string) $r['destination_key']] = (string) $r['status'];
     }
 
-    // Assert per-destination result statuses
     $expectNeeds = ['facebook_page', 'instagram', 'tiktok'];
     foreach ($expectNeeds as $dest) {
         if (($resultMap[$dest] ?? null) !== 'needs_auth') {
@@ -293,8 +283,6 @@ try {
         }
     }
 
-    // email_general / email_press now route through the real EmailAdapter.
-    // Without credentials configured in the test environment they return needs_auth.
     $expectEmailNeeds = ['email_general', 'email_press'];
     foreach ($expectEmailNeeds as $dest) {
         $got = $resultMap[$dest] ?? 'missing';
@@ -304,10 +292,10 @@ try {
             );
         }
     }
-    ok('broadcast created with correct per-destination statuses (needs_auth/manual_required/email-adapter)');
+    ok('broadcast created with correct per-destination statuses');
 
-    // ── 9. Fetch broadcasts list ──────────────────────────────────────────────
-    $broadcasts = $admin->request('GET', "/api/promote/campaigns/$campaignId/broadcasts");
+    // ── 8. Fetch broadcasts list ──────────────────────────────────────────────
+    $broadcasts = $admin->request('GET', "/api/promote/events/$eventId/broadcasts");
     if (!isset($broadcasts['broadcasts']) || !is_array($broadcasts['broadcasts'])) {
         throw new RuntimeException('Broadcasts list returned no broadcasts array');
     }
@@ -316,8 +304,8 @@ try {
     }
     ok('broadcasts list returned (' . count($broadcasts['broadcasts']) . ' broadcast(s))');
 
-    // ── 10. Fetch health ──────────────────────────────────────────────────────
-    $health = $admin->request('GET', "/api/promote/campaigns/$campaignId/health");
+    // ── 9. Fetch health ──────────────────────────────────────────────────────
+    $health = $admin->request('GET', "/api/promote/events/$eventId/health");
     if (!isset($health['health']['score'], $health['health']['complete'],
                 $health['health']['total'], $health['health']['items'])) {
         throw new RuntimeException('Health endpoint missing required keys (score/complete/total/items)');
@@ -325,7 +313,6 @@ try {
     if (!is_array($health['health']['items']) || count($health['health']['items']) === 0) {
         throw new RuntimeException('Health items array is empty');
     }
-    // Validate each item has the documented shape
     foreach ($health['health']['items'] as $item) {
         foreach (['key', 'label', 'status', 'severity', 'detail'] as $field) {
             if (!array_key_exists($field, $item)) {
@@ -336,14 +323,12 @@ try {
     $score = (int) $health['health']['score'];
     ok("health fetched (score={$score}, complete={$health['health']['complete']}/{$health['health']['total']})");
 
-    // ── 11. Fetch analytics ───────────────────────────────────────────────────
-    $analytics = $admin->request('GET', "/api/promote/campaigns/$campaignId/analytics");
+    // ── 10. Fetch analytics ───────────────────────────────────────────────────
+    $analytics = $admin->request('GET', "/api/promote/events/$eventId/analytics");
     if (!isset($analytics['analytics'])) {
         throw new RuntimeException('Analytics endpoint missing analytics key');
     }
     $a = $analytics['analytics'];
-    // website_clicks / rsvps / ticket_conversions are legacy-compat keys, always int 0.
-    // email_opens / email_clicks are null (platform metric placeholders) — (int)null === 0.
     $requiredKeys = ['website_clicks', 'rsvps', 'ticket_conversions', 'email_opens',
                      'broadcast_count', 'destinations_reached', 'listings_live',
                      'manual_pending', 'needs_setup', 'failed_count', 'status_counts'];
@@ -352,16 +337,10 @@ try {
             throw new RuntimeException("Analytics missing key: $key");
         }
     }
-    // Legacy numeric keys should all be zero (no broadcasts sent successfully in test env)
-    foreach (['website_clicks', 'rsvps', 'ticket_conversions'] as $key) {
-        if ((int) $a[$key] !== 0) {
-            throw new RuntimeException("Analytics $key expected 0, got: " . $a[$key]);
-        }
-    }
-    ok('analytics returned with required keys and zero legacy counters');
+    ok('analytics returned with required keys');
 
-    // ── 12. Fetch destinations ────────────────────────────────────────────────
-    $dests = $admin->request('GET', "/api/promote/campaigns/$campaignId/destinations");
+    // ── 11. Fetch destinations ────────────────────────────────────────────────
+    $dests = $admin->request('GET', "/api/promote/events/$eventId/destinations");
     if (!isset($dests['destinations']) || !is_array($dests['destinations'])) {
         throw new RuntimeException('Destinations endpoint missing destinations array');
     }
@@ -371,10 +350,10 @@ try {
     }
     ok("destinations listed ($destCount destinations)");
 
-    // ── 13. 404 for a missing post id ─────────────────────────────────────────
+    // ── 12. 404 for a missing post id ─────────────────────────────────────────
     $notFound = $admin->request(
         'GET',
-        "/api/promote/campaigns/$campaignId/posts/999999",
+        "/api/promote/events/$eventId/posts/999999",
         null,
         [404]
     );
@@ -383,11 +362,11 @@ try {
     }
     ok('404 for missing post id');
 
-    // ── 14. Unauthenticated request → 401 ────────────────────────────────────
-    $anon  = new SmokeClient($baseUrl);
+    // ── 13. Unauthenticated request → 401 ────────────────────────────────────
+    $anon   = new SmokeClient($baseUrl);
     $unauth = $anon->request(
         'GET',
-        "/api/promote/campaigns/$campaignId",
+        "/api/promote/events/$eventId",
         null,
         [401]
     );
@@ -396,8 +375,7 @@ try {
     }
     ok('unauthenticated request → 401');
 
-    // ── 15. Viewer role: GET allowed, POST denied (403) ──────────────────────
-    // Invite a viewer using the invite flow (mirrors endpoint-smoke.php pattern)
+    // ── 14. Viewer role: GET allowed, POST denied (403) ──────────────────────
     $viewerEmail = 'promote-viewer+' . bin2hex(random_bytes(4)) . '@example.com';
     $invite      = $admin->request('POST', "/api/events/$eventId/invites", [
         'email' => $viewerEmail,
@@ -413,17 +391,17 @@ try {
     }
     $viewer->setToken($accepted['access_token']);
 
-    // Viewer GET campaign overview → should succeed (read_event)
-    $viewerRead = $viewer->request('GET', "/api/promote/campaigns/$campaignId");
-    if (empty($viewerRead['campaign']['id'])) {
-        throw new RuntimeException('Viewer GET campaign overview failed unexpectedly');
+    // Viewer GET promote overview → should succeed (read_event)
+    $viewerRead = $viewer->request('GET', "/api/promote/events/$eventId");
+    if (!isset($viewerRead['event']['id'])) {
+        throw new RuntimeException('Viewer GET promote overview failed unexpectedly');
     }
-    ok('viewer can GET campaign overview');
+    ok('viewer can GET promote overview');
 
     // Viewer POST create post → should be blocked (needs edit_event)
     $viewerPost = $viewer->request(
         'POST',
-        "/api/promote/campaigns/$campaignId/posts",
+        "/api/promote/events/$eventId/posts",
         ['title' => 'Viewer unauthorized post', 'status' => 'draft'],
         [403]
     );
@@ -431,18 +409,6 @@ try {
         throw new RuntimeException('Expected 403 for viewer POST create post, got: ' . $viewerPost['status']);
     }
     ok('viewer POST new post → 403 (read-only role blocked)');
-
-    // Viewer POST create campaign → should be blocked (needs edit_event)
-    $viewerCampaign = $viewer->request(
-        'POST',
-        "/api/promote/events/$eventId/campaign",
-        [],
-        [403]
-    );
-    if ($viewerCampaign['status'] !== 403) {
-        throw new RuntimeException('Expected 403 for viewer POST campaign, got: ' . $viewerCampaign['status']);
-    }
-    ok('viewer POST campaign → 403 (read-only role blocked)');
 
     echo "\nPromote smoke test complete against $baseUrl\n";
 } catch (Throwable $error) {

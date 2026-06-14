@@ -187,37 +187,30 @@ final class Kernel
                 return [Promote\CredentialSettings::class, ['destKey' => $segments[2] ?? null]];
             }
             if (($segments[1] ?? '') === 'events') {
-                // GET  /api/promote/events/{eventId}           → fetch campaign overview for event
-                // POST /api/promote/events/{eventId}/campaign  → create or return existing campaign
-                return [Promote\CampaignForEvent::class, [
-                    'eventId' => $this->intOrNull($segments[2] ?? null),
-                ]];
-            }
-            if (($segments[1] ?? '') === 'campaigns') {
-                $campaignId = $this->intOrNull($segments[2] ?? null);
-                $child      = $segments[3] ?? null;
-                $childId    = $this->intOrNull($segments[4] ?? null);
-                // posts have a deeper sub-path: .../posts/{postId}/variants[/generate|/{variantId}]
+                $eventId = $this->intOrNull($segments[2] ?? null);
+                $child   = $segments[3] ?? null;
+                $childId = $this->intOrNull($segments[4] ?? null);
+                // posts: .../posts/{postId}/variants[/generate|/{variantId}]
                 if ($child === 'posts') {
                     $sub   = $segments[5] ?? null;   // 'variants' or null
                     $subId = $this->intOrNull($segments[6] ?? null);
                     return [Promote\Posts::class, [
-                        'campaignId' => $campaignId,
-                        'postId'     => $childId,
-                        'sub'        => $sub,
-                        'subId'      => $subId,
+                        'eventId' => $eventId,
+                        'postId'  => $childId,
+                        'sub'     => $sub,
+                        'subId'   => $subId,
                     ]];
                 }
                 return match ($child) {
-                    'broadcasts'   => [Promote\Broadcasts::class,    ['campaignId' => $campaignId, 'broadcastId' => $childId]],
-                    'health'       => [Promote\HealthEndpoint::class, ['campaignId' => $campaignId]],
-                    'analytics'    => [Promote\Analytics::class,      ['campaignId' => $campaignId]],
-                    'destinations' => [Promote\Destinations::class,   ['campaignId' => $campaignId]],
-                    default        => [Promote::class,                ['campaignId' => $campaignId]],
+                    'broadcasts'   => [Promote\Broadcasts::class,    ['eventId' => $eventId, 'broadcastId' => $childId]],
+                    'health'       => [Promote\HealthEndpoint::class, ['eventId' => $eventId]],
+                    'analytics'    => [Promote\Analytics::class,      ['eventId' => $eventId]],
+                    'destinations' => [Promote\Destinations::class,   ['eventId' => $eventId]],
+                    default        => [Promote::class,                ['eventId' => $eventId]],
                 };
             }
-            // /api/promote/campaigns (no id segment) → list
-            return [Promote::class, ['campaignId' => null]];
+            // /api/promote/events (no id) → list
+            return [Promote::class, ['eventId' => null]];
         }
 
         // Events + sub-resources

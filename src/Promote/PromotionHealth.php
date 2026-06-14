@@ -15,7 +15,7 @@ final class PromotionHealth
 {
     public function __construct(private readonly Database $db) {}
 
-    public function compute(array $campaign, ?array $event, array $posts, array $assets): array
+    public function compute(array $settings, ?array $event, array $posts, array $assets, int $eventId): array
     {
         $items  = [];
         $event  = $event ?? [];
@@ -62,7 +62,7 @@ final class PromotionHealth
         ];
 
         // 5. Eventbrite listing prepared
-        $ebDone = $this->broadcastResultExists((int) $campaign['id'], 'eventbrite');
+        $ebDone = $this->broadcastResultExists($eventId, 'eventbrite');
         $items[] = [
             'key'      => 'eventbrite_listing',
             'label'    => 'Eventbrite listing prepared',
@@ -72,7 +72,7 @@ final class PromotionHealth
         ];
 
         // 6. Luma listing prepared
-        $lumaDone = $this->broadcastResultExists((int) $campaign['id'], 'luma');
+        $lumaDone = $this->broadcastResultExists($eventId, 'luma');
         $items[] = [
             'key'      => 'luma_listing',
             'label'    => 'Luma listing prepared',
@@ -82,7 +82,7 @@ final class PromotionHealth
         ];
 
         // 7. Funcheap submitted
-        $funcheapDone = $this->broadcastResultExists((int) $campaign['id'], 'funcheap');
+        $funcheapDone = $this->broadcastResultExists($eventId, 'funcheap');
         $items[] = [
             'key'      => 'funcheap_submitted',
             'label'    => 'Funcheap submitted',
@@ -92,7 +92,7 @@ final class PromotionHealth
         ];
 
         // 8. Foopee submitted
-        $foopeeDone = $this->broadcastResultExists((int) $campaign['id'], 'foopee');
+        $foopeeDone = $this->broadcastResultExists($eventId, 'foopee');
         $items[] = [
             'key'      => 'foopee_submitted',
             'label'    => 'Foopee submitted',
@@ -112,7 +112,7 @@ final class PromotionHealth
         ];
 
         // 10. Email blast scheduled or sent
-        $emailDone = $this->broadcastResultExists((int) $campaign['id'], 'email_general');
+        $emailDone = $this->broadcastResultExists($eventId, 'email_general');
         $items[] = [
             'key'      => 'email_blast',
             'label'    => 'Email blast scheduled',
@@ -131,18 +131,18 @@ final class PromotionHealth
             'detail'   => $hasPosts ? count($posts) . ' post(s) created' : 'No posts yet',
         ];
 
-        // 12. Campaign has goal set
-        $hasGoal = (int) ($campaign['goal_tickets'] ?? 0) > 0;
+        // 12. Ticket goal set
+        $hasGoal = (int) ($settings['goal_tickets'] ?? 0) > 0;
         $items[] = [
             'key'      => 'goal_set',
             'label'    => 'Ticket goal set',
             'status'   => $hasGoal ? 'done' : 'missing',
             'severity' => $hasGoal ? 'success' : 'info',
-            'detail'   => $hasGoal ? 'Goal: ' . $campaign['goal_tickets'] . ' tickets' : 'No ticket goal configured',
+            'detail'   => $hasGoal ? 'Goal: ' . $settings['goal_tickets'] . ' tickets' : 'No ticket goal configured',
         ];
 
         // 13. SF Chronicle pitch sent
-        $chronicleDone = $this->broadcastResultExists((int) $campaign['id'], 'sf_chronicle');
+        $chronicleDone = $this->broadcastResultExists($eventId, 'sf_chronicle');
         $items[] = [
             'key'      => 'sf_chronicle_submitted',
             'label'    => 'SF Chronicle pitch sent',
@@ -152,7 +152,7 @@ final class PromotionHealth
         ];
 
         // 14. SF Station submitted
-        $sfStationDone = $this->broadcastResultExists((int) $campaign['id'], 'sf_station');
+        $sfStationDone = $this->broadcastResultExists($eventId, 'sf_station');
         $items[] = [
             'key'      => 'sf_station_submitted',
             'label'    => 'SF Station listing submitted',
@@ -162,7 +162,7 @@ final class PromotionHealth
         ];
 
         // 15. DoTheBay submitted
-        $dothebayDone = $this->broadcastResultExists((int) $campaign['id'], 'dothebay');
+        $dothebayDone = $this->broadcastResultExists($eventId, 'dothebay');
         $items[] = [
             'key'      => 'dothebay_submitted',
             'label'    => 'DoTheBay listing submitted',
@@ -172,7 +172,7 @@ final class PromotionHealth
         ];
 
         // 16. SongKick submitted
-        $songkickDone = $this->broadcastResultExists((int) $campaign['id'], 'songkick');
+        $songkickDone = $this->broadcastResultExists($eventId, 'songkick');
         $items[] = [
             'key'      => 'songkick_submitted',
             'label'    => 'SongKick listing submitted',
@@ -182,7 +182,7 @@ final class PromotionHealth
         ];
 
         // 17. JamBase submitted
-        $jambaseDone = $this->broadcastResultExists((int) $campaign['id'], 'jambase');
+        $jambaseDone = $this->broadcastResultExists($eventId, 'jambase');
         $items[] = [
             'key'      => 'jambase_submitted',
             'label'    => 'JamBase listing submitted',
@@ -192,7 +192,7 @@ final class PromotionHealth
         ];
 
         // 18. Ad-hoc email sent
-        $adhocDone = $this->broadcastResultExists((int) $campaign['id'], 'email_adhoc');
+        $adhocDone = $this->broadcastResultExists($eventId, 'email_adhoc');
         $items[] = [
             'key'      => 'email_adhoc_sent',
             'label'    => 'Ad-hoc press / VIP emails sent',
@@ -210,10 +210,10 @@ final class PromotionHealth
             $windowEnd   = date('Y-m-d H:i:s', strtotime($eventDate . ' 23:59:59'));
             $row = $this->db->one(
                 "SELECT b.id FROM promote_broadcasts b
-                 WHERE b.campaign_id = ? AND b.send_mode = 'scheduled'
+                 WHERE b.event_id = ? AND b.send_mode = 'scheduled'
                    AND b.scheduled_at BETWEEN ? AND ?
                  LIMIT 1",
-                [(int) $campaign['id'], $windowStart, $windowEnd]
+                [$eventId, $windowStart, $windowEnd]
             );
             $reminderDone = $row !== null;
         }
@@ -275,14 +275,14 @@ final class PromotionHealth
         return $row !== null;
     }
 
-    /** True if the campaign has at least one broadcast result for the given destination key. */
-    private function broadcastResultExists(int $campaignId, string $destKey): bool
+    /** True if the event has at least one broadcast result for the given destination key. */
+    private function broadcastResultExists(int $eventId, string $destKey): bool
     {
         $row = $this->db->one(
             'SELECT r.id FROM promote_broadcast_results r
              JOIN promote_broadcasts b ON b.id = r.broadcast_id
-             WHERE b.campaign_id = ? AND r.destination_key = ? LIMIT 1',
-            [$campaignId, $destKey]
+             WHERE b.event_id = ? AND r.destination_key = ? LIMIT 1',
+            [$eventId, $destKey]
         );
         return $row !== null;
     }

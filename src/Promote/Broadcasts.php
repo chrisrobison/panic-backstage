@@ -11,46 +11,41 @@ use function Panic\log_activity;
 /**
  * Broadcast CRUD.
  *
- *   GET  /api/promote/campaigns/{id}/broadcasts
- *   POST /api/promote/campaigns/{id}/broadcasts
- *   GET  /api/promote/campaigns/{id}/broadcasts/{broadcastId}
+ *   GET  /api/promote/events/{id}/broadcasts
+ *   POST /api/promote/events/{id}/broadcasts
+ *   GET  /api/promote/events/{id}/broadcasts/{broadcastId}
  */
 final class Broadcasts extends BaseEndpoint
 {
     public function handle(Request $request): Response
     {
-        $campaignId  = (int) ($this->params['campaignId'] ?? 0);
+        $eventId     = (int) ($this->params['eventId'] ?? 0);
         $broadcastId = (int) ($this->params['broadcastId'] ?? 0);
 
-        if (!$campaignId) {
-            return $this->notFound('Campaign not found');
+        if (!$eventId) {
+            return $this->notFound('Event not found');
         }
-        $campaign = $this->db->one('SELECT * FROM promote_campaigns WHERE id = ?', [$campaignId]);
-        if (!$campaign) {
-            return $this->notFound('Campaign not found');
-        }
-        $eventId    = (int) $campaign['event_id'];
         $capability = $request->method() === 'GET' ? 'read_event' : 'edit_event';
         if ($denied = $this->requireEventCapability($eventId, $capability)) {
             return $denied;
         }
 
         return match ($request->method()) {
-            'GET'  => $broadcastId ? $this->show($campaignId, $broadcastId) : $this->index($campaignId),
-            'POST' => $this->create($request, $campaignId, $eventId),
+            'GET'  => $broadcastId ? $this->show($eventId, $broadcastId) : $this->index($eventId),
+            'POST' => $this->create($request, $eventId),
             default => Response::methodNotAllowed(),
         };
     }
 
     // ── Broadcast list ────────────────────────────────────────────────────────
 
-    private function index(int $campaignId): Response
+    private function index(int $eventId): Response
     {
         $broadcasts = $this->db->all(
             'SELECT b.*, u.name created_by_name
              FROM promote_broadcasts b LEFT JOIN users u ON u.id = b.created_by_user_id
-             WHERE b.campaign_id = ? ORDER BY b.created_at DESC',
-            [$campaignId]
+             WHERE b.event_id = ? ORDER BY b.created_at DESC',
+            [$eventId]
         );
         foreach ($broadcasts as &$broadcast) {
             $broadcast['results'] = $this->db->all(
@@ -64,11 +59,11 @@ final class Broadcasts extends BaseEndpoint
 
     // ── Broadcast detail ──────────────────────────────────────────────────────
 
-    private function show(int $campaignId, int $broadcastId): Response
+    private function show(int $eventId, int $broadcastId): Response
     {
         $broadcast = $this->db->one(
-            'SELECT * FROM promote_broadcasts WHERE id = ? AND campaign_id = ?',
-            [$broadcastId, $campaignId]
+            'SELECT * FROM promote_broadcasts WHERE id = ? AND event_id = ?',
+            [$broadcastId, $eventId]
         );
         if (!$broadcast) {
             return $this->notFound('Broadcast not found');
@@ -82,7 +77,7 @@ final class Broadcasts extends BaseEndpoint
 
     // ── Create broadcast ──────────────────────────────────────────────────────
 
-    private function create(Request $request, int $campaignId, int $eventId): Response
+    private function create(Request $request, int $eventId): Response
     {
         $body   = $request->body();
         $postId = (int) ($body['post_id'] ?? 0);
@@ -91,11 +86,11 @@ final class Broadcasts extends BaseEndpoint
         }
 
         $post = $this->db->one(
-            'SELECT * FROM promote_posts WHERE id = ? AND campaign_id = ?',
-            [$postId, $campaignId]
+            'SELECT * FROM promote_posts WHERE id = ? AND event_id = ?',
+            [$postId, $eventId]
         );
         if (!$post) {
-            return Response::json(['error' => 'Post not found in this campaign'], 422);
+            return Response::json(['error' => 'Post not found for this event'], 422);
         }
 
         $destinations = $body['destinations'] ?? [];
@@ -106,14 +101,12 @@ final class Broadcasts extends BaseEndpoint
         $sendMode    = ($body['send_mode'] ?? 'now') === 'scheduled' ? 'scheduled' : 'now';
         $scheduledAt = ($sendMode === 'scheduled' && !empty($body['scheduled_at'])) ? $body['scheduled_at'] : null;
 
-        // Fetch the full event row (with venue join) so adapters have all the data they need
         $event = $this->db->one(
             'SELECT e.*, v.name venue_name, v.city venue_city, v.state venue_state
              FROM events e LEFT JOIN venues v ON v.id = e.venue_id WHERE e.id = ?',
             [$eventId]
         ) ?? [];
 
-        // Fetch destination records for the requested keys
         $placeholders = implode(',', array_fill(0, count($destinations), '?'));
         $destRecords  = $this->db->all(
             "SELECT * FROM promote_destinations WHERE destination_key IN ($placeholders)",
@@ -128,9 +121,9 @@ final class Broadcasts extends BaseEndpoint
         $pdo->beginTransaction();
         try {
             $broadcastId = $this->db->insert(
-                'INSERT INTO promote_broadcasts (campaign_id, post_id, created_by_user_id, send_mode, scheduled_at, status)
+                'INSERT INTO promote_broadcasts (event_id, post_id, created_by_user_id, send_mode, scheduled_at, status)
                  VALUES (?, ?, ?, ?, ?, ?)',
-                [$campaignId, $postId, $this->userId(), $sendMode, $scheduledAt, 'queued']
+                [$eventId, $postId, $this->userId(), $sendMode, $scheduledAt, 'queued']
             );
 
             $adapter = new BroadcastAdapters($this->db);
@@ -167,11 +160,10 @@ final class Broadcasts extends BaseEndpoint
                 ];
             }
 
-            // Determine overall broadcast status
-            $statuses   = array_column($results, 'status');
-            $allSent    = array_unique($statuses) === ['sent'] || array_unique($statuses) === ['queued'];
-            $anyFailed  = in_array('failed', $statuses, true);
-            $allFailed  = count($statuses) > 0 && count(array_filter($statuses, fn ($s) => $s === 'failed')) === count($statuses);
+            $statuses  = array_column($results, 'status');
+            $anyFailed = in_array('failed', $statuses, true);
+            $allFailed = count($statuses) > 0
+                && count(array_filter($statuses, fn ($s) => $s === 'failed')) === count($statuses);
 
             $broadcastStatus = match (true) {
                 $allFailed  => 'failed',

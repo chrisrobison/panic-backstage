@@ -4,8 +4,8 @@
 // via publish/subscribe topics — never by direct reference.
 //
 // Components:
-//   pb-promote-campaign-list     — #promote route: campaign cards for upcoming events
-//   pb-promote-campaign-overview — #promote-event-{id}: rich single-campaign view
+//   pb-promote-campaign-list     — #promote route: event cards for upcoming events
+//   pb-promote-campaign-overview — #promote-event-{id}: rich single-event promote view
 //   pb-promote-health-card       — checklist with done/warn/missing, expandable
 //   pb-promote-post-list         — post cards with Edit/Preview/Broadcast buttons
 //   pb-promote-post-editor       — modal: post CRUD + 15-channel variant tabs
@@ -14,13 +14,13 @@
 //   pb-promote-analytics-card    — 4 stub metric tiles with sparkline placeholders
 //
 // Topics published:
-//   promote.broadcast.open       {campaignId, postId}
-//   promote.post.created         {post, campaignId}
-//   promote.post.updated         {post, campaignId}
-//   promote.post.deleted         {postId, campaignId}
+//   promote.broadcast.open       {eventId, postId}
+//   promote.post.created         {post, eventId}
+//   promote.post.updated         {post, eventId}
+//   promote.post.deleted         {postId, eventId}
 //   promote.variants.generated   {postId, variants}
-//   promote.broadcast.created    {broadcast, campaignId}
-//   promote.health.changed       {campaignId}
+//   promote.broadcast.created    {broadcast, eventId}
+//   promote.health.changed       {eventId}
 //   toast.show                   {message, tone}
 
 import {
@@ -154,61 +154,58 @@ const RATIOS = [
 ];
 
 // ── pb-promote-campaign-list ─────────────────────────────────────────────────
-// Route: #promote — shows campaign cards for upcoming events.
-// If an event has no campaign yet, shows a "Create campaign" CTA.
+// Route: #promote — shows a card per upcoming event with promote activity.
 
 class PromoteCampaignList extends PanicElement {
   async connect() {
-    this.setLoading('Loading campaigns');
+    this.setLoading('Loading promote');
     try {
-      const data = await api('/promote/campaigns');
-      this.render(data.campaigns || []);
+      const data = await api('/promote/events');
+      this.render(data.events || []);
     } catch (error) {
       this.showError(error);
     }
   }
 
-  render(campaigns) {
+  render(events) {
     this.innerHTML = `<section class="page-head">
       <div>
         <h1><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Panic Promote</h1>
         <a class="button ghost small" href="#help-promote-overview" title="Promote help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i> Help</a>
-        <p class="subtle">Campaign command center &mdash; turn upcoming shows into coordinated promotions.</p>
+        <p class="subtle">Promotion command center &mdash; turn upcoming shows into coordinated promotions.</p>
       </div>
     </section>
     <div class="promote-campaign-grid" data-campaign-grid>
-      ${campaigns.length ? campaigns.map((c) => this.campaignCard(c)).join('') : `<div class="panel padded"><p class="muted">No campaigns yet. Open an event and create a campaign to get started.</p></div>`}
+      ${events.length ? events.map((e) => this.eventCard(e)).join('') : `<div class="panel padded"><p class="muted">No upcoming events found. Add events to get started.</p></div>`}
     </div>`;
 
-    $$('[data-open-campaign]', this).forEach((btn) => {
+    $$('[data-open-event]', this).forEach((btn) => {
       btn.addEventListener('click', () => {
-        location.hash = `#promote-event-${esc(btn.dataset.openCampaign)}`;
+        location.hash = `#promote-event-${esc(btn.dataset.openEvent)}`;
       });
     });
   }
 
-  campaignCard(c) {
-    const score = Number(c.health_score || 0);
-    const days = daysOutLabel(c.event_date);
-    const statusTone = c.status === 'active' ? 'success' : c.status === 'completed' ? 'info' : '';
+  eventCard(e) {
+    const days = daysOutLabel(e.event_date);
+    const statusTone = e.promote_status === 'active' ? 'success' : e.promote_status === 'completed' ? 'info' : '';
+    const postCount = Number(e.post_count || 0);
     return `<article class="panel promote-campaign-card">
       <div class="promote-campaign-card-head">
         <div class="promote-campaign-meta">
-          <h2 class="promote-campaign-title"><a href="#promote-event-${esc(c.event_id)}">${esc(c.event_title || c.title)}</a></h2>
+          <h2 class="promote-campaign-title"><a href="#promote-event-${esc(String(e.event_id))}">${esc(e.event_title)}</a></h2>
           <div class="promote-campaign-sub">
-            <span class="muted">${esc(shortDate(c.event_date ? new Date(`${c.event_date}T12:00:00`) : null))}</span>
+            <span class="muted">${esc(shortDate(e.event_date ? new Date(`${e.event_date}T12:00:00`) : null))}</span>
             ${days ? `<span class="promote-days-badge">${esc(days)}</span>` : ''}
-            <span class="badge ${esc(statusTone)}">${esc(titleCase(c.status))}</span>
+            ${e.promote_status ? `<span class="badge ${esc(statusTone)}">${esc(titleCase(e.promote_status))}</span>` : ''}
           </div>
         </div>
-        <button class="primary small" data-open-campaign="${esc(c.event_id)}">Open</button>
+        <button class="primary small" data-open-event="${esc(String(e.event_id))}">Open</button>
       </div>
       <div class="promote-campaign-stats">
-        ${c.goal_tickets ? `<span class="promote-stat"><strong>${esc(String(c.goal_tickets))}</strong> goal</span>` : ''}
-        <span class="promote-stat"><strong>${esc(String(score))}%</strong> health</span>
-        ${c.primary_missing ? `<span class="promote-stat promote-missing"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ${esc(c.primary_missing)}</span>` : ''}
+        ${e.goal_tickets ? `<span class="promote-stat"><strong>${esc(String(e.goal_tickets))}</strong> goal</span>` : ''}
+        <span class="promote-stat"><strong>${esc(String(postCount))}</strong> post${postCount !== 1 ? 's' : ''}</span>
       </div>
-      ${healthScoreBar(score)}
     </article>`;
   }
 }
@@ -222,14 +219,14 @@ customElements.define('pb-promote-campaign-list', PromoteCampaignList);
 class PromoteCampaignOverview extends PanicElement {
   // eventId is set by AppShell.mount() as a property
   async connect() {
-    this.setLoading('Loading campaign');
+    this.setLoading('Loading promote');
     subscribe('promote.post.created', () => this.reloadPosts(), this.abort.signal);
     subscribe('promote.post.updated', () => this.reloadPosts(), this.abort.signal);
     subscribe('promote.post.deleted', () => this.reloadPosts(), this.abort.signal);
     subscribe('promote.variants.generated', () => this.reloadPosts(), this.abort.signal);
     subscribe('promote.broadcast.created', () => this.reloadAll(), this.abort.signal);
     subscribe('promote.health.changed', (p) => {
-      if (p.campaignId === this.campaignId) this.reloadHealth();
+      if (p.eventId === this.eventId) this.reloadHealth();
     }, this.abort.signal);
     await this.loadData();
   }
@@ -237,14 +234,8 @@ class PromoteCampaignOverview extends PanicElement {
   async loadData() {
     try {
       const data = await api(`/promote/events/${this.eventId}`);
-      if (data.campaign) {
-        this.campaignId = Number(data.campaign.id);
-        this.data = data;
-        this.render();
-      } else {
-        // No campaign yet — show create prompt
-        this.renderNoCampaign(data.event);
-      }
+      this.data = data;
+      this.render();
     } catch (error) {
       this.showError(error);
     }
@@ -254,19 +245,17 @@ class PromoteCampaignOverview extends PanicElement {
     try {
       const data = await api(`/promote/events/${this.eventId}`);
       this.data = data;
-      this.campaignId = Number(data.campaign?.id);
       this.render();
     } catch { /* silently skip reload on error */ }
   }
 
   async reloadPosts() {
-    if (!this.campaignId) return;
     try {
-      const data = await api(`/promote/campaigns/${this.campaignId}`);
+      const data = await api(`/promote/events/${this.eventId}`);
       this.data = { ...this.data, ...data };
       const postList = $('pb-promote-post-list', this);
       if (postList) {
-        postList.campaignId = this.campaignId;
+        postList.eventId = this.eventId;
         postList.posts = data.posts || [];
         postList.assets = this.data.assets || [];
         postList.render();
@@ -275,9 +264,8 @@ class PromoteCampaignOverview extends PanicElement {
   }
 
   async reloadHealth() {
-    if (!this.campaignId) return;
     try {
-      const health = await api(`/promote/campaigns/${this.campaignId}/health`);
+      const { health } = await api(`/promote/events/${this.eventId}/health`);
       this.data = { ...this.data, health };
       const healthCard = $('pb-promote-health-card', this);
       if (healthCard) {
@@ -287,40 +275,16 @@ class PromoteCampaignOverview extends PanicElement {
     } catch { /* ignore */ }
   }
 
-  renderNoCampaign(event) {
-    const e = event || {};
-    this.innerHTML = `<section class="page-head">
-      <div><h1>${esc(e.title || 'Event')}</h1><p class="subtle">No promote campaign exists for this event.</p></div>
-      <a href="#promote" class="secondary small">&larr; Back</a>
-    </section>
-    <div class="panel padded">
-      <p>This event doesn&rsquo;t have a Panic Promote campaign yet.</p>
-      <button class="primary" data-create-campaign>Create campaign</button>
-    </div>`;
-
-    $('[data-create-campaign]', this)?.addEventListener('click', async () => {
-      const btn = $('[data-create-campaign]', this);
-      btn.disabled = true;
-      try {
-        await api(`/promote/events/${this.eventId}/campaign`, { method: 'POST' });
-        await this.loadData();
-      } catch (error) {
-        publish('toast.show', { message: error.message || 'Failed to create campaign.', tone: 'error' });
-        btn.disabled = false;
-      }
-    });
-  }
-
   render() {
-    const { campaign, event, posts, assets, health, analytics, destinations } = this.data;
+    const { settings, event, posts, assets, health, analytics, destinations } = this.data;
     const e = event || {};
-    const c = campaign || {};
+    const s = settings || {};
     const eventDate = e.date ? new Date(`${e.date}T12:00:00`) : null;
 
     this.innerHTML = `<section class="page-head">
       <div>
-        <nav class="promote-breadcrumb"><a href="#promote">&larr; Campaigns</a></nav>
-        <h1 class="promote-overview-title">${esc(e.title || c.title)}</h1>
+        <nav class="promote-breadcrumb"><a href="#promote">&larr; Promote</a></nav>
+        <h1 class="promote-overview-title">${esc(e.title || '')}</h1>
         <p class="subtle">${esc(e.venue_name || '')}${e.venue_city ? ` &mdash; ${esc(e.venue_city)}` : ''}</p>
       </div>
       <div class="promote-head-actions">
@@ -337,7 +301,7 @@ class PromoteCampaignOverview extends PanicElement {
           <div class="promote-hero-inner">
             <div class="promote-hero-flyer" data-hero-flyer></div>
             <div class="promote-hero-details">
-              <h2>${esc(e.title || c.title)}</h2>
+              <h2>${esc(e.title || '')}</h2>
               <div class="promote-hero-meta">
                 ${eventDate ? `<span><i class="fa-regular fa-calendar" aria-hidden="true"></i> ${esc(shortDate(eventDate))}</span>` : ''}
                 ${e.doors_time ? `<span><i class="fa-regular fa-clock" aria-hidden="true"></i> Doors ${esc(e.doors_time)}</span>` : ''}
@@ -349,7 +313,7 @@ class PromoteCampaignOverview extends PanicElement {
           </div>
           <div class="promote-metric-tiles">
             <div class="promote-metric-tile">
-              <span class="promote-metric-value">${esc(String(c.goal_tickets || '—'))}</span>
+              <span class="promote-metric-value">${esc(String(s.goal_tickets || '—'))}</span>
               <span class="promote-metric-label">Goal</span>
             </div>
             <div class="promote-metric-tile">
@@ -362,7 +326,7 @@ class PromoteCampaignOverview extends PanicElement {
             </div>
             <div class="promote-metric-tile">
               <span class="promote-metric-value">
-                <span class="badge ${esc(c.status === 'active' ? 'success' : '')}">${esc(titleCase(c.status || 'draft'))}</span>
+                <span class="badge ${esc(s.status === 'active' ? 'success' : '')}">${esc(titleCase(s.status || 'draft'))}</span>
               </span>
               <span class="promote-metric-label">Status</span>
             </div>
@@ -409,7 +373,7 @@ class PromoteCampaignOverview extends PanicElement {
     // setting props to ensure each component renders with real data.
     const postList = $('pb-promote-post-list', this);
     if (postList) {
-      postList.campaignId = this.campaignId;
+      postList.eventId = this.eventId;
       postList.posts = posts || [];
       postList.assets = assets || [];
       postList.render();
@@ -435,7 +399,7 @@ class PromoteCampaignOverview extends PanicElement {
 
     const broadcastModal = $('pb-promote-broadcast-modal', this);
     if (broadcastModal) {
-      broadcastModal.campaignId = this.campaignId;
+      broadcastModal.eventId = this.eventId;
       broadcastModal.destinations = destinations || [];
     }
 
@@ -447,7 +411,7 @@ class PromoteCampaignOverview extends PanicElement {
     // "Broadcast" button (no specific post — opens modal with no pre-selected post)
     $('[data-broadcast-all]', this)?.addEventListener('click', () => {
       const bm = $('pb-promote-broadcast-modal', this);
-      if (bm) bm.open(this.campaignId, null, destinations || []);
+      if (bm) bm.open(this.eventId, null, destinations || []);
     });
 
     this.scrollToSection();
@@ -463,7 +427,7 @@ class PromoteCampaignOverview extends PanicElement {
 
   openPostEditor(post) {
     const editor = document.createElement('pb-promote-post-editor');
-    editor.campaignId = this.campaignId;
+    editor.eventId = this.eventId;
     editor.post = post || null;
     editor.assets = this.data?.assets || [];
     document.body.appendChild(editor);
@@ -540,7 +504,7 @@ customElements.define('pb-promote-health-card', PromoteHealthCard);
 // Post cards with asset thumb, status badge, Edit/Preview/Broadcast buttons.
 
 class PromotePostList extends PanicElement {
-  // campaignId, posts[], assets[] set by parent
+  // eventId, posts[], assets[] set by parent
   connectedCallback() {
     super.connectedCallback();
     this.render();
@@ -574,7 +538,7 @@ class PromotePostList extends PanicElement {
     $$('[data-broadcast-post]', this).forEach((btn) => {
       const postId = Number(btn.dataset.broadcastPost);
       btn.addEventListener('click', () => {
-        publish('promote.broadcast.open', { campaignId: this.campaignId, postId });
+        publish('promote.broadcast.open', { eventId: this.eventId, postId });
       });
     });
 
@@ -583,9 +547,9 @@ class PromotePostList extends PanicElement {
         const postId = Number(btn.dataset.deletePost);
         if (!confirm('Delete this post? This cannot be undone.')) return;
         try {
-          await api(`/promote/campaigns/${this.campaignId}/posts/${postId}`, { method: 'DELETE' });
+          await api(`/promote/events/${this.eventId}/posts/${postId}`, { method: 'DELETE' });
           publish('toast.show', { message: 'Post deleted.', tone: 'success' });
-          publish('promote.post.deleted', { postId, campaignId: this.campaignId });
+          publish('promote.post.deleted', { postId, eventId: this.eventId });
         } catch (error) {
           publish('toast.show', { message: error.message || 'Delete failed.', tone: 'error' });
         }
@@ -615,7 +579,7 @@ class PromotePostList extends PanicElement {
 
   openEditor(post) {
     const editor = document.createElement('pb-promote-post-editor');
-    editor.campaignId = this.campaignId;
+    editor.eventId = this.eventId;
     editor.post = post || null;
     editor.assets = this.assets || [];
     document.body.appendChild(editor);
@@ -629,7 +593,7 @@ customElements.define('pb-promote-post-list', PromotePostList);
 // Appended to document.body by post-list or overview.
 
 class PromotePostEditor extends PanicElement {
-  // campaignId, post (null = create), assets[] set before append
+  // eventId, post (null = create), assets[] set before append
   connectedCallback() {
     super.connectedCallback();
     this.activeChannel = CHANNELS[0];
@@ -641,7 +605,7 @@ class PromotePostEditor extends PanicElement {
   async loadVariants() {
     try {
       // Load the full post to get existing variants (GET single post returns them)
-      const data = await api(`/promote/campaigns/${this.campaignId}/posts/${this.post.id}`);
+      const data = await api(`/promote/events/${this.eventId}/posts/${this.post.id}`);
       this.variants = {};
       (data.variants || []).forEach((v) => { this.variants[v.channel] = v; });
     } catch { /* variants will be empty — that's fine */ }
@@ -734,13 +698,13 @@ class PromotePostEditor extends PanicElement {
       try {
         let result;
         if (isEdit) {
-          result = await api(`/promote/campaigns/${this.campaignId}/posts/${post.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+          result = await api(`/promote/events/${this.eventId}/posts/${post.id}`, { method: 'PATCH', body: JSON.stringify(body) });
           publish('toast.show', { message: 'Post updated.', tone: 'success' });
-          publish('promote.post.updated', { post: result.post, campaignId: this.campaignId });
+          publish('promote.post.updated', { post: result.post, eventId: this.eventId });
         } else {
-          result = await api(`/promote/campaigns/${this.campaignId}/posts`, { method: 'POST', body: JSON.stringify(body) });
+          result = await api(`/promote/events/${this.eventId}/posts`, { method: 'POST', body: JSON.stringify(body) });
           publish('toast.show', { message: 'Post created.', tone: 'success' });
-          publish('promote.post.created', { post: result.post, campaignId: this.campaignId });
+          publish('promote.post.created', { post: result.post, eventId: this.eventId });
           close();
         }
         // Refresh post reference and re-render (for edit, stay open)
@@ -771,7 +735,7 @@ class PromotePostEditor extends PanicElement {
         btn.disabled = true;
         btn.textContent = 'Generating…';
         try {
-          const result = await api(`/promote/campaigns/${this.campaignId}/posts/${post.id}/variants/generate`, { method: 'POST' });
+          const result = await api(`/promote/events/${this.eventId}/posts/${post.id}/variants/generate`, { method: 'POST' });
           result.variants.forEach((v) => { this.variants[v.channel] = v; });
           publish('toast.show', { message: 'Variants generated.', tone: 'success' });
           publish('promote.variants.generated', { postId: post.id, variants: result.variants });
@@ -843,7 +807,7 @@ class PromotePostEditor extends PanicElement {
       const titleInput = $('[name="variant_title"]', panel);
       if (titleInput) body.title = titleInput.value;
       try {
-        const result = await api(`/promote/campaigns/${this.campaignId}/posts/${this.post.id}/variants/${vid}`, { method: 'PATCH', body: JSON.stringify(body) });
+        const result = await api(`/promote/events/${this.eventId}/posts/${this.post.id}/variants/${vid}`, { method: 'PATCH', body: JSON.stringify(body) });
         this.variants[channel] = result.variant;
         publish('toast.show', { message: 'Variant saved.', tone: 'success' });
       } catch (error) {
@@ -862,19 +826,19 @@ customElements.define('pb-promote-post-editor', PromotePostEditor);
 // Subscribes to promote.broadcast.open; publishes promote.broadcast.created.
 
 class PromoteBroadcastModal extends PanicElement {
-  // campaignId, destinations[] set by parent overview
+  // eventId, destinations[] set by parent overview
   connectedCallback() {
     super.connectedCallback();
     subscribe('promote.broadcast.open', (p) => {
-      if (p.campaignId === this.campaignId) {
+      if (p.eventId === this.eventId) {
         this.pendingPostId = p.postId;
-        this.open(p.campaignId, p.postId, this.destinations || []);
+        this.open(p.eventId, p.postId, this.destinations || []);
       }
     }, this.abort.signal);
   }
 
-  open(campaignId, postId, destinations) {
-    this.campaignId = campaignId;
+  open(eventId, postId, destinations) {
+    this.eventId = eventId;
     this.pendingPostId = postId;
     this.destinations = destinations;
     this.renderModal(destinations, postId);
@@ -990,9 +954,9 @@ class PromoteBroadcastModal extends PanicElement {
       };
 
       try {
-        const result = await api(`/promote/campaigns/${this.campaignId}/broadcasts`, { method: 'POST', body: JSON.stringify(body) });
+        const result = await api(`/promote/events/${this.eventId}/broadcasts`, { method: 'POST', body: JSON.stringify(body) });
         publish('toast.show', { message: 'Broadcast sent!', tone: 'success' });
-        publish('promote.broadcast.created', { broadcast: result.broadcast, campaignId: this.campaignId });
+        publish('promote.broadcast.created', { broadcast: result.broadcast, eventId: this.eventId });
         close();
       } catch (error) {
         $('[data-error]', dialog).textContent = error.message || 'Broadcast failed.';

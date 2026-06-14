@@ -8,9 +8,9 @@ use Panic\Request;
 use Panic\Response;
 
 /**
- * Destination list for a campaign.
+ * Destination list for an event's promote view.
  *
- *   GET /api/promote/campaigns/{id}/destinations
+ *   GET /api/promote/events/{id}/destinations
  */
 final class Destinations extends BaseEndpoint
 {
@@ -19,15 +19,11 @@ final class Destinations extends BaseEndpoint
         if ($request->method() !== 'GET') {
             return Response::methodNotAllowed();
         }
-        $campaignId = (int) ($this->params['campaignId'] ?? 0);
-        if (!$campaignId) {
-            return $this->notFound('Campaign not found');
+        $eventId = (int) ($this->params['eventId'] ?? 0);
+        if (!$eventId) {
+            return $this->notFound('Event not found');
         }
-        $campaign = $this->db->one('SELECT event_id FROM promote_campaigns WHERE id = ?', [$campaignId]);
-        if (!$campaign) {
-            return $this->notFound('Campaign not found');
-        }
-        if ($denied = $this->requireEventCapability((int) $campaign['event_id'], 'read_event')) {
+        if ($denied = $this->requireEventCapability($eventId, 'read_event')) {
             return $denied;
         }
         $destinations = $this->db->all(

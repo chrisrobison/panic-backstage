@@ -11,14 +11,14 @@ use function Panic\log_activity;
 /**
  * Post CRUD + variant sub-routes.
  *
- *   GET    /api/promote/campaigns/{id}/posts
- *   POST   /api/promote/campaigns/{id}/posts
- *   GET    /api/promote/campaigns/{id}/posts/{postId}
- *   PATCH  /api/promote/campaigns/{id}/posts/{postId}
- *   DELETE /api/promote/campaigns/{id}/posts/{postId}
+ *   GET    /api/promote/events/{id}/posts
+ *   POST   /api/promote/events/{id}/posts
+ *   GET    /api/promote/events/{id}/posts/{postId}
+ *   PATCH  /api/promote/events/{id}/posts/{postId}
+ *   DELETE /api/promote/events/{id}/posts/{postId}
  *
- *   POST   /api/promote/campaigns/{id}/posts/{postId}/variants/generate
- *   PATCH  /api/promote/campaigns/{id}/posts/{postId}/variants/{variantId}
+ *   POST   /api/promote/events/{id}/posts/{postId}/variants/generate
+ *   PATCH  /api/promote/events/{id}/posts/{postId}/variants/{variantId}
  */
 final class Posts extends BaseEndpoint
 {
@@ -26,49 +26,42 @@ final class Posts extends BaseEndpoint
 
     public function handle(Request $request): Response
     {
-        $campaignId = (int) ($this->params['campaignId'] ?? 0);
-        $postId     = (int) ($this->params['postId'] ?? 0);
-        $sub        = $this->params['sub'] ?? null;   // 'variants' or null
-        $subId      = (int) ($this->params['subId'] ?? 0);
+        $eventId = (int) ($this->params['eventId'] ?? 0);
+        $postId  = (int) ($this->params['postId'] ?? 0);
+        $sub     = $this->params['sub'] ?? null;   // 'variants' or null
+        $subId   = (int) ($this->params['subId'] ?? 0);
 
-        if (!$campaignId) {
-            return $this->notFound('Campaign not found');
+        if (!$eventId) {
+            return $this->notFound('Event not found');
         }
 
-        $campaign = $this->db->one('SELECT * FROM promote_campaigns WHERE id = ?', [$campaignId]);
-        if (!$campaign) {
-            return $this->notFound('Campaign not found');
-        }
-
-        $eventId    = (int) $campaign['event_id'];
         $capability = $request->method() === 'GET' ? 'read_event' : 'edit_event';
         if ($denied = $this->requireEventCapability($eventId, $capability)) {
             return $denied;
         }
 
-        // Variant sub-routes
         if ($sub === 'variants') {
-            return $this->handleVariants($request, $campaignId, $postId, $subId, $eventId);
+            return $this->handleVariants($request, $eventId, $postId, $subId);
         }
 
         return match ($request->method()) {
-            'GET'    => $postId ? $this->show($campaignId, $postId) : $this->index($campaignId),
-            'POST'   => $this->create($request, $campaignId, $eventId),
-            'PATCH'  => $this->update($request, $campaignId, $postId),
-            'DELETE' => $this->delete($campaignId, $postId, $eventId),
+            'GET'    => $postId ? $this->show($eventId, $postId) : $this->index($eventId),
+            'POST'   => $this->create($request, $eventId),
+            'PATCH'  => $this->update($request, $eventId, $postId),
+            'DELETE' => $this->delete($eventId, $postId),
             default  => Response::methodNotAllowed(),
         };
     }
 
     // ── Post list ────────────────────────────────────────────────────────────
 
-    private function index(int $campaignId): Response
+    private function index(int $eventId): Response
     {
         $posts = $this->db->all(
             'SELECT p.*, u.name created_by_name
              FROM promote_posts p LEFT JOIN users u ON u.id = p.created_by_user_id
-             WHERE p.campaign_id = ? ORDER BY p.created_at DESC',
-            [$campaignId]
+             WHERE p.event_id = ? ORDER BY p.created_at DESC',
+            [$eventId]
         );
         foreach ($posts as &$post) {
             $post['variants'] = $this->db->all(
@@ -82,11 +75,11 @@ final class Posts extends BaseEndpoint
 
     // ── Post detail ──────────────────────────────────────────────────────────
 
-    private function show(int $campaignId, int $postId): Response
+    private function show(int $eventId, int $postId): Response
     {
         $post = $this->db->one(
-            'SELECT * FROM promote_posts WHERE id = ? AND campaign_id = ?',
-            [$postId, $campaignId]
+            'SELECT * FROM promote_posts WHERE id = ? AND event_id = ?',
+            [$postId, $eventId]
         );
         if (!$post) {
             return $this->notFound('Post not found');
@@ -100,7 +93,7 @@ final class Posts extends BaseEndpoint
 
     // ── Create post ──────────────────────────────────────────────────────────
 
-    private function create(Request $request, int $campaignId, int $eventId): Response
+    private function create(Request $request, int $eventId): Response
     {
         $body = $request->body();
         if (empty($body['title'])) {
@@ -120,10 +113,10 @@ final class Posts extends BaseEndpoint
             }
         }
         $id = $this->db->insert(
-            'INSERT INTO promote_posts (campaign_id, asset_id, title, master_text, target_url, status, scheduled_at, created_by_user_id)
+            'INSERT INTO promote_posts (event_id, asset_id, title, master_text, target_url, status, scheduled_at, created_by_user_id)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [
-                $campaignId,
+                $eventId,
                 !empty($body['asset_id']) ? (int) $body['asset_id'] : null,
                 (string) $body['title'],
                 $body['master_text'] ?? null,
@@ -133,7 +126,7 @@ final class Posts extends BaseEndpoint
                 $this->userId(),
             ]
         );
-        log_activity($this->db, $eventId, $this->userId(), 'promote post created', ['post_id' => $id, 'campaign_id' => $campaignId]);
+        log_activity($this->db, $eventId, $this->userId(), 'promote post created', ['post_id' => $id]);
         $post = $this->db->one('SELECT * FROM promote_posts WHERE id = ?', [$id]);
         $post['variants'] = [];
         return $this->ok(['post' => $post]);
@@ -141,14 +134,14 @@ final class Posts extends BaseEndpoint
 
     // ── Update post ──────────────────────────────────────────────────────────
 
-    private function update(Request $request, int $campaignId, int $postId): Response
+    private function update(Request $request, int $eventId, int $postId): Response
     {
         if (!$postId) {
             return $this->notFound('Post not found');
         }
         $post = $this->db->one(
-            'SELECT * FROM promote_posts WHERE id = ? AND campaign_id = ?',
-            [$postId, $campaignId]
+            'SELECT * FROM promote_posts WHERE id = ? AND event_id = ?',
+            [$postId, $eventId]
         );
         if (!$post) {
             return $this->notFound('Post not found');
@@ -162,16 +155,18 @@ final class Posts extends BaseEndpoint
             : $post['asset_id'];
 
         $this->db->run(
-            'UPDATE promote_posts SET title = ?, master_text = ?, target_url = ?, status = ?, asset_id = ?, scheduled_at = ? WHERE id = ? AND campaign_id = ?',
+            'UPDATE promote_posts
+             SET title = ?, master_text = ?, target_url = ?, status = ?, asset_id = ?, scheduled_at = ?
+             WHERE id = ? AND event_id = ?',
             [
                 $title,
                 array_key_exists('master_text', $body) ? $body['master_text'] : $post['master_text'],
-                array_key_exists('target_url', $body) ? $body['target_url'] : $post['target_url'],
+                array_key_exists('target_url',  $body) ? $body['target_url']  : $post['target_url'],
                 $status,
                 $assetId,
                 array_key_exists('scheduled_at', $body) ? ($body['scheduled_at'] ?: null) : $post['scheduled_at'],
                 $postId,
-                $campaignId,
+                $eventId,
             ]
         );
         $updated = $this->db->one('SELECT * FROM promote_posts WHERE id = ?', [$postId]);
@@ -184,50 +179,40 @@ final class Posts extends BaseEndpoint
 
     // ── Delete post ──────────────────────────────────────────────────────────
 
-    private function delete(int $campaignId, int $postId, int $eventId): Response
+    private function delete(int $eventId, int $postId): Response
     {
         if (!$postId) {
             return $this->notFound('Post not found');
         }
         $post = $this->db->one(
-            'SELECT id FROM promote_posts WHERE id = ? AND campaign_id = ?',
-            [$postId, $campaignId]
+            'SELECT id FROM promote_posts WHERE id = ? AND event_id = ?',
+            [$postId, $eventId]
         );
         if (!$post) {
             return $this->notFound('Post not found');
         }
-        $this->db->run('DELETE FROM promote_posts WHERE id = ? AND campaign_id = ?', [$postId, $campaignId]);
+        $this->db->run('DELETE FROM promote_posts WHERE id = ? AND event_id = ?', [$postId, $eventId]);
         log_activity($this->db, $eventId, $this->userId(), 'promote post deleted', ['post_id' => $postId]);
         return Response::noContent();
     }
 
     // ── Variant sub-routes ────────────────────────────────────────────────────
 
-    private function handleVariants(Request $request, int $campaignId, int $postId, int $variantId, int $eventId): Response
+    private function handleVariants(Request $request, int $eventId, int $postId, int $variantId): Response
     {
         if (!$postId) {
             return $this->notFound('Post not found');
         }
         $post = $this->db->one(
-            'SELECT * FROM promote_posts WHERE id = ? AND campaign_id = ?',
-            [$postId, $campaignId]
+            'SELECT * FROM promote_posts WHERE id = ? AND event_id = ?',
+            [$postId, $eventId]
         );
         if (!$post) {
             return $this->notFound('Post not found');
         }
 
-        // POST .../variants/generate — "generate" is passed as $variantId (non-int → 0) via segments
-        // Actually: segments[5] = 'generate', so $sub='variants' and $subId=0
-        // We detect generate by checking the raw segment
-        $rawSub = $this->params['rawVariantAction'] ?? null;
-
-        // Check if this is the generate endpoint: URL is .../variants/generate
-        // The Kernel stores segments[5] in $params['sub'] when it's 'variants',
-        // and segments[6] in $params['subId']. So 'generate' would be segments[5]
-        // but since sub='variants', segments[5] IS the subId slot.
-        // We detect generate by $subId==0 AND method==POST
+        // POST .../variants/generate — $variantId == 0 when segment is 'generate'
         if ($request->method() === 'POST' && $variantId === 0) {
-            // generate action
             return $this->generateVariants($post, $eventId);
         }
 
@@ -241,7 +226,7 @@ final class Posts extends BaseEndpoint
 
     private function generateVariants(array $post, int $eventId): Response
     {
-        $event = $this->db->one('SELECT * FROM events WHERE id = ?', [$eventId]);
+        $event     = $this->db->one('SELECT * FROM events WHERE id = ?', [$eventId]);
         $generator = new CopyGenerator();
         $variants  = $generator->generate($post, $event ?? []);
 
@@ -278,7 +263,7 @@ final class Posts extends BaseEndpoint
         if (!$variant) {
             return $this->notFound('Variant not found');
         }
-        $body           = $request->body();
+        $body            = $request->body();
         $allowedStatuses = ['draft', 'ready', 'needs_review', 'approved'];
         $status = isset($body['status']) && in_array($body['status'], $allowedStatuses, true)
             ? $body['status'] : (string) $variant['status'];
@@ -287,7 +272,7 @@ final class Posts extends BaseEndpoint
             'UPDATE promote_post_variants SET title = ?, body = ?, status = ? WHERE id = ? AND post_id = ?',
             [
                 array_key_exists('title', $body) ? $body['title'] : $variant['title'],
-                array_key_exists('body', $body)  ? $body['body']  : $variant['body'],
+                array_key_exists('body',  $body) ? $body['body']  : $variant['body'],
                 $status,
                 $variantId,
                 $postId,
