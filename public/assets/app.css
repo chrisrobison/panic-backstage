@@ -576,8 +576,17 @@ h3 { margin-bottom: 8px; font-size: 15px; }
   line-height: 1.25;
 }
 .mini-event .status-dot { margin-right: 0; }
-.mini-event-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-event-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 0; }
+.mini-event-time { flex-shrink: 0; font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .mini-event:hover .mini-event-title { text-decoration: underline; }
+/* Private event calendar chip — subtle grey background to distinguish from public shows. */
+.mini-event-private { background: color-mix(in srgb, var(--muted) 12%, transparent); }
+.mini-event-lock { font-size: 10px; flex-shrink: 0; margin-right: 1px; line-height: 1; }
+/* Private event badge in workspace header / form section-head */
+.badge-private { font-size: 13px; margin-left: 8px; vertical-align: middle; }
+.badge.status-private { background: #e8e4f0; color: #5b3b9a; }
+/* Pipeline card — private events get a faint tint */
+.pipe-card-private { border-left: 3px solid var(--muted); opacity: 0.9; }
 
 /* Status colour key above the grid (dot colour = event status). */
 .calendar-legend {
@@ -1911,6 +1920,35 @@ body.lightbox-open { overflow: hidden; }
   color: var(--muted, #6b7280);
   font-style: italic;
 }
+/* Callout tip box in help content */
+.help-section .help-tip {
+  background: #f0f7ff;
+  border-left: 3px solid #3b82f6;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 12px 0;
+}
+/* Data table in help content (private event status table, etc.) */
+.help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin: 12px 0 18px;
+}
+.help-table th {
+  text-align: left;
+  padding: 8px 12px;
+  background: #f4f5f8;
+  border: 1px solid var(--line, #e3e4e8);
+  font-weight: 700;
+}
+.help-table td {
+  padding: 8px 12px;
+  border: 1px solid var(--line, #e3e4e8);
+  vertical-align: top;
+  line-height: 1.45;
+}
+.help-table tr:nth-child(even) td { background: #fafafa; }
 .help-section .help-back {
   margin-top: 14px;
   font-size: 13px;

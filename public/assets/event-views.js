@@ -4,6 +4,9 @@
 // owns the quick-create event modal (shared by the calendar and the topbar).
 import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
 
+// Statuses valid for private events (no public-promo stages).
+const PRIVATE_EVENT_STATUSES = ['empty', 'proposed', 'confirmed', 'booked', 'completed', 'settled', 'canceled'];
+
 // On the calendar a day cell is split by floor: Upstairs sits in the top half,
 // Downstairs in the bottom half, and a whole-building "Both Rooms" booking
 // straddles the divider. The dot colour denotes the venue floor (see legend).
@@ -227,18 +230,35 @@ class EventCalendar extends PanicElement {
       + `<span class="legend-item"><span class="status-dot room-both"></span>Both Rooms</span>`
       + `</div>`;
 
+    // Format a raw HH:MM:SS time string into "7:00 PM"
+    const fmtTime = (t) => {
+      if (!t) return '';
+      const [h, m] = t.split(':').map(Number);
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`;
+    };
+
     const miniEvent = (event) => {
       const meta = zoneOf(event);
-      const tip = `${statusLabel(event.status)} · ${meta.label}`;
-      return `<a class="mini-event" href="#event-${esc(event.id)}" title="${esc(tip)}"><span class="status-dot ${roomTone(meta.zone)}"></span><span class="mini-event-title">${esc(event.title)}</span></a>`;
+      const time = fmtTime(event.doors_time || event.show_time);
+      const loadIn = event.load_in_time ? `Load-in ${fmtTime(event.load_in_time)}` : '';
+      const isPrivate = event.event_type === 'private_event';
+      const tip = [isPrivate ? '🔒 Private' : null, statusLabel(event.status), meta.label, time, loadIn].filter(Boolean).join(' · ');
+      return `<a class="mini-event${isPrivate ? ' mini-event-private' : ''}" href="#event-${esc(event.id)}" title="${esc(tip)}">`
+        + `<span class="status-dot ${roomTone(meta.zone)}"></span>`
+        + (isPrivate ? '<span class="mini-event-lock" aria-hidden="true">🔒</span>' : '')
+        + `<span class="mini-event-title">${esc(event.title)}</span>`
+        + (time ? `<span class="mini-event-time">${esc(time)}</span>` : '')
+        + `</a>`;
     };
     // Vertical position = floor: upstairs above the divider, downstairs below,
-    // whole-building bookings straddling it.
+    // whole-building bookings straddling it. Canceled events are hidden.
     const dayCellBody = (dayEvents) => {
-      if (!dayEvents.length) return `<div class="program-night">${this.canCreate ? '+ Available' : 'Available'}</div>`;
-      const up = dayEvents.filter((event) => zoneOf(event).zone === 'up');
-      const both = dayEvents.filter((event) => zoneOf(event).zone === 'both');
-      const down = dayEvents.filter((event) => zoneOf(event).zone === 'down');
+      const visible = dayEvents.filter((event) => event.status !== 'canceled');
+      if (!visible.length) return `<div class="program-night">${this.canCreate ? '+ Available' : 'Available'}</div>`;
+      const up = visible.filter((event) => zoneOf(event).zone === 'up');
+      const both = visible.filter((event) => zoneOf(event).zone === 'both');
+      const down = visible.filter((event) => zoneOf(event).zone === 'down');
       return `<div class="cell-zone zone-up" data-floor="Upstairs">${up.map(miniEvent).join('')}</div>`
         + (both.length ? `<div class="zone-both">${both.map(miniEvent).join('')}</div>` : '')
         + `<div class="cell-zone zone-down" data-floor="Downstairs (21+)">${down.map(miniEvent).join('')}</div>`;
@@ -342,7 +362,11 @@ class PipelineBoard extends PanicElement {
         const items = events.filter((event) => event.status === status);
         return `<article class="pipe-col"><h3>${esc(statusLabel(status))} <span class="pipe-count">${items.length}</span></h3>${items.map((event) => {
           const editable = Boolean(event.capabilities?.edit_event);
-          return `<article class="pipe-card"><strong>${esc(event.title)}</strong><span>${esc(shortDate(eventDate(event)))}</span><small>${esc(event.owner_name || 'Unassigned')}</small><small>${esc(event.open_items || 0)} open items / ${esc(event.incomplete_tasks || 0)} tasks</small>${editable ? `<form data-event="${esc(event.id)}" class="inline-status">${select('status', statuses, event.status, statusLabel)}<button class="small">Move</button><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></form>` : `<div class="inline-status"><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></div>`}</article>`;
+          const isPrivate = event.event_type === 'private_event';
+          const pipeStatuses = isPrivate
+            ? PRIVATE_EVENT_STATUSES.filter((s) => !['settled', 'canceled'].includes(s))
+            : statuses;
+          return `<article class="pipe-card${isPrivate ? ' pipe-card-private' : ''}"><strong>${isPrivate ? '🔒 ' : ''}${esc(event.title)}</strong><span>${esc(shortDate(eventDate(event)))}</span><small>${esc(event.owner_name || 'Unassigned')}</small><small>${esc(event.open_items || 0)} open items / ${esc(event.incomplete_tasks || 0)} tasks</small>${editable ? `<form data-event="${esc(event.id)}" class="inline-status">${select('status', pipeStatuses, event.status, statusLabel)}<button class="small">Move</button><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></form>` : `<div class="inline-status"><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></div>`}</article>`;
         }).join('') || '<small>No events</small>'}</article>`;
       }).join('')}</section>
     </section>`;

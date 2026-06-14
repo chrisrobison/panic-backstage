@@ -36,9 +36,10 @@ export const HELP_SECTIONS = [
     key: 'running',
     icon: 'fa-solid fa-calendar-check',
     items: [
-      { slug: 'event-create', title: 'Creating an event' },
-      { slug: 'overview',     title: 'Overview &amp; readiness' },
-      { slug: 'details',      title: 'Event details' },
+      { slug: 'event-create',    title: 'Creating an event' },
+      { slug: 'private-events',  title: 'Private events &amp; rentals' },
+      { slug: 'overview',        title: 'Overview &amp; readiness' },
+      { slug: 'details',         title: 'Event details' },
       { slug: 'tasks',        title: 'Tasks' },
       { slug: 'lineup',       title: 'Lineup &amp; bands' },
       { slug: 'schedule',     title: 'Schedule &amp; run sheet' },
@@ -235,13 +236,39 @@ const HELP_CONTENT = {
 
   calendar: `
     <h2>Calendar</h2>
-    <p>The calendar shows a six-week window. Use the <code>&lt;</code> and <code>&gt;</code> buttons to move months, or <em>Today</em> to snap back. Dates without an event show an <em>Available</em> chip; dates with events show a colored status dot and the event title. Click any event to open it.</p>
+    <p>The calendar shows a six-week window. Use the <code>&lt;</code> and <code>&gt;</code> buttons to move months, or <em>Today</em> to snap back. Dates without an event show an <em>Available</em> chip; dates with events show a colored status dot and the event title. Click any event chip to open the workspace.</p>
+
+    <h3>Venue floor colour code</h3>
+    <p>The coloured dot on each chip indicates which part of the venue is booked:</p>
+    <ul>
+      <li><strong>Blue dot</strong> — Upstairs</li>
+      <li><strong>Red dot</strong> — Downstairs (21+)</li>
+      <li><strong>Green dot</strong> — Both Rooms</li>
+    </ul>
+    <p>The legend below the calendar toolbar shows the colour key at a glance.</p>
+
+    <h3>Times on chips</h3>
+    <p>Each calendar chip shows the Doors time (or Show time if no Doors time is set) as a small badge on the right. Hovering the chip shows a tooltip with Status · Venue floor · Doors time · Load-In time.</p>
+
+    <h3>Private events</h3>
+    <p>Private venue rentals (Type = Private Event) are shown on the calendar with a 🔒 lock icon and a subtle grey background so staff can distinguish them from publicly promoted shows at a glance. Private events are never announced publicly and will never appear on the public calendar or event page.</p>
+
+    <h3>Cancelled events</h3>
+    <p>Cancelled events are hidden from the calendar entirely. They remain in the database and are queryable via the Events list, but they do not occupy a date cell on the calendar view. This keeps the calendar clean while preserving the historical record.</p>
+
+    <h3>Creating events from the calendar</h3>
+    <p>Venue admins can click any day cell to open the quick-create modal. Pick a template (or Blank event), confirm the date, title, and times, and click <em>Create event</em> to jump straight into the new event workspace.</p>
+
     <p>The dashboard, pipeline, and calendar all read from the same <code>/api/events</code> data, so adding or moving a show updates all three.</p>
   `,
 
   pipeline: `
     <h2>Pipeline board</h2>
     <p>The pipeline groups events by status into columns. To advance an event, choose the new status in its card's inline dropdown and click <em>Move</em>. Open the card to jump into the full event workspace. The pipeline is the fastest way to move several events forward at once.</p>
+
+    <h3>Private events on the pipeline</h3>
+    <p>Private venue rentals appear on the pipeline with a 🔒 prefix and a subtle left border tint. Their inline status dropdown is filtered to only show the statuses valid for private events (Hold, Intake Complete, Booked, Archived, Settled, Cancelled), so staff can't accidentally move a rental into a public-promo stage.</p>
+
     <p>See <a href="#help-statuses">Event status reference</a> for what each column means.</p>
   `,
 
@@ -265,8 +292,9 @@ const HELP_CONTENT = {
   'event-create': `
     <h2>Creating an event</h2>
     <p>Every show in Backstage follows the same arc: spin the event up from a template, lock in the deal and the details, get the key pieces <strong>approved</strong> (the contract and the flyer), announce it to the public, run it on the night, and settle the money afterward. The event workspace is a set of tabs that roughly follow that arc, and the <a href="#help-overview">Overview</a> tab keeps score — its <em>Readiness</em> checks and <em>Next Recommended Action</em> banner always point you at the next thing the show needs.</p>
-    <p>Approvals happen in two places as you go. A <a href="#help-contracts">contract</a> moves through a status workflow (<em>draft &rarr; needs review &rarr; approved &rarr; sent &rarr; signed</em>) and can't be marked sent or signed until its required terms are filled. A flyer is uploaded as <em>pending</em> and a promoter or admin marks it <em>approved</em> before it appears publicly. The event's own <a href="#help-statuses">status</a> (Booked, Ready To Announce, Published, Advanced, Settled…) is the high-level signal to the rest of the team about where the show stands.</p>
-    <p>Every show starts from a template. Open <a href="#help-templates">Templates</a>, pick one that matches the kind of night you are programming, fill in date and doors/show times, and click <em>Create event</em>. From there, work through the tabs — roughly in this order:</p>
+    <p>Approvals happen in two places as you go. A <a href="#help-contracts">contract</a> moves through a status workflow (<em>draft &rarr; needs review &rarr; approved &rarr; sent &rarr; signed</em>) and can't be marked sent or signed until its required terms are filled. A flyer is uploaded as <em>pending</em> and a promoter or admin marks it <em>approved</em> before it appears publicly. The event's own <a href="#help-statuses">status</a> (Hold, Intake Complete, Booked, Needs Assets, Published, Advanced, Settled…) is the high-level signal to the rest of the team about where the show stands.</p>
+    <p class="help-tip">📋 <strong>Private event / venue rental?</strong> See <a href="#help-private-events">Private events &amp; rentals</a> — the workflow is shorter and uses a different form.</p>
+    <p>Every public show starts from a template. Open <a href="#help-templates">Templates</a>, pick one that matches the kind of night you are programming, fill in date and doors/show times, and click <em>Create event</em>. From there, work through the tabs — roughly in this order:</p>
     <ol>
       <li><a href="#help-details">Event details</a> — set venue, type, status, owner, ticket price, capacity, and age restriction.</li>
       <li><a href="#help-lineup">Lineup</a> — add the bands or performers, capture payout terms, and confirm them.</li>
@@ -283,6 +311,64 @@ const HELP_CONTENT = {
       <li><a href="#help-settlement">Settlement</a> — after the show, reconcile the numbers and close the books.</li>
     </ol>
     <p>You don't have to do these strictly in order, and not every show needs every tab. A couple of supporting tools run alongside: the <a href="#help-print">Print</a> menu produces night-of packets (run sheet, staffing, guest list, or a combined master packet), and the <a href="#help-activity">Activity log</a> at the bottom of the event records who changed what, so hand-offs between bookers and night-of staff stay clean.</p>
+  `,
+
+  'private-events': `
+    <h2>Private events &amp; rentals</h2>
+    <p>A <strong>private event</strong> is a venue rental where a client books Mabuhay Gardens for their own occasion — a corporate event, private party, wedding reception, album release, film shoot, or similar. Private events are never publicly listed and follow a different workflow from public shows.</p>
+
+    <h3>How a rental inquiry comes in</h3>
+    <ol>
+      <li>A staff member creates a new event and sets <strong>Type → Private Event</strong>. The form immediately switches to the private event layout.</li>
+      <li>Backstage automatically assigns <strong>Colleen</strong> as the event owner and sends an inquiry notification email to all venue admins listing the client details, date, estimated guests, and AV/catering requirements.</li>
+      <li>The event starts at <em>Hold</em> status. The date is informally blocked on the calendar while the rental is being worked out.</li>
+    </ol>
+
+    <h3>The private event form</h3>
+    <p>When Type is <em>Private Event</em>, the Details tab shows a rental-specific form instead of the standard public-show form:</p>
+    <ul>
+      <li><strong>Client / Primary Contact</strong> — the person making the booking (name, email, phone). Required to advance to Hold.</li>
+      <li><strong>Organization</strong> — company, family name, band, or group renting the space.</li>
+      <li><strong>Estimated guests</strong> — expected headcount (distinct from the hard-cap Capacity). Required for Intake Complete.</li>
+      <li><strong>Capacity (max)</strong> — the fire-code maximum for the space.</li>
+      <li><strong>AV / Tech requirements</strong> — what the client needs (sound system, lighting, projector, microphones, etc.).</li>
+      <li><strong>Catering / Bar notes</strong> — bar service preferences, catering vendors, alcohol restrictions.</li>
+      <li><strong>Internal notes</strong> — staff-only notes not shared with the client.</li>
+      <li><strong>Paid deposit</strong> — deposit received; required before moving to Intake Complete.</li>
+    </ul>
+    <p class="muted small">💰 For rental pricing, contact <strong>Tom Watson</strong>: <a href="mailto:tom@themab.org">tom@themab.org</a></p>
+    <p>The public-show fields (ticket price, ticket URL, public description, Booker section) are hidden for private events. The Promote, Public Page, and Publish Public Page buttons are also hidden — private events are never publicly announced through Backstage.</p>
+
+    <h3>Status workflow</h3>
+    <p>Private events move through a shorter pipeline that skips all public-promotion stages:</p>
+    <table class="help-table">
+      <thead><tr><th>Status</th><th>What it means</th><th>What's required to reach it</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Hold</strong></td><td>Inquiry received; date informally held.</td><td>Title, date, venue, door time, end time, client name/email/phone.</td></tr>
+        <tr><td><strong>Intake Complete</strong></td><td>All client details confirmed; contract being built.</td><td>Age restriction, estimated guests, deposit amount.</td></tr>
+        <tr><td><strong>Booked</strong></td><td>Contract approved/signed; deposit confirmed.</td><td>Contract in Approved, Sent, or Signed status (or contract URL on file).</td></tr>
+        <tr><td><strong>Archived</strong></td><td>Event happened; settlement pending.</td><td>Auto-set by nightly script if still active past the event date.</td></tr>
+        <tr><td><strong>Settled</strong></td><td>Settlement filed; books closed.</td><td>Manual advance.</td></tr>
+        <tr><td><strong>Cancelled</strong></td><td>Rental cancelled.</td><td>Manual advance.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Contacts and notifications</h3>
+    <ul>
+      <li><strong>On creation</strong> — all venue admins receive a <em>New Private Event Inquiry</em> email with the full client details, AV requirements, and a direct link to the event.</li>
+      <li><strong>When booked</strong> — the client (promoter_email) receives a confirmation email that their event is confirmed. All venue admins are also notified of the status change.</li>
+    </ul>
+
+    <h3>Calendar and pipeline display</h3>
+    <p>Private events are distinguishable from public shows throughout the app:</p>
+    <ul>
+      <li>On the <strong>calendar</strong>, private event chips show a 🔒 lock icon and a subtle grey background.</li>
+      <li>On the <strong>pipeline board</strong>, private event cards show a 🔒 prefix and a left-side colour border. Their status dropdown is filtered to the private-valid statuses only, so a rental can't accidentally be moved to Needs Assets or Published.</li>
+      <li>In the <strong>workspace header</strong>, the event title shows a 🔒 badge, and the Promote / Public Page / Publish buttons are not shown.</li>
+    </ul>
+
+    <h3>Contracts for private events</h3>
+    <p>Use the <a href="#help-contracts">Contracts</a> tab to build a rental agreement. Pick the <em>Private Event Rental</em> contract template — it includes the venue rental fee, deposit terms, security requirements, bar minimum, and force-majeure clause out of the box. Walk it through Draft → Approved → Sent → Signed. The Booked status check looks for a contract in the contracts table or a contract URL on file.</p>
   `,
 
   overview: `
@@ -302,20 +388,50 @@ const HELP_CONTENT = {
 
   details: `
     <h2>Event details</h2>
-    <p>The Event Details form holds the facts of the show. Edits save with the <em>Save details</em> button.</p>
+    <p>The Event Details form holds the core facts of the show. Fields auto-save on blur — you will see "Saving…" and then "All changes saved" in the bottom-left of the form as each field persists.</p>
+
+    <h3>Common fields (all events)</h3>
     <ul>
-      <li><strong>Title</strong> — the marquee name of the show. Used everywhere (dashboard, calendar, public page, print packets).</li>
+      <li><strong>Title</strong> — the marquee name. Used everywhere: dashboard, calendar chips, public page, print packets.</li>
       <li><strong>Date</strong> — show date.</li>
       <li><strong>Venue</strong> — choose from the venues your account can see.</li>
-      <li><strong>Type</strong> — live music, karaoke, open mic, promoter night, DJ night, comedy, private event, or special event.</li>
-      <li><strong>Status</strong> — see <a href="#help-statuses">Event status reference</a>.</li>
+      <li><strong>Type</strong> — live music, karaoke, open mic, promoter night, DJ night, comedy, private event, or special event. Changing to or from <em>private event</em> changes the entire form layout.</li>
+      <li><strong>Status</strong> — see <a href="#help-statuses">Event status reference</a>. Private events show a filtered dropdown.</li>
       <li><strong>Owner</strong> — the staff member responsible. Owners get implicit access to the event.</li>
-      <li><strong>Doors / Show / End</strong> — set the public-facing times.</li>
-      <li><strong>Age restriction</strong> — shown on the public page (e.g. 21+, All Ages).</li>
-      <li><strong>Ticket price / Capacity / Ticket URL</strong> — used for ticketing handoff and public page.</li>
-      <li><strong>Public description</strong> — copy that appears on the public event page.</li>
-      <li><strong>Internal notes</strong> — only visible to staff and collaborators.</li>
-      <li><strong>Public page visible</strong> — toggles the publish state from inside the form. The big <em>Publish</em> button at the top of the workspace does the same thing.</li>
+      <li><strong>Load-In / Tech</strong> — when the crew and gear arrive for load-in and soundcheck. Shown on calendar chips as a tooltip and in the print run-sheet header.</li>
+      <li><strong>Doors / Show / End</strong> — the public-facing show times. Setting one will auto-fill reasonable defaults for the others if they're empty.</li>
+      <li><strong>Age restriction</strong> — shown on the public page and in the run sheet (e.g. 21+, All Ages).</li>
+      <li><strong>Paid deposit</strong> — the deposit amount confirmed received. Required to advance past Intake Complete.</li>
+    </ul>
+
+    <h3>Public show fields</h3>
+    <ul>
+      <li><strong>Ticket price</strong> — base ticket price. Used on the public page and for in-house ticketing setup.</li>
+      <li><strong>Capacity</strong> — fire-code max; the ticketing system won't oversell past this.</li>
+      <li><strong>Potential revenue</strong> — estimated upside (capacity × ticket price). Used in settlement projection.</li>
+      <li><strong>Walk-through happened</strong> — checkbox to confirm the pre-show walk-through is done.</li>
+    </ul>
+
+    <h3>Producer / Artist section (public shows)</h3>
+    <p>The producer or primary artist contact — required to advance to <strong>Hold</strong> and above. This is the person Backstage sends the <em>Promo Materials Needed</em> email to when the event reaches Needs Assets.</p>
+    <ul>
+      <li><strong>Booker</strong> — the talent buyer or agent. Also required for Hold and above on public shows.</li>
+    </ul>
+
+    <h3>Private event form</h3>
+    <p>When Type is set to <strong>Private Event</strong>, the form changes completely. Public-only fields (ticket price, ticket URL, ticket system, public description, the Booker section) are hidden and replaced with rental-specific fields. See <a href="#help-private-events">Private events &amp; rentals</a> for the full workflow.</p>
+    <ul>
+      <li><strong>Estimated guests</strong> — expected headcount. Distinct from the hard-cap Capacity.</li>
+      <li><strong>Client / Primary Contact</strong> — the person booking the rental (replaces Producer / Artist).</li>
+      <li><strong>Organization</strong> — company, family name, band, or group renting the space.</li>
+      <li><strong>AV / Tech requirements</strong> — what the client needs for sound, lighting, projection, etc.</li>
+      <li><strong>Catering / Bar notes</strong> — bar service, vendor access, alcohol requirements.</li>
+    </ul>
+    <p>Private events are never publicly listed. The Publish / Public Page / Promote buttons are hidden, and <code>public_visibility</code> is permanently set to 0 regardless of what the form sends.</p>
+
+    <h3>Publish state (public shows only)</h3>
+    <ul>
+      <li><strong>Public page visible</strong> — toggles the publish state from inside the form. The <em>Publish Public Page</em> button at the top of the workspace does the same thing in one click.</li>
     </ul>
   `,
 
@@ -746,36 +862,62 @@ const HELP_CONTENT = {
 
   statuses: `
     <h2>Event status reference</h2>
-    <p>Events move through these statuses, roughly left to right on the pipeline. Labels match the MabEvents Google Sheet so the vocabulary is consistent across both tools:</p>
+    <p>Events move through these statuses, roughly left to right on the pipeline. The vocabulary is shared with the MabEvents Google Sheet so both tools stay in sync:</p>
+
+    <h3>Public show statuses</h3>
     <ol>
-      <li><strong>Empty</strong> — the date is held but nothing is booked.</li>
-      <li><strong>Prospect</strong> — a show idea exists but is not confirmed.</li>
-      <li><strong>In Negotiations</strong> — soft hold with a band/promoter; terms still being worked out.</li>
-      <li><strong>Booked</strong> — show is on (includes deposits paid), but assets and announcement are pending.</li>
-      <li><strong>Needs Assets</strong> — booked, blocked on flyer/social art.</li>
-      <li><strong>Ready To Announce</strong> — flyer approved, ticketing ready; just needs to flip public on.</li>
-      <li><strong>Published</strong> — public page is live.</li>
-      <li><strong>Advanced</strong> — production advanced; ready for night-of-show.</li>
-      <li><strong>Archived</strong> — show happened, waiting on settlement.</li>
-      <li><strong>Settled</strong> — books closed.</li>
-      <li><strong>Cancelled</strong> — show was cancelled.</li>
+      <li><strong>Empty</strong> — the date slot exists but nothing is confirmed for it yet.</li>
+      <li><strong>Hold</strong> — a show idea or inquiry is live; the band/promoter deal is not yet confirmed. The date is informally held. Requires title, date, venue, door/end times, and a producer/artist contact.</li>
+      <li><strong>Intake Complete</strong> — deal structure is agreed and a contract is being built. Age restriction, ticket price, capacity, and a deposit amount must be set.</li>
+      <li><strong>Booked</strong> — a signed contract (or approved contract in the contract builder) plus a confirmed deposit. The show is locked.</li>
+      <li><strong>Needs Assets</strong> — booked but blocked on flyer, artist photos, bio, or social content. An automatic email is sent to the producer/artist when this status is set.</li>
+      <li><strong>Ready To Announce</strong> — the approved flyer is in, ticketing is set up, and the event is ready to flip public.</li>
+      <li><strong>Published</strong> — the public event page is live and the show is announced.</li>
+      <li><strong>Advanced</strong> — production has been advanced with the bands; final logistics are locked for night of show.</li>
+      <li><strong>Archived</strong> — the show happened; settlement has not yet been filed.</li>
+      <li><strong>Settled</strong> — post-show settlement is filed and the books are closed.</li>
+      <li><strong>Cancelled</strong> — the show was cancelled. Cancelled events are hidden from the calendar view but remain queryable for reporting.</li>
     </ol>
-    <p>Statuses do not enforce hard transitions — you can move between any of them. They are signals to the rest of the team and to the dashboard.</p>
+
+    <h3>Private event statuses</h3>
+    <p>Private events (venue rentals) use a shorter path that skips the public-promotion stages:</p>
+    <ol>
+      <li><strong>Hold</strong> — inquiry received; client contact info is being collected.</li>
+      <li><strong>Intake Complete</strong> — client details confirmed, AV/catering requirements noted, deposit amount set.</li>
+      <li><strong>Booked</strong> — contract signed or approved, deposit confirmed.</li>
+      <li><strong>Archived</strong> — event happened.</li>
+      <li><strong>Settled</strong> — settlement filed.</li>
+      <li><strong>Cancelled</strong> — rental cancelled.</li>
+    </ol>
+    <p>Private events are automatically blocked from reaching Needs Assets, Ready To Announce, Published, and Advanced — those stages exist only for publicly promoted shows.</p>
+
+    <h3>Notes</h3>
+    <p>Status transitions are validated by the server — some forward moves require certain fields to be filled (e.g. you cannot advance to Booked without a contract). The pipeline and calendar display the current status for every event.</p>
   `,
 
   workflow: `
     <h2>End-to-end show workflow</h2>
-    <p>A typical Mabuhay show moves through these phases:</p>
+
+    <h3>Public shows</h3>
+    <p>A typical Mabuhay public show moves through these phases:</p>
     <ol>
-      <li><strong>Program the night</strong> — pick a template (Templates page), set the date, and create the event.</li>
-      <li><strong>Sign the artists</strong> — add bands to the lineup, capture payout terms, mark them <em>tentative</em> then <em>confirmed</em>.</li>
-      <li><strong>Set the times</strong> — fill in doors, show, set times, and curfew on the run sheet.</li>
-      <li><strong>Collect assets</strong> — invite the band's designer if needed; upload flyers; approve the primary flyer.</li>
-      <li><strong>Announce</strong> — set ticket URL, public description, and flip the public page on. Status becomes <em>published</em>.</li>
-      <li><strong>Advance</strong> — close out open items, confirm hospitality, share run sheet with bands. Status becomes <em>advanced</em>.</li>
+      <li><strong>Program the night</strong> — pick a template (Templates page), set the date, and create the event. Status: <em>Empty</em>.</li>
+      <li><strong>Lock in the deal</strong> — add the producer/artist contact and the booker contact. Status advances to <em>Hold</em>. The date is informally held while terms are confirmed.</li>
+      <li><strong>Intake complete</strong> — set age restriction, ticket price, capacity, and deposit amount. Build the contract and walk it through approval. Status advances to <em>Intake Complete</em>.</li>
+      <li><strong>Book it</strong> — once the contract is approved and a deposit is confirmed, status advances to <em>Booked</em>.</li>
+      <li><strong>Collect assets</strong> — status advances to <em>Needs Assets</em>; an automatic email is sent to the producer/artist requesting the flyer, photos, bio, and social handles. Upload and approve the primary flyer.</li>
+      <li><strong>Get ready to announce</strong> — flyer approved, ticket URL or in-house ticketing set up. Status becomes <em>Ready to Announce</em>.</li>
+      <li><strong>Announce</strong> — flip the public page on. Status becomes <em>Published</em>.</li>
+      <li><strong>Advance</strong> — close out open items, confirm hospitality, share the run sheet with bands. Status becomes <em>Advanced</em>.</li>
       <li><strong>Night of show</strong> — print the master event packet, use the guest list for door, check guests in.</li>
-      <li><strong>Settle</strong> — file settlement next-day, mark <em>settled</em>.</li>
+      <li><strong>Settle</strong> — file settlement next-day. Status becomes <em>Settled</em>.</li>
     </ol>
+
+    <h3>Private events (venue rentals)</h3>
+    <p>Private rentals skip all public-promotion stages. See <a href="#help-private-events">Private events &amp; rentals</a> for the dedicated workflow.</p>
+
+    <h3>Automated archival</h3>
+    <p>A nightly script automatically archives past events that are still in an active status (Hold through Advanced). If a show's date has passed and it has not been advanced to Settled, the script moves it to <em>Archived</em> and notifies the venue admins via email. Check the Activity log if an event's status changed unexpectedly.</p>
   `,
 
   faq: `

@@ -1,0 +1,27 @@
+Mabuhay Gardens — Promo Materials Needed
+
+Hi {{recipient_name}},
+
+Your event "{{event_name}}" at Mabuhay Gardens is booked and confirmed!
+To proceed with ticketing and promotion, we need the following promo materials.
+
+Event details:
+  Date:  {{event_date}}
+  Time:  {{event_time}}
+  Venue: {{event_venue}}
+
+Required materials:
+  - Event flyer (at least 1080×1080px, PNG or JPG)
+  - Artist / band photos (high resolution)
+  - Short event bio / description (for social posts and the website)
+  - Artist social media handles (Instagram, etc.)
+
+Please upload your materials in Backstage:
+  {{event_admin_url}}
+
+Colleen will be notified automatically once everything is received.
+
+Questions? Contact Colleen: this.that.comedy@gmail.com
+
+---
+Mabuhay Gardens · 443 Broadway, San Francisco, CA
