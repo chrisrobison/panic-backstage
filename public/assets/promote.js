@@ -404,21 +404,34 @@ class PromoteCampaignOverview extends PanicElement {
     if (heroFlyer) heroFlyer.innerHTML = assetThumb(flyer, 'promote-hero-flyer-img');
 
     // Wire child components
+    // NOTE: connectedCallback fires synchronously when innerHTML is assigned above,
+    // before these properties are set — so we must explicitly call render() after
+    // setting props to ensure each component renders with real data.
     const postList = $('pb-promote-post-list', this);
     if (postList) {
       postList.campaignId = this.campaignId;
       postList.posts = posts || [];
       postList.assets = assets || [];
+      postList.render();
     }
 
     const healthCard = $('pb-promote-health-card', this);
-    if (healthCard) healthCard.health = health;
+    if (healthCard) {
+      healthCard.health = health;
+      healthCard.render();
+    }
 
     const assetsCard = $('pb-promote-assets-card', this);
-    if (assetsCard) assetsCard.assets = assets || [];
+    if (assetsCard) {
+      assetsCard.assets = assets || [];
+      assetsCard.render();
+    }
 
     const analyticsCard = $('pb-promote-analytics-card', this);
-    if (analyticsCard) analyticsCard.analytics = analytics;
+    if (analyticsCard) {
+      analyticsCard.analytics = analytics;
+      analyticsCard.render();
+    }
 
     const broadcastModal = $('pb-promote-broadcast-modal', this);
     if (broadcastModal) {
