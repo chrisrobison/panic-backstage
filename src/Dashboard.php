@@ -51,7 +51,7 @@ final class Dashboard extends BaseEndpoint
 
     private function settlementScopeSql(): array
     {
-        if ($this->isVenueAdmin()) {
+        if ($this->isVenueAdmin() || $this->isGlobalViewer()) {
             return ['1=1', []];
         }
         return [

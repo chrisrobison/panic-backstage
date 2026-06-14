@@ -34,6 +34,8 @@ abstract class BaseEndpoint implements Endpoint
         'designer' => ['read_event', 'upload_assets', 'manage_assets'],
         'staff' => ['read_event', 'manage_tasks', 'manage_schedule', 'manage_open_items', 'manage_guest_list', 'manage_staffing'],
         'viewer' => ['read_event'],
+        // global_viewer: read-only access to every event — no edits, no publishing, no admin actions.
+        'global_viewer' => ['read_event', 'view_settlement', 'view_contracts', 'view_public_page'],
     ];
 
     private const EVENT_CAPABILITY_KEYS = [
@@ -55,6 +57,7 @@ abstract class BaseEndpoint implements Endpoint
         'designer' => [],
         'staff' => [],
         'viewer' => [],
+        'global_viewer' => ['view_all_events'],
     ];
 
     private array $eventAccessCache = [];
@@ -105,6 +108,11 @@ abstract class BaseEndpoint implements Endpoint
         return $this->role() === 'venue_admin';
     }
 
+    protected function isGlobalViewer(): bool
+    {
+        return $this->role() === 'global_viewer';
+    }
+
     protected function hasGlobalCapability(string $capability): bool
     {
         return in_array($capability, self::GLOBAL_CAPABILITIES[$this->role()] ?? [], true);
@@ -139,6 +147,8 @@ abstract class BaseEndpoint implements Endpoint
         $role = null;
         if ($this->isVenueAdmin()) {
             $role = 'venue_admin';
+        } elseif ($this->isGlobalViewer()) {
+            $role = 'global_viewer';
         } elseif ((int) ($event['owner_user_id'] ?? 0) === $this->userId()) {
             $role = 'event_owner';
         } else {
@@ -178,7 +188,7 @@ abstract class BaseEndpoint implements Endpoint
 
     protected function eventScopeSql(string $eventAlias = 'e'): array
     {
-        if ($this->isVenueAdmin()) {
+        if ($this->isVenueAdmin() || $this->isGlobalViewer()) {
             return ['1=1', []];
         }
         return [

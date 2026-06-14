@@ -17,7 +17,7 @@ namespace Panic;
 final class Users extends BaseEndpoint
 {
     private const ROLES = [
-        'venue_admin','event_owner','promoter','band','artist','designer','staff','viewer',
+        'venue_admin','event_owner','promoter','band','artist','designer','staff','viewer','global_viewer',
     ];
 
     public function handle(Request $request): Response
