@@ -607,7 +607,7 @@ class PromotePostEditor extends PanicElement {
       // Load the full post to get existing variants (GET single post returns them)
       const data = await api(`/promote/events/${this.eventId}/posts/${this.post.id}`);
       this.variants = {};
-      (data.variants || []).forEach((v) => { this.variants[v.channel] = v; });
+      (data.post?.variants || []).forEach((v) => { this.variants[v.channel] = v; });
     } catch { /* variants will be empty — that's fine */ }
     this.renderModal();
   }
