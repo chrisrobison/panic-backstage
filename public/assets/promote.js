@@ -602,6 +602,7 @@ class PromotePostEditor extends PanicElement {
   connectedCallback() {
     super.connectedCallback();
     this.activeChannel = CHANNELS[0];
+    this.activeMainTab = 'post';
     this.variants = {};
     if (this.post?.id) this.loadVariants();
     else this.renderModal();
@@ -621,10 +622,73 @@ class PromotePostEditor extends PanicElement {
     const post = this.post || {};
     const isEdit = Boolean(post.id);
     const assets = this.assets || [];
+    const variantCount = Object.values(this.variants).filter((v) => v.id).length;
 
     const assetOptions = assets.map((a) =>
       `<option value="${esc(String(a.id))}" ${String(a.id) === String(post.asset_id || '') ? 'selected' : ''}>${esc(a.title || a.asset_type || 'Asset')}</option>`
     ).join('');
+
+    // ── Reusable HTML fragments ───────────────────────────────────────────────
+
+    const postFormHtml = `<form class="grid-form padded" data-post-form>
+      <label class="wide">Title <input name="title" required value="${esc(post.title || '')}"></label>
+      <label class="wide">Master Text
+        <textarea name="master_text" rows="4">${esc(post.master_text || '')}</textarea>
+      </label>
+      <label>Target URL <input type="url" name="target_url" value="${esc(post.target_url || '')}"></label>
+      <label>Status
+        <select name="status">
+          ${POST_STATUSES.map((s) => `<option value="${esc(s)}" ${s === (post.status || 'draft') ? 'selected' : ''}>${esc(titleCase(s))}</option>`).join('')}
+        </select>
+      </label>
+      <label>Asset
+        <select name="asset_id">
+          <option value="">No asset</option>
+          ${assetOptions}
+        </select>
+      </label>
+      <div class="wide form-actions">
+        <button type="submit" class="primary">${isEdit ? 'Save post' : 'Create post'}</button>
+        <button type="button" class="secondary" data-close>Cancel</button>
+      </div>
+      <p class="error-text wide" data-error></p>
+    </form>`;
+
+    const variantsPanelHtml = `<div class="promote-variants-section padded">
+      <div class="promote-variants-head">
+        <span class="promote-variants-intro muted">Edit per-channel copy below, or generate all at once from the master text.</span>
+        <button class="secondary small" data-generate-variants>Generate variants</button>
+      </div>
+      <div class="promote-variant-tabs" role="tablist">
+        ${CHANNELS.map((ch) => `<button class="promote-tab ${ch === this.activeChannel ? 'active' : ''}" role="tab" data-channel="${esc(ch)}">${esc(CHANNEL_LABELS[ch])}</button>`).join('')}
+      </div>
+      <div class="promote-variant-panels" data-variant-panels>
+        ${this.renderVariantPanel(this.activeChannel)}
+      </div>
+    </div>`;
+
+    // ── Main tab bar (edit mode only) ─────────────────────────────────────────
+
+    const tabBarHtml = isEdit ? `<div class="promote-editor-tabbar" role="tablist">
+      <button class="promote-editor-tab ${this.activeMainTab === 'post' ? 'active' : ''}"
+              role="tab" aria-selected="${this.activeMainTab === 'post'}" data-main-tab="post">
+        <i class="fa-solid fa-file-pen" aria-hidden="true"></i> Post
+      </button>
+      <button class="promote-editor-tab ${this.activeMainTab === 'variants' ? 'active' : ''}"
+              role="tab" aria-selected="${this.activeMainTab === 'variants'}" data-main-tab="variants">
+        <i class="fa-solid fa-layer-group" aria-hidden="true"></i> Channel Variants
+        ${variantCount > 0 ? `<span class="promote-editor-tab-badge">${esc(String(variantCount))}&#8202;/&#8202;${esc(String(CHANNELS.length))}</span>` : ''}
+      </button>
+    </div>` : '';
+
+    // ── Modal body ────────────────────────────────────────────────────────────
+
+    const bodyHtml = isEdit
+      ? `<div data-main-panel="post"${this.activeMainTab !== 'post' ? ' hidden' : ''}>${postFormHtml}</div>
+         <div data-main-panel="variants"${this.activeMainTab !== 'variants' ? ' hidden' : ''}>${variantsPanelHtml}</div>`
+      : postFormHtml;
+
+    // ── Build dialog ──────────────────────────────────────────────────────────
 
     const dialog = document.createElement('div');
     dialog.className = 'modal-backdrop';
@@ -633,50 +697,17 @@ class PromotePostEditor extends PanicElement {
         <h2>${isEdit ? 'Edit Post' : 'New Post'}</h2>
         <button class="small secondary" data-close type="button">Close</button>
       </div>
+      ${tabBarHtml}
       <div class="modal-card-body">
-        <form class="grid-form padded" data-post-form>
-          <label class="wide">Title <input name="title" required value="${esc(post.title || '')}"></label>
-          <label class="wide">Master Text
-            <textarea name="master_text" rows="4">${esc(post.master_text || '')}</textarea>
-          </label>
-          <label>Target URL <input type="url" name="target_url" value="${esc(post.target_url || '')}"></label>
-          <label>Status
-            <select name="status">
-              ${POST_STATUSES.map((s) => `<option value="${esc(s)}" ${s === (post.status || 'draft') ? 'selected' : ''}>${esc(titleCase(s))}</option>`).join('')}
-            </select>
-          </label>
-          <label>Asset
-            <select name="asset_id">
-              <option value="">No asset</option>
-              ${assetOptions}
-            </select>
-          </label>
-          <div class="wide form-actions">
-            <button type="submit" class="primary">${isEdit ? 'Save post' : 'Create post'}</button>
-            <button type="button" class="secondary" data-close>Cancel</button>
-          </div>
-          <p class="error-text wide" data-error></p>
-        </form>
-
-        ${isEdit ? `<div class="promote-variants-section padded">
-          <div class="promote-variants-head">
-            <h3>Channel Variants</h3>
-            <button class="secondary small" data-generate-variants>Generate variants</button>
-          </div>
-          <div class="promote-variant-tabs" role="tablist">
-            ${CHANNELS.map((ch) => `<button class="promote-tab ${ch === this.activeChannel ? 'active' : ''}" role="tab" data-channel="${esc(ch)}">${esc(CHANNEL_LABELS[ch])}</button>`).join('')}
-          </div>
-          <div class="promote-variant-panels" data-variant-panels>
-            ${this.renderVariantPanel(this.activeChannel)}
-          </div>
-        </div>` : ''}
+        ${bodyHtml}
       </div>
     </div>`;
 
     this.innerHTML = '';
     this.appendChild(dialog);
 
-    // Close handlers
+    // ── Close handlers ────────────────────────────────────────────────────────
+
     const close = () => this.remove();
     $$('[data-close]', this).forEach((btn) => btn.addEventListener('click', close));
     dialog.addEventListener('click', (event) => { if (event.target === dialog) close(); });
@@ -687,7 +718,25 @@ class PromotePostEditor extends PanicElement {
     // Focus first field
     $('input[name="title"]', this)?.focus();
 
-    // Post form submit
+    // ── Main tab switching (edit only) ────────────────────────────────────────
+
+    if (isEdit) {
+      $$('[data-main-tab]', this).forEach((btn) => {
+        btn.addEventListener('click', () => {
+          this.activeMainTab = btn.dataset.mainTab;
+          $$('[data-main-tab]', this).forEach((b) => {
+            b.classList.toggle('active', b.dataset.mainTab === this.activeMainTab);
+            b.setAttribute('aria-selected', String(b.dataset.mainTab === this.activeMainTab));
+          });
+          $$('[data-main-panel]', this).forEach((p) => {
+            p.toggleAttribute('hidden', p.dataset.mainPanel !== this.activeMainTab);
+          });
+        });
+      });
+    }
+
+    // ── Post form submit ──────────────────────────────────────────────────────
+
     $('[data-post-form]', this).addEventListener('submit', async (event) => {
       event.preventDefault();
       const submit = $('button[type="submit"]', event.target);
@@ -712,11 +761,9 @@ class PromotePostEditor extends PanicElement {
           publish('promote.post.created', { post: result.post, eventId: this.eventId });
           close();
         }
-        // Refresh post reference and re-render (for edit, stay open)
         if (isEdit) {
           this.post = result.post;
           submit.disabled = false;
-          publish('toast.show', { message: 'Saved.', tone: 'success' });
         }
       } catch (error) {
         $('[data-error]', event.target).textContent = error.message || 'Save failed.';
@@ -724,7 +771,8 @@ class PromotePostEditor extends PanicElement {
       }
     });
 
-    // Variant tabs (edit mode only)
+    // ── Channel variant tabs + generate (edit only) ───────────────────────────
+
     if (isEdit) {
       $$('[data-channel]', this).forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -742,6 +790,15 @@ class PromotePostEditor extends PanicElement {
         try {
           const result = await api(`/promote/events/${this.eventId}/posts/${post.id}/variants/generate`, { method: 'POST' });
           result.variants.forEach((v) => { this.variants[v.channel] = v; });
+          // Update the badge count on the Variants tab
+          const badge = $('[data-main-tab="variants"] .promote-editor-tab-badge', this);
+          const newCount = Object.values(this.variants).filter((v) => v.id).length;
+          if (badge) {
+            badge.textContent = `${newCount} / ${CHANNELS.length}`;
+          } else if (newCount > 0) {
+            const varTab = $('[data-main-tab="variants"]', this);
+            if (varTab) varTab.insertAdjacentHTML('beforeend', `<span class="promote-editor-tab-badge">${esc(String(newCount))}&#8202;/&#8202;${esc(String(CHANNELS.length))}</span>`);
+          }
           publish('toast.show', { message: 'Variants generated.', tone: 'success' });
           publish('promote.variants.generated', { postId: post.id, variants: result.variants });
           $('[data-variant-panels]', this).innerHTML = this.renderVariantPanel(this.activeChannel);

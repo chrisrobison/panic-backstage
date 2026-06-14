@@ -2699,8 +2699,54 @@ button.link.danger { color: var(--danger); }
   width: auto;
 }
 
+/* ── Post editor — main tab bar (Post / Channel Variants) ─────────────────── */
+.promote-editor-tabbar {
+  display: flex;
+  border-bottom: 2px solid var(--line);
+  background: #f7f8fb;
+  padding: 0 6px;
+  flex-shrink: 0;
+}
+.promote-editor-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 20px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  margin-bottom: -2px;
+  transition: color .12s, border-color .12s, background .12s;
+  white-space: nowrap;
+}
+.promote-editor-tab:hover:not(.active) {
+  color: var(--ink);
+  background: #eef0f5;
+}
+.promote-editor-tab.active {
+  color: var(--promote-accent);
+  border-bottom-color: var(--promote-accent);
+  font-weight: 700;
+  background: none;
+}
+.promote-editor-tab-badge {
+  background: var(--promote-accent);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  line-height: 1.5;
+}
+
 /* ── Post editor — variant tabs ───────────────────────────────────────────── */
-.promote-variants-section { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 18px; }
+.promote-variants-section { padding-top: 4px; }
+.promote-variants-intro { font-size: 13px; }
 .promote-variants-head {
   display: flex;
   align-items: center;
