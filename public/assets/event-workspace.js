@@ -236,6 +236,7 @@ class EventDetailsForm extends HTMLElement {
       <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
       <label>Status ${select('status', statuses, event.status, statusLabel).replace('<select ', `<select${disabled} `)}</label>
       <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
+      <label>Load-In / Tech <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>
       <label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>
       <label>Show <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
       <label>End <input type="time" name="end_time" value="${esc(event.end_time || '')}"${disabled}></label>
@@ -245,11 +246,11 @@ class EventDetailsForm extends HTMLElement {
       <label>Potential revenue <input type="number" step="0.01" min="0" name="potential_revenue" value="${esc(event.potential_revenue ?? '')}" placeholder="0.00"${disabled}></label>
       <label>Capacity <input type="number" name="capacity" value="${esc(event.capacity || '')}"${disabled}></label>
       <label class="check-label"><input type="checkbox" name="walkthrough_done" value="1" ${Number(event.walkthrough_done) ? 'checked' : ''}${disabled}> Walk-through happened</label>
-      <p class="form-section-head wide">Producer / Promoter <span class="form-section-note">Required for Intake Complete</span></p>
+      <p class="form-section-head wide">Producer / Artist <span class="form-section-note">Required for Hold and above</span></p>
       <label>Name <input name="promoter_name" value="${esc(event.promoter_name || '')}" placeholder="Full name"${disabled}></label>
       <label>Email <input type="email" name="promoter_email" value="${esc(event.promoter_email || '')}" placeholder="email@example.com"${disabled}></label>
       <label>Phone <input type="tel" name="promoter_phone" value="${esc(event.promoter_phone || '')}" placeholder="415-555-0100"${disabled}></label>
-      <p class="form-section-head wide">Booker <span class="form-section-note">Required for Intake Complete</span></p>
+      <p class="form-section-head wide">Booker <span class="form-section-note">Required for Hold and above</span></p>
       <label>Name <input name="booker_name" value="${esc(event.booker_name || '')}" placeholder="Full name"${disabled}></label>
       <label>Email <input type="email" name="booker_email" value="${esc(event.booker_email || '')}" placeholder="email@example.com"${disabled}></label>
       <label>Phone <input type="tel" name="booker_phone" value="${esc(event.booker_phone || '')}" placeholder="415-555-0100"${disabled}></label>

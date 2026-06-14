@@ -227,18 +227,33 @@ class EventCalendar extends PanicElement {
       + `<span class="legend-item"><span class="status-dot room-both"></span>Both Rooms</span>`
       + `</div>`;
 
+    // Format a raw HH:MM:SS time string into "7:00 PM"
+    const fmtTime = (t) => {
+      if (!t) return '';
+      const [h, m] = t.split(':').map(Number);
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`;
+    };
+
     const miniEvent = (event) => {
       const meta = zoneOf(event);
-      const tip = `${statusLabel(event.status)} · ${meta.label}`;
-      return `<a class="mini-event" href="#event-${esc(event.id)}" title="${esc(tip)}"><span class="status-dot ${roomTone(meta.zone)}"></span><span class="mini-event-title">${esc(event.title)}</span></a>`;
+      const time = fmtTime(event.doors_time || event.show_time);
+      const loadIn = event.load_in_time ? `Load-in ${fmtTime(event.load_in_time)}` : '';
+      const tip = [statusLabel(event.status), meta.label, time, loadIn].filter(Boolean).join(' · ');
+      return `<a class="mini-event" href="#event-${esc(event.id)}" title="${esc(tip)}">`
+        + `<span class="status-dot ${roomTone(meta.zone)}"></span>`
+        + `<span class="mini-event-title">${esc(event.title)}</span>`
+        + (time ? `<span class="mini-event-time">${esc(time)}</span>` : '')
+        + `</a>`;
     };
     // Vertical position = floor: upstairs above the divider, downstairs below,
-    // whole-building bookings straddling it.
+    // whole-building bookings straddling it. Canceled events are hidden.
     const dayCellBody = (dayEvents) => {
-      if (!dayEvents.length) return `<div class="program-night">${this.canCreate ? '+ Available' : 'Available'}</div>`;
-      const up = dayEvents.filter((event) => zoneOf(event).zone === 'up');
-      const both = dayEvents.filter((event) => zoneOf(event).zone === 'both');
-      const down = dayEvents.filter((event) => zoneOf(event).zone === 'down');
+      const visible = dayEvents.filter((event) => event.status !== 'canceled');
+      if (!visible.length) return `<div class="program-night">${this.canCreate ? '+ Available' : 'Available'}</div>`;
+      const up = visible.filter((event) => zoneOf(event).zone === 'up');
+      const both = visible.filter((event) => zoneOf(event).zone === 'both');
+      const down = visible.filter((event) => zoneOf(event).zone === 'down');
       return `<div class="cell-zone zone-up" data-floor="Upstairs">${up.map(miniEvent).join('')}</div>`
         + (both.length ? `<div class="zone-both">${both.map(miniEvent).join('')}</div>` : '')
         + `<div class="cell-zone zone-down" data-floor="Downstairs (21+)">${down.map(miniEvent).join('')}</div>`;

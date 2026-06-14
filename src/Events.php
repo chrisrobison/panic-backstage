@@ -10,7 +10,7 @@ use function Panic\slugify;
 
 final class Events extends BaseEndpoint
 {
-    private const STATUSES = ['empty','proposed','hold','confirmed','booked','needs_assets','ready_to_announce','published','advanced','completed','settled','canceled'];
+    private const STATUSES = ['empty','proposed','confirmed','booked','needs_assets','ready_to_announce','published','advanced','completed','settled','canceled'];
 
     /** Statuses that represent a committed booking (conflict + transition checks apply). */
     private const BOOKING_CONFIRMED_STATUSES = ['confirmed','booked','needs_assets','ready_to_announce','published','advanced','completed','settled'];
@@ -178,9 +178,9 @@ final class Events extends BaseEndpoint
             }
         }
         $id = $this->db->insert(
-            'INSERT INTO events (venue_id, title, slug, event_type, status, description_public, description_internal, date, doors_time, show_time, end_time, age_restriction, ticket_price, deposit_amount, potential_revenue, ticket_url, ticket_system, contract_url, walkthrough_done, settlement_doc_url, capacity, public_visibility, owner_user_id, promoter_name, promoter_email, promoter_phone, booker_name, booker_email, booker_phone)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $newStatus, $body['description_public'] ?? null, $body['description_internal'] ?? null, $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), $body['age_restriction'] ?? null, (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), self::nullableString($body['ticket_url'] ?? null), self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), $body['capacity'] ?: null, boolish($body['public_visibility'] ?? false), $body['owner_user_id'] ?: $this->userId(), self::nullableString($body['promoter_name'] ?? null), self::nullableString($body['promoter_email'] ?? null), self::nullableString($body['promoter_phone'] ?? null), self::nullableString($body['booker_name'] ?? null), self::nullableString($body['booker_email'] ?? null), self::nullableString($body['booker_phone'] ?? null)]
+            'INSERT INTO events (venue_id, title, slug, event_type, status, description_public, description_internal, date, doors_time, show_time, end_time, load_in_time, age_restriction, ticket_price, deposit_amount, potential_revenue, ticket_url, ticket_system, contract_url, venue_contract_url, walkthrough_done, settlement_doc_url, capacity, public_visibility, owner_user_id, promoter_name, promoter_email, promoter_phone, booker_name, booker_email, booker_phone)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $newStatus, $body['description_public'] ?? null, $body['description_internal'] ?? null, $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), date_or_null($body['load_in_time'] ?? null), $body['age_restriction'] ?? null, (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), self::nullableString($body['ticket_url'] ?? null), self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), self::nullableString($body['venue_contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), $body['capacity'] ?: null, boolish($body['public_visibility'] ?? false), $body['owner_user_id'] ?: $this->userId(), self::nullableString($body['promoter_name'] ?? null), self::nullableString($body['promoter_email'] ?? null), self::nullableString($body['promoter_phone'] ?? null), self::nullableString($body['booker_name'] ?? null), self::nullableString($body['booker_email'] ?? null), self::nullableString($body['booker_phone'] ?? null)]
         );
         $this->assignEventCode($id);
         log_activity($this->db, $id, $this->userId(), 'event created', ['title' => $body['title']]);
@@ -222,13 +222,15 @@ final class Events extends BaseEndpoint
         // every required field. Anything outside this list falls through to the
         // full-row UPDATE below.
         $partialAllowlist = [
-            'settlement_doc_url' => fn ($v) => self::nullableString($v),
-            'contract_url'       => fn ($v) => self::nullableString($v),
-            'ticket_url'         => fn ($v) => self::nullableString($v),
-            'ticket_system'      => fn ($v) => self::nullableString($v),
-            'walkthrough_done'   => fn ($v) => boolish($v) ? 1 : 0,
-            'deposit_amount'     => fn ($v) => self::nullableDecimal($v),
-            'potential_revenue'  => fn ($v) => self::nullableDecimal($v),
+            'settlement_doc_url'  => fn ($v) => self::nullableString($v),
+            'contract_url'        => fn ($v) => self::nullableString($v),
+            'venue_contract_url'  => fn ($v) => self::nullableString($v),
+            'ticket_url'          => fn ($v) => self::nullableString($v),
+            'ticket_system'       => fn ($v) => self::nullableString($v),
+            'walkthrough_done'    => fn ($v) => boolish($v) ? 1 : 0,
+            'deposit_amount'      => fn ($v) => self::nullableDecimal($v),
+            'potential_revenue'   => fn ($v) => self::nullableDecimal($v),
+            'load_in_time'        => fn ($v) => date_or_null($v),
         ];
         if (count($body) === 1) {
             $key = array_key_first($body);
@@ -267,8 +269,8 @@ final class Events extends BaseEndpoint
             : $old['slug'];
         $wasStatus = (string) $old['status'];
         $this->db->run(
-            'UPDATE events SET venue_id=?, title=?, slug=?, event_type=?, status=?, description_public=?, description_internal=?, date=?, doors_time=?, show_time=?, end_time=?, age_restriction=?, ticket_price=?, deposit_amount=?, potential_revenue=?, ticket_url=?, ticket_system=?, contract_url=?, walkthrough_done=?, settlement_doc_url=?, capacity=?, public_visibility=?, owner_user_id=?, promoter_name=?, promoter_email=?, promoter_phone=?, booker_name=?, booker_email=?, booker_phone=? WHERE id=?',
-            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $body['status'], $body['description_public'] ?? null, $body['description_internal'] ?? null, $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), $body['age_restriction'] ?? null, (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), self::nullableString($body['ticket_url'] ?? $old['ticket_url']), self::nullableString($body['ticket_system'] ?? $old['ticket_system']), self::nullableString($body['contract_url'] ?? $old['contract_url']), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? $old['settlement_doc_url']), $body['capacity'] ?: null, boolish($body['public_visibility'] ?? false), $body['owner_user_id'] ?: null, self::nullableString($body['promoter_name'] ?? $old['promoter_name']), self::nullableString($body['promoter_email'] ?? $old['promoter_email']), self::nullableString($body['promoter_phone'] ?? $old['promoter_phone']), self::nullableString($body['booker_name'] ?? $old['booker_name']), self::nullableString($body['booker_email'] ?? $old['booker_email']), self::nullableString($body['booker_phone'] ?? $old['booker_phone']), $id]
+            'UPDATE events SET venue_id=?, title=?, slug=?, event_type=?, status=?, description_public=?, description_internal=?, date=?, doors_time=?, show_time=?, end_time=?, load_in_time=?, age_restriction=?, ticket_price=?, deposit_amount=?, potential_revenue=?, ticket_url=?, ticket_system=?, contract_url=?, venue_contract_url=?, walkthrough_done=?, settlement_doc_url=?, capacity=?, public_visibility=?, owner_user_id=?, promoter_name=?, promoter_email=?, promoter_phone=?, booker_name=?, booker_email=?, booker_phone=? WHERE id=?',
+            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $body['status'], $body['description_public'] ?? null, $body['description_internal'] ?? null, $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), date_or_null($body['load_in_time'] ?? $old['load_in_time'] ?? null), $body['age_restriction'] ?? null, (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), self::nullableString($body['ticket_url'] ?? $old['ticket_url']), self::nullableString($body['ticket_system'] ?? $old['ticket_system']), self::nullableString($body['contract_url'] ?? $old['contract_url']), self::nullableString($body['venue_contract_url'] ?? $old['venue_contract_url']), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? $old['settlement_doc_url']), $body['capacity'] ?: null, boolish($body['public_visibility'] ?? false), $body['owner_user_id'] ?: null, self::nullableString($body['promoter_name'] ?? $old['promoter_name']), self::nullableString($body['promoter_email'] ?? $old['promoter_email']), self::nullableString($body['promoter_phone'] ?? $old['promoter_phone']), self::nullableString($body['booker_name'] ?? $old['booker_name']), self::nullableString($body['booker_email'] ?? $old['booker_email']), self::nullableString($body['booker_phone'] ?? $old['booker_phone']), $id]
         );
         if (isset($body['status']) && $body['status'] !== $wasStatus) {
             $this->notifyStatusChange($id, $wasStatus, $body['status']);
@@ -418,14 +420,17 @@ final class Events extends BaseEndpoint
             if (in_array($blocker['status'], ['open', 'waiting'], true)) return 'Complete open items';
         }
         $hasFlyer = array_filter($assets, fn ($a) => $a['asset_type'] === 'flyer' && $a['approval_status'] === 'approved');
+        $hasContract = !empty($event['contract_url']) || $this->db->one(
+            "SELECT id FROM contracts WHERE event_id = ? AND status IN ('approved','sent','signed') LIMIT 1",
+            [(int) $event['id']]
+        );
         return match (true) {
-            $event['status'] === 'proposed' => 'Confirm date, owner, and event type',
-            $event['status'] === 'hold' => 'Confirm event details then advance to Intake Complete',
-            $event['status'] === 'confirmed' => empty($event['contract_url'])
-                ? 'Complete all intake fields then obtain signed contract to advance to Booked'
+            $event['status'] === 'proposed' => 'Fill in all contact details and event times, then advance to Intake Complete',
+            $event['status'] === 'confirmed' => !$hasContract
+                ? 'Complete all intake fields then obtain a signed contract (Contracts tab) to advance to Booked'
                 : 'Contract on file — advance status to Booked',
-            $event['status'] === 'booked' && !$hasFlyer => 'Upload or approve flyer',
-            $event['status'] === 'needs_assets' => 'Complete required assets',
+            $event['status'] === 'booked' && !$hasFlyer => 'Upload or approve flyer, then advance to Needs Assets',
+            $event['status'] === 'needs_assets' => 'Collect all promo materials (flyer, photos, bio)',
             $event['status'] === 'ready_to_announce' && !(int) $event['public_visibility'] => 'Publish public event page',
             $event['status'] === 'published' && !$event['ticket_url'] && (float) $event['ticket_price'] > 0 => 'Add ticketing link',
             $event['status'] === 'completed' && !$settlement => 'Complete settlement',
@@ -478,35 +483,85 @@ final class Events extends BaseEndpoint
     /**
      * Validate that all required intake fields are present before the event
      * can be advanced to confirmed (Intake Complete), booked, or beyond.
+     *
+     * Hold (proposed): minimum 12 fields — name, date, type, venue, times, contacts.
+     * Intake Complete (confirmed): all of the above + financial/capacity details.
+     * Booked: Intake Complete fields + a contract on file (either contract_url or
+     *         a record in the contracts table with status approved/sent/signed).
+     *
      * Returns a 422 Response if anything is missing, or null if all good.
      */
     private function validateStatusTransition(string $newStatus, array $event): ?Response
     {
-        if (!in_array($newStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
-            return null; // no extra checks for hold / proposed / empty / canceled
-        }
-        $required = [
+        // Minimum required at Hold (proposed) — also required at all later stages
+        $holdRequired = [
+            'title'          => 'Event name',
+            'date'           => 'Date',
+            'event_type'     => 'Event type',
+            'venue_id'       => 'Venue / location',
             'doors_time'     => 'Start time (Doors)',
             'end_time'       => 'End time',
-            'promoter_name'  => 'Producer/promoter name',
-            'promoter_email' => 'Producer/promoter email',
-            'promoter_phone' => 'Producer/promoter phone',
+            'promoter_name'  => 'Producer/Artist name',
+            'promoter_email' => 'Producer/Artist email',
+            'promoter_phone' => 'Producer/Artist phone',
             'booker_name'    => 'Booker name',
             'booker_email'   => 'Booker email',
             'booker_phone'   => 'Booker phone',
         ];
+
+        // Additional fields required at Intake Complete (confirmed) and beyond
+        $intakeRequired = [
+            'age_restriction'   => 'Age restriction',
+            'ticket_price'      => 'Ticket price (use 0 for free events)',
+            'capacity'          => 'Capacity',
+            'deposit_amount'    => 'Deposit amount (use 0 if none)',
+        ];
+
         $missing = [];
-        foreach ($required as $field => $label) {
-            if (empty($event[$field])) {
-                $missing[] = $label;
+
+        // Hold and beyond: check minimum required fields
+        if (in_array($newStatus, array_merge(['proposed'], self::BOOKING_CONFIRMED_STATUSES), true)) {
+            foreach ($holdRequired as $field => $label) {
+                if (empty($event[$field])) {
+                    $missing[] = $label;
+                }
             }
         }
-        if ($newStatus === 'booked' && empty($event['contract_url'])) {
-            $missing[] = 'Contract URL (required before marking as Booked)';
+
+        // Intake Complete and beyond: check additional fields
+        if (in_array($newStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
+            foreach ($intakeRequired as $field => $label) {
+                if (!isset($event[$field]) || $event[$field] === '' || $event[$field] === null) {
+                    $missing[] = $label;
+                }
+            }
         }
+
+        // Booked: requires a contract — either the legacy contract_url field
+        // or a contract record in the contracts table at an actionable status.
+        if ($newStatus === 'booked') {
+            $hasContractUrl = !empty($event['contract_url']);
+            $hasContractRecord = false;
+            if (!$hasContractUrl && !empty($event['id'])) {
+                $contractRow = $this->db->one(
+                    "SELECT id FROM contracts WHERE event_id = ? AND status IN ('approved','sent','signed') LIMIT 1",
+                    [(int) $event['id']]
+                );
+                $hasContractRecord = (bool) $contractRow;
+            }
+            if (!$hasContractUrl && !$hasContractRecord) {
+                $missing[] = 'Signed or approved contract (use the Contracts tab to create one, or paste a Contract URL)';
+            }
+        }
+
         if ($missing) {
+            $label = match ($newStatus) {
+                'proposed'  => 'Hold',
+                'confirmed' => 'Intake Complete',
+                default     => ucwords(str_replace(['_', '-'], ' ', $newStatus)),
+            };
             return Response::json([
-                'error' => 'Cannot advance to "' . ucfirst(str_replace(['_', '-'], ' ', $newStatus)) . '": missing ' . implode(', ', $missing) . '.',
+                'error' => 'Cannot advance to "' . $label . '": missing ' . implode(', ', $missing) . '.',
             ], 422);
         }
         return null;
@@ -572,15 +627,22 @@ final class Events extends BaseEndpoint
         return !($eA + $buffer <= $sB || $eB + $buffer <= $sA);
     }
 
-    /** Email all venue_admins when an event reaches Intake Complete or Booked. Best-effort — never throws. */
+    /**
+     * Send email notifications when an event status changes.
+     *
+     * - confirmed (Intake Complete): notify venue_admins that event is ready for contract
+     * - booked: notify venue_admins that contract is signed and booking is confirmed
+     * - needs_assets: notify producer/artist and booker to submit promo materials
+     *
+     * Best-effort — never throws.
+     */
     private function notifyStatusChange(int $eventId, string $oldStatus, string $newStatus): void
     {
-        if (!in_array($newStatus, ['confirmed', 'booked'], true)) return;
+        if (!in_array($newStatus, ['confirmed', 'booked', 'needs_assets'], true)) return;
         try {
-            $admins = $this->db->all("SELECT name, email FROM users WHERE role = 'venue_admin' AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'");
-            if (!$admins) return;
             $event = $this->db->one(
-                'SELECT e.title, e.date, e.show_time, e.promoter_name, e.booker_name, v.name AS venue_name
+                'SELECT e.title, e.date, e.show_time, e.promoter_name, e.promoter_email,
+                        e.booker_name, e.booker_email, v.name AS venue_name
                    FROM events e
               LEFT JOIN venues v ON v.id = e.venue_id
                   WHERE e.id = ? LIMIT 1',
@@ -588,40 +650,64 @@ final class Events extends BaseEndpoint
             );
             if (!$event) return;
 
-            $label   = $newStatus === 'confirmed' ? 'Intake Complete' : 'Booked (contract signed)';
-            $subject = "[Backstage] {$label}: {$event['title']}";
-            $link    = rtrim((string) (getenv('APP_URL') ?: ''), '/') . "/#event-{$eventId}";
+            $link = rtrim((string) (getenv('APP_URL') ?: ''), '/') . "/#event-{$eventId}";
 
-            // Map status → badge colour for the HTML template.
-            $statusColor = match ($newStatus) {
-                'confirmed' => '#2563eb',
-                'booked'    => '#16a34a',
-                default     => '#6b7280',
-            };
-
-            // Format show time if present.
             $showTime = '';
             if (!empty($event['show_time'])) {
                 $t = strtotime((string) $event['show_time']);
                 $showTime = $t ? date('g:i A', $t) : (string) $event['show_time'];
             }
 
-            $vars = [
-                'event_name'      => htmlspecialchars((string) $event['title'],         ENT_QUOTES, 'UTF-8'),
-                'old_status'      => htmlspecialchars(ucwords(str_replace('_', ' ', $oldStatus)), ENT_QUOTES, 'UTF-8'),
-                'new_status'      => htmlspecialchars($label,                           ENT_QUOTES, 'UTF-8'),
-                'status_color'    => $statusColor,
-                'event_date'      => htmlspecialchars((string) $event['date'],          ENT_QUOTES, 'UTF-8'),
-                'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
-                'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),
-                'promoter_name'   => htmlspecialchars((string) ($event['promoter_name'] ?? '—'), ENT_QUOTES, 'UTF-8'),
-                'booker_name'     => htmlspecialchars((string) ($event['booker_name']   ?? '—'), ENT_QUOTES, 'UTF-8'),
-                'event_admin_url' => htmlspecialchars($link,                            ENT_QUOTES, 'UTF-8'),
-            ];
-
             $mailer = new Mailer($this->root);
-            foreach ($admins as $admin) {
-                $mailer->sendTemplate($admin['email'], $subject, 'status-changed', $vars);
+
+            // ── venue_admins notified on Intake Complete and Booked ──────────
+            if (in_array($newStatus, ['confirmed', 'booked'], true)) {
+                $admins = $this->db->all("SELECT name, email FROM users WHERE role = 'venue_admin' AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'");
+                if ($admins) {
+                    $label       = $newStatus === 'confirmed' ? 'Intake Complete' : 'Booked (contract signed)';
+                    $subject     = "[Backstage] {$label}: {$event['title']}";
+                    $statusColor = $newStatus === 'confirmed' ? '#2563eb' : '#16a34a';
+                    $vars = [
+                        'event_name'      => htmlspecialchars((string) $event['title'],         ENT_QUOTES, 'UTF-8'),
+                        'old_status'      => htmlspecialchars(ucwords(str_replace('_', ' ', $oldStatus)), ENT_QUOTES, 'UTF-8'),
+                        'new_status'      => htmlspecialchars($label,                           ENT_QUOTES, 'UTF-8'),
+                        'status_color'    => $statusColor,
+                        'event_date'      => htmlspecialchars((string) $event['date'],          ENT_QUOTES, 'UTF-8'),
+                        'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
+                        'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),
+                        'promoter_name'   => htmlspecialchars((string) ($event['promoter_name'] ?? '—'), ENT_QUOTES, 'UTF-8'),
+                        'booker_name'     => htmlspecialchars((string) ($event['booker_name']   ?? '—'), ENT_QUOTES, 'UTF-8'),
+                        'event_admin_url' => htmlspecialchars($link,                            ENT_QUOTES, 'UTF-8'),
+                    ];
+                    foreach ($admins as $admin) {
+                        $mailer->sendTemplate($admin['email'], $subject, 'status-changed', $vars);
+                    }
+                }
+            }
+
+            // ── producer/artist + booker notified when assets are needed ────
+            if ($newStatus === 'needs_assets') {
+                $subject = "[Mabuhay Gardens] Promo materials needed: {$event['title']}";
+                $assetsVars = [
+                    'event_name'      => htmlspecialchars((string) $event['title'],    ENT_QUOTES, 'UTF-8'),
+                    'event_date'      => htmlspecialchars((string) $event['date'],     ENT_QUOTES, 'UTF-8'),
+                    'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
+                    'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),
+                    'event_admin_url' => htmlspecialchars($link,                       ENT_QUOTES, 'UTF-8'),
+                ];
+                $recipients = array_filter([
+                    $event['promoter_email'] ? ['name' => $event['promoter_name'] ?? 'Producer/Artist', 'email' => $event['promoter_email']] : null,
+                    $event['booker_email']   ? ['name' => $event['booker_name']   ?? 'Booker',          'email' => $event['booker_email']]   : null,
+                ]);
+                foreach ($recipients as $recipient) {
+                    if (!filter_var($recipient['email'], FILTER_VALIDATE_EMAIL)) continue;
+                    $mailer->sendTemplate(
+                        $recipient['email'],
+                        $subject,
+                        'needs-assets',
+                        $assetsVars + ['recipient_name' => htmlspecialchars((string) $recipient['name'], ENT_QUOTES, 'UTF-8')]
+                    );
+                }
             }
         } catch (\Throwable $e) {
             @error_log("status-change notification failed for event {$eventId}: {$e->getMessage()}");

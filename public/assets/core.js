@@ -30,7 +30,7 @@ const scriptUrl = new URL((document.currentScript || $$('script[src*="assets/app
 
 const appBaseUrl = /\/public\/assets\/app\.js$/i.test(scriptUrl.pathname) ? new URL('../..', scriptUrl) : new URL('..', scriptUrl);
 
-const statuses = ['empty', 'proposed', 'hold', 'confirmed', 'booked', 'needs_assets', 'ready_to_announce', 'published', 'advanced', 'completed', 'settled', 'canceled'];
+const statuses = ['empty', 'proposed', 'confirmed', 'booked', 'needs_assets', 'ready_to_announce', 'published', 'advanced', 'completed', 'settled', 'canceled'];
 
 
 function appUrl(path = '') {
@@ -221,12 +221,17 @@ function roomTone(zone) {
 // pipeline columns and badges read in the same language as the sheet.
 // Statuses with no sheet counterpart fall through to titleCase().
 const STATUS_LABELS = {
-  proposed:  'Prospect',
-  hold:      'In Negotiations',
-  confirmed: 'Intake Complete',
-  booked:    'Booked',
-  canceled:  'Cancelled',
-  completed: 'Archived',
+  proposed:          'Hold',
+  confirmed:         'Intake Complete',
+  booked:            'Booked',
+  needs_assets:      'Needs Assets',
+  ready_to_announce: 'Ready to Announce',
+  published:         'Published',
+  advanced:          'Advanced',
+  completed:         'Archived',
+  settled:           'Settled',
+  canceled:          'Cancelled',
+  empty:             'Empty',
 };
 
 
