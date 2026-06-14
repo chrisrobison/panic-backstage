@@ -9,7 +9,8 @@ Incremental schema changes that apply **on top of** the baseline in
   migration written before it was last regenerated has been squashed into it,
   so a brand-new database starts with **zero** pending migrations.
 - New schema changes go here as `NNN_short_description.sql`, numbered in
-  ascending order (next number continues from the highest ever used).
+  ascending order. **Next number: `015`** (migrations 001–014 were squashed
+  into `../schema.sql` on 2026-06-14).
 - Apply pending migrations with the runner:
 
   ```bash
