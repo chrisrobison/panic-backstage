@@ -946,12 +946,21 @@ class PromoteBroadcastModal extends PanicElement {
           needs_content: 'Needs content',
         }[d.status] || titleCase(d.status);
         const dotCls = d.destination_key ? `dot-${esc(d.destination_key.split('_')[0])}` : '';
-        return `<label class="promote-dest-row check-label">
-          <input type="checkbox" name="destinations" value="${esc(d.destination_key)}" checked>
-          <span class="promote-dest-dot ${dotCls}" aria-hidden="true"></span>
-          <span class="promote-dest-label">${esc(d.label)}</span>
-          <span class="promote-dest-status badge ${esc(tone)}">${esc(readinessLabel)}</span>
-        </label>`;
+        const isManual = d.status === 'manual_submission' || d.status === 'needs_auth';
+        return `<div class="promote-dest-row">
+          <label class="check-label promote-dest-check-label">
+            <input type="checkbox" name="destinations" value="${esc(d.destination_key)}" checked>
+            <span class="promote-dest-dot ${dotCls}" aria-hidden="true"></span>
+            <span class="promote-dest-label">${esc(d.label)}</span>
+            <span class="promote-dest-status badge ${esc(tone)}">${esc(readinessLabel)}</span>
+          </label>
+          ${isManual ? `<button type="button" class="promote-dest-action-btn"
+                data-action-dest="${esc(d.destination_key)}"
+                data-dest-label="${esc(d.label)}"
+                title="How to submit to ${esc(d.label)}">
+              <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            </button>` : ''}
+        </div>`;
       }).join('');
       return `<div class="promote-dest-group">
         <div class="promote-dest-group-head"><span class="promote-dest-num">${groupNum}</span><strong>${esc(label)}</strong></div>
@@ -987,6 +996,18 @@ class PromoteBroadcastModal extends PanicElement {
     </div>`;
 
     this.appendChild(dialog);
+
+    // Wire action info buttons — open the action modal for manual/needs_auth destinations
+    $$('[data-action-dest]', dialog).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const modal = document.createElement('pb-promote-action-modal');
+        modal.eventId   = this.eventId;
+        modal.postId    = this.pendingPostId;
+        modal.destKey   = btn.dataset.actionDest;
+        modal.destLabel = btn.dataset.destLabel;
+        document.body.appendChild(modal);
+      });
+    });
 
     const close = () => dialog.remove();
     $$('[data-close]', dialog).forEach((btn) => btn.addEventListener('click', close));
@@ -1040,6 +1061,245 @@ class PromoteBroadcastModal extends PanicElement {
 }
 
 customElements.define('pb-promote-broadcast-modal', PromoteBroadcastModal);
+
+// ── pb-promote-action-modal ───────────────────────────────────────────────────
+// Opens when a manual-submission destination's ℹ button is clicked.
+// Shows the channel variant content, instructions, and action buttons:
+//   • Copy to clipboard
+//   • Open in local email app  (mailto: pre-filled)
+//   • Send from events@panicbooking.com  (server-side send)
+//   • Open submission form  (for platform / form-based destinations)
+//
+// Required props set before DOM append: eventId, postId, destKey, destLabel
+
+class PromoteActionModal extends PanicElement {
+  async connectedCallback() {
+    super.connectedCallback();
+    this.renderShell();
+    if (this.postId) {
+      await this.loadInfo();
+    } else {
+      $('[data-action-body]', this).innerHTML =
+        '<p class="muted">Select a specific post before previewing action content.</p>';
+    }
+  }
+
+  // ── Shell (shown while loading) ───────────────────────────────────────────
+
+  renderShell() {
+    const label = this.destLabel || this.destKey || 'Action';
+    this.innerHTML = `<div class="modal-backdrop" data-action-backdrop>
+      <div class="modal-card promote-action-card">
+        <div class="section-head padded">
+          <div>
+            <h2 class="promote-action-title">
+              <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+              ${esc(label)}
+            </h2>
+          </div>
+          <button class="small secondary" data-close type="button">Close</button>
+        </div>
+        <div class="promote-action-body padded" data-action-body>
+          <p class="muted"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Loading…</p>
+        </div>
+      </div>
+    </div>`;
+
+    const close = () => this.remove();
+    $('[data-close]', this)?.addEventListener('click', close);
+    $('[data-action-backdrop]', this)?.addEventListener('click', (e) => {
+      if (e.target === $('[data-action-backdrop]', this)) close();
+    });
+    const onEsc = (e) => { if (e.key === 'Escape') { document.removeEventListener('keydown', onEsc); close(); } };
+    document.addEventListener('keydown', onEsc);
+  }
+
+  // ── Fetch action info from server ─────────────────────────────────────────
+
+  async loadInfo() {
+    try {
+      const info = await api(`/promote/events/${this.eventId}/posts/${this.postId}/action/${this.destKey}`);
+      this.renderContent(info);
+    } catch (err) {
+      $('[data-action-body]', this).innerHTML =
+        `<p class="error-text">${esc(err.message || 'Failed to load action info.')}</p>`;
+    }
+  }
+
+  // ── Render loaded content ─────────────────────────────────────────────────
+
+  renderContent(info) {
+    const { dest_label, dest_group, variant, config, can_email, can_form } = info;
+
+    const subject  = (variant?.title || '').trim();
+    const body     = (variant?.body  || '').trim();
+    const toEmail  = (config?.contact_email || '').trim();
+
+    // Parse warnings/instructions stored in the variant
+    let warnings = [];
+    try {
+      warnings = typeof variant?.warnings_json === 'string'
+        ? JSON.parse(variant.warnings_json || '[]')
+        : (Array.isArray(variant?.warnings_json) ? variant.warnings_json : []);
+    } catch {}
+
+    // Pick the best form URL from config
+    const formUrl = (
+      config?.submission_url   ||
+      config?.partner_url      ||
+      config?.promoter_url     ||
+      config?.artist_url       ||
+      config?.artist_page_url  ||
+      config?.event_platform_url || ''
+    ).trim();
+
+    const groupLabel = {
+      direct_post:          'Direct Post',
+      event_platform:       'Event Platform',
+      editorial_submission: 'Editorial Submission',
+      email:                'Email Campaign',
+    }[dest_group] || titleCase(dest_group || '');
+
+    const noContent = !body;
+
+    const mailtoHref = (toEmail && subject && body)
+      ? `mailto:${encodeURIComponent(toEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      : '';
+
+    const bodyEl = $('[data-action-body]', this);
+    if (!bodyEl) return;
+
+    bodyEl.innerHTML = `
+      ${groupLabel ? `<p class="promote-action-group-label">${esc(groupLabel)}</p>` : ''}
+
+      ${warnings.length ? `
+        <div class="action-instructions">
+          <h4><i class="fa-solid fa-lightbulb" aria-hidden="true"></i> Instructions</h4>
+          <ul class="action-instruction-list">
+            ${warnings.map((w) => `<li>${esc(String(w))}</li>`).join('')}
+          </ul>
+        </div>` : ''}
+
+      ${noContent ? `
+        <div class="action-no-content">
+          <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+          No variant generated yet — open the post editor and click
+          <strong>Generate variants</strong> first.
+        </div>` : `
+
+        <div class="action-content-section">
+          ${subject ? `
+            <div class="action-field">
+              <div class="action-field-label">Subject</div>
+              <div class="action-field-value">${esc(subject)}</div>
+            </div>` : ''}
+
+          <div class="action-field">
+            <div class="action-field-label">
+              <span>Message</span>
+              <button type="button" class="small ghost action-copy-btn" data-copy-body>
+                <i class="fa-regular fa-clipboard" aria-hidden="true"></i> Copy
+              </button>
+            </div>
+            <textarea class="action-body-textarea" readonly rows="9">${esc(body)}</textarea>
+          </div>
+
+          ${can_email ? `
+            <div class="action-field">
+              <div class="action-field-label">To</div>
+              <input type="email" class="action-to-input" data-to-email
+                     value="${esc(toEmail)}"
+                     placeholder="recipient@example.com">
+            </div>` : ''}
+        </div>
+
+        <div class="action-buttons">
+          ${can_email && mailtoHref ? `
+            <a class="button secondary" href="${esc(mailtoHref)}" data-mailto-link target="_blank" rel="noopener">
+              <i class="fa-solid fa-envelope" aria-hidden="true"></i> Open in email app
+            </a>` : ''}
+          ${can_email ? `
+            <button type="button" class="primary" data-send-server>
+              <i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Send from events@panicbooking.com
+            </button>` : ''}
+          ${can_form && formUrl ? `
+            <a class="button secondary" href="${esc(formUrl)}" target="_blank" rel="noopener">
+              <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Open submission form
+            </a>` : ''}
+        </div>
+        <p class="action-status-msg" data-action-status></p>
+      `}
+    `;
+
+    // Copy to clipboard
+    $('[data-copy-body]', this)?.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(body);
+        publish('toast.show', { message: 'Copied to clipboard.', tone: 'success' });
+      } catch {
+        publish('toast.show', { message: 'Copy failed — select and copy manually.', tone: 'warning' });
+      }
+    });
+
+    // Keep mailto link in sync with editable "To" field
+    if (can_email) {
+      const toInput    = $('[data-to-email]', this);
+      const mailtoLink = $('[data-mailto-link]', this);
+
+      if (toInput && mailtoLink) {
+        toInput.addEventListener('input', () => {
+          const addr = toInput.value.trim();
+          if (addr && subject && body) {
+            mailtoLink.href =
+              `mailto:${encodeURIComponent(addr)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+          } else {
+            mailtoLink.href = '#';
+          }
+        });
+      }
+
+      // Send via server
+      $('[data-send-server]', this)?.addEventListener('click', async (ev) => {
+        const btn      = ev.currentTarget;
+        const toInput2 = $('[data-to-email]', this);
+        const to       = (toInput2?.value || toEmail).trim();
+        const statusEl = $('[data-action-status]', this);
+
+        if (!to) {
+          if (statusEl) { statusEl.textContent = 'Enter a recipient email address.'; statusEl.className = 'action-status-msg error-text'; }
+          return;
+        }
+
+        const origHtml = btn.innerHTML;
+        btn.disabled   = true;
+        btn.innerHTML  = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Sending…';
+
+        try {
+          const result = await api(
+            `/promote/events/${this.eventId}/posts/${this.postId}/action/${this.destKey}/send`,
+            { method: 'POST', body: JSON.stringify({ to }) }
+          );
+          publish('toast.show', { message: `Sent to ${result.to}`, tone: 'success' });
+          btn.innerHTML = '<i class="fa-solid fa-circle-check" aria-hidden="true"></i> Sent!';
+          if (statusEl) {
+            statusEl.textContent = `Sent to ${result.to} from events@panicbooking.com`;
+            statusEl.className   = 'action-status-msg promote-action-sent';
+          }
+        } catch (err) {
+          publish('toast.show', { message: err.message || 'Send failed.', tone: 'error' });
+          btn.disabled  = false;
+          btn.innerHTML = origHtml;
+          if (statusEl) {
+            statusEl.textContent = err.message || 'Send failed.';
+            statusEl.className   = 'action-status-msg error-text';
+          }
+        }
+      });
+    }
+  }
+}
+
+customElements.define('pb-promote-action-modal', PromoteActionModal);
 
 // ── pb-promote-assets-card ────────────────────────────────────────────────────
 // Event assets + quick-upload button + 1:1/4:5/9:16/16:9 aspect placeholders.

@@ -191,8 +191,17 @@ final class Kernel
                 $child   = $segments[3] ?? null;
                 $childId = $this->intOrNull($segments[4] ?? null);
                 // posts: .../posts/{postId}/variants[/generate|/{variantId}]
+                //        .../posts/{postId}/action/{destKey}[/send]
                 if ($child === 'posts') {
-                    $sub   = $segments[5] ?? null;   // 'variants' or null
+                    $sub   = $segments[5] ?? null;   // 'variants', 'action', or null
+                    if ($sub === 'action') {
+                        return [Promote\ActionEndpoint::class, [
+                            'eventId'   => $eventId,
+                            'postId'    => $childId,
+                            'destKey'   => $segments[6] ?? null,  // e.g. 'sf_chronicle'
+                            'subAction' => $segments[7] ?? null,  // 'send' or null
+                        ]];
+                    }
                     $subId = $this->intOrNull($segments[6] ?? null);
                     return [Promote\Posts::class, [
                         'eventId' => $eventId,
