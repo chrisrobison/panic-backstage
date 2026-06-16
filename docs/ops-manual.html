@@ -912,6 +912,39 @@
     <a href="#settling" class="section">Filing settlement</a>
     <a href="#settled" class="section">Marking Settled</a>
     <a href="#activity-log" class="section">The Activity Log</a>
+
+    <div class="nav-section">Part IV — Promote</div>
+    <a href="#promote" class="chapter">Chapter 4: Panic Promote</a>
+    <a href="#promote-overview" class="section">How Promote is organized</a>
+    <a href="#promote-posts" class="section">Posts &amp; channel variants</a>
+    <a href="#promote-broadcast" class="section">Broadcasting</a>
+    <a href="#promote-health" class="section">Promotion health checklist</a>
+    <a href="#promote-workflow" class="section">Step-by-step workflow</a>
+    <a href="#promote-setup" class="section">Connecting platforms</a>
+
+    <div class="nav-section">Part V — Ticketing</div>
+    <a href="#ticketing" class="chapter">Chapter 5: In-House Ticketing</a>
+    <a href="#ticketing-modes" class="section">External vs. in-house</a>
+    <a href="#ticket-types" class="section">Setting up ticket types</a>
+    <a href="#ticketing-dashboard" class="section">Live sales dashboard</a>
+    <a href="#ticketing-purchase" class="section">How a purchase works</a>
+    <a href="#ticketing-comps" class="section">Comp tickets</a>
+    <a href="#ticketing-issued" class="section">Managing issued tickets</a>
+    <a href="#ticketing-scanner" class="section">Scanner links</a>
+    <a href="#ticketing-payments" class="section">Payment provider setup</a>
+
+    <div class="nav-section">Part VI — Admin</div>
+    <a href="#admin" class="chapter">Chapter 6: Admin &amp; Users</a>
+    <a href="#admin-overview" class="section">The Admin section</a>
+    <a href="#admin-users" class="section">Login accounts</a>
+    <a href="#admin-staff" class="section">Staff roster</a>
+    <a href="#admin-templates" class="section">Event templates</a>
+
+    <div class="nav-section">Quick Reference</div>
+    <a href="#roles" class="chapter">Roles &amp; Who Does What</a>
+    <a href="#roles-global" class="section">Global roles</a>
+    <a href="#roles-event" class="section">Per-event roles</a>
+    <a href="#roles-scenarios" class="section">Practical scenarios</a>
   </nav>
 </nav>
 
@@ -1832,6 +1865,908 @@
 
   </div><!-- /book-content -->
 </div><!-- /chapter 3 -->
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- PART IV: PANIC PROMOTE                                                      -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<div class="part-break" id="promote-part">
+  <div class="part-num">Part IV</div>
+  <h2>Panic Promote</h2>
+  <p>Turn a confirmed booking into a coordinated promotion across 20 channels — social, listings, email, and press — all from one screen.</p>
+</div>
+
+<div id="promote" class="chapter-page">
+  <div class="chapter-hero">
+    <span class="chapter-num">Chapter 4</span>
+    <h1>Panic Promote</h1>
+    <p class="lead">Promotion isn't just posting to Instagram. It's a coordinated campaign across social media, event listing sites, email, and press — all timed and tracked. Panic Promote makes sure nothing falls through the cracks.</p>
+  </div>
+
+  <div class="book-content">
+
+    <h2 id="promote-overview">How Promote is organized</h2>
+
+    <p>Panic Promote lives in its own section of the sidebar, separate from the event workspace. Navigate to <strong>Promote</strong> in the left nav and you'll see a card for every upcoming event. Each card shows how many posts have been created, how many days until the event, and the campaign's overall status.</p>
+
+    <p>Click <span class="ui-label button">Open</span> on any card to enter that event's promotion command center. You can also jump straight there from inside an event workspace by clicking the <span class="ui-label button">Promote</span> button in the event header.</p>
+
+    <div class="callout note">
+      <span class="callout-title">📌 Only public shows have a campaign</span>
+      <p>Private events (venue rentals) do not appear in Panic Promote. The Promote button is hidden for private events. This is intentional — private events are never publicly advertised.</p>
+    </div>
+
+    <h3>The campaign overview layout</h3>
+
+    <p>Each campaign overview is split into two columns:</p>
+
+    <div class="two-col">
+      <div style="background:#fff; border:1px solid var(--rule); border-radius:var(--radius); padding:16px 20px;">
+        <h4 style="margin-top:0">Left: Main column</h4>
+        <ul style="font-size:0.88rem; font-family:var(--font-ui); margin-bottom:0;">
+          <li><strong>Hero card</strong> — event details, key metrics (days out, post count, goal), and campaign status</li>
+          <li><strong>Posts</strong> — all your posts, with thumbnails, status badges, and action buttons</li>
+        </ul>
+      </div>
+      <div style="background:#fff; border:1px solid var(--rule); border-radius:var(--radius); padding:16px 20px;">
+        <h4 style="margin-top:0">Right: Rail column</h4>
+        <ul style="font-size:0.88rem; font-family:var(--font-ui); margin-bottom:0;">
+          <li><strong>Promotion Health</strong> — a 20-item checklist with a score</li>
+          <li><strong>Assets</strong> — approved flyers and band photos</li>
+          <li><strong>Analytics</strong> — broadcast metrics (opens, clicks, reach)</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- POSTS ──────────────────────────────────────────────────────────────── -->
+    <h2 id="promote-posts">Posts — the unit of promotion</h2>
+
+    <p>A <strong>post</strong> is the central unit of work in Panic Promote. Think of it as one piece of content — an announcement, a reminder, a "last tickets" alert — that gets adapted into different versions for different channels. One post, 20 channel variants.</p>
+
+    <h3>Creating a post</h3>
+
+    <p>Click <span class="ui-label button">+ New Post</span> in the campaign header or the Posts section. You'll fill in:</p>
+
+    <div class="field-ref">
+      <div class="field-ref-title">Post Fields</div>
+      <div class="field-row">
+        <div class="field-name">Title</div>
+        <div class="field-desc">Internal name for this post. e.g. "Announcement" or "Week-before reminder." Never shown publicly.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Master Text</div>
+        <div class="field-desc">The core message in plain language. This is the source material the system adapts into channel-specific variants. Write it like you'd write a social post — it doesn't need to be polished yet, just capture the facts.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Target URL</div>
+        <div class="field-desc">The link you want people to click — usually the ticket page or the event's public page.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Asset</div>
+        <div class="field-desc">The image to attach — a flyer or band photo from the Assets tab. Set this before generating variants so each channel variant includes the right image reference.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Status</div>
+        <div class="field-desc">Draft → Approved → Scheduled → Sent → Archived. Approve a post to indicate it's ready to broadcast.</div>
+      </div>
+    </div>
+
+    <h3>Channel variants — one post, 20 channels</h3>
+
+    <p>After creating a post, open it and switch to the <span class="ui-label tab">Channel Variants</span> tab. You'll see a tab for each supported channel. Click <span class="ui-label button">Generate variants</span> to let the system create a version for every channel at once, adapted to each platform's tone, character limit, and format.</p>
+
+    <p>The 20 channels are organized into four groups:</p>
+
+    <table>
+      <tr><th>Group</th><th>Channels</th><th>How they work</th></tr>
+      <tr>
+        <td><strong>Direct Posts</strong></td>
+        <td>Instagram, Facebook, TikTok, Twitter/X, Threads, Bluesky</td>
+        <td>Connected via API credentials. Click Broadcast to post automatically.</td>
+      </tr>
+      <tr>
+        <td><strong>Event Platforms</strong></td>
+        <td>Eventbrite, Luma, Dice.fm, Resident Advisor</td>
+        <td>Creates a listing on the platform. Some (Eventbrite, Luma) can be API-connected; others require manual submission with the generated copy.</td>
+      </tr>
+      <tr>
+        <td><strong>Editorial Submissions</strong></td>
+        <td>Funcheap, Foopee, SF Chronicle, SF Station, DoTheBay, SongKick, JamBase, Press</td>
+        <td>Editorial listings and press pitches. Always manual — copy the generated text and submit to the site.</td>
+      </tr>
+      <tr>
+        <td><strong>Email</strong></td>
+        <td>Email List, Ad-hoc Email</td>
+        <td>Email List sends to your Mailchimp/SendGrid connected list. Ad-hoc sends targeted one-off emails to press, VIPs, or specific contacts.</td>
+      </tr>
+    </table>
+
+    <p>Each variant has its own character count (so you don't accidentally send a 500-word tweet), its own status (<code>draft / ready / needs_review / approved</code>), and a save button. Edit each variant independently — the system's generated text is a starting point, not the final word.</p>
+
+    <div class="callout tip">
+      <span class="callout-title">✍️ Character limits are enforced</span>
+      <p>Each channel shows a live character count as you type, and turns red if you exceed the limit. Twitter/X is 280 characters. Bluesky is 300. Threads is 500. Instagram captions can be 2,200 characters but shorter performs better. The system knows all of these — don't worry about memorizing them.</p>
+    </div>
+
+    <!-- BROADCASTING ──────────────────────────────────────────────────────── -->
+    <h2 id="promote-broadcast">Broadcasting</h2>
+
+    <p>Once posts and variants are approved, you broadcast them. Click the <span class="ui-label button">Broadcast</span> button on any post card, or click the main <span class="ui-label button">Broadcast</span> button in the header to open the broadcast modal without a pre-selected post.</p>
+
+    <h3>The broadcast modal</h3>
+
+    <p>The broadcast modal shows all your connected destinations grouped by type, with a readiness indicator for each. You choose:</p>
+    <ul>
+      <li>Which destinations to send to (check the ones you want)</li>
+      <li>When to send — <strong>Now</strong> or <strong>Scheduled</strong> (pick a date and time)</li>
+      <li>Which post to attach (if you opened the modal from the campaign header)</li>
+    </ul>
+
+    <p>Destinations show one of three readiness states:</p>
+
+    <div style="display:flex; flex-direction:column; gap:8px; margin:16px 0; font-family:var(--font-ui); font-size:0.88rem;">
+      <div style="display:flex; align-items:center; gap:12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:10px 14px;">
+        <span style="color:#16a34a; font-weight:700;">✓ Connected</span>
+        <span style="color:#374151;">API credentials are set up. One click to post.</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; background:#fefce8; border:1px solid #fde047; border-radius:6px; padding:10px 14px;">
+        <span style="color:#a16207; font-weight:700;">⚠ Needs auth</span>
+        <span style="color:#374151;">Credentials haven't been set up yet. Go to Settings → Promote to connect this platform.</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:10px 14px;">
+        <span style="color:#1d4ed8; font-weight:700;">ⓘ Manual submission</span>
+        <span style="color:#374151;">No API connection exists for this channel. The system generates the copy; you paste it into the site manually.</span>
+      </div>
+    </div>
+
+    <div class="callout note">
+      <span class="callout-title">📋 Manual destinations still count</span>
+      <p>When you submit a manual destination (like Funcheap or SF Chronicle), Backstage still records that you did it. This is what marks those items as "done" in the Promotion Health checklist. Even though there's no API, the tracking is real.</p>
+    </div>
+
+    <!-- PROMOTION HEALTH ──────────────────────────────────────────────────── -->
+    <h2 id="promote-health">The Promotion Health checklist</h2>
+
+    <p>The <strong>Promotion Health</strong> card on the right side of the campaign overview is a 20-item automated checklist. It gives you a single score (0–100%) showing how complete your promotion is. It's the answer to "what haven't we done yet?"</p>
+
+    <p>The checklist checks these 20 items, in priority order:</p>
+
+    <div style="counter-reset: health-counter; margin:20px 0; font-family:var(--font-ui);">
+      <style>.health-item-doc { display:flex; gap:12px; padding:8px 0; border-bottom:1px solid var(--rule); font-size:0.85rem; align-items:flex-start; }
+      .health-num { width:24px; height:24px; border-radius:50%; background:var(--ink); color:#fff; display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:700; flex-shrink:0; margin-top:2px; }
+      .health-label-doc { font-weight:600; color:var(--ink); }
+      .health-detail-doc { color:var(--muted); font-size:0.8rem; }</style>
+
+      <div class="health-item-doc"><div class="health-num">1</div><div><div class="health-label-doc">Panic event page published</div><div class="health-detail-doc">The public event page is live. This is always the first step.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">2</div><div><div class="health-label-doc">Approved flyer exists</div><div class="health-detail-doc">At least one asset of type "flyer" with status "approved" is in the Assets tab.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">3</div><div><div class="health-label-doc">Instagram announcement post approved</div><div class="health-detail-doc">A post has an approved Instagram variant.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">4</div><div><div class="health-label-doc">Facebook event/promo post approved</div><div class="health-detail-doc">A post has an approved Facebook variant.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">5</div><div><div class="health-label-doc">Eventbrite listing prepared</div><div class="health-detail-doc">A broadcast to Eventbrite has been created.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">6</div><div><div class="health-label-doc">Luma listing prepared</div><div class="health-detail-doc">A broadcast to Luma has been created.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">7</div><div><div class="health-label-doc">Funcheap submitted</div><div class="health-detail-doc">Manually submitted to Funcheap (recorded in Backstage).</div></div></div>
+      <div class="health-item-doc"><div class="health-num">8</div><div><div class="health-label-doc">Foopee submitted</div><div class="health-detail-doc">Manually submitted to Foopee.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">9</div><div><div class="health-label-doc">Press email prepared</div><div class="health-detail-doc">A post has an approved "Press" channel variant.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">10</div><div><div class="health-label-doc">Email blast scheduled</div><div class="health-detail-doc">A broadcast to the email list has been created.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">11</div><div><div class="health-label-doc">At least one marketing post created</div><div class="health-detail-doc">The campaign has at least one post (any status).</div></div></div>
+      <div class="health-item-doc"><div class="health-num">12</div><div><div class="health-label-doc">Ticket goal set</div><div class="health-detail-doc">A numeric ticket target has been entered in the campaign settings.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">13</div><div><div class="health-label-doc">SF Chronicle pitch sent</div><div class="health-detail-doc">Manually pitched to the SF Chronicle events section.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">14</div><div><div class="health-label-doc">SF Station listing submitted</div><div class="health-detail-doc">Submitted to SFStation.com.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">15</div><div><div class="health-label-doc">DoTheBay listing submitted</div><div class="health-detail-doc">Submitted to DoTheBay.com.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">16</div><div><div class="health-label-doc">SongKick listing submitted</div><div class="health-detail-doc">Listed on SongKick.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">17</div><div><div class="health-label-doc">JamBase listing submitted</div><div class="health-detail-doc">Listed on JamBase.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">18</div><div><div class="health-label-doc">Ad-hoc press / VIP emails sent</div><div class="health-detail-doc">Targeted emails sent to press, VIPs, or specific contacts.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">19</div><div><div class="health-label-doc">Day-before reminder scheduled</div><div class="health-detail-doc">A broadcast is scheduled within 36 hours before the show date.</div></div></div>
+      <div class="health-item-doc"><div class="health-num">20</div><div><div class="health-label-doc">Band assets collected</div><div class="health-detail-doc">At least one approved band photo or logo is in the Assets tab.</div></div></div>
+    </div>
+
+    <p>The checklist shows the first 5 items by default. Click <span class="ui-label button secondary">View full checklist</span> to see all 20. Items are color-coded: ✅ done (green), ⚠️ warn (yellow), ❌ missing (red/grey).</p>
+
+    <!-- PROMOTE WORKFLOW ──────────────────────────────────────────────────── -->
+    <h2 id="promote-workflow">The promotion workflow, step by step</h2>
+
+    <div class="checklist">
+      <div class="checklist-title">Promotion Campaign Checklist</div>
+      <ul>
+        <li>Confirm event is at <strong>Needs Assets</strong> status or beyond</li>
+        <li>Upload flyer to the event's Assets tab — approve it</li>
+        <li>Upload band photos and logo — approve them</li>
+        <li>Go to Promote → open this event's campaign</li>
+        <li>Set a ticket goal (the target number to sell)</li>
+        <li>Create an Announcement post — write the master text, attach the flyer</li>
+        <li>Open the post → Channel Variants → click Generate variants</li>
+        <li>Review each variant — edit as needed, especially Twitter (280 chars)</li>
+        <li>Mark each variant as Approved when it's ready</li>
+        <li>Click Broadcast → select Direct Posts (Instagram, Facebook) → Send now</li>
+        <li>Create Eventbrite and Luma listings via Broadcast → Event Platforms</li>
+        <li>Manually submit to Funcheap, Foopee, DoTheBay, SFStation, SF Chronicle</li>
+        <li>Create a second post for the email blast — write email-specific copy</li>
+        <li>Schedule the email broadcast</li>
+        <li>Create a "Day-before reminder" post — schedule it for 24 hours before show time</li>
+        <li>Check Promotion Health — aim for 80%+ before the week of the show</li>
+      </ul>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">💡 Timing your posts</span>
+      <p>A good promotion cadence for a ticketed show: <strong>4–6 weeks out</strong> — announce on social + Eventbrite/Luma; <strong>2 weeks out</strong> — email blast to list; <strong>1 week out</strong> — push editorial submissions (Funcheap, DoTheBay, etc.); <strong>24 hours out</strong> — day-before reminder on all channels; <strong>day of</strong> — "Doors tonight" post on Instagram/Facebook.</p>
+    </div>
+
+    <!-- CONNECTING PLATFORMS ─────────────────────────────────────────────── -->
+    <h2 id="promote-setup">Connecting platforms (admin)</h2>
+
+    <p>To enable direct posting, a venue admin needs to connect credentials for each platform. Go to <strong>Settings → Promote</strong> in the sidebar. Each platform shows its connection status and the fields needed to connect it.</p>
+
+    <table>
+      <tr><th>Platform</th><th>What you need</th><th>Notes</th></tr>
+      <tr><td><strong>Instagram</strong></td><td>Facebook Page token (Instagram is managed via Facebook's API)</td><td>Requires a Facebook Business account connected to the Instagram page</td></tr>
+      <tr><td><strong>Facebook</strong></td><td>Facebook Page access token + Page ID</td><td>Token must have <code>pages_manage_posts</code> permission</td></tr>
+      <tr><td><strong>TikTok</strong></td><td>TikTok Content API credentials</td><td>Requires TikTok for Business account</td></tr>
+      <tr><td><strong>Eventbrite</strong></td><td>Eventbrite API key + Organization ID</td><td>Creates the listing automatically on broadcast</td></tr>
+      <tr><td><strong>Luma</strong></td><td>Luma API key</td><td>Creates the Luma event automatically on broadcast</td></tr>
+      <tr><td><strong>Email (Mailchimp)</strong></td><td>Mailchimp API key + Audience ID</td><td>Sends to your subscribed list</td></tr>
+      <tr><td><strong>Email (SendGrid)</strong></td><td>SendGrid API key + list ID</td><td>Alternative to Mailchimp</td></tr>
+    </table>
+
+    <div class="callout warn">
+      <span class="callout-title">🔑 Credentials are venue-level</span>
+      <p>Promote credentials are set once per venue and apply to all events. They are stored securely and never displayed in the UI after they're saved (only a "connected" or "not connected" indicator is shown). If a token expires, broadcasting to that platform will fail — the health checklist will show warnings for any destinations that couldn't be reached.</p>
+    </div>
+
+  </div><!-- /book-content -->
+</div><!-- /chapter 4 -->
+
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- PART V: TICKETING                                                           -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<div class="part-break" id="ticketing-part">
+  <div class="part-num">Part V</div>
+  <h2>In-House Ticketing</h2>
+  <p>Sell tickets directly through Backstage, scan QR codes at the door, issue comps, and track every transaction — no third-party platform required.</p>
+</div>
+
+<div id="ticketing" class="chapter-page">
+  <div class="chapter-hero">
+    <span class="chapter-num">Chapter 5</span>
+    <h1>In-House Ticketing</h1>
+    <p class="lead">The venue owns the ticket, the token, and the audit trail. Buyers pay through Stripe or Square's hosted page — card data never touches Backstage. Everything else — inventory, QR codes, door scanning, comps, and refunds — lives here.</p>
+  </div>
+
+  <div class="book-content">
+
+    <h2 id="ticketing-modes">External vs. in-house</h2>
+
+    <p>Every event starts in <strong>External</strong> ticketing mode — meaning if someone clicks "Buy Tickets" on the public event page, they're sent to whatever URL you specify (TIXR, Eventbrite, a direct Stripe link, etc.).</p>
+
+    <p>When you switch to <strong>In-house</strong> mode, the system takes over: it shows a live ticket purchase form directly on the event page, handles payment, sends QR-code tickets by email, and enables the door scanner.</p>
+
+    <p>To switch modes, open the event workspace → <span class="ui-label tab">Ticketing</span> tab → choose the mode and click <span class="ui-label button">Save ticketing mode</span>.</p>
+
+    <div class="two-col">
+      <div style="background:#fff; border:1px solid var(--rule); border-radius:var(--radius); padding:16px 20px;">
+        <h4 style="margin-top:0">External mode</h4>
+        <p style="font-size:0.88rem; font-family:var(--font-ui); margin:0;">Enter a ticket page URL and the platform name. That's it. The public page shows a "Buy Tickets" button pointing to that URL. All sales, refunds, and reporting are handled by the external platform.</p>
+      </div>
+      <div style="background:#fff; border:1px solid #fbd0a8; border-left:4px solid var(--brand); border-radius:var(--radius); padding:16px 20px;">
+        <h4 style="margin-top:0">In-house mode</h4>
+        <p style="font-size:0.88rem; font-family:var(--font-ui); margin:0;">Full Backstage ticketing. You control the inventory, pricing, comps, scanner links, and reporting. Requires Stripe or Square to be configured in Admin → Payments.</p>
+      </div>
+    </div>
+
+    <div class="callout note">
+      <span class="callout-title">🚀 First time switching to in-house</span>
+      <p>The first time you switch an event to in-house mode, the system automatically seeds a default ticket type (<strong>General Admission</strong>), a small comp allocation, and a <strong>Door</strong> scanner link — so you're not starting from zero. Edit or delete these defaults as needed.</p>
+    </div>
+
+    <!-- TICKET TYPES ──────────────────────────────────────────────────────── -->
+    <h2 id="ticket-types">Setting up ticket types (tiers)</h2>
+
+    <p>Ticket types are your sellable tiers — General Admission, VIP, Early Bird, etc. Each has its own price, inventory count, sales window, and status. You can have as many tiers as you need.</p>
+
+    <p>Click the <span class="ui-label button">+</span> button next to <strong>Ticket types</strong> to add one:</p>
+
+    <div class="field-ref">
+      <div class="field-ref-title">Ticket Type Fields</div>
+      <div class="field-row">
+        <div class="field-name">Name</div>
+        <div class="field-desc">What buyers see on the purchase form. e.g. "General Admission", "VIP", "Early Bird".</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Price (USD)</div>
+        <div class="field-desc">The purchase price in dollars. Enter 0 for free tickets. This gets stored as cents internally to avoid float rounding.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Quantity</div>
+        <div class="field-desc">Total inventory for this tier. The system tracks sold + active holds and prevents overselling.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Status</div>
+        <div class="field-desc">Draft → On Sale → Paused → Sold Out → Closed. Set to <strong>On Sale</strong> when ready to open sales.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Sales start</div>
+        <div class="field-desc">Optional. When ticket sales open for this tier. Leave blank to make it available immediately once status is On Sale.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Sales end</div>
+        <div class="field-desc">Optional. When sales close. Use to create advance-only pricing (e.g. "Advance closes night of show at 6pm").</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Description</div>
+        <div class="field-desc">Optional. Shown to buyers. Use for VIP perks, early entry details, etc.</div>
+      </div>
+    </div>
+
+    <h3>Tier status explained</h3>
+
+    <table>
+      <tr><th>Status</th><th>What it means</th><th>Visible to buyers?</th></tr>
+      <tr><td><strong>Draft</strong></td><td>Being set up — not yet for sale</td><td>No</td></tr>
+      <tr><td><strong>On Sale</strong></td><td>Available for purchase</td><td>Yes, with live availability count</td></tr>
+      <tr><td><strong>Paused</strong></td><td>Temporarily suspended</td><td>No (hidden from purchase form)</td></tr>
+      <tr><td><strong>Sold Out</strong></td><td>All inventory sold (can be system-set or manual)</td><td>Yes, shown as sold out</td></tr>
+      <tr><td><strong>Closed</strong></td><td>Sales window ended</td><td>No</td></tr>
+    </table>
+
+    <!-- LIVE DASHBOARD ────────────────────────────────────────────────────── -->
+    <h2 id="ticketing-dashboard">The live sales dashboard</h2>
+
+    <p>At the top of the Ticketing tab, four summary stats update in real time:</p>
+
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:20px 0; font-family:var(--font-ui);">
+      <div style="background:#fff; border:1px solid var(--rule); border-radius:var(--radius); padding:16px; text-align:center;">
+        <div style="font-size:1.5rem; font-weight:700; color:var(--ink);">—</div>
+        <div style="font-size:0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-top:4px;">Sold</div>
+        <div style="font-size:0.75rem; color:var(--muted); margin-top:4px;">Paid tickets issued</div>
+      </div>
+      <div style="background:#fff; border:1px solid var(--rule); border-radius:var(--radius); padding:16px; text-align:center;">
+        <div style="font-size:1.5rem; font-weight:700; color:var(--ink);">—</div>
+        <div style="font-size:0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-top:4px;">Available</div>
+        <div style="font-size:0.75rem; color:var(--muted); margin-top:4px;">Remaining inventory</div>
+      </div>
+      <div style="background:#fff; border:1px solid var(--rule); border-radius:var(--radius); padding:16px; text-align:center;">
+        <div style="font-size:1.5rem; font-weight:700; color:var(--ink);">—</div>
+        <div style="font-size:0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-top:4px;">Redeemed</div>
+        <div style="font-size:0.75rem; color:var(--muted); margin-top:4px;">Scanned at door / issued</div>
+      </div>
+      <div style="background:#fff; border:1px solid var(--rule); border-radius:var(--radius); padding:16px; text-align:center;">
+        <div style="font-size:1.5rem; font-weight:700; color:var(--ink);">—</div>
+        <div style="font-size:0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-top:4px;">Gross Sales</div>
+        <div style="font-size:0.75rem; color:var(--muted); margin-top:4px;">Revenue before fees</div>
+      </div>
+    </div>
+
+    <p>Below the stats, the tier table shows the same breakdown per ticket type: sold, comped, available, and revenue. Use this to spot which tiers are moving and which aren't — if VIP is sitting at 0 sold a week out, it might be time to lower the price or fold it into GA.</p>
+
+    <!-- HOW A PURCHASE WORKS ─────────────────────────────────────────────── -->
+    <h2 id="ticketing-purchase">How a ticket purchase works</h2>
+
+    <p>Understanding what happens when a buyer purchases a ticket helps you troubleshoot issues and answer customer questions:</p>
+
+    <ol>
+      <li>Buyer opens the public event page and sees the in-house purchase form with available tiers and live inventory.</li>
+      <li>Buyer clicks "Buy" — Backstage creates a <strong>pending order</strong> with a <strong>15-minute hold</strong> on the inventory. This prevents two buyers from buying the last ticket simultaneously.</li>
+      <li>Buyer is redirected to the <strong>payment provider's hosted page</strong> (Stripe Checkout or Square) to enter card details. <em>Card data never touches Backstage.</em></li>
+      <li>After payment, the provider sends a <strong>webhook</strong> to Backstage. Backstage verifies the signature, then issues the tickets and sends each holder a QR code email.</li>
+      <li>The 15-minute hold on inventory is released and replaced by the actual sold quantity.</li>
+    </ol>
+
+    <div class="callout warn">
+      <span class="callout-title">⏱️ The 15-minute hold window</span>
+      <p>If a buyer starts checkout but doesn't complete payment, their hold on the inventory expires after 15 minutes and the tickets become available again. They'll need to start over if they return after the window. This means your "Available" count might temporarily look lower than it actually is during busy sale periods.</p>
+    </div>
+
+    <!-- COMP TICKETS ─────────────────────────────────────────────────────── -->
+    <h2 id="ticketing-comps">Comp tickets</h2>
+
+    <p>Comps are free tickets issued directly — no payment provider involved. You issue them from the <strong>Comp tickets</strong> section of the Ticketing tab.</p>
+
+    <p>To issue comps:</p>
+    <ol>
+      <li>Click the <span class="ui-label button">+</span> next to <strong>Comp tickets</strong></li>
+      <li>Choose the ticket type (tier), quantity, and optionally a holder name and email</li>
+      <li>Click <span class="ui-label button">Issue comps</span></li>
+    </ol>
+
+    <p>If you enter an email address, the QR ticket is immediately sent to that address. If no email is entered, the ticket codes appear on screen so you can share them manually.</p>
+
+    <div class="callout tip">
+      <span class="callout-title">💡 Comps from the Guest List</span>
+      <p>You can also issue comps directly from the Guest List tab. Any guest with an email address has an <span class="ui-label button">Issue comp</span> button next to their entry. This is the fastest way to handle "the band put John on the list" situations — one click issues and emails a QR ticket.</p>
+    </div>
+
+    <!-- ISSUED TICKETS ────────────────────────────────────────────────────── -->
+    <h2 id="ticketing-issued">Managing issued tickets</h2>
+
+    <p>The <strong>Issued tickets</strong> section shows every ticket that has been issued — paid or comp. Each row shows the ticket code, holder name and email, tier, and current status.</p>
+
+    <table>
+      <tr><th>Status</th><th>What it means</th><th>Actions available</th></tr>
+      <tr><td><strong>Valid</strong></td><td>Issued and not yet scanned</td><td>View QR page · Resend email · Void</td></tr>
+      <tr><td><strong>Scanned in</strong></td><td>Successfully scanned at the door — holder is inside</td><td>View QR page (for reference)</td></tr>
+      <tr><td><strong>Void</strong></td><td>Invalidated — will not admit at door</td><td>View only</td></tr>
+    </table>
+
+    <p><strong>Resend</strong> — sends the ticket email again to the holder's email address. Use this when someone says "I never got my ticket." Only available if a holder email is set and the ticket is not voided.</p>
+
+    <p><strong>Void</strong> — invalidates the ticket immediately. Use for fraudulent tickets, duplicate issuances, or when someone's refund is processed but the webhook didn't clean it up automatically. Voided tickets show as "Void" at the door scanner — not "Redeemed."</p>
+
+    <!-- CANCEL EVENT REFUNDS ─────────────────────────────────────────────── -->
+    <h2 id="ticketing-refund">Cancel-event refunds</h2>
+
+    <p>At the bottom of the Ticketing tab, in the <strong>Cancel &amp; refund</strong> section, there's a <span class="ui-label button" style="background:#dc2626; border-color:#dc2626;">Refund all orders</span> button. This is the cancel-event path — it:</p>
+
+    <ul>
+      <li>Issues refunds to every paid order through the original payment provider</li>
+      <li>Voids all issued tickets for the event</li>
+      <li>Marks all orders as refunded</li>
+    </ul>
+
+    <div class="callout danger">
+      <span class="callout-title">⛔ This cannot be undone</span>
+      <p>"Refund all orders" is the nuclear option — it refunds every purchase for the show in one go. Only use it when the event is definitively cancelled and all ticket buyers need to be refunded. Partial refunds (for individual tickets or orders) are not yet supported through the interface — contact the technical team if you need selective refunds.</p>
+    </div>
+
+    <!-- SCANNER LINKS ────────────────────────────────────────────────────── -->
+    <h2 id="ticketing-scanner">Door scanner links</h2>
+
+    <p>Scanner links are how door staff access the QR scanner without needing a Backstage login. Each link is a secret URL — anyone with the URL can scan tickets for that event.</p>
+
+    <h3>Managing scanner links</h3>
+
+    <table>
+      <tr><th>Action</th><th>When to use it</th></tr>
+      <tr><td><strong>Create link</strong></td><td>Before every show that uses in-house ticketing. Label it with the entrance (e.g. "Main Door", "Side Entrance", "VIP Entry").</td></tr>
+      <tr><td><strong>Show link</strong></td><td>If you need to share the link URL with a different door person or open it on another device.</td></tr>
+      <tr><td><strong>Generate link</strong></td><td>Creates a fresh secret for an existing link (without creating a new row). Use if you think the previous secret was shared with the wrong person.</td></tr>
+      <tr><td><strong>Revoke</strong></td><td>Permanently disables this link. Anyone using it will immediately lose scanner access. Use if a door person leaves mid-event or a device is compromised.</td></tr>
+    </table>
+
+    <div class="callout note">
+      <span class="callout-title">📌 PIN protection</span>
+      <p>When creating a scanner link, you can optionally set a PIN. Door staff will need to enter the PIN when they open the scanner URL. This adds a layer of protection if the URL is accidentally shared — knowing the URL alone isn't enough.</p>
+    </div>
+
+    <!-- PAYMENT SETUP ────────────────────────────────────────────────────── -->
+    <h2 id="ticketing-payments">Payment provider setup (admin)</h2>
+
+    <p>Before in-house ticketing can accept real payments, a venue admin must configure the payment provider in <strong>Admin → Payments</strong>. Two providers are supported:</p>
+
+    <table>
+      <tr><th>Provider</th><th>Requires</th><th>Notes</th></tr>
+      <tr><td><strong>Stripe</strong></td><td><code>STRIPE_SECRET_KEY</code> + <code>STRIPE_WEBHOOK_SECRET</code></td><td>Uses Stripe Checkout hosted page. Webhooks must be registered in the Stripe dashboard pointing to <code>/api/webhooks/stripe</code>.</td></tr>
+      <tr><td><strong>Square</strong></td><td><code>SQUARE_ACCESS_TOKEN</code> + <code>SQUARE_LOCATION_ID</code> + <code>SQUARE_WEBHOOK_SIGNATURE_KEY</code></td><td>Uses Square hosted checkout. Webhook URL must be registered in the Square developer dashboard.</td></tr>
+    </table>
+
+    <p>Secret keys are stored in the server's <code>.env</code> file — they are never stored in the database and never shown in the UI. The Admin → Payments screen shows only whether each provider's keys are present (✅ or ❌), not the values themselves.</p>
+
+    <div class="callout tip">
+      <span class="callout-title">💡 Which provider should we use?</span>
+      <p>Both Stripe and Square work reliably. Stripe tends to have better documentation and developer tooling. Square is better if you're already using Square for your bar POS. Only one provider is active at a time — switching mid-event isn't recommended, as in-flight orders use whichever provider was active when they were created.</p>
+    </div>
+
+    <div class="checklist">
+      <div class="checklist-title">In-House Ticketing Setup Checklist</div>
+      <ul>
+        <li>Admin → Payments: confirm active provider + keys are set (both show ✅)</li>
+        <li>Register the webhook URL with your payment provider</li>
+        <li>Event → Ticketing tab: switch mode to "Sell tickets here"</li>
+        <li>Create ticket types (General Admission, VIP, etc.) with prices and quantities</li>
+        <li>Set each ticket type to "On Sale"</li>
+        <li>Publish the event page so the purchase form appears publicly</li>
+        <li>Test with a $0 or $1 ticket before opening sales for real</li>
+        <li>Before doors: create a scanner link (copy the URL immediately)</li>
+        <li>Open the scanner URL on the door device and confirm it loads</li>
+        <li>Issue any comps before doors open</li>
+      </ul>
+    </div>
+
+  </div><!-- /book-content -->
+</div><!-- /chapter 5 -->
+
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- PART VI: ADMIN & USER MANAGEMENT                                            -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<div class="part-break" id="admin-part">
+  <div class="part-num">Part VI</div>
+  <h2>Admin &amp; User Management</h2>
+  <p>Managing who has access to Backstage, what they can do, and how to keep the system organized behind the scenes.</p>
+</div>
+
+<div id="admin" class="chapter-page">
+  <div class="chapter-hero">
+    <span class="chapter-num">Chapter 6</span>
+    <h1>Admin &amp; User Management</h1>
+    <p class="lead">Backstage's Admin section is for venue managers and owners. It's where you set up login accounts, manage the staff roster, build event templates, maintain the contract library, and configure payments.</p>
+  </div>
+
+  <div class="book-content">
+
+    <h2 id="admin-overview">The Admin section</h2>
+
+    <p>Navigate to <strong>Admin</strong> in the left sidebar. You'll see six tabs:</p>
+
+    <table>
+      <tr><th>Tab</th><th>What you manage here</th></tr>
+      <tr><td><strong>Users</strong></td><td>Login accounts — the people who sign into Backstage</td></tr>
+      <tr><td><strong>Duplicates</strong></td><td>Detect and merge duplicate user accounts or contacts</td></tr>
+      <tr><td><strong>Staff</strong></td><td>The employee roster — the people who work your shows (separate from login accounts)</td></tr>
+      <tr><td><strong>Templates</strong></td><td>Event templates with pre-built task checklists and run sheet schedules</td></tr>
+      <tr><td><strong>Contracts</strong></td><td>The contract clause library and template manager</td></tr>
+      <tr><td><strong>Payments</strong></td><td>Payment provider configuration (Stripe or Square)</td></tr>
+    </table>
+
+    <div class="callout note">
+      <span class="callout-title">🔐 Admin-only area</span>
+      <p>The Admin section is only visible to users with the <code>venue_admin</code> role. If you don't see it in the sidebar, your account doesn't have admin access. Ask a venue admin to grant it.</p>
+    </div>
+
+    <!-- USERS ──────────────────────────────────────────────────────────────── -->
+    <h2 id="admin-users">Managing login accounts</h2>
+
+    <p>The <strong>Users</strong> tab shows everyone who has a Backstage account. There are two ways to create an account: a venue admin creates it directly, or someone requests access and an admin approves it.</p>
+
+    <h3>Creating a user</h3>
+
+    <p>Fill in the Create User form at the bottom of the Users tab:</p>
+
+    <div class="field-ref">
+      <div class="field-ref-title">Create User Fields</div>
+      <div class="field-row">
+        <div class="field-name">Name</div>
+        <div class="field-desc">The person's full name. This appears throughout the app wherever events are assigned to them.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Email</div>
+        <div class="field-desc">Used for login and for automated notifications. Must be unique.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Role</div>
+        <div class="field-desc">The user's system-level role. Determines what they can see and do. See the Roles quick reference below.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Password</div>
+        <div class="field-desc">Optional. If left blank, the user can sign in via a magic email link or a passkey. They can set a password later from their Account settings.</div>
+      </div>
+    </div>
+
+    <h3>How users sign in</h3>
+
+    <p>Backstage supports three authentication methods — users can use any or all of them:</p>
+
+    <table>
+      <tr><th>Method</th><th>How it works</th><th>Best for</th></tr>
+      <tr><td><strong>Password</strong></td><td>Standard username + password. Set by the admin on account creation, or changed in Account settings.</td><td>Users who prefer traditional login</td></tr>
+      <tr><td><strong>Passkey</strong></td><td>Biometric authentication (Face ID, Touch ID, Windows Hello) stored on the device. No password needed.</td><td>Any modern device — most secure option</td></tr>
+      <tr><td><strong>Email link</strong></td><td>A one-time magic link sent to the user's email. They click it to sign in — no password required.</td><td>Occasional users who don't want to remember a password</td></tr>
+    </table>
+
+    <div class="callout tip">
+      <span class="callout-title">🔑 Passkeys are the best experience</span>
+      <p>Passkeys use your phone's or laptop's built-in biometrics and are more secure than passwords. When a new user logs in for the first time, Backstage prompts them to set up a passkey if they don't have one. Encourage staff to do this — it makes future logins a single tap.</p>
+    </div>
+
+    <h3>Editing a user</h3>
+
+    <p>Click <span class="ui-label button secondary">Edit</span> next to any user to open their edit modal. You can change their name, email, role, and password, and you can see how many passkeys they have registered. You can also manage their email addresses (useful if someone has multiple addresses).</p>
+
+    <h3>Approving access requests</h3>
+
+    <p>If someone clicks "Request Access" on the login page, their request appears at the top of the Users tab as a <strong>Pending access request</strong>. The request shows their name, email, phone, and a "situation" note explaining why they want access.</p>
+
+    <p>To approve: choose a role from the dropdown next to their name, then click <span class="ui-label button">Approve &amp; send link</span>. The system creates their account and emails them a one-time login link. To dismiss (decline): click <span class="ui-label button" style="background:#dc2626; border-color:#dc2626;">Dismiss</span> — this deletes the request.</p>
+
+    <!-- STAFF ROSTER ──────────────────────────────────────────────────────── -->
+    <h2 id="admin-staff">The staff roster</h2>
+
+    <p>The staff roster (Admin → Staff) is different from login accounts. It's the list of <em>employees</em> — bartenders, security, sound techs, door staff, etc. — who get assigned to shifts on events.</p>
+
+    <p>A staff roster entry doesn't need a Backstage login. A bartender who works shows doesn't need to log into Backstage — they just show up for their shift. But if they do have a login (e.g., a sound tech who also manages their own scheduling), you can link their roster entry to their login account.</p>
+
+    <h3>Staff roster fields</h3>
+
+    <div class="field-ref">
+      <div class="field-ref-title">Staff Member Fields</div>
+      <div class="field-row">
+        <div class="field-name">Name</div>
+        <div class="field-desc">Full name. Appears in shift assignments throughout the event workspace.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Pronoun</div>
+        <div class="field-desc">e.g. "they/them", "she/her". Shown as a small label next to the name.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Default role</div>
+        <div class="field-desc">Their primary role (bartender, security, sound, etc.). Pre-fills when you add them to an event shift.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Position</div>
+        <div class="field-desc">Freeform title. e.g. "Head of Security", "Lead Bartender". Shown in the roster table.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Email / Phone</div>
+        <div class="field-desc">Contact info. Shown in the staffing table so managers can reach them night-of.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Hourly rate</div>
+        <div class="field-desc">Their default pay rate. Pre-fills the rate field when they're added to a shift. Used for shift cost estimation.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Hire date</div>
+        <div class="field-desc">Optional. For HR reference and the Google Sheet sync (Staff Contact tab).</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Link to login</div>
+        <div class="field-desc">Associates this roster entry with a Backstage login account. Lets them see their assigned shifts in the app.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Notes</div>
+        <div class="field-desc">Availability constraints, certifications (e.g. "TIPS certified"), allergies, or anything else scheduling managers need to know.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Active</div>
+        <div class="field-desc">Inactive staff don't appear in the shift assignment dropdown — but their past shift history is preserved.</div>
+      </div>
+    </div>
+
+    <div class="callout note">
+      <span class="callout-title">📊 Google Sheet sync</span>
+      <p>The staff roster syncs two-way with the <strong>Staff Contact</strong> tab in the MabEvents Tracker spreadsheet. Changes in either direction reconcile automatically on a 5-minute cron. This means you can manage staff in the sheet or in Backstage — whichever is more convenient.</p>
+    </div>
+
+    <!-- EVENT TEMPLATES ──────────────────────────────────────────────────── -->
+    <h2 id="admin-templates">Event templates</h2>
+
+    <p>Event templates let you pre-build task checklists and run sheet schedules for common show types, so every new booking of that type starts fully organized instead of blank.</p>
+
+    <p>A template belongs to a specific event type and venue. When you create a new event that matches, you can apply the template to instantly populate its task list and schedule.</p>
+
+    <h3>Creating a template</h3>
+
+    <p>Fill in the Create Template form. The two key fields are:</p>
+
+    <p><strong>Checklist</strong> — one task per line. These become tasks in the event's Tasks tab. Example:</p>
+    <div style="background:var(--code-bg); border-radius:6px; padding:12px 16px; font-family:var(--font-mono); font-size:0.83rem; color:var(--ink); margin:12px 0; line-height:1.8;">
+      Confirm headliner booking<br>
+      Get contract signed<br>
+      Approve flyer<br>
+      Publish event page<br>
+      Confirm door staff<br>
+      Print run-of-show packet
+    </div>
+
+    <p><strong>Schedule</strong> — one item per line in the format <code>HH:MM | type | title</code>. These become items in the event's Schedule (Run Sheet) tab. Example:</p>
+    <div style="background:var(--code-bg); border-radius:6px; padding:12px 16px; font-family:var(--font-mono); font-size:0.83rem; color:var(--ink); margin:12px 0; line-height:1.8;">
+      17:00 | load_in | Load-in opens<br>
+      18:00 | soundcheck | Opener soundcheck<br>
+      19:30 | soundcheck | Headliner soundcheck<br>
+      20:00 | doors | Doors open<br>
+      20:30 | set | Opener set<br>
+      21:00 | changeover | Stage changeover<br>
+      21:30 | set | Headliner set<br>
+      23:00 | curfew | Hard curfew
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">💡 Use templates liberally</span>
+      <p>Create a template for every common show format: three-band local show, DJ night, comedy, open mic, etc. The first time you build a template for each format, you save yourself and every future booker from rebuilding the same checklist and run sheet from scratch every time.</p>
+    </div>
+
+  </div><!-- /book-content -->
+</div><!-- /chapter 6 -->
+
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- QUICK REFERENCE: ROLES & WHO DOES WHAT                                     -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<div class="part-break" id="roles-part">
+  <div class="part-num">Quick Reference</div>
+  <h2>Roles &amp; Who Does What</h2>
+  <p>Every user has a role that controls what they can see and do. Here's the complete map.</p>
+</div>
+
+<div id="roles" class="chapter-page">
+  <div class="chapter-hero" style="background: linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%); border-bottom: 4px solid var(--brand);">
+    <span class="chapter-num">Quick Reference</span>
+    <h1>Roles &amp; Who Does What</h1>
+    <p class="lead">Access in Backstage works on two levels: a <em>global role</em> (your account-level access) and per-event roles (what you can do on a specific event you've been invited to). Both combine to determine what you see and what you can change.</p>
+  </div>
+
+  <div class="book-content">
+
+    <h2 id="roles-global">Global roles</h2>
+
+    <p>Every user account has one global role. This is set by a venue admin when the account is created (or when an access request is approved).</p>
+
+    <div style="display:flex; flex-direction:column; gap:16px; margin:24px 0;">
+
+      <!-- venue_admin -->
+      <div style="background:#fff; border:1px solid var(--rule); border-radius:var(--radius); overflow:hidden;">
+        <div style="background:var(--ink); color:#fff; padding:12px 20px; display:flex; align-items:center; gap:12px;">
+          <span style="font-family:var(--font-ui); font-weight:700; font-size:1rem;">Venue Admin</span>
+          <code style="background:rgba(255,255,255,0.15); color:#fff; font-size:0.75rem; padding:2px 8px; border-radius:4px;">venue_admin</code>
+          <span style="margin-left:auto; font-size:0.8rem; opacity:0.6; font-family:var(--font-ui);">Full access</span>
+        </div>
+        <div style="padding:16px 20px; font-family:var(--font-ui); font-size:0.88rem; line-height:1.6;">
+          <p style="margin-bottom:10px; color:var(--muted);">The top-level role. Venue admins can do everything: manage all events, handle all money fields, approve contracts, manage users and staff, edit templates, configure payments.</p>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 24px;">
+            <span>✅ View and edit all events (all venues)</span>
+            <span>✅ Admin section (all tabs)</span>
+            <span>✅ Create, publish, and delete events</span>
+            <span>✅ Manage all login accounts</span>
+            <span>✅ Settlement — view and edit</span>
+            <span>✅ Manage staff roster</span>
+            <span>✅ Contracts — view, manage, approve</span>
+            <span>✅ Edit event templates</span>
+            <span>✅ In-house ticketing management</span>
+            <span>✅ Contract clause library</span>
+            <span>✅ Invite collaborators to events</span>
+            <span>✅ Manage contacts (CRM)</span>
+          </div>
+          <p style="margin-top:10px; color:var(--muted); font-style:italic;">Typical holders: Colleen (venue manager), Tom Watson, ownership</p>
+        </div>
+      </div>
+
+      <!-- global_viewer -->
+      <div style="background:#fff; border:1px solid var(--rule); border-radius:var(--radius); overflow:hidden;">
+        <div style="background:#475569; color:#fff; padding:12px 20px; display:flex; align-items:center; gap:12px;">
+          <span style="font-family:var(--font-ui); font-weight:700; font-size:1rem;">Global Viewer</span>
+          <code style="background:rgba(255,255,255,0.15); color:#fff; font-size:0.75rem; padding:2px 8px; border-radius:4px;">global_viewer</code>
+          <span style="margin-left:auto; font-size:0.8rem; opacity:0.6; font-family:var(--font-ui);">Read-only, all events</span>
+        </div>
+        <div style="padding:16px 20px; font-family:var(--font-ui); font-size:0.88rem; line-height:1.6;">
+          <p style="margin-bottom:10px; color:var(--muted);">Read-only access to every event across all venues. Can see the full picture — including settlement and contracts — but cannot change anything. Ideal for silent partners, accountants, or ownership who want visibility without edit access.</p>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 24px;">
+            <span>✅ View all events (read-only)</span>
+            <span>✅ View settlement data</span>
+            <span>✅ View contracts</span>
+            <span>✅ View public event pages</span>
+            <span>❌ Cannot edit anything</span>
+            <span>❌ No Admin section access</span>
+          </div>
+          <p style="margin-top:10px; color:var(--muted); font-style:italic;">Typical holders: Accountants, silent investors, ownership with read-only access</p>
+        </div>
+      </div>
+
+      <!-- viewer (placeholder global role) -->
+      <div style="background:#fff; border:1px solid var(--rule); border-radius:var(--radius); overflow:hidden;">
+        <div style="background:#6b7280; color:#fff; padding:12px 20px; display:flex; align-items:center; gap:12px;">
+          <span style="font-family:var(--font-ui); font-weight:700; font-size:1rem;">Viewer</span>
+          <code style="background:rgba(255,255,255,0.15); color:#fff; font-size:0.75rem; padding:2px 8px; border-radius:4px;">viewer</code>
+          <span style="margin-left:auto; font-size:0.8rem; opacity:0.6; font-family:var(--font-ui);">Read-only, invited events only</span>
+        </div>
+        <div style="padding:16px 20px; font-family:var(--font-ui); font-size:0.88rem; line-height:1.6;">
+          <p style="margin-bottom:10px; color:var(--muted);">The default role for new accounts. Can only read events they've been specifically invited to. No global visibility, no editing. Essentially a placeholder account until a venue admin grants additional access.</p>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 24px;">
+            <span>✅ Read events they're invited to</span>
+            <span>❌ Cannot see any other events</span>
+            <span>❌ Cannot edit anything</span>
+            <span>❌ No Admin section access</span>
+          </div>
+          <p style="margin-top:10px; color:var(--muted); font-style:italic;">Typical holders: New accounts pending role assignment</p>
+        </div>
+      </div>
+
+    </div>
+
+    <h2 id="roles-event">Per-event collaborator roles</h2>
+
+    <p>When a venue admin or event owner invites someone to a specific event (via the <span class="ui-label tab">Invites</span> tab), they assign them an event-level role. This is separate from and independent of their global role.</p>
+
+    <p>A <code>viewer</code> global account can be invited as a <code>promoter</code> on one event and have full promoter access to that specific event — while still seeing nothing else in the system. This is the permission model for external producers and bands.</p>
+
+    <!-- Role table -->
+    <div style="overflow-x:auto; margin:24px 0;">
+      <table style="min-width:700px;">
+        <thead>
+          <tr>
+            <th>Event Role</th>
+            <th>Read event</th>
+            <th>Edit event</th>
+            <th>Lineup / Schedule</th>
+            <th>Tasks / Open items</th>
+            <th>Guest list</th>
+            <th>Assets</th>
+            <th>Contracts</th>
+            <th>Settlement</th>
+            <th>Ticketing</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Event Owner</strong><br><code style="font-size:0.72rem;">event_owner</code></td>
+            <td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅ manage</td><td>✅ manage + approve</td><td>✅ view + edit</td><td>✅ manage</td>
+          </tr>
+          <tr>
+            <td><strong>Promoter</strong><br><code style="font-size:0.72rem;">promoter</code></td>
+            <td>✅</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td><td>✅ view only</td><td>❌</td><td>❌</td>
+          </tr>
+          <tr>
+            <td><strong>Band / Artist</strong><br><code style="font-size:0.72rem;">band / artist</code></td>
+            <td>✅</td><td>❌</td><td>❌</td><td>✅ assigned tasks only</td><td>❌</td><td>✅ upload only</td><td>❌</td><td>❌</td><td>❌</td>
+          </tr>
+          <tr>
+            <td><strong>Designer</strong><br><code style="font-size:0.72rem;">designer</code></td>
+            <td>✅</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅ upload + manage</td><td>❌</td><td>❌</td><td>❌</td>
+          </tr>
+          <tr>
+            <td><strong>Staff</strong><br><code style="font-size:0.72rem;">staff</code></td>
+            <td>✅</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td>
+          </tr>
+          <tr>
+            <td><strong>Viewer</strong><br><code style="font-size:0.72rem;">viewer</code></td>
+            <td>✅</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout note">
+      <span class="callout-title">📌 venue_admin always has full event access</span>
+      <p>A user with the <code>venue_admin</code> global role automatically has full access to every event — the same as <code>event_owner</code> — without needing an invite. This means Colleen can manage any event regardless of who created it.</p>
+    </div>
+
+    <h2 id="roles-scenarios">Practical scenarios</h2>
+
+    <h3>A promoter producing a show</h3>
+    <p>Create a <code>viewer</code> account for them, then invite them to their event as <code>promoter</code>. They can manage the lineup, guest list, tasks, and schedule for their show — and view the contract — but they can't edit the event's financial details, access settlement, or see any other events on the system.</p>
+
+    <h3>A band uploading promo materials</h3>
+    <p>Invite the band's manager (or a band member) to the event as <code>band</code>. They can upload flyers, press photos, and social images to the Assets tab, and they can see tasks assigned to them. They can't see the money, the guest list, or the contract.</p>
+
+    <h3>A graphic designer submitting the flyer</h3>
+    <p>Invite them as <code>designer</code>. They can upload and manage assets — upload a draft, mark it ready, replace it with the final version. They see nothing else.</p>
+
+    <h3>A floor manager on the night of the show</h3>
+    <p>Invite them as <code>staff</code>. They can check the run sheet, manage the guest list, and update tasks. They can't change the event details, access contracts, or view settlement. This is the right role for a door manager or production coordinator who needs operational access without financial access.</p>
+
+    <h3>An accountant who needs to see the books</h3>
+    <p>Assign them the <code>global_viewer</code> global role. They can see every event's settlement and contracts across all venues — read-only. They don't need to be invited to each event individually.</p>
+
+    <hr>
+
+    <!-- Quick reference card -->
+    <div style="background:var(--ink); color:#fff; border-radius:var(--radius); padding:24px 28px; margin:32px 0; font-family:var(--font-ui);">
+      <div style="font-size:0.75rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--brand); margin-bottom:16px;">Quick Reference — Assigning the right role</div>
+      <div style="display:grid; gap:10px; font-size:0.88rem;">
+        <div style="display:flex; gap:12px; align-items:flex-start; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+          <span style="background:var(--brand); color:#fff; padding:2px 8px; border-radius:4px; font-size:0.72rem; font-weight:700; flex-shrink:0; white-space:nowrap; margin-top:2px;">venue_admin</span>
+          <span style="color:rgba(255,255,255,0.75);">Full-time management staff who need to do everything — Colleen, Tom, ownership managers</span>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+          <span style="background:#475569; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.72rem; font-weight:700; flex-shrink:0; white-space:nowrap; margin-top:2px;">global_viewer</span>
+          <span style="color:rgba(255,255,255,0.75);">Read-only observers across all events — accountants, silent investors, absentee owners</span>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+          <span style="background:#6b7280; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.72rem; font-weight:700; flex-shrink:0; white-space:nowrap; margin-top:2px;">event_owner</span>
+          <span style="color:rgba(255,255,255,0.75);">The person responsible for a specific show — same power as venue_admin for their own event</span>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+          <span style="background:#d97706; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.72rem; font-weight:700; flex-shrink:0; white-space:nowrap; margin-top:2px;">promoter</span>
+          <span style="color:rgba(255,255,255,0.75);">External promoters running a show — can manage lineup, schedule, guest list; can't touch money or contracts</span>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+          <span style="background:#059669; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.72rem; font-weight:700; flex-shrink:0; white-space:nowrap; margin-top:2px;">band / artist</span>
+          <span style="color:rgba(255,255,255,0.75);">Performers or their managers — upload promo assets and see their assigned tasks only</span>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+          <span style="background:#7c3aed; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.72rem; font-weight:700; flex-shrink:0; white-space:nowrap; margin-top:2px;">designer</span>
+          <span style="color:rgba(255,255,255,0.75);">Graphic designers — upload and manage assets only; no access to operational details</span>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+          <span style="background:#0d9488; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.72rem; font-weight:700; flex-shrink:0; white-space:nowrap; margin-top:2px;">staff</span>
+          <span style="color:rgba(255,255,255,0.75);">Floor managers, production coordinators — run sheet + guest list + tasks; no financial access</span>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start;">
+          <span style="background:#374151; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.72rem; font-weight:700; flex-shrink:0; white-space:nowrap; margin-top:2px;">viewer</span>
+          <span style="color:rgba(255,255,255,0.75);">Read-only on events they're specifically invited to — the default for new accounts with limited access</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /book-content -->
+</div><!-- /roles quick reference -->
+
 
 <!-- Footer -->
 <footer style="background: var(--sidebar-bg); color: rgba(255,255,255,0.4); text-align:center; padding:32px; font-family:var(--font-ui); font-size:0.8rem; margin-top:0;">
