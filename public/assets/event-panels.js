@@ -86,7 +86,7 @@ class TaskList extends HTMLElement {
       { label: 'Priority', grid: 'minmax(90px, 0.8fr)', cell: (t) => chip(t.priority) },
       { label: 'Details', grid: 'minmax(140px, 2fr)', cell: (t) => esc(t.description || '') },
     ];
-    const editForm = (task) => `<form data-api="/events/${data.event.id}/tasks/${task.id}" data-method="PATCH" class="row-form record-form"><label>Task<input name="title" value="${esc(task.title)}"></label><label>Status${select('status', ['todo','in_progress','blocked','done','canceled'], task.status)}</label><label>Assigned${userSelect(users, task.assigned_user_id)}</label><label>Due<input type="date" name="due_date" value="${esc(task.due_date || '')}"></label><label>Priority${select('priority', ['low','normal','high','urgent'], task.priority)}</label><label>Details<input name="description" value="${esc(task.description || '')}"></label><button>Save</button><button type="button" class="secondary" data-complete="${esc(task.id)}">Done</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
+    const editForm = (task) => `<form data-api="/events/${data.event.id}/tasks/${task.id}" data-method="PATCH" class="row-form record-form"><label>Task<input name="title" value="${esc(task.title)}"></label><label>Status${select('status', ['todo','in_progress','blocked','done','canceled'], task.status)}</label><label>Assigned${userSelect(users, task.assigned_user_id)}</label><label>Due<input type="date" name="due_date" value="${esc(task.due_date || '')}"></label><label>Priority${select('priority', ['low','normal','high','urgent'], task.priority)}</label><label>Details<input name="description" value="${esc(task.description || '')}"></label><button>Save</button><button type="button" class="secondary" data-complete="${esc(task.id)}">Done</button><button type="button" class="small danger" data-delete="${esc(task.id)}">Delete</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
     const addForm = editable ? `<form data-api="/events/${data.event.id}/tasks" data-method="POST" class="row-form" data-add-form hidden><label>Task<input name="title" required placeholder="Confirm door count"></label><label>Assigned${userSelect(users)}</label><label>Due<input type="date" name="due_date"></label><label>Priority${select('priority', ['low','normal','high','urgent'], 'normal')}</label><input type="hidden" name="status" value="todo"><label>Details<input name="description" placeholder="Details"></label><button>Add task</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : '';
     const templates = data.taskTemplates || [];
     const templateDropdown = editable && templates.length > 0
@@ -112,6 +112,16 @@ class TaskList extends HTMLElement {
       await api(form.dataset.api, { method: 'PATCH', body: JSON.stringify(body) });
       await refreshSection(this);
       publish('toast.show', { message: 'Task completed.' });
+    }));
+    $$('[data-delete]', this).forEach((button) => button.addEventListener('click', async () => {
+      if (!confirm('Delete this task? This cannot be undone.')) return;
+      try {
+        await api(`/events/${this.eventData.event.id}/tasks/${button.dataset.delete}`, { method: 'DELETE' });
+        await refreshSection(this);
+        publish('toast.show', { message: 'Task deleted.' });
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
     }));
     $$('[data-tmpl-id]', this).forEach((btn) => btn.addEventListener('click', async () => {
       const tmplId = btn.dataset.tmplId;
