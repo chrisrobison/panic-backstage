@@ -412,9 +412,9 @@ class EventsList extends PanicElement {
 
   render(data) {
     if (!data) return;
-    // Default view hides shows more than two weeks in the past. Undated (TBA)
+    // Default view hides events older than yesterday. Undated (TBA)
     // events are always kept since they have no date to fall behind the cutoff.
-    const cutoff = isoDate(addDays(new Date(), -14));
+    const cutoff = isoDate(addDays(new Date(), -1));
     const all = data.events || [];
     const events = all
       .filter((event) => !this.query || String(event.title).toLowerCase().includes(this.query))
