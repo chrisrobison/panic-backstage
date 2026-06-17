@@ -9,8 +9,17 @@ final class Database
 {
     private PDO $pdo;
 
-    public function __construct()
+    /**
+     * @param PDO|null $pdo  Pre-built connection (multi-tenant path).
+     *                       When null, connects using DB_* environment variables
+     *                       (single-tenant path — existing behavior unchanged).
+     */
+    public function __construct(?PDO $pdo = null)
     {
+        if ($pdo !== null) {
+            $this->pdo = $pdo;
+            return;
+        }
         $host = getenv('DB_HOST') ?: '127.0.0.1';
         $port = getenv('DB_PORT') ?: '3306';
         $name = getenv('DB_NAME') ?: 'panic_backstage';

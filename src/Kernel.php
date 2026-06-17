@@ -11,10 +11,16 @@ final class Kernel
         private readonly Auth $auth
     ) {}
 
-    public static function boot(string $root): self
+    /**
+     * @param Database|null $db  Pre-built database (multi-tenant path; PDO injected
+     *                           from TenantContext). When null, creates a new Database
+     *                           using DB_* environment variables (single-tenant path —
+     *                           existing behavior unchanged).
+     */
+    public static function boot(string $root, ?Database $db = null): self
     {
         Env::load($root . '/.env');
-        return new self($root, new Database(), new Auth());
+        return new self($root, $db ?? new Database(), new Auth());
     }
 
     public function handle(): Response
