@@ -96,6 +96,38 @@ if ($venueFixed > 0) {
     echo "  Venue realigned to room: $venueFixed event(s)\n";
 }
 
+// ── Step 6: assign EVT-N codes to any imported event that had none ─────────
+// Sheet rows whose column A was blank at export time arrive with external_id
+// NULL. Assign the next sequential EVT-N to each so every event has a stable
+// human-readable ID for cross-system referencing. Oldest-first (date ASC, id
+// ASC) keeps codes in roughly chronological order. After this, the cron /
+// sync-mabevents.py pipeline calls app-id-sync.php push-codes to write them
+// back to column A of the Tracker sheet.
+$missing = $pdo->query(
+    "SELECT id, title, date FROM events WHERE external_id IS NULL OR external_id = '' ORDER BY date ASC, id ASC"
+)->fetchAll();
+
+$codesAssigned = 0;
+foreach ($missing as $ev) {
+    $id = (int) $ev['id'];
+    for ($attempt = 0; $attempt < 5; $attempt++) {
+        $maxRow = $pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(external_id, 5) AS UNSIGNED)), 0) FROM events WHERE external_id LIKE 'EVT-%'")->fetchColumn();
+        $code   = 'EVT-' . ((int) $maxRow + 1);
+        try {
+            $stmt = $pdo->prepare("UPDATE events SET external_id = ? WHERE id = ? AND (external_id IS NULL OR external_id = '')");
+            $stmt->execute([$code, $id]);
+            $codesAssigned++;
+            break;
+        } catch (PDOException $e) {
+            // Unique-index collision — retry with the next number.
+        }
+    }
+}
+if ($codesAssigned > 0) {
+    echo "  EVT codes assigned  : $codesAssigned (sheet rows that had no ID in column A)\n";
+    echo "  → run app-id-sync.php push-codes to write these back to the sheet\n";
+}
+
 // ── Report ─────────────────────────────────────────────────────────────────
 $totalEvents = (int) $pdo->query("SELECT COUNT(*) FROM events")->fetchColumn();
 $totalUsers  = (int) $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();

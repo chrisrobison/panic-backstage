@@ -245,6 +245,59 @@ switch ($cmd) {
         break;
     }
 
+    case 'assign-codes': {
+        // Assign the next sequential EVT-N code to every event that currently
+        // has no external_id. This happens when a sheet row has a blank column A
+        // at import time — the importer faithfully copies NULL, and only app-
+        // created events call assignEventCode() automatically.
+        //
+        // Events are processed oldest-first (date ASC, id ASC) so newly-minted
+        // codes appear in roughly chronological order. Each assignment re-reads
+        // the current MAX to stay race-safe even if another process runs
+        // concurrently.  After this completes, run `push-codes` to write the
+        // new codes back to column A of the Tracker sheet.
+
+        $missing = $db->all(
+            "SELECT id, title, date FROM events
+             WHERE external_id IS NULL OR external_id = ''
+             ORDER BY date ASC, id ASC"
+        );
+
+        if (!$missing) {
+            echo "ok: all events already have an EVT code — nothing to assign\n";
+            break;
+        }
+
+        $assigned = 0; $failed = 0;
+        foreach ($missing as $ev) {
+            $id = (int) $ev['id'];
+            $ok = false;
+            for ($attempt = 0; $attempt < 5; $attempt++) {
+                $row  = $db->one("SELECT COALESCE(MAX(CAST(SUBSTRING(external_id, 5) AS UNSIGNED)), 0) AS m FROM events WHERE external_id LIKE 'EVT-%'");
+                $code = 'EVT-' . (((int) ($row['m'] ?? 0)) + 1);
+                try {
+                    $db->run('UPDATE events SET external_id = ? WHERE id = ? AND (external_id IS NULL OR external_id = \'\')', [$code, $id]);
+                    $ok = true;
+                    break;
+                } catch (\Throwable $e) {
+                    // Unique-index collision — another process grabbed that number; retry.
+                }
+            }
+            if ($ok) {
+                $assigned++;
+                echo "  assigned {$code} → event #{$id} ({$ev['date']} — " . mb_substr((string) $ev['title'], 0, 50) . ")\n";
+            } else {
+                $failed++;
+                fwrite(STDERR, "  FAIL: could not assign code for event #{$id}\n");
+            }
+        }
+
+        printf("assign-codes: %d assigned, %d failed (of %d)\n", $assigned, $failed, count($missing));
+        if ($failed > 0) exit(1);
+        echo "  → run 'push-codes' next to write these codes to column A of the sheet\n";
+        break;
+    }
+
     case 'push-codes': {
         // Populate the visible "Event ID" column A with each event's EVT-N code,
         // and relabel its header. Rows are located via the hidden App ID column.
@@ -411,6 +464,6 @@ switch ($cmd) {
 
     default:
         fwrite(STDERR, "unknown command: {$cmd}\n");
-        fwrite(STDERR, "commands: inspect | ensure-column | backfill [--dry-run] | link-imports | push-codes | push <id>...\n");
+        fwrite(STDERR, "commands: inspect | ensure-column | backfill [--dry-run] | link-imports | assign-codes | push-codes | push <id>...\n");
         exit(1);
 }

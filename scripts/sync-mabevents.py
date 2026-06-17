@@ -150,6 +150,16 @@ def backfill_app_ids() -> None:
     if result.returncode != 0:
         print(f"  WARNING: {APPID_PHP.name} backfill exited {result.returncode} (non-fatal)")
 
+def push_codes() -> None:
+    # Write each event's EVT-N code into column A of the Tracker sheet.
+    # import-mabevents.php now assigns codes to any event that lacked one
+    # (sheet rows with a blank column A), so this step propagates those
+    # newly-minted codes back to the sheet immediately after every sync.
+    print(f"→ Pushing EVT codes to sheet column A via {APPID_PHP.name} push-codes …")
+    result = subprocess.run(['php', str(APPID_PHP), 'push-codes'])
+    if result.returncode != 0:
+        print(f"  WARNING: {APPID_PHP.name} push-codes exited {result.returncode} (non-fatal)")
+
 def apply_sql() -> None:
     print(f"→ Applying SQL via {IMPORT_PHP.name} …")
     result = subprocess.run(['php', str(IMPORT_PHP)])
@@ -194,6 +204,7 @@ def main() -> None:
     apply_sql()
     link_imports()      # precise write-back for events just created from the sheet
     backfill_app_ids()  # legacy slug/external_id linking for everything else
+    push_codes()        # write EVT-N codes (including newly assigned ones) to column A
     print("✓ Sync complete.")
 
 if __name__ == '__main__':
