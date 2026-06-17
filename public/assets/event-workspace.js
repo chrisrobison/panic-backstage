@@ -108,6 +108,26 @@ class EventNextAction extends EventBusCard {
 class EventWorkspace extends PanicElement {
   async connect() {
     await this.load();
+    // Keep the page header in sync with any field edits broadcast on the bus
+    // (e.g. title, date, venue, publish toggle).  We patch only the header
+    // elements in-place so the full workspace — tabs, sub-components, scroll
+    // position — is never torn down.
+    subscribe('event.changed', ({ data }) => {
+      this.data = data;
+      this._updateHeader(data);
+    }, this.abort.signal);
+  }
+
+  /** Patch the .event-top header elements without re-rendering the workspace. */
+  _updateHeader(data) {
+    const event = data.event;
+    const isPrivate = event.event_type === 'private_event';
+    const h1 = $('section.event-top h1', this);
+    if (h1) h1.innerHTML = `${esc(event.title)}${isPrivate ? ' <span class="badge-private" title="Private venue rental">🔒</span>' : ''}`;
+    const subtitle = $('section.event-top p.subtle', this);
+    if (subtitle) subtitle.textContent = `${shortDate(eventDate(event))} at ${event.venue_name}`;
+    const publishBtn = $('[data-publish]', this);
+    if (publishBtn) publishBtn.textContent = Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page';
   }
 
   async load() {
