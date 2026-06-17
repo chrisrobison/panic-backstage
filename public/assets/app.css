@@ -2765,6 +2765,22 @@ button.link.danger { color: var(--danger); }
 .action-instructions h4 { margin: 0 0 6px; font-size: 13px; color: var(--promote-accent, #6366f1); display: flex; align-items: center; gap: 6px; }
 .action-instruction-list { margin: 0; padding-left: 18px; }
 .action-instruction-list li { font-size: 13px; color: var(--ink-dim); margin-bottom: 3px; }
+.action-submit-links { display: flex; flex-direction: column; gap: 5px; }
+.action-submit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  color: var(--promote-accent, #6366f1);
+  text-decoration: none;
+  padding: 6px 10px;
+  background: var(--soft, #f5f5f8);
+  border-radius: 6px;
+  transition: background .15s, opacity .15s;
+  word-break: break-all;
+}
+.action-submit-link:hover { background: var(--soft-hover, #eaeaf4); text-decoration: underline; }
+.action-submit-link i { font-size: 11px; flex-shrink: 0; opacity: .75; }
 .action-content-section { margin-bottom: 16px; }
 .action-field { margin-bottom: 14px; }
 .action-field-label {

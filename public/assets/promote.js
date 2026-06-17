@@ -1143,15 +1143,19 @@ class PromoteActionModal extends PanicElement {
         : (Array.isArray(variant?.warnings_json) ? variant.warnings_json : []);
     } catch {}
 
-    // Pick the best form URL from config
-    const formUrl = (
-      config?.submission_url   ||
-      config?.partner_url      ||
-      config?.promoter_url     ||
-      config?.artist_url       ||
-      config?.artist_page_url  ||
-      config?.event_platform_url || ''
-    ).trim();
+    // Collect all submission / platform URLs from config (shown as links in the modal)
+    const urlFieldLabels = {
+      submission_url:     'Submission Form',
+      partner_url:        'Partner Portal',
+      promoter_url:       'Promoter Portal',
+      artist_url:         'Artist Page',
+      artist_page_url:    'Artist Profile',
+      event_platform_url: 'Event Platform',
+    };
+    const submitLinks = Object.entries(urlFieldLabels)
+      .filter(([key]) => config?.[key])
+      .map(([key, label]) => ({ label, url: (config[key] || '').trim() }))
+      .filter(({ url }) => url);
 
     const groupLabel = {
       direct_post:          'Direct Post',
@@ -1178,6 +1182,18 @@ class PromoteActionModal extends PanicElement {
           <ul class="action-instruction-list">
             ${warnings.map((w) => `<li>${esc(String(w))}</li>`).join('')}
           </ul>
+        </div>` : ''}
+
+      ${submitLinks.length ? `
+        <div class="action-field">
+          <div class="action-field-label">Submit To</div>
+          <div class="action-submit-links">
+            ${submitLinks.map(({ label, url }) =>
+              `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="action-submit-link">
+                <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> ${esc(label)}
+              </a>`
+            ).join('')}
+          </div>
         </div>` : ''}
 
       ${noContent ? `
@@ -1222,10 +1238,11 @@ class PromoteActionModal extends PanicElement {
             <button type="button" class="primary" data-send-server>
               <i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Send from events@panicbooking.com
             </button>` : ''}
-          ${can_form && formUrl ? `
-            <a class="button secondary" href="${esc(formUrl)}" target="_blank" rel="noopener">
-              <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Open submission form
-            </a>` : ''}
+          ${submitLinks.map(({ label, url }) =>
+            `<a class="button secondary" href="${esc(url)}" target="_blank" rel="noopener noreferrer">
+              <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> ${esc(label)}
+            </a>`
+          ).join('')}
         </div>
         <p class="action-status-msg" data-action-status></p>
       `}
