@@ -875,6 +875,7 @@ CREATE TABLE `staff_members` (
   `phone` varchar(64) DEFAULT NULL,
   `pronoun` varchar(40) DEFAULT NULL,
   `default_role` enum('manager','security','bartender','barback','door','sound','lighting','stagehand','runner','cleaner','other') NOT NULL DEFAULT 'other',
+  `employment_type` enum('employee','contractor') NOT NULL DEFAULT 'employee',
   `position` varchar(120) DEFAULT NULL,
   `hourly_rate` decimal(10,2) DEFAULT NULL,
   `hire_date` date DEFAULT NULL,

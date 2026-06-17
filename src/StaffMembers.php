@@ -71,14 +71,15 @@ final class StaffMembers extends BaseEndpoint
         [$payload, $error] = $this->payload($request, isCreate: true);
         if ($error) return $error;
         $id = $this->db->insert(
-            'INSERT INTO staff_members (name, email, phone, pronoun, default_role, position, hourly_rate, hire_date, notes, active, user_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO staff_members (name, email, phone, pronoun, default_role, employment_type, position, hourly_rate, hire_date, notes, active, user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $payload['name'],
                 $payload['email'],
                 $payload['phone'],
                 $payload['pronoun'],
                 $payload['default_role'],
+                $payload['employment_type'],
                 $payload['position'],
                 $payload['hourly_rate'],
                 $payload['hire_date'],
@@ -98,13 +99,14 @@ final class StaffMembers extends BaseEndpoint
         [$payload, $error] = $this->payload($request, isCreate: false);
         if ($error) return $error;
         $this->db->run(
-            'UPDATE staff_members SET name=?, email=?, phone=?, pronoun=?, default_role=?, position=?, hourly_rate=?, hire_date=?, notes=?, active=?, user_id=? WHERE id=?',
+            'UPDATE staff_members SET name=?, email=?, phone=?, pronoun=?, default_role=?, employment_type=?, position=?, hourly_rate=?, hire_date=?, notes=?, active=?, user_id=? WHERE id=?',
             [
                 $payload['name'],
                 $payload['email'],
                 $payload['phone'],
                 $payload['pronoun'],
                 $payload['default_role'],
+                $payload['employment_type'],
                 $payload['position'],
                 $payload['hourly_rate'],
                 $payload['hire_date'],
@@ -136,6 +138,10 @@ final class StaffMembers extends BaseEndpoint
         if (!in_array($role, self::ROLES, true)) {
             return [[], Response::json(['error' => 'Invalid default_role'], 422)];
         }
+        $employmentType = (string) $request->body('employment_type', 'employee');
+        if (!in_array($employmentType, ['employee', 'contractor'], true)) {
+            return [[], Response::json(['error' => 'Invalid employment_type'], 422)];
+        }
         $email = trim((string) $request->body('email', ''));
         if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return [[], Response::json(['error' => 'Invalid email'], 422)];
@@ -151,12 +157,13 @@ final class StaffMembers extends BaseEndpoint
         $hireDate = ($hire !== '' && ($ts = strtotime($hire)) !== false) ? date('Y-m-d', $ts) : null;
 
         return [[
-            'name'         => $name,
-            'email'        => $email !== '' ? strtolower($email) : null,
-            'phone'        => trim((string) $request->body('phone', '')) ?: null,
-            'pronoun'      => trim((string) $request->body('pronoun', '')) ?: null,
-            'default_role' => $role,
-            'position'     => trim((string) $request->body('position', '')) ?: null,
+            'name'            => $name,
+            'email'           => $email !== '' ? strtolower($email) : null,
+            'phone'           => trim((string) $request->body('phone', '')) ?: null,
+            'pronoun'         => trim((string) $request->body('pronoun', '')) ?: null,
+            'default_role'    => $role,
+            'employment_type' => $employmentType,
+            'position'        => trim((string) $request->body('position', '')) ?: null,
             'hourly_rate'  => $rate,
             'hire_date'    => $hireDate,
             'notes'        => trim((string) $request->body('notes', '')) ?: null,

@@ -235,11 +235,12 @@ class AdminStaff extends PanicElement {
           </div>
         </div>
         <table class="data-table admin-table">
-          <thead><tr><th>Name</th><th>Default role</th><th>Contact</th><th>Rate</th><th>Hired</th><th>Login</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Default role</th><th>Type</th><th>Contact</th><th>Rate</th><th>Hired</th><th>Login</th><th>Status</th><th></th></tr></thead>
           <tbody>
             ${staff.map((s) => `<tr class="${Number(s.active) ? '' : 'muted-row'}">
               <td><strong>${esc(s.name)}</strong>${s.pronoun ? ` <small class="muted">(${esc(s.pronoun)})</small>` : ''}${s.position ? `<br><small>${esc(s.position)}</small>` : ''}${s.notes ? `<br><small class="muted">${esc(s.notes)}</small>` : ''}</td>
               <td><span class="badge">${esc(titleCase(s.default_role))}</span></td>
+              <td><span class="badge ${s.employment_type === 'contractor' ? 'status-amber' : 'status-blue'}">${esc(titleCase(s.employment_type || 'employee'))}</span></td>
               <td>${s.email ? esc(s.email) : ''}${s.email && s.phone ? '<br>' : ''}${s.phone ? esc(s.phone) : ''}</td>
               <td>${s.hourly_rate ? `$${esc(Number(s.hourly_rate).toFixed(2))}/hr` : '—'}</td>
               <td>${s.hire_date ? esc(String(s.hire_date).slice(0, 10)) : '<span class="muted">—</span>'}</td>
@@ -249,7 +250,7 @@ class AdminStaff extends PanicElement {
                 <button class="small secondary" data-edit="${esc(s.id)}">Edit</button>
                 <button class="small danger" data-delete="${esc(s.id)}" data-name="${esc(s.name)}">Delete</button>
               </td>
-            </tr>`).join('') || '<tr><td colspan="8"><div class="empty-state">No staff yet — use the + above to add your first crew member.</div></td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="9"><div class="empty-state">No staff yet — use the + above to add your first crew member.</div></td></tr>'}
           </tbody>
         </table>
       </article>
@@ -276,6 +277,7 @@ class AdminStaff extends PanicElement {
         <label>Name <input name="name" required value="${esc(s.name || '')}" placeholder="Full name"></label>
         <label>Pronoun <input name="pronoun" value="${esc(s.pronoun || '')}" placeholder="they/them, she/her, …"></label>
         <label>Default role ${select('default_role', roles, s.default_role || 'security')}</label>
+        <label>Type <select name="employment_type"><option value="employee" ${(s.employment_type || 'employee') === 'employee' ? 'selected' : ''}>Employee (W-2)</option><option value="contractor" ${s.employment_type === 'contractor' ? 'selected' : ''}>Contractor (1099)</option></select></label>
         <label>Position <input name="position" value="${esc(s.position || '')}" placeholder="Lead bartender, Head of Security, …"></label>
         <label>Email <input type="email" name="email" value="${esc(s.email || '')}" placeholder="Optional"></label>
         <label>Phone <input name="phone" value="${esc(s.phone || '')}" placeholder="Optional"></label>
