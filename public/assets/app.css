@@ -1175,6 +1175,7 @@ pb-event-summary, pb-event-readiness, pb-event-next-action { display: contents; 
   padding: 3px 2px 4px;
   border: 0;
   background: transparent;
+  color: var(--ink);
   border-radius: 8px;
   cursor: pointer;
   transition: background .12s;
