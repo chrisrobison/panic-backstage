@@ -349,17 +349,19 @@ class AdminTemplates extends PanicElement {
       <article class="panel">
         <div class="section-head padded"><h2>Event Templates</h2><span class="muted">${templates.length} total</span></div>
         <table class="data-table admin-table">
-          <thead><tr><th>Name</th><th>Type</th><th>Venue</th><th>Default title</th><th>Checklist / Schedule</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Type</th><th>Venue</th><th>Default title</th><th>Tasks / Schedule / Staffing</th><th></th></tr></thead>
           <tbody>
             ${templates.map((t) => {
               const checklist = (() => { try { return JSON.parse(t.checklist_json || '[]'); } catch { return []; } })();
               const schedule  = (() => { try { return JSON.parse(t.schedule_json  || '[]'); } catch { return []; } })();
+              const staffing  = (() => { try { return JSON.parse(t.staffing_json  || '[]'); } catch { return []; } })();
+              const staffTotal = staffing.reduce((sum, r) => sum + (parseInt(r.count, 10) || 1), 0);
               return `<tr>
                 <td><strong>${esc(t.name)}</strong></td>
                 <td>${esc(titleCase(t.event_type))}</td>
                 <td>${esc(t.venue_name)}</td>
                 <td>${esc(t.default_title || '—')}</td>
-                <td>${checklist.length} task${checklist.length === 1 ? '' : 's'} &middot; ${schedule.length} schedule item${schedule.length === 1 ? '' : 's'}</td>
+                <td>${checklist.length} task${checklist.length === 1 ? '' : 's'} &middot; ${schedule.length} schedule item${schedule.length === 1 ? '' : 's'} &middot; ${staffTotal} staff position${staffTotal === 1 ? '' : 's'}</td>
                 <td class="row-actions">
                   <button class="small secondary" data-edit="${esc(t.id)}">Edit</button>
                   <button class="small danger" data-delete="${esc(t.id)}" data-name="${esc(t.name)}">Delete</button>
@@ -381,6 +383,14 @@ class AdminTemplates extends PanicElement {
           <label class="wide">Public description <textarea name="default_description_public" rows="2"></textarea></label>
           <label class="wide">Checklist <small class="muted">One task per line. Pre-populates the Tasks list of new events.</small><textarea name="_checklist" rows="5" placeholder="Confirm headliner\nApprove flyer\nPublish event page"></textarea></label>
           <label class="wide">Schedule <small class="muted">One per line as <code>HH:MM | type | title</code>. Types: load_in, soundcheck, doors, set, changeover, curfew, staff_call, other.</small><textarea name="_schedule" rows="5" placeholder="17:00 | load_in | Load-in\n18:00 | soundcheck | Soundcheck\n20:00 | doors | Doors\n20:30 | set | Opener"></textarea></label>
+          <label class="wide">Staffing
+            <small class="muted">One role per line as <code>role | count | notes</code>. Roles: manager, bartender, barback, door, security, sound, lighting, stagehand, runner, cleaner, other. These create TBD shifts when an event is made from this template.</small>
+            <div class="staffing-suggest-row" style="display:flex;gap:0.5rem;margin-bottom:0.4rem;align-items:center">
+              <input type="number" name="_cap_hint" placeholder="Capacity" min="1" max="9999" style="width:110px">
+              <button type="button" class="small secondary" data-suggest-staffing>Suggest from capacity</button>
+            </div>
+            <textarea name="_staffing" rows="5" placeholder="manager | 1&#10;bartender | 2&#10;security | 2 | Front door&#10;door | 1&#10;sound | 1"></textarea>
+          </label>
           <button>Create template</button>
         </form>
       </article>
@@ -388,6 +398,42 @@ class AdminTemplates extends PanicElement {
     $('[data-form="create"]', this).addEventListener('submit', (event) => this.create(event));
     $$('[data-edit]', this).forEach((b) => b.addEventListener('click', () => this.openEdit(Number(b.dataset.edit))));
     $$('[data-delete]', this).forEach((b) => b.addEventListener('click', () => this.delete(Number(b.dataset.delete), b.dataset.name)));
+    this.bindSuggestButtons(this);
+  }
+
+  // Staffing tiers for the "Suggest from capacity" helper (mirrored in event-panels.js).
+  static STAFFING_TIERS = [
+    { max:  50, roles: [['manager',1],['bartender',1],['door',1],['sound',1]] },
+    { max: 100, roles: [['manager',1],['bartender',2],['door',1],['security',1],['sound',1]] },
+    { max: 150, roles: [['manager',1],['bartender',2],['barback',1],['door',2],['security',1],['sound',1],['lighting',1],['stagehand',1]] },
+    { max: 200, roles: [['manager',1],['bartender',3],['barback',1],['door',2],['security',2],['sound',1],['lighting',1],['stagehand',1]] },
+    { max: 250, roles: [['manager',1],['bartender',3],['barback',2],['door',2],['security',3],['sound',1],['lighting',1],['stagehand',1],['runner',1]] },
+    { max: 300, roles: [['manager',1],['bartender',4],['barback',2],['door',2],['security',4],['sound',1],['lighting',1],['stagehand',2],['runner',1]] },
+    { max: 350, roles: [['manager',1],['bartender',5],['barback',2],['door',3],['security',5],['sound',1],['lighting',1],['stagehand',2],['runner',1]] },
+    { max: 400, roles: [['manager',1],['bartender',5],['barback',3],['door',3],['security',6],['sound',1],['lighting',1],['stagehand',2],['runner',1]] },
+  ];
+
+  staffingTierFor(capacity) {
+    const cap = Math.max(1, parseInt(capacity, 10) || 0);
+    const tiers = AdminTemplates.STAFFING_TIERS;
+    for (const tier of tiers) { if (cap <= tier.max) return tier.roles; }
+    return tiers[tiers.length - 1].roles;
+  }
+
+  bindSuggestButtons(root) {
+    $$('[data-suggest-staffing]', root).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const form   = btn.closest('form, article, .modal-card');
+        const capEl  = $('[name="_cap_hint"]', form);
+        const txtEl  = $('[name="_staffing"]', form);
+        if (!capEl || !txtEl) return;
+        const cap = parseInt(capEl.value, 10);
+        if (!cap || cap <= 0) { capEl.focus(); return; }
+        const roles = this.staffingTierFor(cap);
+        txtEl.value = roles.map(([role, count]) => `${role} | ${count}`).join('\n');
+        txtEl.focus();
+      });
+    });
   }
 
   parseChecklist(value) {
@@ -419,12 +465,33 @@ class AdminTemplates extends PanicElement {
     } catch { return ''; }
   }
 
+  parseStaffing(value) {
+    const validRoles = new Set(['manager','security','bartender','barback','door','sound','lighting','stagehand','runner','cleaner','other']);
+    return String(value || '').split('\n').map((l) => l.trim()).filter(Boolean).map((line) => {
+      const parts = line.split('|').map((p) => p.trim());
+      const role  = validRoles.has(parts[0]) ? parts[0] : 'other';
+      const count = Math.max(1, parseInt(parts[1], 10) || 1);
+      const notes = parts[2] || null;
+      return notes ? { role, count, notes } : { role, count };
+    });
+  }
+
+  serializeStaffing(json) {
+    try {
+      const arr = JSON.parse(json || '[]');
+      return (arr || []).map((row) => [row.role, row.count ?? 1, row.notes].filter((v) => v != null && v !== '').join(' | ')).join('\n');
+    } catch { return ''; }
+  }
+
   buildBody(form) {
     const body = formData(form);
     body.checklist_json = JSON.stringify(this.parseChecklist(body._checklist));
     body.schedule_json  = JSON.stringify(this.parseSchedule(body._schedule));
+    body.staffing_json  = JSON.stringify(this.parseStaffing(body._staffing));
     delete body._checklist;
     delete body._schedule;
+    delete body._staffing;
+    delete body._cap_hint;
     return body;
   }
 
@@ -459,6 +526,14 @@ class AdminTemplates extends PanicElement {
         <label class="wide">Public description <textarea name="default_description_public" rows="2">${esc(t.default_description_public || '')}</textarea></label>
         <label class="wide">Checklist <small class="muted">One task per line.</small><textarea name="_checklist" rows="7">${esc(this.serializeChecklist(t.checklist_json))}</textarea></label>
         <label class="wide">Schedule <small class="muted">HH:MM | type | title  (types: load_in, soundcheck, doors, set, changeover, curfew, staff_call, other)</small><textarea name="_schedule" rows="7">${esc(this.serializeSchedule(t.schedule_json))}</textarea></label>
+        <label class="wide">Staffing
+          <small class="muted">role | count | notes  (roles: manager, bartender, barback, door, security, sound, lighting, stagehand, runner, cleaner, other)</small>
+          <div class="staffing-suggest-row" style="display:flex;gap:0.5rem;margin-bottom:0.4rem;align-items:center">
+            <input type="number" name="_cap_hint" placeholder="Capacity" min="1" max="9999" style="width:110px">
+            <button type="button" class="small secondary" data-suggest-staffing>Suggest from capacity</button>
+          </div>
+          <textarea name="_staffing" rows="7">${esc(this.serializeStaffing(t.staffing_json))}</textarea>
+        </label>
         <button>Save template</button>
       </form>
     </div>`;
@@ -466,6 +541,7 @@ class AdminTemplates extends PanicElement {
     const close = () => dialog.remove();
     $('[data-close]', dialog).addEventListener('click', close);
     dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
+    this.bindSuggestButtons(dialog);
     $('[data-form="edit"]', dialog).addEventListener('submit', async (event) => {
       event.preventDefault();
       try {

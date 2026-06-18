@@ -240,6 +240,10 @@ final class Kernel
             if ($child === 'tasks' && ($segments[3] ?? '') === 'from-template') {
                 return [Events\Tasks::class, ['eventId' => $eventId, 'fromTemplateId' => $this->intOrNull($segments[4] ?? null)]];
             }
+            // Auto-populate staffing from capacity tiers
+            if ($child === 'staffing' && ($segments[3] ?? '') === 'from-capacity') {
+                return [Events\Staffing::class, ['eventId' => $eventId, 'action' => 'from-capacity']];
+            }
             return match ($child) {
                 'tasks'      => [Events\Tasks::class,    ['eventId' => $eventId, 'taskId'     => $childId]],
                 'blockers',

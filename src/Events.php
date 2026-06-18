@@ -444,6 +444,10 @@ final class Events extends BaseEndpoint
         foreach ($this->jsonList($template['schedule_json']) as $item) {
             $this->db->run('INSERT INTO event_schedule_items (event_id, title, item_type, start_time, end_time) VALUES (?, ?, ?, ?, ?)', [$id, $item['title'], $item['item_type'] ?? 'other', $item['start_time'] ?? null, $item['end_time'] ?? null]);
         }
+        $staffingEntries = $this->jsonList($template['staffing_json'] ?? '');
+        if ($staffingEntries) {
+            (new Events\Staffing($this->db, $this->auth, []))->createFromTemplate($id, $staffingEntries);
+        }
         log_activity($this->db, $id, $this->userId(), 'event created from template', ['template_id' => $templateId]);
         $this->pushToSheet($id);
         return $this->ok(['id' => $id]);
