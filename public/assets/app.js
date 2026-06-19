@@ -1,5 +1,4 @@
 import { getRefreshToken, clearTokens, appUrl, setAppUser, publish, subscribe, api, broadcastEventData, refreshSection, table, PanicElement, $, $$ } from './core.js';
-import { openEventQuickCreate } from './events.js';
 import { openCredentialSetupModal } from './auth.js';
 import './core.js';
 import './print.js';
@@ -13,6 +12,7 @@ import './help.js';
 import { HELP_SECTIONS } from './help.js';
 import './promote.js';
 import './outbox.js';
+import './event-wizard.js';
 
 
 class AppShell extends PanicElement {
@@ -133,7 +133,7 @@ class AppShell extends PanicElement {
       location.href = appUrl('login.html');
     });
     $('[data-search]', this).addEventListener('input', (event) => publish('events.search', { query: event.target.value }));
-    $('[data-action="new-event"]', this).addEventListener('click', () => openEventQuickCreate());
+    $('[data-action="new-event"]', this).addEventListener('click', () => { location.hash = 'new-event'; });
     this.setupNavCollapse();
     this.setupNavGroups();
     this.setupMobileDrawer();
@@ -277,6 +277,7 @@ class AppShell extends PanicElement {
     }
     if (route.startsWith('help')) return this.helpNavKey(route);
     if (route === 'outbox') return 'outbox';
+    if (route === 'new-event') return 'events';
     return route;
   }
 
@@ -329,6 +330,7 @@ class AppShell extends PanicElement {
       return this.mount(outlet, 'pb-help-page', { anchor });
     }
     if (route === 'outbox') return this.mount(outlet, 'pb-outbox-page');
+    if (route === 'new-event') return this.mount(outlet, 'pb-event-wizard');
     return this.mount(outlet, 'pb-dashboard');
   }
 

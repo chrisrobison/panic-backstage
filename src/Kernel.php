@@ -187,6 +187,11 @@ final class Kernel
             return [Outbox::class, ['outboxId' => $this->intOrNull($segments[1] ?? null)]];
         }
 
+        // Wizard defaults — admin-configurable defaults for the event wizard
+        if ($segments[0] === 'wizard-defaults') {
+            return [WizardDefaults::class, []];
+        }
+
         // Panic Promote — /api/promote/...
         if ($segments[0] === 'promote') {
             // GET /api/promote/eventbrite/org — one-time setup helper
