@@ -49,7 +49,7 @@ function downloadContractPdf(html, filename) {
     margin: [0.6, 0.6, 0.7, 0.6],
     filename,
     image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0, windowWidth: 760 },
     jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
     pagebreak: { mode: ['css', 'legacy'] },
   }).from(holder).save().then(cleanup, cleanup);
