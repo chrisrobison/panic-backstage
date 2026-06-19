@@ -12,6 +12,7 @@ import './help.js';
 import { HELP_SECTIONS } from './help.js';
 import './promote.js';
 import './outbox.js';
+import './events.js';
 import './event-wizard.js';
 
 
