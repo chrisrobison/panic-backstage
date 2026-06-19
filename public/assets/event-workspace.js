@@ -33,7 +33,10 @@ function activityEntry(entry) {
   } catch (_) { /* malformed JSON — skip diff */ }
 
   const user = esc(entry.user_name || 'system');
-  const date = `<span class="log-date">${esc(shortDate(entry.created_at))}</span>`;
+  // created_at arrives as a MySQL datetime string ("2026-06-17 15:30:00"); replace
+  // the space with 'T' so the Date constructor parses it reliably across browsers.
+  const parsedDate = entry.created_at ? new Date(String(entry.created_at).replace(' ', 'T')) : null;
+  const date = `<span class="log-date">${esc(parsedDate ? shortDate(parsedDate) : '')}</span>`;
   const byLine = `<span class="log-meta"> by ${user} ${date}</span>`;
 
   if (changes.length === 1) {
