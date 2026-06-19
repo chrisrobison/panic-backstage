@@ -61,7 +61,7 @@ const CONTRACT_DOC_CSS = `
 
   /* ── Print / Save as PDF ────────────────────────────────────────────────── */
   @media print {
-    @page { size: 8.5in 11in; margin: 0.75in; }
+    @page { size: 8.5in 11in; margin: 0.5in; }
 
     body { padding: 0; background: #fff; }
     .contract-doc { max-width: none; margin: 0; }

@@ -321,8 +321,8 @@ HTML;
 
         $bin  = '/usr/bin/wkhtmltopdf';
         $args = '--quiet --page-size Letter'
-              . ' --margin-top 0.75in --margin-right 0.75in'
-              . ' --margin-bottom 0.75in --margin-left 0.75in'
+              . ' --margin-top 0.5in --margin-right 0.5in'
+              . ' --margin-bottom 0.5in --margin-left 0.5in'
               . ' --encoding utf-8 --disable-smart-shrinking'
               . ' - -';   // stdin → stdout
 
