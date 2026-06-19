@@ -29,62 +29,98 @@ function parseJson(value, fallback) {
 }
 
 
-// Document typography for popped-out version views (inline so the new window
-// is self-contained). The in-app preview + PDF reuse app.css .contract-doc.
-const CONTRACT_DOC_CSS = `body{font-family:Georgia,'Times New Roman',serif;color:#111;background:#fff;margin:0;padding:36px;line-height:1.55}.contract-doc{max-width:720px;margin:0 auto}.contract-doc-head h1{font-size:22px;margin:0 0 4px}.contract-doc-sub{color:#555;margin:0 0 16px;font-style:italic}.contract-summary{width:100%;border-collapse:collapse;margin:0 0 24px;font-size:13px}.contract-summary caption{text-align:left;font-weight:bold;padding-bottom:6px}.contract-summary th{text-align:left;width:42%;padding:3px 8px;color:#444;font-weight:normal;border-bottom:1px solid #eee}.contract-summary td{padding:3px 8px;border-bottom:1px solid #eee}.contract-section{margin:0 0 18px}.contract-section h2{font-size:15px;margin:0 0 6px}.contract-section-body p{margin:0 0 8px;text-align:justify}.contract-token-missing{background:#ffe2a8;color:#7a4b00;padding:0 4px;border-radius:3px;font-style:italic}`;
+// Self-contained typography for contract print/PDF windows.
+// @page sets letter size + margins; the browser handles everything from there.
+const CONTRACT_DOC_CSS = `
+  *, *::before, *::after { box-sizing: border-box; }
 
-
-function downloadContractPdf(html, filename) {
-  if (!window.html2pdf) {
-    publish('toast.show', { message: 'PDF tool still loading — try again in a moment.', tone: 'error' });
-    return;
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    color: #111;
+    background: #fff;
+    margin: 0;
+    padding: 40px 48px;
+    line-height: 1.6;
   }
-  publish('toast.show', { message: 'Building PDF…' });
-  // Pass HTML as a string with styles inlined so html2pdf manages its own
-  // temporary element (at a sane z-index).  Injecting a z-index:-9999 holder
-  // into the live DOM places it behind the app body background, which is what
-  // was causing the blank-page output.
-  const wrapped = `<style>${CONTRACT_DOC_CSS}</style><div style="padding:36px;max-width:720px;margin:0 auto;background:#fff;">${html}</div>`;
-  window.html2pdf()
-    .set({
-      margin:    [0.6, 0.6, 0.7, 0.6],
-      filename,
-      image:     { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 796 },
-      jsPDF:     { unit: 'in', format: 'letter', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'] },
-    })
-    .from(wrapped, 'string')
-    .save()
-    .catch(() => publish('toast.show', { message: 'PDF build failed — use Print / Save PDF instead.', tone: 'error' }));
-}
+
+  .contract-doc { max-width: 7in; margin: 0 auto; }
+
+  .contract-doc-head h1 { font-size: 22px; margin: 0 0 4px; }
+  .contract-doc-sub    { color: #555; margin: 0 0 20px; font-style: italic; }
+
+  .contract-summary { width: 100%; border-collapse: collapse; margin: 0 0 24px; font-size: 13px; }
+  .contract-summary caption { text-align: left; font-weight: bold; padding-bottom: 6px; }
+  .contract-summary th { text-align: left; width: 42%; padding: 4px 8px; color: #444; font-weight: normal; border-bottom: 1px solid #ddd; }
+  .contract-summary td { padding: 4px 8px; border-bottom: 1px solid #ddd; }
+
+  .contract-section    { margin: 0 0 20px; }
+  .contract-section h2 { font-size: 15px; margin: 0 0 6px; }
+  .contract-section-body p { margin: 0 0 8px; text-align: justify; }
+
+  .contract-token-missing { background: #ffe2a8; color: #7a4b00; padding: 0 4px; border-radius: 3px; font-style: italic; }
+
+  /* ── Print / Save as PDF ────────────────────────────────────────────────── */
+  @media print {
+    @page { size: 8.5in 11in; margin: 0.75in; }
+
+    body { padding: 0; background: #fff; }
+    .contract-doc { max-width: none; margin: 0; }
+    .print-bar { display: none !important; }
+  }
+`;
 
 
-/** Open the contract preview in a new window with a sticky print bar. */
-function printContractWindow(html, title) {
-  const win = window.open('', '_blank', 'width=860,height=1100');
+/**
+ * Open the contract preview in a new window.
+ * Pass autoPrint:true to immediately trigger the print dialog (Download PDF flow).
+ */
+function printContractWindow(html, title, { autoPrint = false } = {}) {
+  const win = window.open('', '_blank', 'width=900,height=1100');
   if (!win) {
     publish('toast.show', { message: 'Pop-up blocked — allow pop-ups to print.', tone: 'error' });
     return;
   }
+  const autoScript = autoPrint
+    ? `<script>window.addEventListener('load', function(){ window.print(); });<\/script>`
+    : '';
   win.document.open();
-  win.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+  win.document.write(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>${esc(title)}</title>
+  <style>
 ${CONTRACT_DOC_CSS}
-.print-bar{position:sticky;top:0;z-index:99;background:#f5f5f5;border-bottom:1px solid #ddd;padding:10px 18px;display:flex;align-items:center;gap:10px;font-family:system-ui,sans-serif;font-size:13px}
-.print-bar button{font:inherit;padding:6px 14px;border:1px solid #888;background:#fff;border-radius:4px;cursor:pointer}
-.print-bar .primary{background:#111;color:#fff;border-color:#111}
-.print-bar .hint{color:#888;margin-left:4px}
-@media print{.print-bar{display:none!important}}
-</style></head><body>
-<div class="print-bar">
-  <button class="primary" onclick="window.print()">🖨 Print / Save as PDF</button>
-  <button onclick="window.close()">Close</button>
-  <span class="hint">Use your browser's print dialog → Save as PDF</span>
-</div>
-${html}
-</body></html>`);
+    /* Screen-only print bar */
+    .print-bar {
+      position: sticky; top: 0; z-index: 99;
+      background: #f5f5f5; border-bottom: 1px solid #ddd;
+      padding: 10px 18px; display: flex; align-items: center; gap: 10px;
+      font-family: system-ui, sans-serif; font-size: 13px;
+    }
+    .print-bar button { font: inherit; padding: 6px 14px; border: 1px solid #888; background: #fff; border-radius: 4px; cursor: pointer; }
+    .print-bar .primary { background: #111; color: #fff; border-color: #111; }
+    .print-bar .hint { color: #888; margin-left: 4px; }
+  </style>
+  ${autoScript}
+</head>
+<body>
+  <div class="print-bar">
+    <button class="primary" onclick="window.print()">🖨 Print / Save as PDF</button>
+    <button onclick="window.close()">Close</button>
+    <span class="hint">In the print dialog choose "Save as PDF" to download</span>
+  </div>
+  ${html}
+</body>
+</html>`);
   win.document.close();
   win.focus();
+}
+
+
+/** Download PDF: open the print window and immediately trigger the print dialog. */
+function downloadContractPdf(html, title) {
+  printContractWindow(html, title, { autoPrint: true });
 }
 
 
@@ -311,8 +347,7 @@ class ContractEditor extends PanicElement {
   bind() {
     const id = this.contractId;
     $('[data-act="pdf"]', this)?.addEventListener('click', () => {
-      const name = `${String(this.data.contract.title || 'contract').replace(/[^\w-]+/g, '-')}.pdf`;
-      downloadContractPdf(this.data.preview_html, name);
+      downloadContractPdf(this.data.preview_html, this.data.contract.title || 'Contract');
     });
     $('[data-act="print"]', this)?.addEventListener('click', () => {
       printContractWindow(this.data.preview_html, this.data.contract.title || 'Contract');
