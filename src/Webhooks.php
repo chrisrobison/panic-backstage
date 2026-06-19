@@ -177,6 +177,19 @@ final class Webhooks extends BaseEndpoint
      */
     private function emailTickets(int $orderId, array $tickets): void
     {
+        // ── Atomic deduplication ──────────────────────────────────────────────
+        // Only the first webhook delivery that wins this UPDATE proceeds to
+        // send.  Any concurrent or subsequent retry gets 0 rows and returns
+        // immediately.  This is a second line of defence on top of the
+        // token-nulling in TicketingService::fulfillOrder().
+        $claimed = $this->db->run(
+            'UPDATE ticket_orders SET emailed_at = NOW() WHERE id = ? AND emailed_at IS NULL',
+            [$orderId]
+        );
+        if ($claimed === 0) {
+            return; // Already emailed — do not send again.
+        }
+
         $order = $this->db->one(
             'SELECT o.buyer_name, o.buyer_email, e.title AS event_title
                FROM ticket_orders o
@@ -214,22 +227,28 @@ final class Webhooks extends BaseEndpoint
             $safeQr   = htmlspecialchars($qrUrl, ENT_QUOTES, 'UTF-8');
 
             $textLines[] = 'Ticket ' . $n . '  (' . (string) $ticket['code'] . ')';
-            $textLines[] = '  Show QR at door: ' . $viewUrl;
+            $textLines[] = '  View ticket + QR: ' . $viewUrl;
+            $textLines[] = '  QR image only:    ' . $qrUrl;
             $textLines[] = '';
 
+            // Wrap the QR image in a link so tapping it opens the ticket page
+            // even when images are blocked.  Add a plain "View your ticket"
+            // link below for clients that do block images.
             $htmlItems[] = '<div style="padding:16px 0;border-bottom:1px solid #2e2929;">'
                 . '<div style="font-size:13px;color:#a9a097;letter-spacing:1px;text-transform:uppercase;">Ticket ' . $n . '</div>'
                 . '<div style="margin-top:4px;font-size:16px;font-weight:bold;color:#fff;">' . $code . '</div>'
                 . '<div style="margin-top:14px;text-align:center;">'
-                . '<img src="' . $safeQr . '" alt="QR code — show at the door" width="200" height="200"'
-                . ' style="display:block;margin:0 auto;background:#ffffff;padding:10px;">'
+                . '<a href="' . $safeView . '" style="display:inline-block;line-height:0;border:2px solid #3a3434;border-radius:4px;">'
+                . '<img src="' . $safeQr . '" alt="QR code — tap to open your ticket" width="200" height="200"'
+                . ' style="display:block;background:#ffffff;padding:10px;">'
+                . '</a>'
                 . '</div>'
                 . '<div style="margin-top:8px;font-size:13px;color:#b5aba2;text-align:center;">'
                 . 'Screenshot or save this QR &mdash; show it at the door to get in.'
                 . '</div>'
-                . '<div style="margin-top:10px;">'
-                . '<a href="' . $safeView . '" style="color:#c9b27e;font-size:13px;word-break:break-all;">'
-                . 'Open live ticket &rarr;</a></div></div>';
+                . '<div style="margin-top:10px;font-size:13px;">'
+                . '<a href="' . $safeView . '" style="color:#c9b27e;font-weight:bold;">View your ticket &amp; QR &rarr;</a>'
+                . '</div></div>';
         }
 
         if ($n === 0) {

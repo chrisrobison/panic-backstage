@@ -929,6 +929,7 @@ CREATE TABLE `ticket_orders` (
   `is_comp` tinyint(1) NOT NULL DEFAULT 0,
   `hold_expires_at` datetime DEFAULT NULL,
   `paid_at` datetime DEFAULT NULL,
+  `emailed_at` datetime DEFAULT NULL,
   `refunded_at` datetime DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
