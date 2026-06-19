@@ -1016,12 +1016,16 @@ pb-event-summary, pb-event-readiness, pb-event-next-action { display: contents; 
   color: var(--muted);
 }
 .timeline { list-style: none; padding: 0; margin: 0; }
-.timeline li { border-top: 1px solid var(--line); padding: 12px 18px; }
-.log-changes { list-style: none; padding: 0; margin: 4px 0 0; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
-.log-changes li { display: flex; flex-wrap: wrap; gap: 3px; align-items: baseline; }
+.timeline li { border-top: 1px solid var(--line); padding: 12px 18px; line-height: 1.5; }
+.log-action { }
+.log-meta { color: var(--muted); font-size: 0.85em; }
+.log-date { }
+.log-val { font-style: italic; }
+.log-clipped { cursor: help; border-bottom: 1px dotted var(--muted); }
+.log-empty { opacity: 0.4; font-style: italic; }
+.log-changes { list-style: none; padding: 0 0 0 1em; margin: 4px 0 0; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+.log-changes li { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
 .log-field { font-weight: 600; color: var(--body); }
-.log-from { text-decoration: line-through; opacity: 0.6; word-break: break-all; }
-.log-to   { color: var(--accent, #2563eb); word-break: break-all; }
 
 .tonight-page { display: none; }
 .tonight-page[aria-hidden="true"] { display: none !important; }

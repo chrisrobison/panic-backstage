@@ -9,20 +9,47 @@ function factCell(label, value) {
   return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
 }
 
-/** Render one activity-log entry, including an optional diff line for 'event updated' / 'status changed'. */
+/**
+ * Clip a value to `max` chars.  If the full value is longer it is truncated
+ * with an ellipsis and the full text is placed in a `title` attribute so the
+ * user can hover to see the complete value.
+ */
+function clip(raw, max = 32) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '<span class="log-empty">(empty)</span>';
+  const escaped = esc(s);
+  if (s.length <= max) return `<span class="log-val">“${escaped}”</span>`;
+  return `<span class="log-val log-clipped" title="${escaped}">“${esc(s.slice(0, max))}…”</span>`;
+}
+
+/** Render one activity-log entry, including an optional diff for 'event updated' / 'status changed'. */
 function activityEntry(entry) {
-  let details = '';
+  let changes = [];
   try {
     const parsed = entry.details_json ? JSON.parse(entry.details_json) : null;
     if (parsed && Array.isArray(parsed.changes) && parsed.changes.length) {
-      const lines = parsed.changes.map(c => {
-        const trunc = s => String(s ?? '').slice(0, 100);
-        return `<span class="log-field">${esc(c.field)}:</span> <span class="log-from">${esc(trunc(c.from))}</span> → <span class="log-to">${esc(trunc(c.to))}</span>`;
-      });
-      details = `<ul class="log-changes">${lines.map(l => `<li>${l}</li>`).join('')}</ul>`;
+      changes = parsed.changes;
     }
   } catch (_) { /* malformed JSON — skip diff */ }
-  return `<li><strong>${esc(entry.action)}</strong> by ${esc(entry.user_name || 'system')} <span class="muted">${esc(entry.created_at)}</span>${details}</li>`;
+
+  const user = esc(entry.user_name || 'system');
+  const date = `<span class="log-date">${esc(shortDate(entry.created_at))}</span>`;
+  const byLine = `<span class="log-meta"> by ${user} ${date}</span>`;
+
+  if (changes.length === 1) {
+    const c = changes[0];
+    // Single-field change: inline as "status changed from "hold" to "booked" by User Date"
+    return `<li><span class="log-action"><strong>${esc(entry.action)}</strong> from ${clip(c.from)} to ${clip(c.to)}</span>${byLine}</li>`;
+  }
+
+  // Multi-field change: action header + indented list of field diffs
+  const diffList = changes.length
+    ? `<ul class="log-changes">${changes.map(c =>
+        `<li><span class="log-field">${esc(c.field)}</span> from ${clip(c.from)} to ${clip(c.to)}</li>`
+      ).join('')}</ul>`
+    : '';
+
+  return `<li><strong>${esc(entry.action)}</strong>${byLine}${diffList}</li>`;
 }
 
 // Base for read-only workspace cards that re-render whenever fresh event data
