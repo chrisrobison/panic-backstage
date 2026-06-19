@@ -105,7 +105,62 @@ class EventNextAction extends EventBusCard {
   }
 }
 
+// Human-readable labels for each section in the visibility dropdown.
+const SECTION_LABELS = {
+  overview:     'Overview',
+  assets:       'Assets',
+  tasks:        'Tasks',
+  lineup:       'Lineup',
+  schedule:     'Run Sheet',
+  staffing:     'Staffing',
+  'guest-list': 'Guest List',
+  'open-items': 'Open Items',
+  contracts:    'Contracts',
+  invites:      'Invites',
+  settlement:   'Settlement',
+  ticketing:    'Ticketing',
+  activity:     'Activity',
+};
+
 class EventWorkspace extends PanicElement {
+  // ── Per-event, per-user section visibility prefs (localStorage) ─────────────
+  _prefsKey(userId, eventId) {
+    return `pb_sections_${userId}_${eventId}`;
+  }
+
+  _loadPrefs(userId, eventId, tabs) {
+    try {
+      const stored = JSON.parse(localStorage.getItem(this._prefsKey(userId, eventId)) || '{}');
+      const prefs = {};
+      for (const tab of tabs) prefs[tab] = stored[tab] !== false; // default visible
+      return prefs;
+    } catch (_) {
+      return Object.fromEntries(tabs.map(t => [t, true]));
+    }
+  }
+
+  _savePrefs(userId, eventId, prefs) {
+    try { localStorage.setItem(this._prefsKey(userId, eventId), JSON.stringify(prefs)); }
+    catch (_) { /* ignore quota / private-mode errors */ }
+  }
+
+  _bindSectionToggles(userId, eventId, prefs) {
+    // Apply initial hidden state from loaded prefs
+    for (const [sectionId, visible] of Object.entries(prefs)) {
+      const el = this.querySelector(`#${CSS.escape(sectionId)}`);
+      if (el) el.style.display = visible ? '' : 'none';
+    }
+    // Wire up checkbox changes
+    $$('[data-section-toggle]', this).forEach(checkbox => {
+      checkbox.addEventListener('change', () => {
+        prefs[checkbox.dataset.sectionToggle] = checkbox.checked;
+        this._savePrefs(userId, eventId, prefs);
+        const el = this.querySelector(`#${CSS.escape(checkbox.dataset.sectionToggle)}`);
+        if (el) el.style.display = checkbox.checked ? '' : 'none';
+      });
+    });
+  }
+
   async connect() {
     await this.load();
     // Keep the page header in sync with any field edits broadcast on the bus
@@ -145,11 +200,21 @@ class EventWorkspace extends PanicElement {
     const data = this.data;
     const event = data.event;
     const isPrivate = event.event_type === 'private_event';
-    const tabs = ['overview', 'details', 'tasks', ...(isPrivate ? [] : ['lineup']), 'schedule', 'staffing', 'guest-list', 'open-items', 'assets', 'activity'];
-    if (can(data, 'manage_invites')) tabs.splice(tabs.indexOf('assets'), 0, 'invites');
+    const tabs = ['overview', 'details', 'assets', 'tasks', ...(isPrivate ? [] : ['lineup']), 'schedule', 'staffing', 'guest-list', 'open-items', 'activity'];
+    if (can(data, 'view_contracts')) tabs.splice(tabs.length - 1, 0, 'contracts');
+    if (can(data, 'manage_invites')) tabs.splice(tabs.length - 1, 0, 'invites');
     if (can(data, 'view_settlement') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'settlement');
-    if (can(data, 'view_contracts')) tabs.splice(tabs.indexOf('assets') + 1, 0, 'contracts');
     if (can(data, 'manage_ticketing') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'ticketing');
+    const user = getAppUser();
+    const userId = user?.id ?? 'anon';
+    const toggleableTabs = tabs.filter(t => t !== 'details');
+    const prefs = this._loadPrefs(userId, event.id, toggleableTabs);
+    const sectionsDropdown = `<details class="print-menu sections-menu">
+      <summary class="button secondary">Sections &#9662;</summary>
+      <div class="print-menu-items">
+        ${toggleableTabs.map(t => `<label class="section-toggle-item"><input type="checkbox" data-section-toggle="${esc(t)}"${prefs[t] !== false ? ' checked' : ''}> ${esc(SECTION_LABELS[t] || titleCase(t))}</label>`).join('')}
+      </div>
+    </details>`;
     this.innerHTML = `<section class="event-top">
       <div>
         <a class="back-link" href="#events">&lt;- Back to Events</a>
@@ -159,6 +224,7 @@ class EventWorkspace extends PanicElement {
       <div class="event-actions">
         ${isPrivate ? '' : `<a class="button promote-accent" href="#promote-event-${esc(String(event.id))}"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Promote</a>`}
         ${isPrivate ? '' : `<a class="button secondary" href="${esc(appUrl(data.links.public_page))}" target="_blank" rel="noreferrer">Public Page</a>`}
+        ${sectionsDropdown}
         ${can(data, 'read_event') ? `<details class="print-menu">
           <summary class="button secondary">Print &#9662;</summary>
           <div class="print-menu-items">
@@ -182,13 +248,13 @@ class EventWorkspace extends PanicElement {
       <article class="panel"><div class="section-head padded"><h2>Internal Notes</h2></div><div class="notes">${esc(event.description_internal || 'No internal notes yet.')}</div></article>
     </section>
     <pb-event-details-form id="details"></pb-event-details-form>
+    <pb-asset-manager id="assets"></pb-asset-manager>
     <pb-task-list id="tasks"></pb-task-list>
     ${isPrivate ? '' : '<pb-lineup-editor id="lineup"></pb-lineup-editor>'}
     <pb-run-sheet id="schedule"></pb-run-sheet>
     <pb-staffing-manager id="staffing"></pb-staffing-manager>
     <pb-guest-list-manager id="guest-list"></pb-guest-list-manager>
     <pb-open-items id="open-items"></pb-open-items>
-    <pb-asset-manager id="assets"></pb-asset-manager>
     ${can(data, 'view_contracts') ? '<pb-event-contracts id="contracts"></pb-event-contracts>' : ''}
     ${can(data, 'manage_invites') ? '<pb-invite-manager id="invites"></pb-invite-manager>' : ''}
     ${(!isPrivate && can(data, 'view_settlement')) ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
@@ -211,7 +277,7 @@ class EventWorkspace extends PanicElement {
     if ($('pb-ticketing-admin', this)) $('pb-ticketing-admin', this).data = data;
     $('[data-publish]', this)?.addEventListener('click', () => this.togglePublic());
     $$('[data-print]', this).forEach((button) => button.addEventListener('click', () => {
-      $('details.print-menu', this)?.removeAttribute('open');
+      button.closest('details.print-menu')?.removeAttribute('open');
       openPrintWindow(button.dataset.print, this.data);
     }));
     $$('.workspace-tabs a', this).forEach((tab) => tab.addEventListener('click', (event) => {
@@ -221,6 +287,7 @@ class EventWorkspace extends PanicElement {
       if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
       $$('.workspace-tabs a', this).forEach((other) => other.classList.toggle('active', other === tab));
     }));
+    this._bindSectionToggles(userId, event.id, prefs);
   }
 
   async togglePublic() {
