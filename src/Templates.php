@@ -43,12 +43,18 @@ final class Templates extends BaseEndpoint
 
     private function index(): Response
     {
+        $wdRow    = $this->db->one('SELECT defaults_json FROM wizard_defaults WHERE id = 1');
+        $wizardDefaults = $wdRow
+            ? (json_decode((string) ($wdRow['defaults_json'] ?? '{}'), true) ?? [])
+            : [];
+
         return $this->ok([
             'templates' => $this->db->all(
                 'SELECT t.*, v.name venue_name FROM event_templates t JOIN venues v ON v.id = t.venue_id ORDER BY t.name'
             ),
-            'venues' => $this->db->all('SELECT * FROM venues ORDER BY name'),
-            'types'  => self::TYPES,
+            'venues'          => $this->db->all('SELECT * FROM venues ORDER BY name'),
+            'types'           => self::TYPES,
+            'wizard_defaults' => $wizardDefaults,
         ]);
     }
 

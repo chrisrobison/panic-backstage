@@ -857,7 +857,7 @@ final class Events extends BaseEndpoint
                 $showTime = $t ? date('g:i A', $t) : (string) $event['show_time'];
             }
 
-            $mailer = new Mailer($this->root);
+            $mailer = new Mailer($this->root, $this->db);
 
             // ── Human-readable status labels ─────────────────────────────────
             $statusLabels = [
@@ -1030,7 +1030,7 @@ final class Events extends BaseEndpoint
                 'event_admin_url'  => htmlspecialchars($link,                                         ENT_QUOTES, 'UTF-8'),
             ];
 
-            $mailer = new Mailer($this->root);
+            $mailer = new Mailer($this->root, $this->db);
             foreach ($admins as $admin) {
                 $mailer->sendTemplate($admin['email'], $subject, 'private-event-inquiry', $vars);
             }

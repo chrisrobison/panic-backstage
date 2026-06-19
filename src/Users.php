@@ -139,7 +139,7 @@ final class Users extends BaseEndpoint
         $link   = "{$appUrl}/login.html?token={$token}";
         $name   = (string) $user['name'];
 
-        (new Mailer($this->root))->sendTemplate(
+        (new Mailer($this->root, $this->db))->sendTemplate(
             (string) $user['email'],
             'Your Backstage access has been approved',
             'access-approved',

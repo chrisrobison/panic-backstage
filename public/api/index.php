@@ -39,6 +39,20 @@ if ($superDbName !== '') {
     // no active tenant row). It never returns null in SaaS mode.
     $ctx = Panic\Tenant\TenantContext::resolve();
 
+    // ── Per-tenant APP_URL ───────────────────────────────────────────────────
+    // The static .env value is meaningless in SaaS mode — every tenant has its
+    // own hostname. Derive scheme (honouring TRUST_PROXY) and use the domain
+    // that matched this tenant so email links, scanner URLs, and WebAuthn all
+    // point at the correct origin.
+    $tenantDomain = $ctx->tenant['domain'] ?? Panic\Tenant\TenantContext::host();
+    if ((string)(getenv('TRUST_PROXY') ?: '') === 'true') {
+        $proto = strtolower(explode(',', (string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? 'https'))[0]);
+    } else {
+        $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    }
+    putenv('APP_URL=' . $proto . '://' . $tenantDomain);
+    // ────────────────────────────────────────────────────────────────────────
+
     // Inject the tenant PDO into Database so all endpoint code is unchanged.
     Panic\Kernel::boot($root, new Panic\Database($ctx->db))->handle()->send();
     exit;

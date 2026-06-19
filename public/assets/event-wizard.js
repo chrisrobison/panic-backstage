@@ -456,8 +456,8 @@ class EventContractWizard extends PanicElement {
     });
 
     try {
-      // Load event templates (venues + types included) and contract templates
-      // in parallel to keep the wizard snappy.
+      // Load event templates (venues + types + admin wizard defaults) and
+      // contract templates in parallel to keep the wizard snappy.
       const [tplData, ctplData] = await Promise.all([
         api('/templates'),
         api('/contract-templates').catch(() => ({ templates: [] })),
@@ -472,6 +472,16 @@ class EventContractWizard extends PanicElement {
         event_templates:    tplData.templates || [],       // event setup templates
         contract_templates: ctplData.templates || ctplData || [],  // contract clause templates
       };
+
+      // Apply admin-configured defaults. These override the WIZARD_FLOW field-level
+      // defaults seeded above (admin's venue-specific values are more authoritative
+      // than hardcoded fallbacks). Empty / missing keys are skipped.
+      const adminDefaults = tplData.wizard_defaults || {};
+      Object.entries(adminDefaults).forEach(([key, val]) => {
+        if (val !== null && val !== undefined && val !== '') {
+          this.wizardData[key] = String(val);
+        }
+      });
 
       // Pre-fill today as the default date if none set
       if (!this.wizardData.date) {

@@ -251,7 +251,7 @@ final class UserEmails extends BaseEndpoint
         $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
         $link   = "{$appUrl}/login.html?verify_email={$token}";
 
-        (new Mailer($this->root))->sendTemplate(
+        (new Mailer($this->root, $this->db))->sendTemplate(
             $email,
             'Confirm your Backstage email',
             'confirm-email',

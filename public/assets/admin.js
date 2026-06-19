@@ -13,6 +13,7 @@ const ADMIN_TABS = [
   { key: 'templates', title: 'Templates', icon: 'fa-layer-group' },
   { key: 'contracts', title: 'Contracts', icon: 'fa-file-signature' },
   { key: 'payments',  title: 'Payments',  icon: 'fa-credit-card' },
+  { key: 'wizard',    title: 'Wizard',    icon: 'fa-wand-magic-sparkles' },
 ];
 
 
@@ -38,7 +39,7 @@ class AdminPage extends PanicElement {
       this.render();
     }));
     const outlet = $('.admin-outlet', this);
-    const tag = { users: 'pb-admin-users', duplicates: 'pb-user-duplicates', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts', payments: 'pb-payment-settings' }[this.tab];
+    const tag = { users: 'pb-admin-users', duplicates: 'pb-user-duplicates', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts', payments: 'pb-payment-settings', wizard: 'pb-admin-wizard-defaults' }[this.tab];
     outlet.replaceChildren(document.createElement(tag));
   }
 }
@@ -567,7 +568,178 @@ class AdminTemplates extends PanicElement {
   }
 }
 
+// ── Wizard Defaults Editor ────────────────────────────────────────────────────
+// Admin UI for configuring the sane defaults that pre-fill the Event Creation
+// Wizard for every new event.  Displayed on the "Wizard" tab of the Admin page.
+
+const DEAL_TYPES = [
+  { value: 'talent_buy',    label: 'Talent Buy' },
+  { value: 'promoter_deal', label: 'Promoter Deal' },
+  { value: 'rental',        label: 'Venue Rental' },
+  { value: 'private_event', label: 'Private Event' },
+  { value: 'residency',     label: 'Residency' },
+  { value: 'free_event',    label: 'Free / Internal' },
+];
+
+const EVENT_TYPES = [
+  'live_music', 'karaoke', 'open_mic', 'promoter_night',
+  'dj_night', 'comedy', 'private_event', 'special_event',
+];
+
+class AdminWizardDefaults extends PanicElement {
+  async connect() {
+    this.saving    = false;
+    this.defaults  = {};
+    this.venues    = [];
+    this.setLoading('Loading wizard defaults…');
+    try {
+      const [wdRes, tplRes] = await Promise.all([
+        api('/wizard-defaults'),
+        api('/templates'),
+      ]);
+      this.defaults = wdRes.defaults || {};
+      this.venues   = tplRes.venues  || [];
+      this.render();
+    } catch (err) {
+      this.innerHTML = `<p class="error-text">Failed to load: ${esc(err.message)}</p>`;
+    }
+  }
+
+  /** Render a labelled form field. `type` may be text|number|time|select|bool. */
+  _field({ id, label, type, options, hint }) {
+    const val = esc(this.defaults[id] ?? '');
+    const baseAttrs = `name="${esc(id)}" id="wd-${esc(id)}"`;
+
+    let input;
+    if (type === 'select') {
+      const opts = [
+        `<option value="">— no default —</option>`,
+        ...options.map((o) =>
+          `<option value="${esc(o.value)}" ${this.defaults[id] === o.value ? 'selected' : ''}>${esc(o.label)}</option>`),
+      ].join('');
+      input = `<select ${baseAttrs} class="wd-input">${opts}</select>`;
+    } else if (type === 'bool') {
+      input = `<select ${baseAttrs} class="wd-input">
+        <option value="">— no default —</option>
+        <option value="1" ${this.defaults[id] === '1' ? 'selected' : ''}>Yes</option>
+        <option value="0" ${this.defaults[id] === '0' ? 'selected' : ''}>No</option>
+      </select>`;
+    } else {
+      const typeAttr = type === 'number' ? 'type="number"' : type === 'time' ? 'type="time"' : 'type="text"';
+      const extra    = type === 'number' ? 'min="0" step="1"' : '';
+      input = `<input ${baseAttrs} ${typeAttr} ${extra} value="${val}" class="wd-input" placeholder="— no default —">`;
+    }
+
+    return `
+      <div class="wd-field">
+        <label class="wd-label" for="wd-${esc(id)}">${esc(label)}</label>
+        ${input}
+        ${hint ? `<span class="wd-hint">${esc(hint)}</span>` : ''}
+      </div>`;
+  }
+
+  render() {
+    const venueOpts = this.venues.map((v) => ({ value: String(v.id), label: v.name }));
+    const typeOpts  = EVENT_TYPES.map((t) => ({ value: t, label: titleCase(t) }));
+
+    this.innerHTML = `
+      <div class="wd-editor">
+        <div class="wd-header">
+          <div>
+            <h2>Wizard defaults</h2>
+            <p class="subtle">These values pre-fill every new event in the creation wizard.
+              Leave a field set to "— no default —" to start it blank.
+              Staff can always override any default during the wizard.</p>
+          </div>
+          <button class="btn-primary wd-save" ${this.saving ? 'disabled' : ''}>
+            <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+            ${this.saving ? 'Saving…' : 'Save defaults'}
+          </button>
+        </div>
+
+        <form class="wd-form" novalidate>
+
+          <fieldset class="wd-section">
+            <legend><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> Event basics</legend>
+            <div class="wd-grid">
+              ${this._field({ id: 'venue_id',       label: 'Venue',          type: 'select', options: venueOpts })}
+              ${this._field({ id: 'event_type',     label: 'Event type',     type: 'select', options: typeOpts  })}
+              ${this._field({ id: 'age_restriction',label: 'Age restriction',type: 'select', options: [
+                { value: 'All Ages', label: 'All Ages' },
+                { value: '18+',      label: '18+' },
+                { value: '21+',      label: '21+' },
+              ]})}
+              ${this._field({ id: 'capacity',       label: 'Capacity',       type: 'number', hint: 'Max attendees' })}
+              ${this._field({ id: 'doors_time',     label: 'Doors open',     type: 'time'   })}
+              ${this._field({ id: 'show_time',      label: 'Show time',      type: 'time'   })}
+              ${this._field({ id: 'end_time',       label: 'End / curfew',   type: 'time'   })}
+            </div>
+          </fieldset>
+
+          <fieldset class="wd-section">
+            <legend><i class="fa-solid fa-handshake" aria-hidden="true"></i> Deal structure</legend>
+            <div class="wd-grid">
+              ${this._field({ id: 'deal_type',      label: 'Default deal type', type: 'select', options: DEAL_TYPES })}
+            </div>
+          </fieldset>
+
+          <fieldset class="wd-section">
+            <legend><i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i> Deal terms</legend>
+            <div class="wd-grid">
+              ${this._field({ id: 'deposit_amount',     label: 'Deposit required ($)',  type: 'number' })}
+              ${this._field({ id: 'bar_minimum',        label: 'Bar minimum ($)',        type: 'number' })}
+              ${this._field({ id: 'merch_venue_percent',label: 'Venue merch cut (%)',    type: 'number', hint: '0–100' })}
+            </div>
+          </fieldset>
+
+          <fieldset class="wd-section">
+            <legend><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Production &amp; security</legend>
+            <div class="wd-grid">
+              ${this._field({ id: 'sound_tech_included',    label: 'Sound tech included',    type: 'bool' })}
+              ${this._field({ id: 'lighting_tech_included', label: 'Lighting tech included',  type: 'bool' })}
+              ${this._field({ id: 'security_count',         label: '# security guards',       type: 'number' })}
+              ${this._field({ id: 'security_rate',          label: 'Security rate ($/hr)',     type: 'number' })}
+              ${this._field({ id: 'security_paid_by',       label: 'Security paid by',         type: 'select', options: [
+                { value: 'venue',     label: 'Venue'    },
+                { value: 'artist',    label: 'Artist'   },
+                { value: 'promoter',  label: 'Promoter' },
+              ]})}
+            </div>
+          </fieldset>
+
+        </form>
+      </div>
+    `;
+
+    $('[data-action="reset"]', this)?.addEventListener('click', () => this.connect());
+    $('.wd-save', this).addEventListener('click', (e) => { e.preventDefault(); this.save(); });
+  }
+
+  async save() {
+    if (this.saving) return;
+    this.saving = true;
+    // Collect current values from form inputs
+    const newDefaults = {};
+    $$('.wd-input', this).forEach((el) => {
+      const val = el.value.trim();
+      if (val !== '') newDefaults[el.name] = val;
+    });
+    try {
+      const res = await api('/wizard-defaults', { method: 'PUT', body: { defaults: newDefaults } });
+      this.defaults = res.defaults || newDefaults;
+      publish('toast.show', { message: 'Wizard defaults saved.' });
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Save failed.', tone: 'error' });
+    } finally {
+      this.saving = false;
+      // Re-render to reflect authoritative saved state
+      this.render();
+    }
+  }
+}
+
 customElements.define('pb-admin-page', AdminPage);
 customElements.define('pb-admin-users', AdminUsers);
 customElements.define('pb-admin-staff', AdminStaff);
 customElements.define('pb-admin-templates', AdminTemplates);
+customElements.define('pb-admin-wizard-defaults', AdminWizardDefaults);

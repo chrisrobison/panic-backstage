@@ -183,6 +183,16 @@ final class Kernel
             return [Dashboard::class, []];
         }
 
+        // Outbox — sent-mail log (admin; manage_users gate inside endpoint)
+        if ($segments[0] === 'outbox') {
+            return [Outbox::class, ['outboxId' => $this->intOrNull($segments[1] ?? null)]];
+        }
+
+        // Wizard defaults — admin-configurable defaults for the event wizard
+        if ($segments[0] === 'wizard-defaults') {
+            return [WizardDefaults::class, []];
+        }
+
         // Panic Promote — /api/promote/...
         if ($segments[0] === 'promote') {
             // GET /api/promote/eventbrite/org — one-time setup helper

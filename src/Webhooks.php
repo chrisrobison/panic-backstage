@@ -259,7 +259,7 @@ final class Webhooks extends BaseEndpoint
             ? 'Hi <strong style="color:#fff;">' . htmlspecialchars($buyerName, ENT_QUOTES, 'UTF-8') . '</strong>,'
             : 'Hello,';
 
-        (new Mailer($this->root))->sendTemplate(
+        (new Mailer($this->root, $this->db))->sendTemplate(
             $to,
             'Your tickets for ' . $title,
             'ticket-purchase',

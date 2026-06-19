@@ -37,6 +37,7 @@ export const HELP_SECTIONS = [
     icon: 'fa-solid fa-calendar-check',
     items: [
       { slug: 'event-create',    title: 'Creating an event' },
+      { slug: 'event-wizard',    title: 'Event creation wizard' },
       { slug: 'private-events',  title: 'Private events &amp; rentals' },
       { slug: 'overview',        title: 'Overview &amp; readiness' },
       { slug: 'details',         title: 'Event details' },
@@ -291,14 +292,22 @@ const HELP_CONTENT = {
 
   'event-create': `
     <h2>Creating an event</h2>
-    <p>Every show in Backstage follows the same arc: spin the event up from a template, lock in the deal and the details, get the key pieces <strong>approved</strong> (the contract and the flyer), announce it to the public, run it on the night, and settle the money afterward. The event workspace is a set of tabs that roughly follow that arc, and the <a href="#help-overview">Overview</a> tab keeps score — its <em>Readiness</em> checks and <em>Next Recommended Action</em> banner always point you at the next thing the show needs.</p>
-    <p>Approvals happen in two places as you go. A <a href="#help-contracts">contract</a> moves through a status workflow (<em>draft &rarr; needs review &rarr; approved &rarr; sent &rarr; signed</em>) and can't be marked sent or signed until its required terms are filled. A flyer is uploaded as <em>pending</em> and a promoter or admin marks it <em>approved</em> before it appears publicly. The event's own <a href="#help-statuses">status</a> (Hold, Intake Complete, Booked, Needs Assets, Published, Advanced, Settled…) is the high-level signal to the rest of the team about where the show stands.</p>
-    <p class="help-tip">📋 <strong>Private event / venue rental?</strong> See <a href="#help-private-events">Private events &amp; rentals</a> — the workflow is shorter and uses a different form.</p>
-    <p>Every public show starts from a template. Open <a href="#help-templates">Templates</a>, pick one that matches the kind of night you are programming, fill in date and doors/show times, and click <em>Create event</em>. From there, work through the tabs — roughly in this order:</p>
+    <p>Every show in Backstage follows the same arc: create the event and lock in the deal, get the key pieces <strong>approved</strong> (the contract and the flyer), announce it to the public, run it on the night, and settle the money afterward. The event workspace is a set of tabs that roughly follow that arc, and the <a href="#help-overview">Overview</a> tab keeps score — its <em>Readiness</em> checks and <em>Next Recommended Action</em> banner always point you at the next thing the show needs.</p>
+
+    <h3>The two ways to create an event</h3>
+    <p>Click the <strong>+ New event</strong> button in the top bar to open the <a href="#help-event-wizard">Event Creation Wizard</a> — a 7-step guided flow that walks you from title and date through deal structure, financial terms, production requirements, and promotion, then creates both the event <em>and</em> a pre-populated contract draft in a single click. This is the recommended path for any show that will have a booking agreement.</p>
+    <p>If you need to spin up a simple show quickly and deal with the contract separately, use the <strong>Quick Create instead</strong> button in the wizard's sidebar. It opens a compact modal: pick a template (or choose "Blank event"), fill in date and doors/show times, and click <em>Create event</em>. The new event opens immediately in its workspace.</p>
+    <p class="help-tip">📋 <strong>Private event / venue rental?</strong> See <a href="#help-private-events">Private events &amp; rentals</a> — the workflow is shorter and the wizard handles the rental deal type automatically.</p>
+
+    <h3>Approvals and status</h3>
+    <p>Approvals happen in two places as the show progresses. A <a href="#help-contracts">contract</a> moves through its own status workflow (<em>draft &rarr; needs review &rarr; approved &rarr; sent &rarr; signed</em>) and can't be marked sent or signed until its required terms are filled. A flyer is uploaded as <em>pending</em> and a promoter or admin marks it <em>approved</em> before it appears publicly. The event's own <a href="#help-statuses">status</a> (Hold, Intake Complete, Booked, Needs Assets, Published, Advanced, Settled…) is the high-level signal to the rest of the team about where the show stands.</p>
+
+    <h3>Working through the event workspace</h3>
+    <p>After creation, the event workspace opens with a set of tabs. Work through them roughly in this order:</p>
     <ol>
       <li><a href="#help-details">Event details</a> — set venue, type, status, owner, ticket price, capacity, and age restriction.</li>
       <li><a href="#help-lineup">Lineup</a> — add the bands or performers, capture payout terms, and confirm them.</li>
-      <li><a href="#help-contracts">Contracts</a> — capture the deal as structured terms, generate the agreement, and walk it through approval to signed.</li>
+      <li><a href="#help-contracts">Contracts</a> — capture the deal as structured terms, generate the agreement, and walk it through approval to signed. (The wizard pre-creates a contract draft for you.)</li>
       <li><a href="#help-ticketing">Ticketing &amp; door</a> — link an external ticket URL, or sell in-house: set up tiers, comps, and door-scanner links.</li>
       <li><a href="#help-schedule">Run sheet</a> — set load-in, soundcheck, set times, changeovers, and curfew.</li>
       <li><a href="#help-staffing">Staffing</a> — schedule security, bar, door, sound, and other night-of-show crew.</li>
@@ -311,6 +320,102 @@ const HELP_CONTENT = {
       <li><a href="#help-settlement">Settlement</a> — after the show, reconcile the numbers and close the books.</li>
     </ol>
     <p>You don't have to do these strictly in order, and not every show needs every tab. A couple of supporting tools run alongside: the <a href="#help-print">Print</a> menu produces night-of packets (run sheet, staffing, guest list, or a combined master packet), and the <a href="#help-activity">Activity log</a> at the bottom of the event records who changed what, so hand-offs between bookers and night-of staff stay clean.</p>
+  `,
+
+  'event-wizard': `
+    <h2>Event creation wizard</h2>
+    <p>The <strong>Event Creation Wizard</strong> is a 7-step guided form that collects everything needed to spin up a new show — event basics, deal structure, contact details, financial terms, production requirements, and promotion settings — then creates both the event <em>and</em> a pre-populated contract draft in one go.</p>
+    <p>Open it by clicking <strong>+ New event</strong> in the top bar, or navigating to <strong>#new-event</strong>. A live <strong>Summary</strong> sidebar on the right updates in real-time as you fill in each field.</p>
+    <p class="help-tip">⌨️ <strong>Keyboard shortcut:</strong> <kbd>Ctrl+Enter</kbd> (or <kbd>Cmd+Enter</kbd> on Mac) advances to the next step from any field.</p>
+
+    <h3>Step 1 — Event Basics</h3>
+    <p>Core details that every event needs. These fields map directly onto the event record:</p>
+    <ul>
+      <li><strong>Event Title</strong> (required) — the public-facing name, e.g. "Friday Night Live with The Slackers".</li>
+      <li><strong>Date</strong> (required) — show date. Defaults to today.</li>
+      <li><strong>Room / Venue</strong> (required) — which space is being used (Downstairs 21+, Upstairs, Both Rooms, etc.).</li>
+      <li><strong>Event Type</strong> (required) — Live Music, Karaoke, Open Mic, Promoter Night, DJ Night, Comedy, Private Event, or Special Event.</li>
+      <li><strong>Doors Open / Show Time / End / Curfew</strong> — defaults to 7 pm / 8 pm / 11 pm.</li>
+      <li><strong>Age Restriction</strong> — All Ages, 18+, or 21+.</li>
+      <li><strong>Capacity</strong> — maximum attendance.</li>
+      <li><strong>Public Description</strong> — short blurb for the public page and event listings. Supports Markdown.</li>
+    </ul>
+
+    <h3>Step 2 — Deal Structure</h3>
+    <p>Choose how the event is structured financially. Your selection gates which financial fields appear on the Deal Terms step and which contract template is auto-suggested:</p>
+    <table class="help-table">
+      <thead><tr><th>Deal type</th><th>When to use it</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Talent Buy</strong></td><td>You pay the artist a guarantee plus a share of the door. Standard for most live music bookings.</td></tr>
+        <tr><td><strong>Promoter Deal</strong></td><td>A promoter rents the room and keeps the door receipts. Venue takes a rental or share.</td></tr>
+        <tr><td><strong>Venue Rental</strong></td><td>Flat rental fee for the space; no door deal or artist guarantee.</td></tr>
+        <tr><td><strong>Private Event</strong></td><td>Buyout or private occasion not listed publicly. Use this for corporate events, parties, film shoots, etc.</td></tr>
+        <tr><td><strong>Residency</strong></td><td>Recurring engagement (weekly, monthly) with a revenue-split structure over a defined term.</td></tr>
+        <tr><td><strong>Free / Internal</strong></td><td>No booking fee or formal contract required — staff event, volunteer night, or similar.</td></tr>
+      </tbody>
+    </table>
+    <p>A matching <strong>Contract Template</strong> is auto-suggested based on the deal type. You can override it with any template in your library. Smart clause selection runs automatically after the event is created.</p>
+
+    <h3>Step 3 — Artist / Promoter</h3>
+    <p><em>Skipped for Free / Internal events.</em> Enter the booking counterparty — the artist, band, promoter, or client:</p>
+    <ul>
+      <li><strong>Contact Name</strong> — start typing to search your Contacts list. Selecting a match auto-fills the organization and email. You can also type a name not in the system.</li>
+      <li><strong>Band / Organization</strong> — label, agency, promoter company, or group name.</li>
+      <li><strong>Contact Email</strong> — used for contract delivery.</li>
+      <li><strong>Artist / Act Name</strong> (Talent Buy and Promoter Deal only) — the performing name if it differs from the contact name.</li>
+    </ul>
+
+    <h3>Step 4 — Deal Terms</h3>
+    <p><em>Skipped for Free / Internal events.</em> Financial terms that will be carried directly into the contract draft. Fields shown depend on the deal type chosen in step 2:</p>
+    <table class="help-table">
+      <thead><tr><th>Field</th><th>Applies to</th></tr></thead>
+      <tbody>
+        <tr><td>Guarantee ($)</td><td>Talent Buy, Promoter Deal</td></tr>
+        <tr><td>Artist Door Split (%)</td><td>Talent Buy, Promoter Deal</td></tr>
+        <tr><td>Venue Door Split (%)</td><td>Talent Buy, Promoter Deal</td></tr>
+        <tr><td>Promoter Door Split (%)</td><td>Promoter Deal</td></tr>
+        <tr><td>Rental Fee ($)</td><td>Venue Rental, Private Event</td></tr>
+        <tr><td>House / Producer Revenue Split (%)</td><td>Residency</td></tr>
+        <tr><td>Advance Ticket ($) / Door Ticket ($)</td><td>All except Rental, Private, Free</td></tr>
+        <tr><td>Deposit Required ($)</td><td>All deal types</td></tr>
+        <tr><td>Balance Due Date</td><td>All deal types</td></tr>
+        <tr><td>Bar Minimum ($)</td><td>All deal types</td></tr>
+        <tr><td>Venue Merch Cut (%)</td><td>All deal types</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Step 5 — Production &amp; Security</h3>
+    <p>Tech rider and night-of logistics:</p>
+    <ul>
+      <li><strong>Sound Tech Included</strong> / <strong>Lighting Tech Included</strong> — yes/no toggles that map onto the contract's tech clause.</li>
+      <li><strong># Security Guards</strong> / <strong>Rate ($/hr)</strong> / <strong>Paid By</strong> — venue, artist, or promoter.</li>
+      <li><strong>Tech Rider Notes</strong> — backline, PA specs, load-in time, stage plot — anything the tech team needs to know.</li>
+    </ul>
+
+    <h3>Step 6 — Promotion</h3>
+    <p>Public listing and marketing settings:</p>
+    <ul>
+      <li><strong>Public Listing?</strong> — whether the event appears on the public-facing page immediately after creation. You can always turn this on later via the <a href="#help-publish">Publish</a> tab.</li>
+      <li><strong>Announce / On-Sale Date</strong> — when tickets go on sale and social posts should go out. Informs the Panic Promote campaign calendar.</li>
+      <li><strong>Promotion Notes</strong> — social handles, preferred platforms, priority campaigns, ticket link — anything marketing needs.</li>
+    </ul>
+
+    <h3>Step 7 — Review &amp; Create</h3>
+    <p>A summary of every field filled in across all previous steps, grouped by section. Each section has an <strong>Edit</strong> button that jumps you back to that step, and any missing required fields are listed at the top as clickable links that focus the relevant input.</p>
+    <p>When everything looks good, click <strong>Create Event &amp; Draft Contract</strong>. Backstage:</p>
+    <ol>
+      <li>Creates the event (<code>POST /events</code>).</li>
+      <li>Creates a contract draft linked to the event (<code>POST /events/{id}/contracts</code>), titled <em>"[Event Title] — [Deal Type]"</em>, pre-filled with the counterparty details and the selected template.</li>
+      <li>Patches the deal terms onto the contract (<code>PATCH /contracts/{id}</code>) so the guarantee, splits, deposit, and other financial fields are already in the draft when you open it.</li>
+      <li>Runs smart clause re-evaluation to auto-select relevant clauses from your contract library based on the deal type and terms.</li>
+      <li>Redirects to the new event workspace and shows a success toast.</li>
+    </ol>
+
+    <h3>Quick Create fallback</h3>
+    <p>The <strong>⚡ Quick Create instead</strong> button in the wizard sidebar switches to the compact quick-create modal — just template, date, title, and times. Use it when you want to stub out a placeholder event and fill in the contract separately later. Any date you've entered in the wizard carries over.</p>
+
+    <h3>What the wizard does not do</h3>
+    <p>The wizard creates the event and the contract draft. It does not schedule the lineup, build the run sheet, add staffing, or publish the public page — those live in the event workspace tabs you'll work through after creation. See <a href="#help-event-create">Creating an event</a> for the full post-creation workflow.</p>
   `,
 
   'private-events': `
