@@ -50,6 +50,7 @@ export const HELP_SECTIONS = [
       { slug: 'assets',       title: 'Assets &amp; flyers' },
       { slug: 'invites',      title: 'Invites &amp; collaborators' },
       { slug: 'contracts',    title: 'Contracts &amp; deal builder' },
+      { slug: 'e-signatures', title: 'Electronic signatures' },
       { slug: 'ticketing',    title: 'Ticketing &amp; door' },
       { slug: 'settlement',   title: 'Settlement' },
       { slug: 'publish',      title: 'Publishing the public page' },
@@ -723,12 +724,108 @@ const HELP_CONTENT = {
     <p>The <em>Review</em> panel lists required terms that are still blank (grouped by clause) and flags deal risks — no deposit on a rental, an all-ages event with no security clause, a guarantee with no cancellation terms, and so on. You cannot mark a contract <em>Sent</em> or <em>Signed</em> until every required term is filled and at least one version has been generated.</p>
 
     <h3>Status workflow</h3>
-    <p>Contracts move through: <strong>Draft &rarr; Needs Review &rarr; Approved &rarr; Sent &rarr; Signed</strong> (plus <em>Cancelled</em> and <em>Superseded</em>). Approving requires the <em>approve contracts</em> permission. The buttons available depend on the current status and your role.</p>
+    <p>Contracts move through two broad phases. The <strong>draft phase</strong> is internal: <strong>Draft &rarr; Needs Review &rarr; Approved &rarr; Ready to Send</strong>. Once you send the contract out for signature, it enters the <strong>e-sign phase</strong>: <strong>Sent &rarr; Viewed &rarr; Partially Signed &rarr; Signed by Client &rarr; Countersigned &rarr; Fully Executed</strong>. When a contract reaches <em>Fully Executed</em>, the linked event automatically advances to <em>Booked</em> (if it was still in a pre-booked status). Terminal statuses — <em>Voided</em>, <em>Declined</em>, <em>Expired</em>, <em>Cancelled</em>, and <em>Superseded</em> — can occur at any point and end the workflow. Approving requires the <em>approve contracts</em> permission.</p>
 
     <h3>Versions &amp; PDF</h3>
-    <p>Every <em>Generate version</em> stores an immutable snapshot you can re-open from <em>Version history</em>. <em>Download PDF</em> renders the current preview to a PDF in the browser — no e-signature step is required for the MVP; a generated PDF plus manual signing is enough.</p>
+    <p>Every <em>Generate version</em> stores an immutable snapshot you can re-open from <em>Version history</em>. <em>Download PDF</em> renders the current preview to a PDF for your own records. Once a contract is fully executed via electronic signature, a <strong>Final Executed PDF</strong> is generated server-side with the signature blocks and a one-page audit certificate appended; this is the legally authoritative copy. See <a href="#help-e-signatures">Electronic signatures</a> for the complete send-to-executed workflow.</p>
 
     <p class="muted small">Who sees what: venue admins and event owners can manage and approve event contracts; promoters can view them; bands, designers, and viewers do not see contracts. Clause text is starter language — have counsel review your clause library before sending real contracts.</p>
+  `,
+
+  'e-signatures': `
+    <h2>Electronic signatures</h2>
+    <p>Panic Backstage has a built-in e-signature flow — no DocuSign or third-party account required. Once a contract is approved, send it for signature with one click. Each signer receives a secure, time-limited link by email and signs right in their browser. When everyone has signed, the system generates a tamper-evident <strong>Final Executed PDF</strong> with embedded signature blocks and an audit certificate, stores a SHA-256 hash of that file, and automatically advances the linked event to <em>Booked</em>.</p>
+
+    <h3>The contract signing status ladder</h3>
+    <p>A contract that goes through the full e-sign workflow passes through these statuses:</p>
+    <ol>
+      <li><strong>Draft</strong> — initial contract in the builder.</li>
+      <li><strong>Needs Review</strong> — submitted for admin review.</li>
+      <li><strong>Approved</strong> — reviewed and approved; ready to send.</li>
+      <li><strong>Ready to Send</strong> — queued up; signers identified. Click <em>Send for Signature</em>.</li>
+      <li><strong>Sent</strong> — signing-link emails are delivered; awaiting action.</li>
+      <li><strong>Viewed</strong> — at least one signer has opened their link.</li>
+      <li><strong>Partially Signed</strong> — one or more signers have signed but at least one is still pending.</li>
+      <li><strong>Signed by Client</strong> — the counterparty signer(s) have all signed; awaiting your countersignature.</li>
+      <li><strong>Countersigned</strong> — venue has countersigned; generating the final PDF.</li>
+      <li><strong>Fully Executed</strong> — all parties have signed. Final PDF is sealed and the linked event moves to <em>Booked</em>.</li>
+    </ol>
+    <p><strong>Terminal statuses</strong> (can happen at any stage): <em>Voided</em> — admin cancelled the contract; <em>Declined</em> — a signer clicked "Decline"; <em>Expired</em> — signing links timed out before everyone signed.</p>
+
+    <h3>Who can sign</h3>
+    <p>Contracts support multiple signers:</p>
+    <ul>
+      <li><strong>Renter / Counterparty</strong> — the promoter, artist, or client on the other side of the deal. Their email is taken from the contract's counterparty fields.</li>
+      <li><strong>Venue</strong> — the staff member countersigning on behalf of the venue. This is the admin who clicks <em>Countersign</em> inside the app.</li>
+      <li>Additional signers (guarantor, artist rep) can be added manually when sending.</li>
+    </ul>
+
+    <h3>Sending a contract for signature</h3>
+    <ol>
+      <li>In the contract editor, make sure the contract is in <strong>Approved</strong> or <strong>Ready to Send</strong> status and all required terms are filled.</li>
+      <li>Click <strong>Send for Signature</strong>. A dialog shows the signers — their names and email addresses are pre-filled from the counterparty fields. Add or edit signers if needed.</li>
+      <li>Click <strong>Confirm &amp; Send</strong>. Each signer receives an email with a personalised, time-limited signing link.</li>
+      <li>The contract status advances to <em>Sent</em> and the <em>Signers</em> panel in the right rail shows each signer's current status (Pending, Viewed, Signed, Declined).</li>
+    </ol>
+
+    <div class="help-callout warn">
+      <strong>Link expiry.</strong> By default signing links expire after 7 days (168 hours). If a signer says their link stopped working, use <em>Resend Link</em> from the Signers panel to regenerate it.
+    </div>
+
+    <h3>What the signer experiences</h3>
+    <ol>
+      <li>The signer receives an email with a <strong>Review &amp; Sign</strong> button.</li>
+      <li>Clicking the link opens <code>/sign.html</code> — a simple, clean page showing the contract for review. The signer does <em>not</em> need a Backstage account.</li>
+      <li>After reading, they choose one of two methods:
+        <ul>
+          <li><strong>Type signature</strong> — their name is rendered in a cursive font as a legal signature.</li>
+          <li><strong>Draw signature</strong> — a canvas lets them draw with mouse or touch.</li>
+        </ul>
+      </li>
+      <li>They tick the consent checkbox and click <strong>Sign Agreement</strong>. The signature is recorded immediately; the link is invalidated after use and cannot be reused.</li>
+      <li>If they choose to decline, they click <strong>Decline</strong> and can optionally leave a note explaining why.</li>
+    </ol>
+
+    <h3>Managing signers — resend, void, countersign</h3>
+    <p>These actions are available from the <strong>Signers</strong> panel on the right side of the contract editor (visible once the contract has been sent):</p>
+    <ul>
+      <li><strong>Resend link.</strong> Generates a fresh signing link for a specific signer and re-sends the email. Use when a signer's original link has expired or they deleted the email.</li>
+      <li><strong>Void contract.</strong> Cancels the entire signing process, invalidates all outstanding links, and records a reason. The contract status becomes <em>Voided</em>. Use if terms change substantially or the deal falls through. Void is permanent — start a new contract to re-engage.</li>
+      <li><strong>Countersign.</strong> Available to venue admins once all external signers have signed (status = <em>Signed by Client</em>). Click <em>Countersign</em>, provide your typed or drawn signature and consent, and Backstage finalises the contract, generates the PDF, and advances the event.</li>
+    </ul>
+
+    <div class="help-callout note">
+      <strong>Skip countersignature?</strong> If your venue does not require a countersignature, you can configure the workflow to automatically fully-execute once the counterparty signs. Ask your Backstage administrator to check the workflow settings.
+    </div>
+
+    <h3>The audit log</h3>
+    <p>Every action on a contract — sent, viewed, signed, declined, voided, countersigned — is recorded in an immutable <strong>Audit log</strong>. Open it from the contract editor's right rail by clicking <em>Audit log</em>. Each entry shows:</p>
+    <ul>
+      <li>The <strong>action</strong> taken (e.g. <em>contract_sent</em>, <em>contract_signed</em>).</li>
+      <li>Which <strong>signer</strong> performed it (name + email), or "Admin" for venue-side actions.</li>
+      <li>The <strong>timestamp</strong>, <strong>IP address</strong>, and browser user-agent.</li>
+    </ul>
+    <p>The audit log is append-only — no entry can be edited or deleted. It is reproduced in full on the last page of the Final Executed PDF as the audit certificate.</p>
+
+    <h3>The Final Executed PDF</h3>
+    <p>When a contract reaches <em>Fully Executed</em>, Backstage generates a single locked PDF that contains:</p>
+    <ul>
+      <li>The full contract body as it was approved.</li>
+      <li>A <strong>signature block</strong> for each signer showing their typed or drawn signature, full name, title, the date and time of signing, and their IP address.</li>
+      <li>A <strong>one-page audit certificate</strong> at the end listing every event in the lifecycle from draft to execution.</li>
+      <li>A <strong>SHA-256 hash</strong> of the document, stored in the database so you can verify the file has not been altered after the fact.</li>
+    </ul>
+    <p>To download the final PDF, open the contract and click <strong>Download Final PDF</strong> in the right rail. The button is only present once the contract is in <em>Fully Executed</em> status.</p>
+
+    <h3>Security</h3>
+    <ul>
+      <li>Signing tokens are single-use and expire after the configured TTL (default 7 days). Only the SHA-256 <em>hash</em> of the token is stored in the database; the raw token exists only in the email link.</li>
+      <li>The token is invalidated the moment the signer clicks <em>Sign Agreement</em> or <em>Decline</em>. Refreshing the page or forwarding the link will no longer open the signing form.</li>
+      <li>A voided contract's outstanding tokens are invalidated immediately — signers who follow an old link see an "this link is no longer valid" message.</li>
+      <li>If a signer's link is resent, the previous token is invalidated and only the new one works.</li>
+    </ul>
+
+    <p class="muted small">Who sees what: venue admins can send, void, resend, countersign, and download contracts. Event owners can view contract status. The signing page (<code>/sign.html</code>) is publicly accessible — signers need no Backstage account.</p>
   `,
 
   ticketing: `
