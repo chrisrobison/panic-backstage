@@ -52,6 +52,7 @@ final class Contracts extends BaseEndpoint
         if ($child !== null) {
             return match ($child) {
                 'render'         => $this->requireManage($access) ?? $this->renderVersion($contract),
+                'pdf'            => $this->pdfExport($contract),
                 'versions'       => $method === 'GET' ? $this->version($contract, (int) ($this->params['childId'] ?? 0)) : Response::methodNotAllowed(),
                 'status'         => $this->requireManage($access) ?? $this->changeStatus($request, $contract, $access),
                 'apply-template' => $this->requireManage($access) ?? $this->applyTemplate($request, $contract),
@@ -270,6 +271,94 @@ final class Contracts extends BaseEndpoint
             log_activity($this->db, (int) $contract['event_id'], $this->userId(), 'contract version generated', ['version' => $next]);
         }
         return $this->ok(['id' => $vid, 'version_number' => $next, 'html' => $rendered['html']]);
+    }
+
+    // ── PDF export via wkhtmltopdf ────────────────────────────────────────────
+
+    /** CSS for the wkhtmltopdf render (no @page needed — margins come from CLI flags). */
+    private const PDF_CSS = <<<'CSS'
+        *, *::before, *::after { box-sizing: border-box; }
+        body { font-family: Georgia, 'Times New Roman', serif; color: #111; background: #fff; margin: 0; padding: 0; line-height: 1.6; }
+        .contract-doc { max-width: none; margin: 0; }
+        .contract-doc-head h1 { font-size: 22px; margin: 0 0 4px; }
+        .contract-doc-sub { color: #555; margin: 0 0 20px; font-style: italic; }
+        .contract-summary { width: 100%; border-collapse: collapse; margin: 0 0 24px; font-size: 13px; }
+        .contract-summary caption { text-align: left; font-weight: bold; padding-bottom: 6px; }
+        .contract-summary th { text-align: left; width: 42%; padding: 4px 8px; color: #444; font-weight: normal; border-bottom: 1px solid #ddd; }
+        .contract-summary td { padding: 4px 8px; border-bottom: 1px solid #ddd; }
+        .contract-section { margin: 0 0 20px; }
+        .contract-section h2 { font-size: 15px; margin: 0 0 6px; }
+        .contract-section-body p { margin: 0 0 8px; text-align: justify; }
+        .contract-token-missing { background: #ffe2a8; color: #7a4b00; padding: 0 4px; border-radius: 3px; font-style: italic; }
+CSS;
+
+    /**
+     * Render the current contract preview to a PDF via wkhtmltopdf and stream
+     * it back as application/pdf.
+     *   GET /api/contracts/{id}/pdf
+     */
+    private function pdfExport(array $contract): Response
+    {
+        [$event, $venue] = ContractService::eventVenueFor($this->db, $contract);
+        $ctx      = ContractRenderer::context($contract, $event, $venue);
+        $sections = $this->boolIncluded($this->loadSections((int) $contract['id']));
+        $rendered = ContractRenderer::render($contract, $sections, $ctx, $event, $venue);
+
+        $title   = htmlspecialchars((string) ($contract['title'] ?? 'Contract'), ENT_QUOTES, 'UTF-8');
+        $css     = self::PDF_CSS;
+        $body    = $rendered['html'];
+        $html    = <<<HTML
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{$title}</title>
+  <style>{$css}</style>
+</head>
+<body>{$body}</body>
+</html>
+HTML;
+
+        $bin  = '/usr/bin/wkhtmltopdf';
+        $args = '--quiet --page-size Letter'
+              . ' --margin-top 0.75in --margin-right 0.75in'
+              . ' --margin-bottom 0.75in --margin-left 0.75in'
+              . ' --encoding utf-8 --disable-smart-shrinking'
+              . ' - -';   // stdin → stdout
+
+        $proc = proc_open("$bin $args", [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ], $pipes);
+
+        if (!is_resource($proc)) {
+            return Response::json(['error' => 'PDF renderer unavailable'], 503);
+        }
+
+        fwrite($pipes[0], $html);
+        fclose($pipes[0]);
+
+        $pdf    = stream_get_contents($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $exit   = proc_close($proc);
+
+        if ($exit !== 0 || !$pdf) {
+            error_log("wkhtmltopdf exit={$exit}: {$stderr}");
+            return Response::json(['error' => 'PDF generation failed'], 500);
+        }
+
+        $safe = preg_replace('/[^\w\s-]/', '', (string) ($contract['title'] ?? 'contract'));
+        $safe = trim(preg_replace('/\s+/', '-', $safe)) ?: 'contract';
+
+        return new Response($pdf, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$safe}.pdf\"",
+            'Content-Length'      => (string) strlen($pdf),
+            'Cache-Control'       => 'private, no-cache',
+        ]);
     }
 
     private function version(array $contract, int $versionId): Response

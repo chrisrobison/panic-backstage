@@ -1,4 +1,4 @@
-import { esc, titleCase, publish, api, formData, badge, option, select, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
+import { esc, titleCase, publish, api, getToken, formData, badge, option, select, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
 
 
 // ── Contracts (admin) ─────────────────────────────────────────────────────────
@@ -118,9 +118,35 @@ ${CONTRACT_DOC_CSS}
 }
 
 
-/** Download PDF: open the print window and immediately trigger the print dialog. */
-function downloadContractPdf(html, title) {
-  printContractWindow(html, title, { autoPrint: true });
+/**
+ * Request a server-rendered PDF from GET /api/contracts/{id}/pdf
+ * (wkhtmltopdf on the server) and trigger a browser download.
+ * Falls back to the print window if the endpoint fails.
+ */
+async function downloadContractPdf(contractId, title) {
+  publish('toast.show', { message: 'Generating PDF…' });
+  try {
+    const resp = await fetch(`/api/contracts/${contractId}/pdf`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `Server error ${resp.status}`);
+    }
+    const blob = await resp.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), {
+      href:     url,
+      download: `${(title || 'contract').replace(/[^\w\s-]/g, '').trim() || 'contract'}.pdf`,
+    });
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    publish('toast.show', { message: 'PDF downloaded.' });
+  } catch (err) {
+    publish('toast.show', { message: `PDF failed: ${err.message} — use Print instead.`, tone: 'error' });
+  }
 }
 
 
@@ -347,7 +373,7 @@ class ContractEditor extends PanicElement {
   bind() {
     const id = this.contractId;
     $('[data-act="pdf"]', this)?.addEventListener('click', () => {
-      downloadContractPdf(this.data.preview_html, this.data.contract.title || 'Contract');
+      downloadContractPdf(this.contractId, this.data.contract.title || 'Contract');
     });
     $('[data-act="print"]', this)?.addEventListener('click', () => {
       printContractWindow(this.data.preview_html, this.data.contract.title || 'Contract');
