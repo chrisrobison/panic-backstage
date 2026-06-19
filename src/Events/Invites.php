@@ -129,7 +129,7 @@ final class Invites extends BaseEndpoint
         $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
         $url    = "{$appUrl}/invite.html?token={$token}";
 
-        (new Mailer($this->root))->sendTemplate(
+        (new Mailer($this->root, $this->db))->sendTemplate(
             $email,
             "You're invited to collaborate on {$title}",
             'event-invite',

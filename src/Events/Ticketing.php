@@ -555,7 +555,7 @@ final class Ticketing extends BaseEndpoint
             ? 'Hi <strong style="color:#fff;">' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</strong>,'
             : 'Hello,';
 
-        (new Mailer($this->root))->sendTemplate(
+        (new Mailer($this->root, $this->db))->sendTemplate(
             $email,
             "Your comp tickets for {$title}",
             'comp-tickets',

@@ -23,14 +23,20 @@ final class Mailer
     private string $fromName;
     /** @var string[] Extra envelope-only recipients (blind copies). */
     private array $bcc;
+    private ?Database $db;
 
-    public function __construct(string $root)
+    /**
+     * @param Database|null $db  When provided, each sent message is persisted
+     *                           to the outbox table so admins can browse it.
+     */
+    public function __construct(string $root, ?Database $db = null)
     {
         $this->logDir      = $root . '/storage/mail';
         $this->templateDir = $root . '/storage/email-templates';
         $this->fromAddress = getenv('MAIL_FROM_ADDRESS') ?: ('noreply@' . (getenv('APP_HOST') ?: 'localhost'));
         $this->fromName    = getenv('MAIL_FROM_NAME') ?: 'Backstage';
         $this->bcc         = $this->parseBcc(getenv('MAIL_BCC') ?: '');
+        $this->db          = $db;
 
         if (!is_dir($this->logDir)) {
             mkdir($this->logDir, 0755, true);
@@ -82,7 +88,7 @@ final class Mailer
             $text = str_replace('{{' . $key . '}}', $value, $text);
         }
 
-        $this->send($to, $subject, $text, $html);
+        $this->send($to, $subject, $text, $html, $template);
     }
 
     /**
@@ -91,8 +97,11 @@ final class Mailer
      * When $htmlBody is provided the message is wrapped in a multipart/alternative
      * MIME envelope (plain-text part first, HTML part second). When omitted the
      * message is a simple text/plain message.
+     *
+     * @param string|null $template  Template name (if sent via sendTemplate).
+     *                               Stored in the outbox record for traceability.
      */
-    public function send(string $to, string $subject, string $textBody, ?string $htmlBody = null): void
+    public function send(string $to, string $subject, string $textBody, ?string $htmlBody = null, ?string $template = null): void
     {
         // Strip header injection attempts from anything that ends up in headers.
         $to      = $this->sanitizeHeaderValue($to);
@@ -102,6 +111,7 @@ final class Mailer
 
         $this->writeToFile($to, $message);
         $this->pipeToSendmail($to, $message);
+        $this->logToOutbox($to, $subject, $textBody, $htmlBody, $template);
     }
 
     // ─── Message builder ───────────────────────────────────────────────────────
@@ -230,6 +240,25 @@ final class Mailer
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Persist the sent message to the outbox table.
+     * Failures are silently swallowed so a DB issue never breaks a mail send.
+     */
+    private function logToOutbox(string $to, string $subject, string $textBody, ?string $htmlBody, ?string $template): void
+    {
+        if ($this->db === null) {
+            return;
+        }
+        try {
+            $this->db->run(
+                'INSERT INTO outbox (to_address, subject, text_body, html_body, template) VALUES (?, ?, ?, ?, ?)',
+                [$to, $subject, $textBody !== '' ? $textBody : null, $htmlBody, $template]
+            );
+        } catch (\Throwable) {
+            // Never let outbox failures interrupt mail delivery.
+        }
+    }
 
     private function logError(string $to, int $exit, string $detail): void
     {

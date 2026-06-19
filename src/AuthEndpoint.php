@@ -117,7 +117,7 @@ final class AuthEndpoint extends BaseEndpoint
         $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
         $link   = "{$appUrl}/login.html?token={$token}";
 
-        (new Mailer($this->root))->sendTemplate(
+        (new Mailer($this->root, $this->db))->sendTemplate(
             $email,
             'Your Backstage login link',
             'magic-link',
@@ -443,7 +443,7 @@ final class AuthEndpoint extends BaseEndpoint
             'applicant_notes_block'=> $notesBlock,
         ];
 
-        $mailer = new Mailer($this->root);
+        $mailer = new Mailer($this->root, $this->db);
         foreach ($admins as $admin) {
             $mailer->sendTemplate((string) $admin['email'], 'Backstage — new access request', 'access-request', $vars);
         }

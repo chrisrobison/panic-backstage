@@ -12,6 +12,7 @@ import './tickets-public.js';
 import './help.js';
 import { HELP_SECTIONS } from './help.js';
 import './promote.js';
+import './outbox.js';
 
 
 class AppShell extends PanicElement {
@@ -93,6 +94,7 @@ class AppShell extends PanicElement {
             <a data-nav="admin-templates" href="#admin-templates" title="Admin templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
             <a data-nav="admin-contracts" href="#admin-contracts" title="Contracts"><i class="fa-solid fa-file-signature" aria-hidden="true"></i>Contracts</a>
             <a data-nav="admin-payments" href="#admin-payments" title="Payments"><i class="fa-solid fa-credit-card" aria-hidden="true"></i>Payments</a>
+            <a data-nav="outbox" href="#outbox" title="Outbox"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i>Outbox</a>
           </div>
         </div>
         ${this.helpNavGroup()}
@@ -274,6 +276,7 @@ class AppShell extends PanicElement {
       return `admin-${tab}`;
     }
     if (route.startsWith('help')) return this.helpNavKey(route);
+    if (route === 'outbox') return 'outbox';
     return route;
   }
 
@@ -325,6 +328,7 @@ class AppShell extends PanicElement {
       const anchor = route === 'help' ? '' : route.replace(/^help[-/]/, '');
       return this.mount(outlet, 'pb-help-page', { anchor });
     }
+    if (route === 'outbox') return this.mount(outlet, 'pb-outbox-page');
     return this.mount(outlet, 'pb-dashboard');
   }
 
