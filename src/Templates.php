@@ -11,8 +11,10 @@ namespace Panic;
  *   PATCH  /api/templates/{id}         update (name, copy, price, age, checklist, schedule)
  *   DELETE /api/templates/{id}         delete
  *
- * checklist_json and schedule_json may be sent as JSON strings OR as PHP arrays
- * (the JSON body decoder will hand us arrays); both are accepted.
+ * checklist_json, schedule_json, and staffing_json may be sent as JSON strings OR as
+ * PHP arrays (the JSON body decoder will hand us arrays); both are accepted.
+ *
+ * staffing_json format: [{"role":"bartender","count":2},{"role":"security","count":2,"notes":"Front door"}]
  */
 final class Templates extends BaseEndpoint
 {
@@ -64,8 +66,8 @@ final class Templates extends BaseEndpoint
         [$payload, $error] = $this->payload($request);
         if ($error) return $error;
         $id = $this->db->insert(
-            'INSERT INTO event_templates (venue_id, name, event_type, default_title, default_description_public, default_ticket_price, default_age_restriction, checklist_json, schedule_json)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO event_templates (venue_id, name, event_type, default_title, default_description_public, default_ticket_price, default_age_restriction, checklist_json, schedule_json, staffing_json)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $payload['venue_id'],
                 $payload['name'],
@@ -76,6 +78,7 @@ final class Templates extends BaseEndpoint
                 $payload['default_age_restriction'],
                 $payload['checklist_json'],
                 $payload['schedule_json'],
+                $payload['staffing_json'],
             ]
         );
         return $this->ok(['id' => $id]);
@@ -90,7 +93,7 @@ final class Templates extends BaseEndpoint
         if ($error) return $error;
         $this->db->run(
             'UPDATE event_templates
-             SET venue_id=?, name=?, event_type=?, default_title=?, default_description_public=?, default_ticket_price=?, default_age_restriction=?, checklist_json=?, schedule_json=?
+             SET venue_id=?, name=?, event_type=?, default_title=?, default_description_public=?, default_ticket_price=?, default_age_restriction=?, checklist_json=?, schedule_json=?, staffing_json=?
              WHERE id=?',
             [
                 $payload['venue_id'],
@@ -102,6 +105,7 @@ final class Templates extends BaseEndpoint
                 $payload['default_age_restriction'],
                 $payload['checklist_json'],
                 $payload['schedule_json'],
+                $payload['staffing_json'],
                 $id,
             ]
         );
@@ -140,6 +144,7 @@ final class Templates extends BaseEndpoint
             'default_age_restriction'    => trim((string) $request->body('default_age_restriction', '')) ?: null,
             'checklist_json'             => $this->normalizeJsonList($request->body('checklist_json')),
             'schedule_json'              => $this->normalizeJsonList($request->body('schedule_json')),
+            'staffing_json'              => $this->normalizeJsonList($request->body('staffing_json')),
         ], null];
     }
 

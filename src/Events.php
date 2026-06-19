@@ -214,7 +214,7 @@ final class Events extends BaseEndpoint
 
         // Private events are never publicly visible and auto-assign to Colleen.
         $publicVisibility = $isPrivate ? 0 : (boolish($body['public_visibility'] ?? false) ? 1 : 0);
-        $ownerId = $body['owner_user_id'] ?: ($isPrivate ? $this->getPrivateEventHandlerId() : $this->userId());
+        $ownerId = ($body['owner_user_id'] ?? null) ?: ($isPrivate ? $this->getPrivateEventHandlerId() : $this->userId());
 
         if (in_array($newStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
             if ($conflict = $this->checkRoomConflict((int) $body['venue_id'], $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['end_time'] ?? null))) {
@@ -224,7 +224,7 @@ final class Events extends BaseEndpoint
         $id = $this->db->insert(
             'INSERT INTO events (venue_id, title, slug, event_type, status, description_public, description_internal, av_requirements, catering_notes, date, doors_time, show_time, end_time, load_in_time, age_restriction, ticket_price, deposit_amount, potential_revenue, ticket_url, ticket_system, contract_url, venue_contract_url, walkthrough_done, settlement_doc_url, capacity, estimated_guests, public_visibility, owner_user_id, promoter_name, promoter_email, promoter_phone, client_org, booker_name, booker_email, booker_phone)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $newStatus, $isPrivate ? null : self::nullableString($body['description_public'] ?? null), self::nullableString($body['description_internal'] ?? null), self::nullableString($body['av_requirements'] ?? null), self::nullableString($body['catering_notes'] ?? null), $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), date_or_null($body['load_in_time'] ?? null), $body['age_restriction'] ?? null, $isPrivate ? 0 : (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), self::nullableString($body['venue_contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), $body['capacity'] ?: null, $body['estimated_guests'] ?: null, $publicVisibility, $ownerId, self::nullableString($body['promoter_name'] ?? null), self::nullableString($body['promoter_email'] ?? null), self::nullableString($body['promoter_phone'] ?? null), self::nullableString($body['client_org'] ?? null), $isPrivate ? null : self::nullableString($body['booker_name'] ?? null), $isPrivate ? null : self::nullableString($body['booker_email'] ?? null), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? null)]
+            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $newStatus, $isPrivate ? null : self::nullableString($body['description_public'] ?? null), self::nullableString($body['description_internal'] ?? null), self::nullableString($body['av_requirements'] ?? null), self::nullableString($body['catering_notes'] ?? null), $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), date_or_null($body['load_in_time'] ?? null), $body['age_restriction'] ?? null, $isPrivate ? 0 : (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), self::nullableString($body['venue_contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), ($body['capacity'] ?? null) ?: null, ($body['estimated_guests'] ?? null) ?: null, $publicVisibility, $ownerId, self::nullableString($body['promoter_name'] ?? null), self::nullableString($body['promoter_email'] ?? null), self::nullableString($body['promoter_phone'] ?? null), self::nullableString($body['client_org'] ?? null), $isPrivate ? null : self::nullableString($body['booker_name'] ?? null), $isPrivate ? null : self::nullableString($body['booker_email'] ?? null), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? null)]
         );
         $this->assignEventCode($id);
         log_activity($this->db, $id, $this->userId(), 'event created', ['title' => $body['title']]);
@@ -249,6 +249,9 @@ final class Events extends BaseEndpoint
             return $denied;
         }
         $body = $request->body();
+        if (isset($body['status']) && !in_array($body['status'], self::STATUSES, true)) {
+            return Response::json(['error' => 'Invalid status value: ' . $body['status'] . '. Allowed: ' . implode(', ', self::STATUSES)], 422);
+        }
         if (isset($body['status']) && count($body) === 1) {
             $existing = $this->db->one('SELECT * FROM events WHERE id = ?', [$id]);
             if (!$existing) return $this->notFound();
@@ -337,7 +340,7 @@ final class Events extends BaseEndpoint
 
         $this->db->run(
             'UPDATE events SET venue_id=?, title=?, slug=?, event_type=?, status=?, description_public=?, description_internal=?, av_requirements=?, catering_notes=?, date=?, doors_time=?, show_time=?, end_time=?, load_in_time=?, age_restriction=?, ticket_price=?, deposit_amount=?, potential_revenue=?, ticket_url=?, ticket_system=?, contract_url=?, venue_contract_url=?, walkthrough_done=?, settlement_doc_url=?, capacity=?, estimated_guests=?, public_visibility=?, owner_user_id=?, promoter_name=?, promoter_email=?, promoter_phone=?, client_org=?, booker_name=?, booker_email=?, booker_phone=? WHERE id=?',
-            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $body['status'], $isPrivate ? null : ($body['description_public'] ?? null), $body['description_internal'] ?? null, self::nullableString($body['av_requirements'] ?? $old['av_requirements']), self::nullableString($body['catering_notes'] ?? $old['catering_notes']), $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), date_or_null($body['load_in_time'] ?? $old['load_in_time'] ?? null), $body['age_restriction'] ?? null, $isPrivate ? 0 : (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? $old['ticket_url']), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? $old['ticket_system']), self::nullableString($body['contract_url'] ?? $old['contract_url']), self::nullableString($body['venue_contract_url'] ?? $old['venue_contract_url']), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? $old['settlement_doc_url']), $body['capacity'] ?: null, isset($body['estimated_guests']) && $body['estimated_guests'] !== '' ? (int) $body['estimated_guests'] : ($old['estimated_guests'] ?? null), $updatePublicVis, $body['owner_user_id'] ?: null, self::nullableString($body['promoter_name'] ?? $old['promoter_name']), self::nullableString($body['promoter_email'] ?? $old['promoter_email']), self::nullableString($body['promoter_phone'] ?? $old['promoter_phone']), self::nullableString($body['client_org'] ?? $old['client_org']), $isPrivate ? null : self::nullableString($body['booker_name'] ?? $old['booker_name']), $isPrivate ? null : self::nullableString($body['booker_email'] ?? $old['booker_email']), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? $old['booker_phone']), $id]
+            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $body['status'], $isPrivate ? null : ($body['description_public'] ?? null), $body['description_internal'] ?? null, self::nullableString($body['av_requirements'] ?? $old['av_requirements']), self::nullableString($body['catering_notes'] ?? $old['catering_notes']), $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), date_or_null($body['load_in_time'] ?? $old['load_in_time'] ?? null), $body['age_restriction'] ?? null, $isPrivate ? 0 : (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? $old['ticket_url']), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? $old['ticket_system']), self::nullableString($body['contract_url'] ?? $old['contract_url']), self::nullableString($body['venue_contract_url'] ?? $old['venue_contract_url']), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? $old['settlement_doc_url']), ($body['capacity'] ?? null) ?: null, isset($body['estimated_guests']) && $body['estimated_guests'] !== '' ? (int) $body['estimated_guests'] : ($old['estimated_guests'] ?? null), $updatePublicVis, ($body['owner_user_id'] ?? null) ?: null, self::nullableString($body['promoter_name'] ?? $old['promoter_name']), self::nullableString($body['promoter_email'] ?? $old['promoter_email']), self::nullableString($body['promoter_phone'] ?? $old['promoter_phone']), self::nullableString($body['client_org'] ?? $old['client_org']), $isPrivate ? null : self::nullableString($body['booker_name'] ?? $old['booker_name']), $isPrivate ? null : self::nullableString($body['booker_email'] ?? $old['booker_email']), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? $old['booker_phone']), $id]
         );
         if (isset($body['status']) && $body['status'] !== $wasStatus) {
             $this->notifyStatusChange($id, $wasStatus, $body['status']);
@@ -443,6 +446,10 @@ final class Events extends BaseEndpoint
         }
         foreach ($this->jsonList($template['schedule_json']) as $item) {
             $this->db->run('INSERT INTO event_schedule_items (event_id, title, item_type, start_time, end_time) VALUES (?, ?, ?, ?, ?)', [$id, $item['title'], $item['item_type'] ?? 'other', $item['start_time'] ?? null, $item['end_time'] ?? null]);
+        }
+        $staffingEntries = $this->jsonList($template['staffing_json'] ?? '');
+        if ($staffingEntries) {
+            (new Events\Staffing($this->db, $this->auth, []))->createFromTemplate($id, $staffingEntries);
         }
         log_activity($this->db, $id, $this->userId(), 'event created from template', ['template_id' => $templateId]);
         $this->pushToSheet($id);
@@ -819,16 +826,16 @@ final class Events extends BaseEndpoint
     /**
      * Send email notifications when an event status changes.
      *
-     * - confirmed (Intake Complete): notify venue_admins + venue manager (Tom) with
-     *   actionable next-steps email so the contract can be drafted and co-signed.
-     * - booked: notify venue_admins that contract is signed and booking is confirmed
-     * - needs_assets: notify producer/artist and booker to submit promo materials
+     * Admin (venue_admins + VENUE_MANAGER_EMAIL) is notified on EVERY status
+     * change via the status-changed template. Two additional external sidecars fire
+     * for specific transitions only:
+     * - booked (private events): also notify the client that their event is confirmed.
+     * - needs_assets (public events): notify producer/artist + booker to submit promo materials.
      *
      * Best-effort — never throws.
      */
     private function notifyStatusChange(int $eventId, string $oldStatus, string $newStatus): void
     {
-        if (!in_array($newStatus, ['confirmed', 'booked', 'needs_assets'], true)) return;
         try {
             $event = $this->db->one(
                 'SELECT e.title, e.date, e.show_time, e.event_type,
@@ -852,121 +859,120 @@ final class Events extends BaseEndpoint
 
             $mailer = new Mailer($this->root);
 
-            // ── Intake Complete: notify venue_admins + venue manager (Tom) ───
-            // Uses a dedicated intake-complete template with clear next steps:
-            // draft contract → Tom co-signs → send to producer/client for signature
-            // → upload signed copy → advance to Booked.
-            if ($newStatus === 'confirmed') {
-                $admins = $this->db->all(
-                    "SELECT name, email FROM users
-                      WHERE role = 'venue_admin'
-                        AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'"
-                );
+            // ── Human-readable status labels ─────────────────────────────────
+            $statusLabels = [
+                'empty'              => 'Empty',
+                'proposed'          => 'Hold',
+                'confirmed'         => 'Intake Complete',
+                'booked'            => 'Booked',
+                'needs_assets'      => 'Needs Assets',
+                'ready_to_announce' => 'Ready to Announce',
+                'published'         => 'Published',
+                'advanced'          => 'Advanced',
+                'completed'         => 'Completed',
+                'settled'           => 'Settled',
+                'canceled'          => 'Canceled',
+            ];
+            $statusColors = [
+                'empty'              => '#9ca3af',
+                'proposed'          => '#6b7280',
+                'confirmed'         => '#2563eb',
+                'booked'            => '#16a34a',
+                'needs_assets'      => '#d97706',
+                'ready_to_announce' => '#7c3aed',
+                'published'         => '#0891b2',
+                'advanced'          => '#0891b2',
+                'completed'         => '#16a34a',
+                'settled'           => '#16a34a',
+                'canceled'          => '#dc2626',
+            ];
+            $newLabel   = $statusLabels[$newStatus] ?? ucwords(str_replace('_', ' ', $newStatus));
+            $oldLabel   = $statusLabels[$oldStatus] ?? ucwords(str_replace('_', ' ', $oldStatus));
+            $statusColor = $statusColors[$newStatus] ?? '#6b7280';
 
-                // Build recipient list: venue_admins + VENUE_MANAGER_EMAIL, deduped.
-                $recipients = [];
-                foreach ($admins as $a) {
-                    $recipients[strtolower(trim((string) $a['email']))] = $a;
-                }
-                $mgEmail = trim((string) (getenv('VENUE_MANAGER_EMAIL') ?: ''));
-                $mgName  = trim((string) (getenv('VENUE_MANAGER_NAME') ?: 'Venue Manager'));
-                if ($mgEmail && filter_var($mgEmail, FILTER_VALIDATE_EMAIL)) {
-                    $recipients[strtolower($mgEmail)] ??= ['name' => $mgName, 'email' => $mgEmail];
-                }
+            // ── Always notify admins on any status change ─────────────────────
+            $admins = $this->db->all(
+                "SELECT name, email FROM users
+                  WHERE role = 'venue_admin'
+                    AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'"
+            );
 
-                if ($recipients) {
-                    $contactLabel = $isPrivate ? 'Client' : 'Producer / Artist';
-                    $contactName  = htmlspecialchars((string) ($event['promoter_name'] ?? '—'), ENT_QUOTES, 'UTF-8');
-                    $contactEmail = htmlspecialchars((string) ($event['promoter_email'] ?? ''), ENT_QUOTES, 'UTF-8');
-                    $label        = $isPrivate ? 'Private Event — Intake Complete' : 'Intake Complete';
-                    $subject      = "[Backstage] {$label}: {$event['title']}";
-                    $vars = [
-                        'event_name'      => htmlspecialchars((string) $event['title'],         ENT_QUOTES, 'UTF-8'),
-                        'event_date'      => htmlspecialchars((string) $event['date'],          ENT_QUOTES, 'UTF-8'),
-                        'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
-                        'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),
-                        'contact_label'   => htmlspecialchars($contactLabel,                    ENT_QUOTES, 'UTF-8'),
-                        'contact_name'    => $contactName,
-                        'contact_email'   => $contactEmail,
-                        'is_private'      => $isPrivate ? 'yes' : 'no',
-                        'event_admin_url' => htmlspecialchars($link,                            ENT_QUOTES, 'UTF-8'),
-                    ];
-                    foreach ($recipients as $recipient) {
-                        $mailer->sendTemplate($recipient['email'], $subject, 'intake-complete', $vars);
-                    }
+            // Include VENUE_MANAGER_EMAIL in the admin recipient list, deduped.
+            $adminRecipients = [];
+            foreach ($admins as $a) {
+                $adminRecipients[strtolower(trim((string) $a['email']))] = $a;
+            }
+            $mgEmail = trim((string) (getenv('VENUE_MANAGER_EMAIL') ?: ''));
+            $mgName  = trim((string) (getenv('VENUE_MANAGER_NAME') ?: 'Venue Manager'));
+            if ($mgEmail && filter_var($mgEmail, FILTER_VALIDATE_EMAIL)) {
+                $adminRecipients[strtolower($mgEmail)] ??= ['name' => $mgName, 'email' => $mgEmail];
+            }
+
+            if ($adminRecipients) {
+                $eventLabel  = $isPrivate ? "Private Event — {$newLabel}" : $newLabel;
+                $subject     = "[Backstage] Status changed to {$eventLabel}: {$event['title']}";
+                $adminVars   = [
+                    'event_name'      => htmlspecialchars((string) $event['title'],                                 ENT_QUOTES, 'UTF-8'),
+                    'old_status'      => htmlspecialchars($oldLabel,                                                ENT_QUOTES, 'UTF-8'),
+                    'new_status'      => htmlspecialchars($eventLabel,                                              ENT_QUOTES, 'UTF-8'),
+                    'status_color'    => $statusColor,
+                    'event_date'      => htmlspecialchars((string) $event['date'],                                  ENT_QUOTES, 'UTF-8'),
+                    'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
+                    'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'),     ENT_QUOTES, 'UTF-8'),
+                    'promoter_name'   => htmlspecialchars((string) ($event['promoter_name'] ?? '—'),               ENT_QUOTES, 'UTF-8'),
+                    'booker_name'     => $isPrivate
+                        ? 'N/A (private event)'
+                        : htmlspecialchars((string) ($event['booker_name'] ?? '—'), ENT_QUOTES, 'UTF-8'),
+                    'event_admin_url' => htmlspecialchars($link,                                                    ENT_QUOTES, 'UTF-8'),
+                ];
+                foreach ($adminRecipients as $recipient) {
+                    $mailer->sendTemplate($recipient['email'], $subject, 'status-changed', $adminVars);
                 }
             }
 
-            // ── Booked: notify venue_admins that contract is on file ─────────
-            if ($newStatus === 'booked') {
-                $admins = $this->db->all(
-                    "SELECT name, email FROM users
-                      WHERE role = 'venue_admin'
-                        AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'"
-                );
-                if ($admins) {
-                    $label       = $isPrivate ? 'Private Event — Booked (contract signed)' : 'Booked (contract signed)';
-                    $subject     = "[Backstage] {$label}: {$event['title']}";
-                    $vars = [
-                        'event_name'      => htmlspecialchars((string) $event['title'],         ENT_QUOTES, 'UTF-8'),
-                        'old_status'      => htmlspecialchars(ucwords(str_replace('_', ' ', $oldStatus)), ENT_QUOTES, 'UTF-8'),
-                        'new_status'      => htmlspecialchars($label,                           ENT_QUOTES, 'UTF-8'),
-                        'status_color'    => '#16a34a',
-                        'event_date'      => htmlspecialchars((string) $event['date'],          ENT_QUOTES, 'UTF-8'),
-                        'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
-                        'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),
-                        'promoter_name'   => htmlspecialchars((string) ($event['promoter_name'] ?? '—'), ENT_QUOTES, 'UTF-8'),
-                        'booker_name'     => $isPrivate ? 'N/A (private event)' : htmlspecialchars((string) ($event['booker_name'] ?? '—'), ENT_QUOTES, 'UTF-8'),
-                        'event_admin_url' => htmlspecialchars($link,                            ENT_QUOTES, 'UTF-8'),
-                    ];
-                    foreach ($admins as $admin) {
-                        $mailer->sendTemplate($admin['email'], $subject, 'status-changed', $vars);
-                    }
-                }
-
-                // For private events that are now Booked, also notify the client.
-                if ($isPrivate && $newStatus === 'booked' && !empty($event['promoter_email'])
-                    && filter_var($event['promoter_email'], FILTER_VALIDATE_EMAIL)) {
-                    $clientVars = [
-                        'event_name'      => htmlspecialchars((string) $event['title'],    ENT_QUOTES, 'UTF-8'),
-                        'old_status'      => 'Pending',
-                        'new_status'      => 'Confirmed & Booked',
-                        'status_color'    => '#16a34a',
-                        'event_date'      => htmlspecialchars((string) $event['date'],     ENT_QUOTES, 'UTF-8'),
-                        'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
-                        'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),
-                        'promoter_name'   => htmlspecialchars((string) ($event['promoter_name'] ?? 'You'), ENT_QUOTES, 'UTF-8'),
-                        'booker_name'     => 'Mabuhay Gardens',
-                        'event_admin_url' => htmlspecialchars($link,                       ENT_QUOTES, 'UTF-8'),
-                    ];
-                    $mailer->sendTemplate(
-                        $event['promoter_email'],
-                        "[Mabuhay Gardens] Your event is confirmed: {$event['title']}",
-                        'status-changed',
-                        $clientVars
-                    );
-                }
-            }
-
-            // ── producer/artist + booker notified when assets needed (public events only) ──
-            if ($newStatus === 'needs_assets' && !$isPrivate) {
-                $subject = "[Mabuhay Gardens] Promo materials needed: {$event['title']}";
-                $assetsVars = [
-                    'event_name'      => htmlspecialchars((string) $event['title'],    ENT_QUOTES, 'UTF-8'),
-                    'event_date'      => htmlspecialchars((string) $event['date'],     ENT_QUOTES, 'UTF-8'),
+            // ── Booked: also notify the client for private events ─────────────
+            if ($newStatus === 'booked' && $isPrivate
+                && !empty($event['promoter_email'])
+                && filter_var($event['promoter_email'], FILTER_VALIDATE_EMAIL)
+            ) {
+                $clientVars = [
+                    'event_name'      => htmlspecialchars((string) $event['title'],                             ENT_QUOTES, 'UTF-8'),
+                    'old_status'      => 'Pending',
+                    'new_status'      => 'Confirmed & Booked',
+                    'status_color'    => '#16a34a',
+                    'event_date'      => htmlspecialchars((string) $event['date'],                              ENT_QUOTES, 'UTF-8'),
                     'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
                     'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),
-                    'event_admin_url' => htmlspecialchars($link,                       ENT_QUOTES, 'UTF-8'),
+                    'promoter_name'   => htmlspecialchars((string) ($event['promoter_name'] ?? 'You'),         ENT_QUOTES, 'UTF-8'),
+                    'booker_name'     => 'Mabuhay Gardens',
+                    'event_admin_url' => htmlspecialchars($link,                                                ENT_QUOTES, 'UTF-8'),
                 ];
-                $recipients = array_filter([
+                $mailer->sendTemplate(
+                    $event['promoter_email'],
+                    "[Mabuhay Gardens] Your event is confirmed: {$event['title']}",
+                    'status-changed',
+                    $clientVars
+                );
+            }
+
+            // ── Needs Assets: notify producer/artist + booker (public events only) ──
+            if ($newStatus === 'needs_assets' && !$isPrivate) {
+                $assetsVars = [
+                    'event_name'      => htmlspecialchars((string) $event['title'],                             ENT_QUOTES, 'UTF-8'),
+                    'event_date'      => htmlspecialchars((string) $event['date'],                              ENT_QUOTES, 'UTF-8'),
+                    'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
+                    'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),
+                    'event_admin_url' => htmlspecialchars($link,                                                ENT_QUOTES, 'UTF-8'),
+                ];
+                $externalRecipients = array_filter([
                     $event['promoter_email'] ? ['name' => $event['promoter_name'] ?? 'Producer/Artist', 'email' => $event['promoter_email']] : null,
                     $event['booker_email']   ? ['name' => $event['booker_name']   ?? 'Booker',          'email' => $event['booker_email']]   : null,
                 ]);
-                foreach ($recipients as $recipient) {
+                foreach ($externalRecipients as $recipient) {
                     if (!filter_var($recipient['email'], FILTER_VALIDATE_EMAIL)) continue;
                     $mailer->sendTemplate(
                         $recipient['email'],
-                        $subject,
+                        "[Mabuhay Gardens] Promo materials needed: {$event['title']}",
                         'needs-assets',
                         $assetsVars + ['recipient_name' => htmlspecialchars((string) $recipient['name'], ENT_QUOTES, 'UTF-8')]
                     );

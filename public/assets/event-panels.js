@@ -2,6 +2,26 @@
 // The editable section panels inside the event workspace: Tasks, Lineup, Run
 // Sheet, Staffing, Open Items, Guest List, Assets, Invites, Settlement — plus
 // the shared record-list helpers they all build on.
+
+// Capacity-based staffing tiers (mirrored from Staffing.php STAFFING_TIERS).
+// Used by the "Auto-fill from capacity" button in the StaffingManager panel.
+// Tiers cover every 50 guests from 50 → 400; anything above 400 uses the 400 tier.
+const STAFFING_TIERS = [
+  { max:  50, roles: [['manager',1],['bartender',1],['door',1],['sound',1]] },
+  { max: 100, roles: [['manager',1],['bartender',2],['door',1],['security',1],['sound',1]] },
+  { max: 150, roles: [['manager',1],['bartender',2],['barback',1],['door',2],['security',1],['sound',1],['lighting',1],['stagehand',1]] },
+  { max: 200, roles: [['manager',1],['bartender',3],['barback',1],['door',2],['security',2],['sound',1],['lighting',1],['stagehand',1]] },
+  { max: 250, roles: [['manager',1],['bartender',3],['barback',2],['door',2],['security',3],['sound',1],['lighting',1],['stagehand',1],['runner',1]] },
+  { max: 300, roles: [['manager',1],['bartender',4],['barback',2],['door',2],['security',4],['sound',1],['lighting',1],['stagehand',2],['runner',1]] },
+  { max: 350, roles: [['manager',1],['bartender',5],['barback',2],['door',3],['security',5],['sound',1],['lighting',1],['stagehand',2],['runner',1]] },
+  { max: 400, roles: [['manager',1],['bartender',5],['barback',3],['door',3],['security',6],['sound',1],['lighting',1],['stagehand',2],['runner',1]] },
+];
+
+function staffingTierFor(capacity) {
+  const cap = Math.max(1, parseInt(capacity, 10) || 0);
+  for (const tier of STAFFING_TIERS) { if (cap <= tier.max) return tier.roles; }
+  return STAFFING_TIERS[STAFFING_TIERS.length - 1].roles;
+}
 import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
 
 // ---- Editable record lists: read-only review tables with hover-to-edit ----
@@ -86,7 +106,7 @@ class TaskList extends HTMLElement {
       { label: 'Priority', grid: 'minmax(90px, 0.8fr)', cell: (t) => chip(t.priority) },
       { label: 'Details', grid: 'minmax(140px, 2fr)', cell: (t) => esc(t.description || '') },
     ];
-    const editForm = (task) => `<form data-api="/events/${data.event.id}/tasks/${task.id}" data-method="PATCH" class="row-form record-form"><label>Task<input name="title" value="${esc(task.title)}"></label><label>Status${select('status', ['todo','in_progress','blocked','done','canceled'], task.status)}</label><label>Assigned${userSelect(users, task.assigned_user_id)}</label><label>Due<input type="date" name="due_date" value="${esc(task.due_date || '')}"></label><label>Priority${select('priority', ['low','normal','high','urgent'], task.priority)}</label><label>Details<input name="description" value="${esc(task.description || '')}"></label><button>Save</button><button type="button" class="secondary" data-complete="${esc(task.id)}">Done</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
+    const editForm = (task) => `<form data-api="/events/${data.event.id}/tasks/${task.id}" data-method="PATCH" class="row-form record-form"><label>Task<input name="title" value="${esc(task.title)}"></label><label>Status${select('status', ['todo','in_progress','blocked','done','canceled'], task.status)}</label><label>Assigned${userSelect(users, task.assigned_user_id)}</label><label>Due<input type="date" name="due_date" value="${esc(task.due_date || '')}"></label><label>Priority${select('priority', ['low','normal','high','urgent'], task.priority)}</label><label>Details<input name="description" value="${esc(task.description || '')}"></label><button>Save</button><button type="button" class="secondary" data-complete="${esc(task.id)}">Done</button><button type="button" class="small danger" data-delete="${esc(task.id)}">Delete</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
     const addForm = editable ? `<form data-api="/events/${data.event.id}/tasks" data-method="POST" class="row-form" data-add-form hidden><label>Task<input name="title" required placeholder="Confirm door count"></label><label>Assigned${userSelect(users)}</label><label>Due<input type="date" name="due_date"></label><label>Priority${select('priority', ['low','normal','high','urgent'], 'normal')}</label><input type="hidden" name="status" value="todo"><label>Details<input name="description" placeholder="Details"></label><button>Add task</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : '';
     const templates = data.taskTemplates || [];
     const templateDropdown = editable && templates.length > 0
@@ -112,6 +132,16 @@ class TaskList extends HTMLElement {
       await api(form.dataset.api, { method: 'PATCH', body: JSON.stringify(body) });
       await refreshSection(this);
       publish('toast.show', { message: 'Task completed.' });
+    }));
+    $$('[data-delete]', this).forEach((button) => button.addEventListener('click', async () => {
+      if (!confirm('Delete this task? This cannot be undone.')) return;
+      try {
+        await api(`/events/${this.eventData.event.id}/tasks/${button.dataset.delete}`, { method: 'DELETE' });
+        await refreshSection(this);
+        publish('toast.show', { message: 'Task deleted.' });
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
     }));
     $$('[data-tmpl-id]', this).forEach((btn) => btn.addEventListener('click', async () => {
       const tmplId = btn.dataset.tmplId;
@@ -209,6 +239,7 @@ class StaffingManager extends HTMLElement {
     }, {});
     const roleOrder = ['manager','sound','lighting','security','door','bartender','barback','stagehand','runner','cleaner','other'];
 
+    const capacity = data.event?.capacity ? parseInt(data.event.capacity, 10) : 0;
     const totalShifts = shifts.length;
     const confirmed = shifts.filter((s) => s.status === 'confirmed').length;
     const tbd = shifts.filter((s) => !s.staff_member_id).length;
@@ -249,11 +280,17 @@ class StaffingManager extends HTMLElement {
       <button type="button" class="secondary small" data-cancel-add>Cancel</button>
     </form>` : '';
 
+    // Auto-fill button: only show when user can edit and event has a capacity set.
+    const autoFillBtn = editable && capacity > 0
+      ? `<button type="button" class="small secondary" data-auto-staff title="Clear all shifts and rebuild from capacity-based staffing tiers">Auto-fill (${capacity} cap)</button>`
+      : '';
+
     this.innerHTML = `<section class="panel">
       <div class="section-head padded">
         <h2>Staffing ${helpLink('staffing', 'Staffing')}</h2>
         <div class="section-head-actions">
           <div class="staffing-totals muted">${totalShifts} shift${totalShifts === 1 ? '' : 's'} &middot; ${confirmed} confirmed${tbd ? ` &middot; ${tbd} TBD` : ''}</div>
+          ${autoFillBtn}
           ${addToggle('Add shift', editable)}
         </div>
       </div>
@@ -322,6 +359,29 @@ class StaffingManager extends HTMLElement {
         await api(`/events/${eventId}/staffing`, { method: 'POST', body: JSON.stringify(buildBody(event.target)) });
         publish('toast.show', { message: 'Shift added.' });
         await refreshSection(this);
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
+
+    // Auto-fill from capacity tiers
+    $('[data-auto-staff]', this)?.addEventListener('click', async () => {
+      const cap  = parseInt(this.eventData?.event?.capacity, 10) || 0;
+      if (!cap) {
+        publish('toast.show', { message: 'Set a capacity on the event first.', tone: 'error' });
+        return;
+      }
+      const tier  = staffingTierFor(cap);
+      const total = tier.reduce((sum, [, count]) => sum + count, 0);
+      const preview = tier.map(([role, count]) => `${count} ${titleCase(role)}`).join(', ');
+      if (!confirm(`Reset staffing for ${cap} people?\n\nThis will clear all current shifts and create:\n${preview}\n\n${total} positions total. Continue?`)) return;
+      try {
+        await api(`/events/${eventId}/staffing/from-capacity`, {
+          method: 'POST',
+          body: JSON.stringify({ capacity: cap }),
+        });
+        await refreshSection(this);
+        publish('toast.show', { message: `Staffing auto-filled for ${cap} people (${total} positions).` });
       } catch (err) {
         publish('toast.show', { message: err.message, tone: 'error' });
       }

@@ -199,6 +199,9 @@ class DashboardView extends PanicElement {
 class EventCalendar extends PanicElement {
   async connect() {
     this.month = new Date();
+    this.selectedDate = isoDate(new Date());
+    // Default to agenda view on mobile, grid on desktop.
+    this.viewMode = window.matchMedia('(max-width: 860px)').matches ? 'agenda' : 'grid';
     await this.load();
   }
 
@@ -211,37 +214,115 @@ class EventCalendar extends PanicElement {
       const data = await api(`/events?start_date=${isoDate(start)}&end_date=${isoDate(end)}`);
       publish('events.loaded', data);
       this.canCreate = Boolean(data?.capabilities?.create_events);
-      this.render(data.events || [], start, data.venues || []);
+      this._events = data.events || [];
+      this._venues = data.venues || [];
+      this._start  = start;
+      this._zoneMap = venueZoneMap(this._venues);
+      this.render();
     } catch (error) {
       this.showError(error);
     }
   }
 
-  render(events, start, venues = []) {
-    const days = Array.from({ length: 42 }, (_, index) => addDays(start, index));
-    const createable = this.canCreate ? ' calendar-clickable' : '';
-    const zoneMap = venueZoneMap(venues);
-    const zoneOf = (event) => zoneMap.get(Number(event.venue_id)) || { zone: 'down', label: 'Unassigned' };
+  // ── Shared helpers ────────────────────────────────────────────────────────
 
-    // The dot colour denotes venue floor — legend is always visible.
-    const legend = `<div class="calendar-legend" aria-label="Venue floor colour key">`
+  _fmtTime(t) {
+    if (!t) return '';
+    const [h, m] = t.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`;
+  }
+
+  _zoneOf(event) {
+    return this._zoneMap.get(Number(event.venue_id)) || { zone: 'down', label: 'Unassigned' };
+  }
+
+  _legend() {
+    return `<div class="calendar-legend" aria-label="Venue floor colour key">`
       + `<span class="legend-item"><span class="status-dot room-up"></span>Upstairs</span>`
       + `<span class="legend-item"><span class="status-dot room-down"></span>Downstairs (21+)</span>`
       + `<span class="legend-item"><span class="status-dot room-both"></span>Both Rooms</span>`
       + `</div>`;
+  }
 
-    // Format a raw HH:MM:SS time string into "7:00 PM"
-    const fmtTime = (t) => {
-      if (!t) return '';
-      const [h, m] = t.split(':').map(Number);
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`;
-    };
+  // ── Top-level render ──────────────────────────────────────────────────────
+
+  render() {
+    const monthLabel = this.month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    this.innerHTML = `<section class="calendar-page">
+      <div class="page-head">
+        <div>
+          <h1>Calendar</h1>
+          <p class="subtle">Dynamic booking window for Mabuhay Gardens.${this.canCreate ? ' <span class="muted small">Click any day to create.</span>' : ''}</p>
+        </div>
+        ${this.canCreate ? '<button class="button" data-action="quick-new" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> New event</button>' : ''}
+      </div>
+      <article class="panel calendar-shell">
+        <div class="calendar-toolbar">
+          <div class="calendar-controls">
+            <button class="secondary small" data-prev>&lt;</button>
+            <button class="secondary small" data-next>&gt;</button>
+            <button class="secondary small" data-today>Today</button>
+          </div>
+          <h2>${esc(monthLabel)}</h2>
+          <div class="calendar-actions">
+            <div class="cal-view-toggle" role="group" aria-label="Calendar view">
+              <button class="secondary small${this.viewMode === 'grid' ? ' active' : ''}" data-view="grid" title="Month grid">
+                <i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>
+                <span class="cal-view-label"> Grid</span>
+              </button>
+              <button class="secondary small${this.viewMode === 'agenda' ? ' active' : ''}" data-view="agenda" title="Agenda view">
+                <i class="fa-solid fa-bars" aria-hidden="true"></i>
+                <span class="cal-view-label"> Agenda</span>
+              </button>
+            </div>
+            <a class="button secondary small" href="#pipeline">Pipeline</a>
+          </div>
+        </div>
+        ${this.viewMode === 'grid' ? this._renderGrid() : this._renderAgenda()}
+      </article>
+    </section>`;
+
+    // Common navigation
+    $('[data-prev]', this).addEventListener('click', () => {
+      this.month = new Date(this.month.getFullYear(), this.month.getMonth() - 1, 1);
+      this.load();
+    });
+    $('[data-next]', this).addEventListener('click', () => {
+      this.month = new Date(this.month.getFullYear(), this.month.getMonth() + 1, 1);
+      this.load();
+    });
+    $('[data-today]', this).addEventListener('click', () => {
+      this.month = new Date();
+      this.selectedDate = isoDate(new Date());
+      this.load();
+    });
+    $('[data-action="quick-new"]', this)?.addEventListener('click', () => openEventQuickCreate());
+
+    // View toggle
+    $$('[data-view]', this).forEach((btn) => {
+      btn.addEventListener('click', () => { this.viewMode = btn.dataset.view; this.render(); });
+    });
+
+    if (this.viewMode === 'grid') {
+      this._wireGrid();
+    } else {
+      this._wireAgenda();
+    }
+  }
+
+  // ── Grid view ────────────────────────────────────────────────────────────
+
+  _renderGrid() {
+    const events = this._events;
+    const days   = Array.from({ length: 42 }, (_, i) => addDays(this._start, i));
+    const createable = this.canCreate ? ' calendar-clickable' : '';
+    const today  = isoDate(new Date());
 
     const miniEvent = (event) => {
-      const meta = zoneOf(event);
-      const time = fmtTime(event.doors_time || event.show_time);
-      const loadIn = event.load_in_time ? `Load-in ${fmtTime(event.load_in_time)}` : '';
+      const meta = this._zoneOf(event);
+      const time = this._fmtTime(event.doors_time || event.show_time);
+      const loadIn = event.load_in_time ? `Load-in ${this._fmtTime(event.load_in_time)}` : '';
       const isPrivate = event.event_type === 'private_event';
       const tip = [isPrivate ? '🔒 Private' : null, statusLabel(event.status), meta.label, time, loadIn].filter(Boolean).join(' · ');
       return `<a class="mini-event${isPrivate ? ' mini-event-private' : ''}" href="#event-${esc(event.id)}" title="${esc(tip)}">`
@@ -251,59 +332,164 @@ class EventCalendar extends PanicElement {
         + (time ? `<span class="mini-event-time">${esc(time)}</span>` : '')
         + `</a>`;
     };
-    // Vertical position = floor: upstairs above the divider, downstairs below,
-    // whole-building bookings straddling it. Canceled events are hidden.
+
     const dayCellBody = (dayEvents) => {
-      const visible = dayEvents.filter((event) => event.status !== 'canceled');
+      const visible = dayEvents.filter((e) => e.status !== 'canceled');
       if (!visible.length) return `<div class="program-night">${this.canCreate ? '+ Available' : 'Available'}</div>`;
-      const up = visible.filter((event) => zoneOf(event).zone === 'up');
-      const both = visible.filter((event) => zoneOf(event).zone === 'both');
-      const down = visible.filter((event) => zoneOf(event).zone === 'down');
+      const up   = visible.filter((e) => this._zoneOf(e).zone === 'up');
+      const both = visible.filter((e) => this._zoneOf(e).zone === 'both');
+      const down = visible.filter((e) => this._zoneOf(e).zone === 'down');
       return `<div class="cell-zone zone-up" data-floor="Upstairs">${up.map(miniEvent).join('')}</div>`
         + (both.length ? `<div class="zone-both">${both.map(miniEvent).join('')}</div>` : '')
         + `<div class="cell-zone zone-down" data-floor="Downstairs (21+)">${down.map(miniEvent).join('')}</div>`;
     };
 
-    this.innerHTML = `<section class="calendar-page">
-      <div class="page-head"><div><h1>Calendar</h1><p class="subtle">Dynamic booking window for Mabuhay Gardens.${this.canCreate ? ' <span class="muted small">Click any day to create.</span>' : ''}</p></div>${this.canCreate ? '<button class="button" data-action="quick-new" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> New event</button>' : ''}</div>
-      <article class="panel calendar-shell">
-        <div class="calendar-toolbar">
-          <div class="calendar-controls"><button class="secondary small" data-prev>&lt;</button><button class="secondary small" data-next>&gt;</button><button class="secondary small" data-today>Today</button></div>
-          <h2>${esc(this.month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }))}</h2>
-          <div class="calendar-actions"><a class="button secondary small" href="#pipeline">Pipeline</a></div>
-        </div>
-        ${legend}
-        <div class="calendar-grid calendar-split">
-          ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day) => `<div class="weekday">${day}</div>`).join('')}
-          ${days.map((date) => {
-            const iso = isoDate(date);
-            const dayEvents = events.filter((event) => event.date === iso);
-            const clickAttr = this.canCreate ? ` data-create-date="${esc(iso)}" role="button" tabindex="0"` : '';
-            return `<div class="calendar-day${createable}"${clickAttr}><span class="day-num">${date.getDate()}</span>${dayCellBody(dayEvents)}</div>`;
-          }).join('')}
-        </div>
-      </article>
-    </section>`;
-    $('[data-prev]', this).addEventListener('click', () => { this.month = new Date(this.month.getFullYear(), this.month.getMonth() - 1, 1); this.load(); });
-    $('[data-next]', this).addEventListener('click', () => { this.month = new Date(this.month.getFullYear(), this.month.getMonth() + 1, 1); this.load(); });
-    $('[data-today]', this).addEventListener('click', () => { this.month = new Date(); this.load(); });
-    $('[data-action="quick-new"]', this)?.addEventListener('click', () => openEventQuickCreate());
+    return `${this._legend()}
+      <div class="calendar-grid calendar-split">
+        ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d) => `<div class="weekday">${d}</div>`).join('')}
+        ${days.map((date) => {
+          const iso = isoDate(date);
+          const dayEvents = events.filter((e) => e.date === iso);
+          const isToday = iso === today ? ' cal-today' : '';
+          const clickAttr = this.canCreate ? ` data-create-date="${esc(iso)}" role="button" tabindex="0"` : '';
+          return `<div class="calendar-day${createable}${isToday}"${clickAttr}><span class="day-num">${date.getDate()}</span>${dayCellBody(dayEvents)}</div>`;
+        }).join('')}
+      </div>`;
+  }
 
-    if (this.canCreate) {
-      // Day-cell click → open the quick-create modal with that date pre-filled.
-      // Mini-event links inside the cell still navigate normally (the listener
-      // ignores clicks that originated on an <a>, button, or other link).
-      $$('[data-create-date]', this).forEach((cell) => {
-        const open = () => openEventQuickCreate({ date: cell.dataset.createDate });
-        cell.addEventListener('click', (event) => {
-          if (event.target.closest('a, button')) return;
-          open();
-        });
-        cell.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
-        });
+  _wireGrid() {
+    if (!this.canCreate) return;
+    $$('[data-create-date]', this).forEach((cell) => {
+      const open = () => openEventQuickCreate({ date: cell.dataset.createDate });
+      cell.addEventListener('click', (e) => { if (e.target.closest('a, button')) return; open(); });
+      cell.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    });
+  }
+
+  // ── Agenda view ──────────────────────────────────────────────────────────
+
+  _renderAgenda() {
+    const events = this._events;
+    const days   = Array.from({ length: 42 }, (_, i) => addDays(this._start, i));
+    const today  = isoDate(new Date());
+
+    const miniGrid = `<div class="cal-mini">
+      <div class="cal-mini-weekdays">
+        ${['S','M','T','W','T','F','S'].map((d) => `<span>${d}</span>`).join('')}
+      </div>
+      <div class="cal-mini-grid">
+        ${days.map((date) => {
+          const iso = isoDate(date);
+          const dayEvts = events.filter((e) => e.date === iso && e.status !== 'canceled');
+          const isToday   = iso === today;
+          const isSel     = iso === this.selectedDate;
+          const isCurMo   = date.getMonth() === this.month.getMonth();
+          const zones     = [...new Set(dayEvts.map((e) => this._zoneOf(e).zone))];
+          const dots      = zones.map((z) => `<i class="cal-dot cal-dot-${z}"></i>`).join('');
+          return `<button class="cal-mini-day${isToday ? ' is-today' : ''}${isSel ? ' is-selected' : ''}${!isCurMo ? ' other-month' : ''}" data-select-date="${esc(iso)}" type="button" aria-label="${iso}${isToday ? ' (today)' : ''}${isSel ? ' (selected)' : ''}">
+            <span class="cal-mini-num">${date.getDate()}</span>
+            <span class="cal-mini-dots">${dots}</span>
+          </button>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+    return `${miniGrid}${this._legend()}<div class="cal-day-agenda" data-day-agenda>${this._renderDayContent()}</div>`;
+  }
+
+  _renderDayContent() {
+    const events       = this._events;
+    const selectedDate = this.selectedDate;
+    const dayEvents    = events.filter((e) => e.date === selectedDate && e.status !== 'canceled');
+    const dateObj      = new Date(selectedDate + 'T12:00:00');
+    const dayLabel     = dateObj.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+    const up   = dayEvents.filter((e) => this._zoneOf(e).zone === 'up');
+    const both = dayEvents.filter((e) => this._zoneOf(e).zone === 'both');
+    const down = dayEvents.filter((e) => this._zoneOf(e).zone === 'down');
+
+    const agendaRow = (event) => {
+      const time = this._fmtTime(event.doors_time || event.show_time);
+      const isPrivate = event.event_type === 'private_event';
+      return `<a class="cal-agenda-row" href="#event-${esc(event.id)}">
+        <span class="cal-agenda-time">${esc(time)}</span>
+        <span class="cal-agenda-title">${isPrivate ? '<span aria-hidden="true">🔒</span> ' : ''}${esc(event.title)}</span>
+        ${badge(event.status)}
+      </a>`;
+    };
+
+    const section = (title, evts, zone) => `<div class="cal-venue-section">
+      <div class="cal-venue-head">
+        <span class="status-dot room-${zone}"></span>
+        <h3>${esc(title)}</h3>
+        ${this.canCreate ? `<button class="small secondary cal-new-btn" data-quick-create data-date="${esc(selectedDate)}" type="button">+ New</button>` : ''}
+      </div>
+      ${evts.length
+        ? evts.map(agendaRow).join('')
+        : `<div class="cal-available"><span class="program-night">${this.canCreate ? '+ Available' : 'Available'}</span></div>`}
+    </div>`;
+
+    return `<div class="cal-day-header">
+      <button class="icon-btn" data-day-prev type="button" aria-label="Previous day"><i class="fa-solid fa-chevron-left"></i></button>
+      <h2>${esc(dayLabel)}</h2>
+      <button class="icon-btn" data-day-next type="button" aria-label="Next day"><i class="fa-solid fa-chevron-right"></i></button>
+    </div>
+    ${section('Upstairs', up, 'up')}
+    ${both.length ? section('Both Rooms', both, 'both') : ''}
+    ${section('Downstairs', down, 'down')}`;
+  }
+
+  _wireAgenda() {
+    // Mini-calendar day selection
+    $$('[data-select-date]', this).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.selectedDate = btn.dataset.selectDate;
+        this._refreshAgenda();
       });
+    });
+    this._wireAgendaDayNav();
+    this._wireQuickCreate();
+  }
+
+  _wireAgendaDayNav() {
+    $('[data-day-prev]', this)?.addEventListener('click', () => this._navigateDay(-1));
+    $('[data-day-next]', this)?.addEventListener('click', () => this._navigateDay(1));
+  }
+
+  _navigateDay(delta) {
+    const d = new Date(this.selectedDate + 'T12:00:00');
+    d.setDate(d.getDate() + delta);
+    this.selectedDate = isoDate(d);
+    if (d.getMonth() !== this.month.getMonth() || d.getFullYear() !== this.month.getFullYear()) {
+      // Crossed a month boundary — reload so the mini-grid covers the new month.
+      this.month = new Date(d.getFullYear(), d.getMonth(), 1);
+      this.load();
+    } else {
+      this._refreshAgenda();
     }
+  }
+
+  _refreshAgenda() {
+    // Update mini-calendar selection state without a full re-render.
+    $$('[data-select-date]', this).forEach((b) => {
+      b.classList.toggle('is-selected', b.dataset.selectDate === this.selectedDate);
+      b.setAttribute('aria-label', `${b.dataset.selectDate}${b.classList.contains('is-today') ? ' (today)' : ''}${b.classList.contains('is-selected') ? ' (selected)' : ''}`);
+    });
+    $(`[data-select-date="${this.selectedDate}"]`, this)?.scrollIntoView({ block: 'nearest' });
+
+    // Swap only the day-agenda content.
+    const agenda = $('[data-day-agenda]', this);
+    if (agenda) {
+      agenda.innerHTML = this._renderDayContent();
+      this._wireAgendaDayNav();
+      this._wireQuickCreate();
+    }
+  }
+
+  _wireQuickCreate() {
+    $$('[data-quick-create]', this).forEach((btn) => {
+      btn.addEventListener('click', () => openEventQuickCreate({ date: btn.dataset.date || this.selectedDate }));
+    });
   }
 }
 
@@ -412,9 +598,9 @@ class EventsList extends PanicElement {
 
   render(data) {
     if (!data) return;
-    // Default view hides shows more than two weeks in the past. Undated (TBA)
+    // Default view hides events older than yesterday. Undated (TBA)
     // events are always kept since they have no date to fall behind the cutoff.
-    const cutoff = isoDate(addDays(new Date(), -14));
+    const cutoff = isoDate(addDays(new Date(), -1));
     const all = data.events || [];
     const events = all
       .filter((event) => !this.query || String(event.title).toLowerCase().includes(this.query))

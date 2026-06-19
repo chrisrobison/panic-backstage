@@ -12,6 +12,7 @@ import './tickets-public.js';
 import './help.js';
 import { HELP_SECTIONS } from './help.js';
 import './promote.js';
+import './event-wizard.js';
 
 
 class AppShell extends PanicElement {
@@ -131,7 +132,7 @@ class AppShell extends PanicElement {
       location.href = appUrl('login.html');
     });
     $('[data-search]', this).addEventListener('input', (event) => publish('events.search', { query: event.target.value }));
-    $('[data-action="new-event"]', this).addEventListener('click', () => openEventQuickCreate());
+    $('[data-action="new-event"]', this).addEventListener('click', () => { location.hash = 'new-event'; });
     this.setupNavCollapse();
     this.setupNavGroups();
     this.setupMobileDrawer();
@@ -266,6 +267,7 @@ class AppShell extends PanicElement {
   // Resolve the hash into the leaf nav key used for active-state matching.
   // Event-workspace deep links (event-<id>) light up the Events ▸ List leaf.
   navKeyForRoute(route) {
+    if (route === 'new-event') return 'events';
     if (route.startsWith('event-')) return 'events';
     if (route === 'promote' || route.startsWith('promote-event-')) return 'promote';
     if (route === 'promote-settings') return 'promote-settings';
@@ -303,6 +305,7 @@ class AppShell extends PanicElement {
       }
     });
     const outlet = $('#app', this);
+    if (route === 'new-event') return this.mount(outlet, 'pb-event-wizard');
     if (route === 'promote') return this.mount(outlet, 'pb-promote-campaign-list');
     if (route === 'promote-settings') return this.mount(outlet, 'pb-promote-settings');
     if (promoteRoute) {
