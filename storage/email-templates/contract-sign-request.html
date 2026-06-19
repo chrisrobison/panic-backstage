@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Please Sign: {{contract_title}}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+         background: #f5f4f0; margin: 0; padding: 24px 16px; color: #111; }
+  .wrap { max-width: 560px; margin: 0 auto; background: #fff;
+          border-radius: 6px; overflow: hidden;
+          box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .hd   { background: #1a56c4; padding: 24px 32px; }
+  .hd h1 { color: #fff; margin: 0; font-size: 1.2rem; font-weight: 700; }
+  .bd   { padding: 28px 32px; }
+  .bd p { line-height: 1.6; margin: 0 0 16px; font-size: .95rem; }
+  .cta  { display: block; background: #1a56c4; color: #fff; text-decoration: none;
+          text-align: center; padding: 14px 24px; border-radius: 6px;
+          font-weight: 700; font-size: 1rem; margin: 24px 0; }
+  .expires { font-size: .82rem; color: #888; margin: 0; }
+  .notice  { font-size: .8rem; color: #888; border-top: 1px solid #e8e7e3;
+             padding-top: 16px; margin-top: 24px; }
+  .ft  { background: #f5f4f0; padding: 16px 32px; font-size: .78rem; color: #888; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hd"><h1>Agreement Ready for Your Signature</h1></div>
+  <div class="bd">
+    <p>Hi {{signer_name}},</p>
+    <p>You have been sent the following agreement for electronic signature:</p>
+    <p><strong>{{contract_title}}</strong></p>
+    <p>Please click the button below to review the agreement and sign electronically.</p>
+    <a href="{{signing_url}}" class="cta">Review &amp; Sign Agreement</a>
+    <p class="expires">This signing link expires on <strong>{{expires_date}}</strong>.</p>
+    <div class="notice">
+      <p>If you did not expect this email or believe you received it in error, please disregard it or contact us directly. Do not forward this email — the signing link is unique to you.</p>
+    </div>
+  </div>
+  <div class="ft">{{venue_name}}</div>
+</div>
+</body>
+</html>

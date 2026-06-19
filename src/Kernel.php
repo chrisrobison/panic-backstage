@@ -111,10 +111,27 @@ final class Kernel
 
         // Contracts (deal builder)
         if ($segments[0] === 'contracts') {
+            // Contract webhooks (unauthenticated; verified by provider signature):
+            //   POST /api/contracts/webhook/{provider}
+            if (($segments[1] ?? '') === 'webhook') {
+                return [ContractWebhooks::class, ['provider' => $segments[2] ?? null]];
+            }
             return [Contracts::class, [
                 'contractId' => $this->intOrNull($segments[1] ?? null),
                 'child'      => $segments[2] ?? null,
                 'childId'    => $this->intOrNull($segments[3] ?? null),
+            ]];
+        }
+
+        // Public contract signing (unauthenticated; token-protected):
+        //   GET  /api/signing/{token}          load contract for signing page
+        //   POST /api/signing/{token}/viewed   mark viewed
+        //   POST /api/signing/{token}/sign     submit signature
+        //   POST /api/signing/{token}/decline  decline to sign
+        if ($segments[0] === 'signing') {
+            return [ContractSigningEndpoint::class, [
+                'token'  => $segments[1] ?? null,
+                'action' => $segments[2] ?? null,
             ]];
         }
 
@@ -292,13 +309,15 @@ final class Kernel
             AuthEndpoint::class,
             PublicEvents::class,
             Invites::class,
-            Me::class,          // returns null user gracefully when unauthenticated
-            PublicTickets::class, // public ticket browse + checkout
-            Webhooks::class,    // provider webhooks, authenticated by signature
-            TicketView::class,  // public ticket page, looked up by token hash
-            Scanner::class,     // /api/scan/redeem (scanner-token); JWT mgmt paths
-                                // still gated via requireEventCapability (null user => denied)
-            QrCode::class,      // /assets/qr.svg — public QR image generator
+            Me::class,                  // returns null user gracefully when unauthenticated
+            PublicTickets::class,        // public ticket browse + checkout
+            Webhooks::class,            // payment provider webhooks, authenticated by signature
+            ContractWebhooks::class,    // contract provider webhooks, authenticated by signature
+            ContractSigningEndpoint::class, // public signing flow, authenticated by token hash
+            TicketView::class,          // public ticket page, looked up by token hash
+            Scanner::class,             // /api/scan/redeem (scanner-token); JWT mgmt paths
+                                        // still gated via requireEventCapability (null user => denied)
+            QrCode::class,              // /assets/qr.svg — public QR image generator
         ], true);
     }
 

@@ -1,0 +1,12 @@
+Hi {{admin_name}},
+
+A contract has been voided.
+
+Contract: {{contract_title}}
+Reason:   {{reason}}
+
+View in Backstage:
+{{contract_url}}
+
+——
+Panic Backstage

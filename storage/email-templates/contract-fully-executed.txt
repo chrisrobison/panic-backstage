@@ -1,0 +1,16 @@
+Hi {{signer_name}},
+
+Great news — your agreement has been fully executed!
+
+Agreement: {{contract_title}}
+Signed:    {{signed_date}}
+
+All parties have signed and the agreement is now legally in effect.
+
+A copy of the signed agreement is available at:
+{{download_url}}
+
+Thank you for completing this process.
+
+——
+Panic Backstage

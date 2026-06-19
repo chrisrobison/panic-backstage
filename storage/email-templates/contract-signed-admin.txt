@@ -1,0 +1,13 @@
+Hi {{admin_name}},
+
+Contract status update: {{event}}
+
+Contract:  {{contract_title}}
+Signer:    {{signer_name}} <{{signer_email}}>
+{{detail}}
+
+View the contract in Backstage:
+{{contract_url}}
+
+——
+Panic Backstage

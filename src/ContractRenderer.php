@@ -55,7 +55,35 @@ final class ContractRenderer
         'recurring_night', 'fundraiser', 'house_show', 'other',
     ];
 
-    public const STATUSES = ['draft', 'needs_review', 'approved', 'sent', 'signed', 'canceled', 'superseded'];
+    /** All valid contract statuses (original + digital-signature workflow states). */
+    public const STATUSES = [
+        // Original workflow
+        'draft', 'needs_review', 'approved', 'sent', 'signed', 'canceled', 'superseded',
+        // Digital-signature workflow
+        'ready_to_send', 'viewed', 'partially_signed', 'signed_by_client',
+        'countersigned', 'fully_executed', 'voided', 'declined', 'expired', 'error',
+    ];
+
+    /** Human-readable label for each status (used in admin UI). */
+    public const STATUS_LABELS = [
+        'draft'            => 'Draft',
+        'needs_review'     => 'Needs Review',
+        'approved'         => 'Approved',
+        'ready_to_send'    => 'Ready to Send',
+        'sent'             => 'Sent',
+        'viewed'           => 'Viewed by Signer',
+        'partially_signed' => 'Partially Signed',
+        'signed_by_client' => 'Signed by Client',
+        'countersigned'    => 'Countersigned',
+        'fully_executed'   => 'Fully Executed',
+        'signed'           => 'Signed',
+        'canceled'         => 'Canceled',
+        'voided'           => 'Voided',
+        'declined'         => 'Declined',
+        'expired'          => 'Expired',
+        'superseded'       => 'Superseded',
+        'error'            => 'Error',
+    ];
 
     public static function label(string $key): string
     {

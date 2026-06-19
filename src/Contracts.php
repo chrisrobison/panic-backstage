@@ -8,19 +8,28 @@ use function Panic\log_activity;
 /**
  * Contract / Deal Builder endpoint.
  *
- *   GET    /api/contracts                       list (admin: all; else own/event-scoped)
- *   POST   /api/contracts                       create (standalone = admin only)
- *   GET    /api/contracts/{id}                  full contract incl. preview + missing terms
- *   PATCH  /api/contracts/{id}                  update deal terms / counterparty / variables
+ *   GET    /api/contracts                          list (admin: all; else own/event-scoped)
+ *   POST   /api/contracts                          create (standalone = admin only)
+ *   GET    /api/contracts/{id}                     full contract incl. preview + missing terms
+ *   PATCH  /api/contracts/{id}                     update deal terms / counterparty / variables
  *   DELETE /api/contracts/{id}
- *   POST   /api/contracts/{id}/render           render a new immutable version
- *   GET    /api/contracts/{id}/versions/{vid}   fetch a past version's HTML
- *   POST   /api/contracts/{id}/status           change workflow status
- *   POST   /api/contracts/{id}/apply-template   (re)build sections from a template
- *   POST   /api/contracts/{id}/reevaluate       re-run smart module selection
- *   POST   /api/contracts/{id}/sections         add a section (module or custom)
- *   PATCH  /api/contracts/{id}/sections         bulk update sections (include / order / body)
- *   DELETE /api/contracts/{id}/sections/{sid}   remove a section
+ *   POST   /api/contracts/{id}/render              render a new immutable version
+ *   GET    /api/contracts/{id}/versions/{vid}      fetch a past version's HTML
+ *   POST   /api/contracts/{id}/status              change workflow status
+ *   POST   /api/contracts/{id}/apply-template      (re)build sections from a template
+ *   POST   /api/contracts/{id}/reevaluate          re-run smart module selection
+ *   POST   /api/contracts/{id}/sections            add a section (module or custom)
+ *   PATCH  /api/contracts/{id}/sections            bulk update sections (include / order / body)
+ *   DELETE /api/contracts/{id}/sections/{sid}      remove a section
+ *
+ * Digital-signature actions (all require manage access):
+ *   POST   /api/contracts/{id}/send                send for signature (creates signers + emails)
+ *   POST   /api/contracts/{id}/resend              resend link to unsigned signers
+ *   POST   /api/contracts/{id}/void                void the contract
+ *   POST   /api/contracts/{id}/countersign         venue countersignature (admin only)
+ *   GET    /api/contracts/{id}/audit               audit log
+ *   GET    /api/contracts/{id}/download            download final signed PDF
+ *   GET    /api/contracts/{id}/signers             list signers
  */
 final class Contracts extends BaseEndpoint
 {
@@ -58,7 +67,15 @@ final class Contracts extends BaseEndpoint
                 'apply-template' => $this->requireManage($access) ?? $this->applyTemplate($request, $contract),
                 'reevaluate'     => $this->requireManage($access) ?? $this->reevaluate($contract),
                 'sections'       => $this->requireManage($access) ?? $this->sections($request, $contract),
-                default          => $this->notFound(),
+                // ── Digital signature actions ──────────────────────────────────
+                'send'        => $this->requireManage($access) ?? $this->sendForSignature($request, $contract),
+                'resend'      => $this->requireManage($access) ?? $this->resendSigningLinks($contract),
+                'void'        => $this->requireManage($access) ?? $this->voidContract($request, $contract),
+                'countersign' => $this->requireApprove($access) ?? $this->countersign($request, $contract),
+                'audit'       => $method === 'GET' ? ($this->requireManage($access) ?? $this->auditLog($contract)) : Response::methodNotAllowed(),
+                'download'    => $method === 'GET' ? ($this->requireManage($access) ?? $this->downloadFinalPdf($contract)) : Response::methodNotAllowed(),
+                'signers'     => $method === 'GET' ? ($this->requireManage($access) ?? $this->listSigners($contract)) : Response::methodNotAllowed(),
+                default       => $this->notFound(),
             };
         }
 
@@ -93,6 +110,11 @@ final class Contracts extends BaseEndpoint
     private function requireManage(array $access): ?Response
     {
         return $access['manage'] ? null : $this->forbidden();
+    }
+
+    private function requireApprove(array $access): ?Response
+    {
+        return $access['approve'] ? null : $this->forbidden('Only approvers can countersign contracts.');
     }
 
     // ── list / create ───────────────────────────────────────────────────────
@@ -514,6 +536,536 @@ HTML;
         }
 
         return Response::methodNotAllowed();
+    }
+
+    // ── digital signatures ────────────────────────────────────────────────────
+
+    /**
+     * POST /api/contracts/{id}/send
+     *
+     * Body: { signers?: [{role, name, email, phone?, company?, title?}] }
+     *
+     * Creates signer records, generates signing tokens, sends emails,
+     * updates contract status to 'sent'.
+     *
+     * If `signers` is omitted the counterparty on the contract is used.
+     */
+    private function sendForSignature(Request $request, array $contract): Response
+    {
+        $contractId = (int) $contract['id'];
+
+        // Block re-sending a fully-executed or voided contract.
+        if (in_array($contract['status'], ['fully_executed', 'voided', 'canceled'], true)) {
+            return Response::json(['error' => 'This contract cannot be sent for signature in its current state.'], 422);
+        }
+
+        // Ensure there is a rendered version.
+        if (!$this->db->one('SELECT id FROM contract_versions WHERE contract_id = ? LIMIT 1', [$contractId])) {
+            return Response::json(['error' => 'Generate a contract version before sending for signature.'], 422);
+        }
+
+        $b       = $request->body();
+        $signers = $b['signers'] ?? null;
+
+        // Derive signers from counterparty if not explicitly provided.
+        if (empty($signers)) {
+            if (empty($contract['counterparty_email'])) {
+                return Response::json(['error' => 'No signers provided and no counterparty email on the contract.'], 422);
+            }
+            $signers = [[
+                'role'    => 'renter',
+                'name'    => $contract['counterparty_name']  ?? '',
+                'email'   => $contract['counterparty_email'] ?? '',
+                'company' => $contract['counterparty_org']   ?? null,
+            ]];
+        }
+
+        $ttlHours = max(1, (int) (getenv('SIGNATURE_TOKEN_TTL_HOURS') ?: 168));
+        $appUrl   = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        $mailer   = new Mailer($this->root, $this->db);
+
+        // Void any existing pending signers on this contract (re-send scenario).
+        $this->db->run(
+            "UPDATE contract_signers SET status = 'voided', signing_token_hash = NULL WHERE contract_id = ? AND status IN ('pending','sent','viewed')",
+            [$contractId]
+        );
+
+        foreach ($signers as $signerData) {
+            $email = trim((string) ($signerData['email'] ?? ''));
+            $name  = trim((string) ($signerData['name']  ?? ''));
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                continue;
+            }
+
+            // Generate token — store only the hash.
+            $rawToken   = $this->auth->generateToken(48);
+            $tokenHash  = $this->auth->hashToken($rawToken);
+            $expiresAt  = date('Y-m-d H:i:s', time() + $ttlHours * 3600);
+
+            $signerId = $this->db->insert(
+                'INSERT INTO contract_signers
+                    (contract_id, role, name, email, phone, company, title, status,
+                     signing_token_hash, token_expires_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [
+                    $contractId,
+                    $signerData['role']    ?? 'renter',
+                    $name,
+                    $email,
+                    $signerData['phone']   ?? null,
+                    $signerData['company'] ?? null,
+                    $signerData['title']   ?? null,
+                    'sent',
+                    $tokenHash,
+                    $expiresAt,
+                ]
+            );
+
+            // Send signing email.
+            $signingUrl = $appUrl . '/sign.html?token=' . urlencode($rawToken);
+            try {
+                $mailer->sendTemplate(
+                    $email,
+                    'Please sign: ' . ($contract['title'] ?? 'Agreement'),
+                    'contract-sign-request',
+                    [
+                        'signer_name'    => $name,
+                        'contract_title' => (string) ($contract['title'] ?? ''),
+                        'signing_url'    => $signingUrl,
+                        'expires_date'   => date('F j, Y', strtotime($expiresAt)),
+                        'venue_name'     => (string) (getenv('MAIL_FROM_NAME') ?: 'The Venue'),
+                    ]
+                );
+            } catch (\Throwable $e) {
+                error_log("Contracts::sendForSignature mail failed to {$email}: " . $e->getMessage());
+            }
+
+            ContractAuditLog::appendFromRequest(
+                $this->db, $contractId, 'contract_sent', $signerId,
+                ['email' => $email, 'role' => $signerData['role'] ?? 'renter']
+            );
+        }
+
+        // Create provider envelope (for external providers).
+        try {
+            $provider    = ContractSignatureProviders::make();
+            $signerRows  = $this->db->all('SELECT * FROM contract_signers WHERE contract_id = ? AND status = ?', [$contractId, 'sent']);
+            $envelope    = $provider->createEnvelope($contract, $signerRows);
+            $envelopeId  = $envelope['envelope_id'] ?? null;
+            if ($envelopeId) {
+                $this->db->run(
+                    'UPDATE contracts SET provider_envelope_id = ?, provider_status = ? WHERE id = ?',
+                    [$envelopeId, $envelope['status'] ?? 'created', $contractId]
+                );
+                $provider->sendEnvelope($envelopeId);
+            }
+        } catch (\Throwable $e) {
+            error_log("Contracts::sendForSignature provider error: " . $e->getMessage());
+            ContractAuditLog::appendFromRequest(
+                $this->db, $contractId, 'provider_error', null,
+                ['detail' => $e->getMessage()]
+            );
+        }
+
+        // Update contract status.
+        $this->db->run(
+            "UPDATE contracts SET status = 'sent', sent_at = NOW() WHERE id = ?",
+            [$contractId]
+        );
+
+        if (!empty($contract['event_id'])) {
+            log_activity($this->db, (int) $contract['event_id'], $this->userId(), 'contract sent for signature', ['contract_id' => $contractId]);
+        }
+
+        // Notify all venue admins.
+        $this->notifyAdminsOfSend($contract);
+
+        return $this->ok(['ok' => true]);
+    }
+
+    /**
+     * POST /api/contracts/{id}/resend
+     *
+     * Regenerates tokens and resends signing emails to all signers who have
+     * not yet signed.
+     */
+    private function resendSigningLinks(array $contract): Response
+    {
+        $contractId = (int) $contract['id'];
+
+        if (in_array($contract['status'], ['fully_executed', 'voided', 'canceled', 'draft'], true)) {
+            return Response::json(['error' => 'Cannot resend links for a contract in this state.'], 422);
+        }
+
+        $pending = $this->db->all(
+            "SELECT * FROM contract_signers WHERE contract_id = ? AND status IN ('sent','viewed','pending')",
+            [$contractId]
+        );
+
+        if (empty($pending)) {
+            return Response::json(['error' => 'No unsigned signers to resend to.'], 422);
+        }
+
+        $ttlHours = max(1, (int) (getenv('SIGNATURE_TOKEN_TTL_HOURS') ?: 168));
+        $appUrl   = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        $mailer   = new Mailer($this->root, $this->db);
+
+        foreach ($pending as $signer) {
+            $rawToken  = $this->auth->generateToken(48);
+            $tokenHash = $this->auth->hashToken($rawToken);
+            $expiresAt = date('Y-m-d H:i:s', time() + $ttlHours * 3600);
+
+            $this->db->run(
+                "UPDATE contract_signers SET status = 'sent', signing_token_hash = ?, token_expires_at = ? WHERE id = ?",
+                [$tokenHash, $expiresAt, (int) $signer['id']]
+            );
+
+            $signingUrl = $appUrl . '/sign.html?token=' . urlencode($rawToken);
+            try {
+                $mailer->sendTemplate(
+                    (string) $signer['email'],
+                    'Reminder — please sign: ' . ($contract['title'] ?? 'Agreement'),
+                    'contract-sign-request',
+                    [
+                        'signer_name'    => (string) $signer['name'],
+                        'contract_title' => (string) ($contract['title'] ?? ''),
+                        'signing_url'    => $signingUrl,
+                        'expires_date'   => date('F j, Y', strtotime($expiresAt)),
+                        'venue_name'     => (string) (getenv('MAIL_FROM_NAME') ?: 'The Venue'),
+                    ]
+                );
+            } catch (\Throwable $e) {
+                error_log("Contracts::resendSigningLinks mail failed: " . $e->getMessage());
+            }
+
+            ContractAuditLog::appendFromRequest(
+                $this->db, $contractId, 'contract_resent', (int) $signer['id'],
+                ['email' => $signer['email']]
+            );
+        }
+
+        return $this->ok(['ok' => true, 'resent' => count($pending)]);
+    }
+
+    /**
+     * POST /api/contracts/{id}/void
+     *
+     * Body: { reason?: "..." }
+     *
+     * Voids the contract and invalidates all pending signing tokens.
+     */
+    private function voidContract(Request $request, array $contract): Response
+    {
+        $contractId = (int) $contract['id'];
+
+        if (in_array($contract['status'], ['fully_executed', 'voided'], true)) {
+            return Response::json(['error' => 'Contract is already ' . $contract['status'] . '.'], 422);
+        }
+
+        $reason = trim((string) ($request->body('reason') ?? ''));
+
+        // Invalidate all pending signer tokens.
+        $this->db->run(
+            "UPDATE contract_signers
+             SET status = 'voided', signing_token_hash = NULL, token_expires_at = NULL
+             WHERE contract_id = ? AND status IN ('pending','sent','viewed')",
+            [$contractId]
+        );
+
+        $this->db->run(
+            "UPDATE contracts SET status = 'voided', voided_at = NOW() WHERE id = ?",
+            [$contractId]
+        );
+
+        ContractAuditLog::appendFromRequest(
+            $this->db, $contractId, 'contract_voided', null,
+            array_filter(['reason' => $reason, 'voided_by' => $this->userId()])
+        );
+
+        if (!empty($contract['event_id'])) {
+            log_activity($this->db, (int) $contract['event_id'], $this->userId(), 'contract voided', ['contract_id' => $contractId]);
+        }
+
+        // Notify admins.
+        $this->notifyAdminsOfVoid($contract, $reason);
+
+        return $this->ok(['ok' => true]);
+    }
+
+    /**
+     * POST /api/contracts/{id}/countersign
+     *
+     * Records the venue's countersignature directly (admin-authenticated action,
+     * no magic link needed since the admin is already logged in).
+     *
+     * Body: { name: "...", title?: "...", signature_text?: "..." }
+     *
+     * Advances contract from 'signed_by_client' → 'countersigned' → 'fully_executed'.
+     */
+    private function countersign(Request $request, array $contract): Response
+    {
+        $contractId = (int) $contract['id'];
+
+        $allowedStatuses = ['sent', 'viewed', 'partially_signed', 'signed_by_client', 'countersigned'];
+        if (!in_array($contract['status'], $allowedStatuses, true)) {
+            return Response::json([
+                'error' => 'Contract cannot be countersigned in its current state (' . $contract['status'] . ').',
+            ], 422);
+        }
+
+        $b    = $request->body();
+        $user = $this->auth->user();
+        $name = trim((string) ($b['name'] ?? $user['name'] ?? ''));
+        if ($name === '') {
+            return Response::json(['error' => 'Signer name is required.'], 422);
+        }
+
+        // Upsert a venue signer row.
+        $existing = $this->db->one(
+            "SELECT id FROM contract_signers WHERE contract_id = ? AND role = 'venue' LIMIT 1",
+            [$contractId]
+        );
+
+        if ($existing) {
+            $this->db->run(
+                "UPDATE contract_signers
+                 SET status = 'signed', signed_at = NOW(), name = ?, title = ?, signature_text = ?,
+                     ip_address = ?, user_agent = ?, signing_token_hash = NULL
+                 WHERE id = ?",
+                [
+                    $name,
+                    trim((string) ($b['title'] ?? '')),
+                    trim((string) ($b['signature_text'] ?? $name)),
+                    $this->clientIp(),
+                    substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 512),
+                    (int) $existing['id'],
+                ]
+            );
+            $signerId = (int) $existing['id'];
+        } else {
+            $signerId = $this->db->insert(
+                "INSERT INTO contract_signers
+                    (contract_id, role, name, email, title, status, signed_at,
+                     signature_text, ip_address, user_agent)
+                 VALUES (?, 'venue', ?, ?, ?, 'signed', NOW(), ?, ?, ?)",
+                [
+                    $contractId,
+                    $name,
+                    (string) ($user['email'] ?? ''),
+                    trim((string) ($b['title'] ?? '')),
+                    trim((string) ($b['signature_text'] ?? $name)),
+                    $this->clientIp(),
+                    substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 512),
+                ]
+            );
+        }
+
+        ContractAuditLog::appendFromRequest(
+            $this->db, $contractId, 'contract_countersigned', $signerId,
+            ['countersigned_by_user_id' => $this->userId()]
+        );
+
+        // Check whether all signers are now signed.
+        $unsigned = $this->db->one(
+            "SELECT COUNT(*) AS n FROM contract_signers WHERE contract_id = ? AND status != 'signed'",
+            [$contractId]
+        );
+
+        if ((int) ($unsigned['n'] ?? 1) === 0) {
+            // All signed → fully executed.
+            $this->finalizeCountersigned($contractId, $contract);
+        } else {
+            $this->db->run(
+                "UPDATE contracts SET status = 'countersigned' WHERE id = ?",
+                [$contractId]
+            );
+        }
+
+        if (!empty($contract['event_id'])) {
+            log_activity($this->db, (int) $contract['event_id'], $this->userId(), 'contract countersigned', ['contract_id' => $contractId]);
+        }
+
+        return $this->ok(['ok' => true]);
+    }
+
+    private function finalizeCountersigned(int $contractId, array $contract): void
+    {
+        $this->db->run(
+            "UPDATE contracts SET status = 'fully_executed', fully_executed_at = NOW() WHERE id = ?",
+            [$contractId]
+        );
+
+        ContractAuditLog::appendFromRequest($this->db, $contractId, 'contract_fully_executed');
+
+        try {
+            $pdfService = new ContractPdfService($this->db, $this->root);
+            $pdfBytes   = $pdfService->renderFinalSignedPdf($contractId);
+            $hash       = $pdfService->hashPdf($pdfBytes);
+            $path       = $pdfService->storePdf($contractId, $pdfBytes, 'final');
+
+            $this->db->run(
+                'UPDATE contracts SET final_pdf_path = ?, final_pdf_sha256 = ? WHERE id = ?',
+                [$path, $hash, $contractId]
+            );
+
+            ContractAuditLog::appendFromRequest(
+                $this->db, $contractId, 'pdf_generated', null, ['path' => $path]
+            );
+            ContractAuditLog::appendFromRequest(
+                $this->db, $contractId, 'pdf_hash_created', null, ['sha256' => $hash]
+            );
+        } catch (\Throwable $e) {
+            error_log("Contracts::countersign PDF generation failed: " . $e->getMessage());
+        }
+
+        if (!empty($contract['event_id'])) {
+            $this->db->run(
+                "UPDATE events SET status = 'booked' WHERE id = ? AND status IN ('proposed','confirmed')",
+                [(int) $contract['event_id']]
+            );
+            log_activity($this->db, (int) $contract['event_id'], $this->userId(), 'contract_signed', ['contract_id' => $contractId]);
+        }
+    }
+
+    /**
+     * GET /api/contracts/{id}/audit
+     *
+     * Returns the immutable audit log for this contract.
+     */
+    private function auditLog(array $contract): Response
+    {
+        $rows = $this->db->all(
+            'SELECT cal.id, cal.action, cal.ip_address, cal.user_agent, cal.metadata_json,
+                    cal.created_at, cs.name AS signer_name, cs.email AS signer_email,
+                    cs.role AS signer_role
+               FROM contract_audit_log cal
+               LEFT JOIN contract_signers cs ON cs.id = cal.signer_id
+              WHERE cal.contract_id = ?
+              ORDER BY cal.created_at ASC',
+            [(int) $contract['id']]
+        );
+
+        // Parse metadata_json for each row.
+        foreach ($rows as &$row) {
+            $row['metadata'] = $row['metadata_json'] ? json_decode($row['metadata_json'], true) : null;
+            unset($row['metadata_json'], $row['user_agent']); // UA is stored but not sent to admin UI
+        }
+        unset($row);
+
+        return $this->ok(['audit_log' => $rows]);
+    }
+
+    /**
+     * GET /api/contracts/{id}/download
+     *
+     * Streams the final signed PDF back to the admin.
+     */
+    private function downloadFinalPdf(array $contract): Response
+    {
+        $path = (string) ($contract['final_pdf_path'] ?? '');
+
+        if ($path === '') {
+            return Response::json(['error' => 'No final PDF is available for this contract yet.'], 404);
+        }
+
+        $fullPath = $this->root . '/' . $path;
+        if (!is_file($fullPath)) {
+            return Response::json(['error' => 'Final PDF file not found on disk.'], 404);
+        }
+
+        $pdf  = (string) file_get_contents($fullPath);
+        $safe = preg_replace('/[^\w\s-]/', '', (string) ($contract['title'] ?? 'contract'));
+        $safe = trim(preg_replace('/\s+/', '-', $safe)) ?: 'contract';
+
+        ContractAuditLog::appendFromRequest(
+            $this->db, (int) $contract['id'], 'contract_previewed', null,
+            ['downloaded_by_user_id' => $this->userId()]
+        );
+
+        return new Response($pdf, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$safe}-signed.pdf\"",
+            'Content-Length'      => (string) strlen($pdf),
+            'Cache-Control'       => 'private, no-cache',
+        ]);
+    }
+
+    /**
+     * GET /api/contracts/{id}/signers
+     *
+     * Returns all signer records for the contract (without raw token data).
+     */
+    private function listSigners(array $contract): Response
+    {
+        $signers = $this->db->all(
+            'SELECT id, role, name, email, phone, company, title, status,
+                    viewed_at, signed_at, declined_at, ip_address, created_at, updated_at
+               FROM contract_signers WHERE contract_id = ? ORDER BY id',
+            [(int) $contract['id']]
+        );
+        return $this->ok(['signers' => $signers]);
+    }
+
+    // ── signature notification helpers ────────────────────────────────────────
+
+    private function notifyAdminsOfSend(array $contract): void
+    {
+        try {
+            $admins = $this->db->all("SELECT email, name FROM users WHERE role = 'venue_admin'", []);
+            $mailer = new Mailer($this->root, $this->db);
+            $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+            foreach ($admins as $admin) {
+                $mailer->sendTemplate(
+                    $admin['email'],
+                    'Contract sent for signature: ' . ($contract['title'] ?? ''),
+                    'contract-signed-admin',
+                    [
+                        'admin_name'     => $admin['name'],
+                        'event'          => 'sent for signature',
+                        'contract_title' => (string) ($contract['title'] ?? ''),
+                        'signer_name'    => (string) ($contract['counterparty_name'] ?? ''),
+                        'signer_email'   => (string) ($contract['counterparty_email'] ?? ''),
+                        'detail'         => '',
+                        'contract_url'   => $appUrl . '/#/contracts/' . $contract['id'],
+                    ]
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log("Contracts::notifyAdminsOfSend failed: " . $e->getMessage());
+        }
+    }
+
+    private function notifyAdminsOfVoid(array $contract, string $reason): void
+    {
+        try {
+            $admins = $this->db->all("SELECT email, name FROM users WHERE role = 'venue_admin'", []);
+            $mailer = new Mailer($this->root, $this->db);
+            $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+            foreach ($admins as $admin) {
+                $mailer->sendTemplate(
+                    $admin['email'],
+                    'Contract voided: ' . ($contract['title'] ?? ''),
+                    'contract-voided',
+                    [
+                        'admin_name'     => $admin['name'],
+                        'contract_title' => (string) ($contract['title'] ?? ''),
+                        'reason'         => $reason ?: 'No reason provided',
+                        'contract_url'   => $appUrl . '/#/contracts/' . $contract['id'],
+                    ]
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log("Contracts::notifyAdminsOfVoid failed: " . $e->getMessage());
+        }
+    }
+
+    private function clientIp(): ?string
+    {
+        $xff = (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
+        if ($xff !== '') {
+            return substr(trim(explode(',', $xff)[0]), 0, 45);
+        }
+        return isset($_SERVER['REMOTE_ADDR']) ? substr((string) $_SERVER['REMOTE_ADDR'], 0, 45) : null;
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

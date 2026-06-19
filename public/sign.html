@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign Agreement</title>
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <style>
+    /* ── Reset ──────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Tokens ─────────────────────────────────────────────────────────── */
+    :root {
+      --font-serif:  Georgia, 'Times New Roman', serif;
+      --font-sans:   -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --font-mono:   'Courier New', Courier, monospace;
+      --color-ink:   #111;
+      --color-mid:   #555;
+      --color-muted: #888;
+      --color-bg:    #f8f7f4;
+      --color-card:  #fff;
+      --color-border:#d0cfc8;
+      --color-accent:#1a56c4;
+      --color-danger:#b91c1c;
+      --color-ok:    #15803d;
+      --radius:      6px;
+      --shadow:      0 1px 4px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+    }
+
+    /* ── Page shell ─────────────────────────────────────────────────────── */
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-bg);
+      color: var(--color-ink);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 48px;
+    }
+
+    header {
+      width: 100%;
+      max-width: 760px;
+      margin-bottom: 28px;
+      text-align: center;
+    }
+    header h1 { font-family: var(--font-serif); font-size: 1.4rem; color: var(--color-ink); }
+    header p  { font-size: .875rem; color: var(--color-mid); margin-top: 4px; }
+
+    /* ── Cards ──────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--color-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 28px 32px;
+      width: 100%;
+      max-width: 760px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-family: var(--font-serif);
+      font-size: 1.1rem;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    /* ── Contract body ──────────────────────────────────────────────────── */
+    .contract-body {
+      font-family: var(--font-serif);
+      font-size: .95rem;
+      line-height: 1.7;
+      max-height: 540px;
+      overflow-y: auto;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      background: #fdfcfa;
+      margin-bottom: 16px;
+    }
+    .contract-body h1 { font-size: 1.2rem; margin-bottom: 4px; }
+    .contract-body h2 { font-size: 1rem; margin: 16px 0 4px; }
+    .contract-body p  { margin-bottom: 10px; text-align: justify; }
+    .contract-body table { border-collapse: collapse; width: 100%; font-size: .875rem; margin-bottom: 12px; }
+    .contract-body th,
+    .contract-body td { padding: 4px 8px; border-bottom: 1px solid var(--color-border); }
+    .contract-body th { font-weight: 600; text-align: left; }
+
+    .scroll-hint {
+      font-size: .75rem;
+      color: var(--color-muted);
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    /* ── Form elements ──────────────────────────────────────────────────── */
+    label { display: block; font-size: .875rem; font-weight: 600; margin-bottom: 5px; color: var(--color-ink); }
+    .hint { font-size: .78rem; color: var(--color-mid); margin-top: 3px; }
+
+    input[type="text"], input[type="email"] {
+      width: 100%;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: 9px 12px;
+      font-size: 1rem;
+      font-family: var(--font-sans);
+      outline: none;
+      transition: border-color .15s;
+    }
+    input[type="text"]:focus, input[type="email"]:focus { border-color: var(--color-accent); }
+
+    .field { margin-bottom: 18px; }
+
+    /* Typed signature */
+    #sigTypeInput {
+      font-family: 'Brush Script MT', cursive, var(--font-serif);
+      font-size: 1.6rem;
+      letter-spacing: .03em;
+      border-bottom: 2px solid #333;
+      border-top: none; border-left: none; border-right: none;
+      border-radius: 0;
+      padding: 6px 4px 4px;
+    }
+
+    /* Canvas signature */
+    .sig-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+    .sig-tab {
+      padding: 6px 14px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: .85rem;
+      background: #f0efec;
+      transition: background .12s, border-color .12s;
+    }
+    .sig-tab.active { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
+
+    #sigCanvas {
+      display: block;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      cursor: crosshair;
+      touch-action: none;
+      background: #fff;
+    }
+    .sig-canvas-actions { display: flex; gap: 8px; margin-top: 6px; }
+    .btn-ghost {
+      padding: 5px 12px;
+      font-size: .82rem;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      background: transparent;
+    }
+
+    /* Consent + confirmation */
+    .consent-box {
+      background: #f5f4f0;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      font-size: .875rem;
+      line-height: 1.6;
+      margin-bottom: 18px;
+    }
+    .consent-check { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; }
+    .consent-check input[type="checkbox"] { width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; }
+
+    .confirm-text {
+      font-size: .82rem;
+      color: var(--color-mid);
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+
+    /* Buttons */
+    .btn-sign {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      background: var(--color-accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 1.05rem;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: .01em;
+      transition: background .15s, opacity .15s;
+    }
+    .btn-sign:hover { background: #1546a0; }
+    .btn-sign:disabled { opacity: .5; cursor: not-allowed; }
+
+    .btn-decline {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      background: transparent;
+      color: var(--color-danger);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      font-size: .9rem;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: border-color .15s;
+    }
+    .btn-decline:hover { border-color: var(--color-danger); }
+
+    /* Status screens */
+    .status-screen {
+      text-align: center;
+      padding: 40px 24px;
+    }
+    .status-icon { font-size: 3rem; margin-bottom: 16px; }
+    .status-screen h2 { font-family: var(--font-serif); font-size: 1.4rem; margin-bottom: 10px; }
+    .status-screen p  { color: var(--color-mid); font-size: .95rem; line-height: 1.6; }
+
+    .error-banner {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      font-size: .9rem;
+      color: var(--color-danger);
+      margin-bottom: 18px;
+      display: none;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 60px 24px;
+      color: var(--color-mid);
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--color-border);
+      border-top-color: var(--color-accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .signer-info { font-size: .875rem; color: var(--color-mid); margin-bottom: 20px; }
+    .signer-info strong { color: var(--color-ink); }
+
+    @media (max-width: 480px) {
+      .card { padding: 20px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Electronic Agreement Signing</h1>
+  <p id="contractTitle"></p>
+</header>
+
+<!-- Loading state -->
+<div id="loadingScreen" class="card">
+  <div class="loading">
+    <div class="spinner"></div>
+    Loading your agreement…
+  </div>
+</div>
+
+<!-- Error state (invalid / expired token) -->
+<div id="errorScreen" class="card" style="display:none">
+  <div class="status-screen">
+    <div class="status-icon">⚠️</div>
+    <h2>Signing Link Unavailable</h2>
+    <p id="errorMsg">This signing link is invalid or has expired. Please contact the venue to request a new link.</p>
+  </div>
+</div>
+
+<!-- Signing form -->
+<div id="signingScreen" style="display:none">
+
+  <!-- Contract body -->
+  <div class="card">
+    <div class="card-title">Agreement to Review and Sign</div>
+    <div id="signerInfo" class="signer-info"></div>
+    <div id="contractBody" class="contract-body"></div>
+    <p class="scroll-hint">Scroll to read the full agreement before signing.</p>
+  </div>
+
+  <!-- Signature form -->
+  <div class="card">
+    <div class="card-title">Your Electronic Signature</div>
+
+    <div id="errorBanner" class="error-banner"></div>
+
+    <!-- Signature method tabs -->
+    <div class="sig-tabs">
+      <button class="sig-tab active" id="tabType" onclick="switchTab('type')">Type Signature</button>
+      <button class="sig-tab" id="tabDraw" onclick="switchTab('draw')">Draw Signature</button>
+    </div>
+
+    <!-- Typed signature -->
+    <div id="panelType">
+      <div class="field">
+        <label for="sigTypeInput">Type your full legal name</label>
+        <input type="text" id="sigTypeInput" autocomplete="name" placeholder="Jane Doe" spellcheck="false">
+        <p class="hint">Your typed name will serve as your electronic signature.</p>
+      </div>
+    </div>
+
+    <!-- Drawn signature -->
+    <div id="panelDraw" style="display:none">
+      <label style="margin-bottom:8px">Draw your signature below</label>
+      <canvas id="sigCanvas" width="680" height="140"></canvas>
+      <div class="sig-canvas-actions">
+        <button class="btn-ghost" onclick="clearCanvas()">Clear</button>
+      </div>
+    </div>
+
+    <!-- Consent -->
+    <div class="consent-box" style="margin-top:20px">
+      <p>By signing this agreement you agree to the following:</p>
+      <blockquote style="margin: 8px 0 0 16px; font-style: italic; color: var(--color-mid);">
+        "I agree to use electronic records and signatures for this agreement. I understand that by signing
+        electronically, I am agreeing to the terms of this contract."
+      </blockquote>
+      <div class="consent-check">
+        <input type="checkbox" id="consentCheck">
+        <label for="consentCheck" style="font-weight:normal; cursor:pointer">
+          I have read the agreement and I consent to signing electronically.
+        </label>
+      </div>
+    </div>
+
+    <!-- Final confirmation + submit -->
+    <p class="confirm-text">
+      By clicking <strong>Sign Agreement</strong>, I confirm that I am authorized to sign this agreement
+      and intend to be legally bound by it.
+    </p>
+
+    <button class="btn-sign" id="signBtn" disabled onclick="submitSignature()">Sign Agreement</button>
+
+    <button class="btn-decline" onclick="showDeclineConfirm()">I decline to sign this agreement</button>
+  </div>
+</div>
+
+<!-- Success state -->
+<div id="successScreen" class="card" style="display:none">
+  <div class="status-screen">
+    <div class="status-icon">✅</div>
+    <h2>Signature Recorded</h2>
+    <p>Thank you — your electronic signature has been recorded. You will receive a copy of the fully
+       executed agreement when all parties have signed.</p>
+  </div>
+</div>
+
+<!-- Declined state -->
+<div id="declinedScreen" class="card" style="display:none">
+  <div class="status-screen">
+    <div class="status-icon">🚫</div>
+    <h2>Agreement Declined</h2>
+    <p>You have declined this agreement. The venue has been notified. Please contact them if you have
+       questions or wish to discuss the terms.</p>
+  </div>
+</div>
+
+<!-- Decline confirmation dialog -->
+<div id="declineDialog" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5);
+     z-index:100; display:none; align-items:center; justify-content:center">
+  <div style="background:#fff; border-radius:8px; padding:28px 32px; max-width:440px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,.2)">
+    <h3 style="font-family:var(--font-serif); margin-bottom:12px">Decline this agreement?</h3>
+    <p style="font-size:.9rem; color:var(--color-mid); margin-bottom:16px">
+      This action cannot be undone. The venue will be notified. If you have concerns about the terms,
+      consider contacting the venue first.
+    </p>
+    <div class="field">
+      <label for="declineReason">Reason (optional)</label>
+      <input type="text" id="declineReason" placeholder="e.g. Terms need revision">
+    </div>
+    <div style="display:flex; gap:10px; margin-top:4px">
+      <button onclick="hideDeclineDialog()" style="flex:1; padding:10px; border:1px solid var(--color-border);
+              border-radius:var(--radius); cursor:pointer; background:transparent">Cancel</button>
+      <button onclick="submitDecline()" style="flex:1; padding:10px; background:var(--color-danger);
+              color:#fff; border:none; border-radius:var(--radius); cursor:pointer; font-weight:600">
+        Decline Agreement
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let token    = '';
+  let signerId = null;
+  let sigMode  = 'type'; // 'type' | 'draw'
+
+  // Canvas drawing state
+  let isDrawing = false;
+  let canvas, ctx;
+  let hasDrawnContent = false;
+
+  // ── Initialise ─────────────────────────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', function () {
+    const params = new URLSearchParams(window.location.search);
+    token = params.get('token') || '';
+
+    if (!token) {
+      showError('No signing token found in the URL. Please use the link from your email.');
+      return;
+    }
+
+    loadContract();
+    setupCanvas();
+    setupConsentListener();
+  });
+
+  // ── Load contract ──────────────────────────────────────────────────────────
+  async function loadContract() {
+    try {
+      const res  = await fetch('/api/signing/' + encodeURIComponent(token));
+      const data = await res.json();
+
+      if (!res.ok) {
+        showError(data.error || 'Failed to load the agreement.');
+        return;
+      }
+
+      // Populate UI.
+      document.getElementById('contractTitle').textContent = data.contract.title || 'Agreement';
+      document.title = 'Sign: ' + (data.contract.title || 'Agreement');
+
+      document.getElementById('signerInfo').innerHTML =
+        'You are signing as <strong>' + esc(data.signer.name || data.signer.email) + '</strong>' +
+        (data.signer.role ? ' (' + esc(ucFirst(data.signer.role.replace(/_/g, ' '))) + ')' : '') + '.';
+
+      const bodyEl = document.getElementById('contractBody');
+      // Use innerHTML — HTML is rendered by the server from trusted template content.
+      bodyEl.innerHTML = data.html || '<p><em>No contract body available.</em></p>';
+
+      signerId = data.signer.id;
+
+      show('signingScreen');
+      hide('loadingScreen');
+
+      // Mark as viewed.
+      fetch('/api/signing/' + encodeURIComponent(token) + '/viewed', { method: 'POST' }).catch(() => {});
+
+    } catch (err) {
+      showError('Network error loading the agreement. Please refresh and try again.');
+    }
+  }
+
+  // ── Canvas drawing ─────────────────────────────────────────────────────────
+  function setupCanvas() {
+    canvas = document.getElementById('sigCanvas');
+    ctx    = canvas.getContext('2d');
+
+    // Scale canvas for high-DPI displays.
+    const rect = canvas.getBoundingClientRect();
+    const dpr  = window.devicePixelRatio || 1;
+    canvas.width  = canvas.offsetWidth  * dpr || 680;
+    canvas.height = 140 * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth   = 2;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+
+    // Mouse events
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup',   endDraw);
+    canvas.addEventListener('mouseleave', endDraw);
+
+    // Touch events
+    canvas.addEventListener('touchstart', e => { e.preventDefault(); startDraw(e.touches[0]); }, { passive: false });
+    canvas.addEventListener('touchmove',  e => { e.preventDefault(); draw(e.touches[0]); },      { passive: false });
+    canvas.addEventListener('touchend',   e => { endDraw(); });
+  }
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left),
+      y: (e.clientY - rect.top),
+    };
+  }
+
+  function startDraw(e) {
+    isDrawing = true;
+    const pos = getPos(e);
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+  }
+
+  function draw(e) {
+    if (!isDrawing) return;
+    const pos = getPos(e);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    hasDrawnContent = true;
+    updateSignBtn();
+  }
+
+  function endDraw() { isDrawing = false; }
+
+  window.clearCanvas = function () {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasDrawnContent = false;
+    updateSignBtn();
+  };
+
+  // ── Tab switching ──────────────────────────────────────────────────────────
+  window.switchTab = function (mode) {
+    sigMode = mode;
+    document.getElementById('panelType').style.display = mode === 'type' ? '' : 'none';
+    document.getElementById('panelDraw').style.display = mode === 'draw' ? '' : 'none';
+    document.getElementById('tabType').classList.toggle('active', mode === 'type');
+    document.getElementById('tabDraw').classList.toggle('active', mode === 'draw');
+    updateSignBtn();
+  };
+
+  // ── Consent ────────────────────────────────────────────────────────────────
+  function setupConsentListener() {
+    document.getElementById('consentCheck').addEventListener('change', updateSignBtn);
+    document.getElementById('sigTypeInput').addEventListener('input', updateSignBtn);
+  }
+
+  function updateSignBtn() {
+    const consented = document.getElementById('consentCheck').checked;
+    const hasSig = sigMode === 'type'
+      ? document.getElementById('sigTypeInput').value.trim().length >= 2
+      : hasDrawnContent;
+    document.getElementById('signBtn').disabled = !(consented && hasSig);
+  }
+
+  // ── Submit signature ───────────────────────────────────────────────────────
+  window.submitSignature = async function () {
+    const btn = document.getElementById('signBtn');
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
+    clearError();
+
+    const body = {
+      consent: document.getElementById('consentCheck').checked,
+    };
+
+    if (sigMode === 'type') {
+      body.signature_text = document.getElementById('sigTypeInput').value.trim();
+    } else {
+      body.signature_image = canvas.toDataURL('image/png');
+    }
+
+    try {
+      const res  = await fetch('/api/signing/' + encodeURIComponent(token) + '/sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showFormError(data.error || 'Signing failed. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Sign Agreement';
+        return;
+      }
+
+      // Success.
+      hide('signingScreen');
+      show('successScreen');
+
+    } catch (err) {
+      showFormError('Network error. Please check your connection and try again.');
+      btn.disabled = false;
+      btn.textContent = 'Sign Agreement';
+    }
+  };
+
+  // ── Decline ────────────────────────────────────────────────────────────────
+  window.showDeclineConfirm = function () {
+    const d = document.getElementById('declineDialog');
+    d.style.display = 'flex';
+  };
+
+  window.hideDeclineDialog = function () {
+    document.getElementById('declineDialog').style.display = 'none';
+  };
+
+  window.submitDecline = async function () {
+    const reason = document.getElementById('declineReason').value.trim();
+    hideDeclineDialog();
+
+    try {
+      await fetch('/api/signing/' + encodeURIComponent(token) + '/decline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+    } catch (_) {}
+
+    hide('signingScreen');
+    show('declinedScreen');
+  };
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function show(id) { document.getElementById(id).style.display = ''; }
+  function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+  function showError(msg) {
+    document.getElementById('errorMsg').textContent = msg;
+    hide('loadingScreen');
+    show('errorScreen');
+  }
+
+  function showFormError(msg) {
+    const el = document.getElementById('errorBanner');
+    el.textContent = msg;
+    el.style.display = '';
+  }
+
+  function clearError() {
+    document.getElementById('errorBanner').style.display = 'none';
+  }
+
+  function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function ucFirst(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+}());
+</script>
+</body>
+</html>

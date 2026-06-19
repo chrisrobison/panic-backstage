@@ -1,0 +1,18 @@
+Hi {{signer_name}},
+
+You have been sent a contract for electronic signature:
+
+  {{contract_title}}
+
+Please click the link below to review and sign the agreement:
+
+  {{signing_url}}
+
+This link is valid until {{expires_date}}.
+
+If you did not expect this email or have questions, please contact us directly.
+
+——
+{{venue_name}}
+
+IMPORTANT: Do not forward this email. The signing link is unique to you.

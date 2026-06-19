@@ -70,7 +70,7 @@ require __DIR__ . '/index.html';
 function sensitive_html_headers(string $path): void
 {
     $name = strtolower(basename($path));
-    if ($name !== 'login.html' && $name !== 'invite.html' && $name !== 'scanner.html') {
+    if (!in_array($name, ['login.html', 'invite.html', 'scanner.html', 'sign.html'], true)) {
         return;
     }
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
