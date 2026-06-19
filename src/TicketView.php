@@ -79,8 +79,11 @@ final class TicketView extends BaseEndpoint
         $statusBadge = '<span class="tk-badge tk-' . $this->e($statusUi[1]) . '">'
             . $this->e($statusUi[0]) . '</span>';
 
+        $saveHint = '';
         $redeemedNote = '';
-        if ($status === 'redeemed' && !empty($ticket['redeemed_at'])) {
+        if ($status === 'issued') {
+            $saveHint = '<p class="tk-save">Screenshot this QR &mdash; you\'ll need it at the door.</p>';
+        } elseif ($status === 'redeemed' && !empty($ticket['redeemed_at'])) {
             $redeemedNote = '<p class="tk-note">Scanned at the door on '
                 . $this->e((string) $ticket['redeemed_at']) . '.</p>';
         } elseif ($status === 'void') {
@@ -118,6 +121,7 @@ final class TicketView extends BaseEndpoint
   .tk-void{background:#3a1518;color:#e27480;}
   .tk-code{margin-top:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;color:#a8a8b8;font-size:.85rem;}
   .tk-note{margin:12px 0 0;color:#a8a8b8;font-size:.85rem;}
+  .tk-save{margin:10px 0 0;font-size:.82rem;font-weight:600;color:#74e29a;}
 </style>
 </head>
 <body class="tk-body">
@@ -134,6 +138,7 @@ final class TicketView extends BaseEndpoint
     {$qrBlock}
     <footer class="tk-foot">
       {$statusBadge}
+      {$saveHint}
       <div class="tk-code">{$code}</div>
       {$redeemedNote}
     </footer>

@@ -207,19 +207,29 @@ final class Webhooks extends BaseEndpoint
             }
             $n++;
             $viewUrl  = $appUrl . '/t/' . rawurlencode($token);
+            // Use PNG for the email QR — SVG is not supported by Gmail or Outlook.
+            $qrUrl    = $appUrl . '/assets/qr.png?text=' . rawurlencode($token) . '&size=300';
             $code     = htmlspecialchars((string) $ticket['code'], ENT_QUOTES, 'UTF-8');
             $safeView = htmlspecialchars($viewUrl, ENT_QUOTES, 'UTF-8');
+            $safeQr   = htmlspecialchars($qrUrl, ENT_QUOTES, 'UTF-8');
 
             $textLines[] = 'Ticket ' . $n . '  (' . (string) $ticket['code'] . ')';
-            $textLines[] = '  View / QR: ' . $viewUrl;
+            $textLines[] = '  Show QR at door: ' . $viewUrl;
             $textLines[] = '';
 
-            $htmlItems[] = '<div style="padding:12px 0;border-bottom:1px solid #2e2929;">'
+            $htmlItems[] = '<div style="padding:16px 0;border-bottom:1px solid #2e2929;">'
                 . '<div style="font-size:13px;color:#a9a097;letter-spacing:1px;text-transform:uppercase;">Ticket ' . $n . '</div>'
                 . '<div style="margin-top:4px;font-size:16px;font-weight:bold;color:#fff;">' . $code . '</div>'
-                . '<div style="margin-top:6px;">'
-                . '<a href="' . $safeView . '" style="color:#c9b27e;font-size:14px;word-break:break-all;">'
-                . $safeView . '</a></div></div>';
+                . '<div style="margin-top:14px;text-align:center;">'
+                . '<img src="' . $safeQr . '" alt="QR code — show at the door" width="200" height="200"'
+                . ' style="display:block;margin:0 auto;background:#ffffff;padding:10px;">'
+                . '</div>'
+                . '<div style="margin-top:8px;font-size:13px;color:#b5aba2;text-align:center;">'
+                . 'Screenshot or save this QR &mdash; show it at the door to get in.'
+                . '</div>'
+                . '<div style="margin-top:10px;">'
+                . '<a href="' . $safeView . '" style="color:#c9b27e;font-size:13px;word-break:break-all;">'
+                . 'Open live ticket &rarr;</a></div></div>';
         }
 
         if ($n === 0) {

@@ -4,15 +4,18 @@ declare(strict_types=1);
 namespace Panic;
 
 /**
- * Self-contained QR Code generator that renders an SVG for arbitrary text.
+ * Self-contained QR Code generator that renders an SVG or PNG for arbitrary text.
  *
- * Served at GET /assets/qr.svg?text=<payload> (the kernel/router forward that
- * exact path here). Zero runtime dependencies: this is a from-scratch QR
- * encoder (model 2, byte mode, ECC level M) — no Composer / gd / imagick.
+ * Routes (both forwarded by the kernel/router):
+ *   GET /assets/qr.svg?text=<payload>  → image/svg+xml  (ticket view pages)
+ *   GET /assets/qr.png?text=<payload>  → image/png      (HTML emails — SVG is
+ *                                         not supported in Gmail or Outlook)
  *
- * Output is image/svg+xml so it embeds directly in <img src> tags, ticket
- * pages, and HTML emails. The payload is our short plaintext ticket token, so
- * the encoded data stays small and scannable.
+ * SVG path is a from-scratch implementation (no Composer / gd / imagick).
+ * PNG path uses PHP's GD extension (confirmed available on this server).
+ *
+ * The payload is our short plaintext ticket token so the encoded data stays
+ * small and reliably scannable.
  */
 final class QrCode extends BaseEndpoint
 {
@@ -22,28 +25,45 @@ final class QrCode extends BaseEndpoint
             return Response::methodNotAllowed();
         }
 
+        // 'format' is injected by the Kernel router: 'png' for /assets/qr.png,
+        // 'svg' (default) for /assets/qr.svg.
+        $format = (string) ($this->params['format'] ?? 'svg');
+        $isPng  = $format === 'png';
+
         $text = (string) $request->query('text', '');
         if ($text === '') {
             // 1x1 transparent placeholder keeps <img> tags from showing a broken icon.
-            return new Response(
-                '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>',
-                200,
-                ['Content-Type' => 'image/svg+xml', 'Cache-Control' => 'no-store']
-            );
+            return $isPng
+                ? $this->blankPng()
+                : new Response(
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>',
+                    200,
+                    ['Content-Type' => 'image/svg+xml', 'Cache-Control' => 'no-store']
+                );
         }
 
-        $size   = (int) ($request->query('size', '240') ?? 240);
+        $size   = (int) ($request->query('size', '300') ?? 300);
         $size   = max(64, min(1024, $size));
         $margin = 4;
 
         try {
             $matrix = $this->encode($text);
         } catch (\Throwable $e) {
-            return new Response(
-                '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>',
-                200,
-                ['Content-Type' => 'image/svg+xml', 'Cache-Control' => 'no-store']
-            );
+            return $isPng
+                ? $this->blankPng()
+                : new Response(
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>',
+                    200,
+                    ['Content-Type' => 'image/svg+xml', 'Cache-Control' => 'no-store']
+                );
+        }
+
+        if ($isPng) {
+            $png = $this->renderPng($matrix, $size, $margin);
+            return new Response($png, 200, [
+                'Content-Type'  => 'image/png',
+                'Cache-Control' => 'public, max-age=86400',
+            ]);
         }
 
         $svg = $this->renderSvg($matrix, $size, $margin);
@@ -51,6 +71,56 @@ final class QrCode extends BaseEndpoint
             'Content-Type'  => 'image/svg+xml',
             'Cache-Control' => 'public, max-age=86400',
         ]);
+    }
+
+    /** 1×1 transparent PNG placeholder for error / empty-text cases. */
+    private function blankPng(): Response
+    {
+        // Minimal valid 1×1 transparent PNG (hard-coded bytes).
+        $png = base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+        );
+        return new Response((string) $png, 200, [
+            'Content-Type'  => 'image/png',
+            'Cache-Control' => 'no-store',
+        ]);
+    }
+
+    /**
+     * Render the QR matrix to a PNG bitmap using PHP's GD extension.
+     * Each QR module is drawn as a square block; the whole image is padded
+     * by $margin modules of white quiet-zone on all sides.
+     *
+     * @return string Raw PNG bytes.
+     */
+    private function renderPng(array $matrix, int $size, int $margin): string
+    {
+        $count   = count($matrix);
+        $dim     = $count + 2 * $margin;
+        $scale   = (int) max(1, floor($size / $dim));
+        $imgSize = $dim * $scale;
+
+        $img   = imagecreate($imgSize, $imgSize);
+        $white = imagecolorallocate($img, 255, 255, 255);
+        $black = imagecolorallocate($img, 0, 0, 0);
+        imagefill($img, 0, 0, $white);
+
+        for ($r = 0; $r < $count; $r++) {
+            for ($c = 0; $c < $count; $c++) {
+                if ($matrix[$r][$c]) {
+                    $x1 = ($c + $margin) * $scale;
+                    $y1 = ($r + $margin) * $scale;
+                    imagefilledrectangle($img, $x1, $y1, $x1 + $scale - 1, $y1 + $scale - 1, $black);
+                }
+            }
+        }
+
+        ob_start();
+        imagepng($img);
+        $png = (string) ob_get_clean();
+        imagedestroy($img);
+
+        return $png;
     }
 
     private function renderSvg(array $matrix, int $size, int $margin): string

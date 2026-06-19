@@ -534,17 +534,27 @@ final class Ticketing extends BaseEndpoint
             if (empty($t['token'])) {
                 continue; // idempotent re-issue: no plaintext token to deliver.
             }
-            $link      = "{$appUrl}/t/{$t['token']}";
-            $code      = htmlspecialchars((string) $t['code'], ENT_QUOTES, 'UTF-8');
-            $safeLink  = htmlspecialchars($link, ENT_QUOTES, 'UTF-8');
+            $link     = "{$appUrl}/t/{$t['token']}";
+            // PNG for email — SVG is not supported in Gmail or Outlook.
+            $qrUrl    = "{$appUrl}/assets/qr.png?text=" . rawurlencode((string) $t['token']) . '&size=300';
+            $code     = htmlspecialchars((string) $t['code'], ENT_QUOTES, 'UTF-8');
+            $safeLink = htmlspecialchars($link, ENT_QUOTES, 'UTF-8');
+            $safeQr   = htmlspecialchars($qrUrl, ENT_QUOTES, 'UTF-8');
 
             $textLines[] = "  {$t['code']}  ->  {$link}";
-            $htmlItems[] = '<div style="padding:12px 0;border-bottom:1px solid #2e2929;">'
+            $htmlItems[] = '<div style="padding:16px 0;border-bottom:1px solid #2e2929;">'
                 . '<div style="font-size:13px;color:#a9a097;letter-spacing:1px;text-transform:uppercase;">Ticket</div>'
                 . '<div style="margin-top:4px;font-size:16px;font-weight:bold;color:#fff;">' . $code . '</div>'
-                . '<div style="margin-top:6px;">'
-                . '<a href="' . $safeLink . '" style="color:#c9b27e;font-size:14px;word-break:break-all;">'
-                . $safeLink . '</a></div></div>';
+                . '<div style="margin-top:14px;text-align:center;">'
+                . '<img src="' . $safeQr . '" alt="QR code — show at the door" width="200" height="200"'
+                . ' style="display:block;margin:0 auto;background:#ffffff;padding:10px;">'
+                . '</div>'
+                . '<div style="margin-top:8px;font-size:13px;color:#b5aba2;text-align:center;">'
+                . 'Screenshot or save this QR &mdash; show it at the door to get in.'
+                . '</div>'
+                . '<div style="margin-top:10px;">'
+                . '<a href="' . $safeLink . '" style="color:#c9b27e;font-size:13px;word-break:break-all;">'
+                . 'Open live ticket &rarr;</a></div></div>';
         }
         if ($textLines === []) {
             return 0;

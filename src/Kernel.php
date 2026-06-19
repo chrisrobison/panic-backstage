@@ -161,10 +161,11 @@ final class Kernel
             return [TicketView::class, ['token' => $segments[1] ?? null]];
         }
 
-        // Dynamically generated QR image (no JWT). /assets/qr.svg?text=...
-        // The web server forwards this exact path to the kernel.
-        if ($segments[0] === 'assets' && ($segments[1] ?? '') === 'qr.svg') {
-            return [QrCode::class, []];
+        // Dynamically generated QR image (no JWT).
+        //   /assets/qr.svg?text=...  → SVG (ticket view pages)
+        //   /assets/qr.png?text=...  → PNG (HTML emails; Gmail/Outlook don't support SVG)
+        if ($segments[0] === 'assets' && in_array($segments[1] ?? '', ['qr.svg', 'qr.png'], true)) {
+            return [QrCode::class, ['format' => ($segments[1] ?? '') === 'qr.png' ? 'png' : 'svg']];
         }
 
         // Global payment settings (admin; manage_users gate inside endpoint)

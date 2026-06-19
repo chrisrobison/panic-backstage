@@ -107,12 +107,18 @@ final class TicketingService
                 throw new \RuntimeException("Order {$orderId} not found.");
             }
 
-            // Already fulfilled -> idempotent no-op: return existing tickets
-            // (tokens are gone; only the hash survives).
+            // Already fulfilled -> idempotent no-op: return existing tickets.
+            // IMPORTANT: return token=null on this retry path so the webhook
+            // handler does NOT re-send the confirmation email.  The plaintext
+            // token is still stored in the DB and available to the admin resend
+            // path (Ticketing::resendTicket), which reads it directly.
             if ((string) $order['status'] === 'fulfilled') {
                 $existing = $this->existingTickets($db, $orderId);
                 $pdo->commit();
-                return $existing;
+                return array_map(
+                    static fn(array $t): array => array_merge($t, ['token' => null]),
+                    $existing
+                );
             }
 
             $items = $db->all(

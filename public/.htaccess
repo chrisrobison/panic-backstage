@@ -9,8 +9,11 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^t/ api/index.php [L]
 
-# /assets/qr.svg is a dynamically generated QR image, not a static file.
+# /assets/qr.svg and /assets/qr.png are dynamically generated QR images.
+# SVG is used on ticket view pages; PNG is used in HTML emails (Gmail/Outlook
+# do not support SVG in <img> tags).
 RewriteRule ^assets/qr\.svg$ api/index.php [L]
+RewriteRule ^assets/qr\.png$ api/index.php [L]
 
 # Increase upload limits to match the app's 10MB cap (mod_php only;
 # for PHP-FPM set upload_max_filesize in the pool .conf instead)
