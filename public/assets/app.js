@@ -251,6 +251,7 @@ class AppShell extends PanicElement {
     return `<div class="nav-group" data-group="help">
           <button class="nav-parent" type="button" data-group-toggle="help" aria-expanded="false" title="Help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i><span class="nav-parent-label">Help</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
           <div class="nav-children">
+            <a href="${appUrl('docs/ops-manual.html')}" target="_blank" rel="noopener" title="User Guide"><i class="fa-solid fa-book" aria-hidden="true"></i>User Guide</a>
             <a data-nav="help" href="#help" title="All topics"><i class="fa-solid fa-bookmark" aria-hidden="true"></i>All topics</a>
             ${children}
           </div>
