@@ -1,4 +1,4 @@
-import { esc, titleCase, publish, api, getToken, formData, badge, option, select, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
+import { esc, titleCase, publish, api, apiUrl, getToken, formData, badge, option, select, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
 
 
 // ── Contracts (admin) ─────────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ ${CONTRACT_DOC_CSS}
 async function downloadContractPdf(contractId, title) {
   publish('toast.show', { message: 'Generating PDF…' });
   try {
-    const resp = await fetch(`/api/contracts/${contractId}/pdf`, {
+    const resp = await fetch(apiUrl(`contracts/${contractId}/pdf`), {
       headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!resp.ok) {
