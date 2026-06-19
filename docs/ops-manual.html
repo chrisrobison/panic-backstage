@@ -892,6 +892,8 @@
     <a href="#intake" class="section">Intake Complete</a>
     <a href="#booked" class="section">Booked</a>
     <a href="#contract" class="section">The contract workflow</a>
+    <a href="#counterparty" class="section">The counterparty</a>
+    <a href="#contract-pdf" class="section">Downloading &amp; printing</a>
     <a href="#notifications" class="section">Automatic notifications</a>
     <a href="#private-events" class="section">Private event rentals</a>
     <a href="#sheet-sync" class="section">Google Sheet sync</a>
@@ -1334,6 +1336,39 @@
     <div class="callout warn">
       <span class="callout-title">⚠️ Unfilled contract terms</span>
       <p>Before you can mark a contract as Sent or Signed, every required field in the included clauses must be filled. The system will show you a list of what's still missing. Common ones: <code>marketing_deadline</code>, <code>insurance_amount</code>, and the guarantee amount if there's a guarantee clause.</p>
+    </div>
+
+    <h3 id="counterparty">The counterparty</h3>
+
+    <p>Every contract has two parties: the <strong>venue</strong> (Mabuhay Gardens or Broadway Studios) and the <strong>counterparty</strong> — whoever is on the other side of the deal.</p>
+
+    <table>
+      <tr><th>Scenario</th><th>Counterparty is…</th></tr>
+      <tr><td>Band / artist booking</td><td>The artist, band, or their booking agent</td></tr>
+      <tr><td>Promoter deal</td><td>The external promoter or event organizer</td></tr>
+      <tr><td>Private / venue rental</td><td>The client or their organization</td></tr>
+    </table>
+
+    <p>Set the counterparty in the contract editor using the <span class="ui-label field">Counterparty Name</span>, <span class="ui-label field">Organization</span>, and <span class="ui-label field">Email</span> fields. The name and organization combine on the printed contract — e.g., <em>"Chris Robison (The Panic Band)"</em>. The email address is used when you send the contract.</p>
+
+    <div class="callout note">
+      <span class="callout-title">📋 Private events auto-fill the counterparty</span>
+      <p>For private events, the counterparty name and organization are pulled from the <strong>Client / Primary Contact</strong> fields on the event. You don't need to enter them again — just confirm they're correct when you open the contract editor.</p>
+    </div>
+
+    <h3 id="contract-pdf">Downloading and printing a contract</h3>
+
+    <p>Once the contract has content, two export buttons appear at the top of the contract editor:</p>
+
+    <table>
+      <tr><th>Button</th><th>What it does</th></tr>
+      <tr><td><span class="ui-label button secondary">⬇ Download PDF</span></td><td>Generates a formatted PDF on the server and downloads it to your device instantly. Works on all platforms — desktop and mobile — because the PDF is built server-side. Use this when you need to email the file or keep a copy on record.</td></tr>
+      <tr><td><span class="ui-label button secondary">🖨 Print / Save PDF</span></td><td>Opens the contract in a new browser window, formatted for print. Use your browser or OS print dialog to save as PDF or send to a printer. Best on desktop.</td></tr>
+    </table>
+
+    <div class="callout tip">
+      <span class="callout-title">📱 Exporting on a phone</span>
+      <p>Use <strong>Download PDF</strong> on mobile devices. The Print option relies on your device having a print-to-PDF option in its system print dialog — which not all phones support. Download PDF bypasses that limitation entirely.</p>
     </div>
 
     <!-- NOTIFICATIONS ─────────────────────────────────────────────────────── -->
@@ -1840,13 +1875,33 @@
     <p>The activity log records:</p>
     <ul>
       <li>Status changes (with before/after values)</li>
-      <li>Field edits (e.g., "deposit_amount: $500 → $750")</li>
+      <li>Field edits (with old and new values shown inline)</li>
       <li>Contract status changes</li>
       <li>Tasks created or completed</li>
       <li>Assets uploaded or approved</li>
       <li>Guest list additions and check-ins</li>
       <li>Settlement saves</li>
     </ul>
+
+    <h3>Reading a log entry</h3>
+
+    <p>Each entry is written in plain English and tells you the full story on one line. A single-field change looks like this:</p>
+
+    <div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; padding:14px 18px; font-family:var(--font-mono); font-size:0.85rem; margin:16px 0; line-height:1.7;">
+      <strong>status</strong> changed from <em>"hold"</em> to <em>"booked"</em> <span style="color:#6b7280;">by Christopher Robison Jun 17, 2026</span>
+    </div>
+
+    <p>When a single save touches multiple fields — for example updating the deposit amount and the ticket price at the same time — the entry lists each changed field underneath it:</p>
+
+    <div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; padding:14px 18px; font-family:var(--font-mono); font-size:0.85rem; margin:16px 0; line-height:1.7;">
+      <strong>event updated</strong> <span style="color:#6b7280;">by Christopher Robison Jun 17, 2026</span><br>
+      <span style="padding-left:1em; display:block; color:#374151; font-size:0.8rem;">
+        <strong>deposit_amount</strong> from <em>"500"</em> to <em>"750"</em><br>
+        <strong>ticket_price</strong> from <em>"20"</em> to <em>"25"</em>
+      </span>
+    </div>
+
+    <p>Long values are clipped to keep the log readable. Hover over a clipped value (shown with a dotted underline) to see the full content in a tooltip.</p>
 
     <div class="callout tip">
       <span class="callout-title">💡 It's read-only on purpose</span>
