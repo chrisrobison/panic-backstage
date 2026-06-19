@@ -40,19 +40,51 @@ function downloadContractPdf(html, filename) {
     return;
   }
   publish('toast.show', { message: 'Building PDF…' });
-  const holder = document.createElement('div');
-  holder.className = 'contract-pdf-holder';
-  holder.innerHTML = html;
-  document.body.appendChild(holder);
-  const cleanup = () => holder.remove();
-  window.html2pdf().set({
-    margin: [0.6, 0.6, 0.7, 0.6],
-    filename,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0, windowWidth: 760 },
-    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
-    pagebreak: { mode: ['css', 'legacy'] },
-  }).from(holder).save().then(cleanup, cleanup);
+  // Pass HTML as a string with styles inlined so html2pdf manages its own
+  // temporary element (at a sane z-index).  Injecting a z-index:-9999 holder
+  // into the live DOM places it behind the app body background, which is what
+  // was causing the blank-page output.
+  const wrapped = `<style>${CONTRACT_DOC_CSS}</style><div style="padding:36px;max-width:720px;margin:0 auto;background:#fff;">${html}</div>`;
+  window.html2pdf()
+    .set({
+      margin:    [0.6, 0.6, 0.7, 0.6],
+      filename,
+      image:     { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 796 },
+      jsPDF:     { unit: 'in', format: 'letter', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'] },
+    })
+    .from(wrapped, 'string')
+    .save()
+    .catch(() => publish('toast.show', { message: 'PDF build failed — use Print / Save PDF instead.', tone: 'error' }));
+}
+
+
+/** Open the contract preview in a new window with a sticky print bar. */
+function printContractWindow(html, title) {
+  const win = window.open('', '_blank', 'width=860,height=1100');
+  if (!win) {
+    publish('toast.show', { message: 'Pop-up blocked — allow pop-ups to print.', tone: 'error' });
+    return;
+  }
+  win.document.open();
+  win.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+${CONTRACT_DOC_CSS}
+.print-bar{position:sticky;top:0;z-index:99;background:#f5f5f5;border-bottom:1px solid #ddd;padding:10px 18px;display:flex;align-items:center;gap:10px;font-family:system-ui,sans-serif;font-size:13px}
+.print-bar button{font:inherit;padding:6px 14px;border:1px solid #888;background:#fff;border-radius:4px;cursor:pointer}
+.print-bar .primary{background:#111;color:#fff;border-color:#111}
+.print-bar .hint{color:#888;margin-left:4px}
+@media print{.print-bar{display:none!important}}
+</style></head><body>
+<div class="print-bar">
+  <button class="primary" onclick="window.print()">🖨 Print / Save as PDF</button>
+  <button onclick="window.close()">Close</button>
+  <span class="hint">Use your browser's print dialog → Save as PDF</span>
+</div>
+${html}
+</body></html>`);
+  win.document.close();
+  win.focus();
 }
 
 
@@ -144,7 +176,8 @@ class ContractEditor extends PanicElement {
       <div><a class="back-link" href="${backHref}">&lt;- Back</a><h1>${esc(contract.title)}</h1>
         <p class="subtle">${esc(titleCase(contract.contract_type))} · ${contractStatusBadge(contract.status)}${forLabel}</p></div>
       <div class="event-actions">
-        <button class="secondary" data-act="pdf">Download PDF</button>
+        <button class="secondary" data-act="pdf">⬇ Download PDF</button>
+        <button class="secondary" data-act="print">🖨 Print / Save PDF</button>
         ${this.manage ? '<button data-act="render">Generate version</button>' : ''}
       </div>
     </section>
@@ -280,6 +313,9 @@ class ContractEditor extends PanicElement {
     $('[data-act="pdf"]', this)?.addEventListener('click', () => {
       const name = `${String(this.data.contract.title || 'contract').replace(/[^\w-]+/g, '-')}.pdf`;
       downloadContractPdf(this.data.preview_html, name);
+    });
+    $('[data-act="print"]', this)?.addEventListener('click', () => {
+      printContractWindow(this.data.preview_html, this.data.contract.title || 'Contract');
     });
     $('[data-act="render"]', this)?.addEventListener('click', () => this.action(() => api(`/contracts/${id}/render`, { method: 'POST' }), 'Version generated.'));
     $('[data-act="reevaluate"]', this)?.addEventListener('click', () => this.action(() => api(`/contracts/${id}/reevaluate`, { method: 'POST' }), 'Smart selection refreshed.'));
