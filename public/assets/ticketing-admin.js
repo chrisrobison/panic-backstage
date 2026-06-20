@@ -601,10 +601,12 @@ class PaymentSettingsPanel extends PanicElement {
   render() {
     const s = this.settings;
     const providers = s.providers || [];
+    const env       = s.env       || {};
+
     this.innerHTML = `<section class="panel" id="payment-settings">
       <div class="section-head padded"><h2>Payment provider ${helpLink('admin-payments', 'Payment providers')}</h2></div>
       <div class="padded">
-        <p class="subtle">Select the active processor for in-house ticket checkout. Secret keys live in the server environment and are never shown here.</p>
+        <p class="subtle">Select the active processor for in-house ticket checkout.</p>
         <form class="grid-form" data-form="payment">
           <label>Active provider
             <select name="active_provider">
@@ -618,7 +620,13 @@ class PaymentSettingsPanel extends PanicElement {
           ${providers.map((p) => `<li><span class="status-dot ${p.configured ? 'green' : 'red'}"></span> ${esc(p.label)} — ${p.configured ? 'configured' : 'keys not set in environment'}</li>`).join('')}
         </ul>
       </div>
+      ${this.envSectionHtml('square', 'Square', env.square || [], s.active_provider)}
+      ${this.envSectionHtml('stripe', 'Stripe', env.stripe || [], s.active_provider)}
     </section>`;
+
+    // Switch visible env section when the provider select changes.
+    const providerSelect = $('select[name="active_provider"]', this);
+    providerSelect?.addEventListener('change', () => this.syncEnvSections(providerSelect.value));
 
     $('form[data-form="payment"]', this).addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -626,6 +634,39 @@ class PaymentSettingsPanel extends PanicElement {
       this.settings = await api('/payment-settings', { method: 'PATCH', body: JSON.stringify(values) });
       publish('toast.show', { message: 'Payment settings saved.' });
       this.render();
+    });
+  }
+
+  /** Build the collapsible env-var block for one provider. */
+  envSectionHtml(providerKey, providerLabel, vars, activeProvider) {
+    if (!vars.length) return '';
+    const hidden = providerKey !== activeProvider;
+    return `
+      <div class="env-config-section" data-env-provider="${esc(providerKey)}"${hidden ? ' hidden' : ''}>
+        <div class="section-head padded sub-head">
+          <h3>${esc(providerLabel)} environment</h3>
+          <p class="subtle" style="font-weight:normal;font-size:.85em;margin:.15rem 0 0">
+            Read from server <code>.env</code> — edit the file directly to change values.
+          </p>
+        </div>
+        <div class="padded">
+          <div class="grid-form">
+            ${vars.map((v) => `
+              <label>
+                ${esc(v.label)} <small class="muted" style="font-weight:normal">${esc(v.key)}</small>
+                <input type="text" value="${esc(v.value)}" readonly
+                  placeholder="(not set)"
+                  style="font-family:monospace;${v.value ? '' : 'opacity:.45'}">
+              </label>`).join('')}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  /** Show only the env section matching the currently-selected provider. */
+  syncEnvSections(activeKey) {
+    $$('[data-env-provider]', this).forEach((el) => {
+      el.hidden = el.dataset.envProvider !== activeKey;
     });
   }
 }

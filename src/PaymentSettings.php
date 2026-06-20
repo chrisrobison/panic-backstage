@@ -7,16 +7,16 @@ use Panic\Payments\PaymentProviders;
 
 /**
  * Global payment configuration:
- *   GET   /api/payment-settings   -> active provider, currency, and which
- *                                    providers have their secret keys configured
+ *   GET   /api/payment-settings   -> active provider, currency, provider config
+ *                                    status, and the current .env values for each
+ *                                    provider's keys (admin reference only)
  *   PATCH /api/payment-settings   -> switch the active provider / default currency
  *
  * Venue-admin only (global capability: manage_users — the admin role gate).
  *
- * Secret keys NEVER leave .env: this endpoint reports only *which* provider is
- * active and a boolean per provider indicating whether its required Env keys
- * are present, so the admin UI can warn before switching to an unconfigured
- * provider. It does not read, return, or accept secret values.
+ * The GET response includes the raw .env values for Square and Stripe keys so
+ * the admin UI can display them as a read-only reference. Values are returned
+ * as-is; the endpoint does not accept or write secret values.
  */
 final class PaymentSettings extends BaseEndpoint
 {
@@ -46,6 +46,7 @@ final class PaymentSettings extends BaseEndpoint
             'currency'        => $currency,
             'updated_at'      => $row['updated_at'] ?? null,
             'providers'       => $this->providerStatus(),
+            'env'             => $this->envValues(),
         ]);
     }
 
@@ -87,6 +88,7 @@ final class PaymentSettings extends BaseEndpoint
             'active_provider' => $newActive,
             'currency'        => $newCurrency,
             'providers'       => $this->providerStatus(),
+            'env'             => $this->envValues(),
         ]);
     }
 
@@ -111,6 +113,35 @@ final class PaymentSettings extends BaseEndpoint
                 'key'        => 'square',
                 'label'      => 'Square',
                 'configured' => $has('SQUARE_ACCESS_TOKEN') && $has('SQUARE_LOCATION_ID') && $has('SQUARE_WEBHOOK_SIGNATURE_KEY'),
+            ],
+        ];
+    }
+
+    /**
+     * Current .env values for every key each provider uses, returned as an
+     * ordered list of {key, label, value} records per provider. Displayed
+     * read-only in the admin UI for reference; never accepted as input.
+     *
+     * @return array<string,array<int,array{key:string,label:string,value:string}>>
+     */
+    private function envValues(): array
+    {
+        $env = new Env();
+        $get = static fn (string $k): string => (string) ($env->get($k) ?? '');
+
+        return [
+            'square' => [
+                ['key' => 'SQUARE_ENV',                   'label' => 'Environment',          'value' => $get('SQUARE_ENV')],
+                ['key' => 'SQUARE_APP_ID',                'label' => 'App ID',               'value' => $get('SQUARE_APP_ID')],
+                ['key' => 'SQUARE_ACCESS_TOKEN',          'label' => 'Access Token',         'value' => $get('SQUARE_ACCESS_TOKEN')],
+                ['key' => 'SQUARE_LOCATION_ID',           'label' => 'Location ID',          'value' => $get('SQUARE_LOCATION_ID')],
+                ['key' => 'SQUARE_WEBHOOK_SIGNATURE_KEY', 'label' => 'Webhook Signature Key','value' => $get('SQUARE_WEBHOOK_SIGNATURE_KEY')],
+                ['key' => 'SQUARE_WEBHOOK_URL',           'label' => 'Webhook URL',          'value' => $get('SQUARE_WEBHOOK_URL')],
+                ['key' => 'SQUARE_API_VERSION',           'label' => 'API Version',          'value' => $get('SQUARE_API_VERSION')],
+            ],
+            'stripe' => [
+                ['key' => 'STRIPE_SECRET_KEY',     'label' => 'Secret Key',     'value' => $get('STRIPE_SECRET_KEY')],
+                ['key' => 'STRIPE_WEBHOOK_SECRET', 'label' => 'Webhook Secret', 'value' => $get('STRIPE_WEBHOOK_SECRET')],
             ],
         ];
     }

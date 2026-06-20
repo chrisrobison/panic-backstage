@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `admin` — Show provider env vars on payments settings page
 - **Added** `changelog` — Add CHANGELOG.md and automated post-commit hook
 
 ---
