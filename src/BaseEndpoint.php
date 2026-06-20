@@ -25,7 +25,7 @@ abstract class BaseEndpoint implements Endpoint
             'manage_ticketing',
         ],
         'promoter' => [
-            'read_event', 'manage_lineup', 'manage_tasks', 'manage_schedule',
+            'read_event', 'edit_event', 'manage_lineup', 'manage_tasks', 'manage_schedule',
             'manage_open_items', 'manage_guest_list', 'manage_staffing', 'view_public_page',
             'view_contracts',
         ],
