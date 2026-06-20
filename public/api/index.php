@@ -38,6 +38,7 @@ if ($superDbName !== '') {
     // an appropriate error response (400 for unrecognised host, 404 for
     // no active tenant row). It never returns null in SaaS mode.
     $ctx = Panic\Tenant\TenantContext::resolve();
+    Panic\Tenant\TenantContext::setCurrent($ctx);   // make slug available app-wide
 
     // ── Per-tenant APP_URL ───────────────────────────────────────────────────
     // The static .env value is meaningless in SaaS mode — every tenant has its

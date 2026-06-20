@@ -1,0 +1,5 @@
+# Tenant data directories — created at provisioning time, never tracked in git.
+# TenantProvisioner::provision() creates clients/{slug}/{assets,logs,mail,contracts}/
+# for each tenant when they are first activated.
+*
+!.gitignore

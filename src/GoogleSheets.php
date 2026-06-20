@@ -141,7 +141,10 @@ final class GoogleSheets
 
     public function __construct(string $root)
     {
-        $this->logFile   = $root . '/storage/logs/sheet-sync.log';
+        // Multi-tenant: write sync log to clients/{slug}/logs/
+        // Single-tenant fallback: storage/logs/ (unchanged behaviour)
+        $logsDir         = \Panic\Tenant\TenantContext::clientDir($root) . '/logs';
+        $this->logFile   = $logsDir . '/sheet-sync.log';
         $this->cacheFile = sys_get_temp_dir() . '/backstage-sheets-token.json';
         $this->keyFile   = getenv('GOOGLE_SA_KEY_FILE') ?: null;
         $this->sheetId   = (string) (getenv('GOOGLE_SHEET_ID') ?: '');
