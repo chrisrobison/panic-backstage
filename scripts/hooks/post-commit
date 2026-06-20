@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# post-commit hook — auto-updates CHANGELOG.md after every meaningful commit.
+#
+# Install:  bash scripts/hooks/install-hooks.sh
+# Manual:   cp scripts/hooks/post-commit .git/hooks/post-commit && chmod +x .git/hooks/post-commit
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Guard: don't re-enter when we amend the commit below ─────────────────────
+if [ "${_CHANGELOG_HOOK_RUNNING:-0}" = "1" ]; then
+  exit 0
+fi
+
+# ── Gather commit info ────────────────────────────────────────────────────────
+COMMIT_MSG=$(git log -1 --pretty=%s)
+COMMIT_DATE=$(git log -1 --pretty=%ad --date=short)
+
+# ── Skip merge commits and chore/test commits ─────────────────────────────────
+[[ "$COMMIT_MSG" == Merge* ]]   && exit 0
+[[ "$COMMIT_MSG" == chore* ]]   && exit 0
+[[ "$COMMIT_MSG" == test* ]]    && exit 0
+[[ "$COMMIT_MSG" == wip* ]]     && exit 0
+
+# ── Parse conventional commit format: type(scope): description ────────────────
+TYPE=$(echo "$COMMIT_MSG"  | grep -oP '^[a-z]+(?=[\(:])')
+SCOPE=$(echo "$COMMIT_MSG" | grep -oP '(?<=\()[^)]+(?=\))')
+CLEAN=$(echo "$COMMIT_MSG" | sed -E 's/^[a-z]+(\([^)]+\))?: //')
+
+# Capitalise first letter of description
+CLEAN="$(tr '[:lower:]' '[:upper:]' <<< "${CLEAN:0:1}")${CLEAN:1}"
+
+# ── Map commit type to changelog label ────────────────────────────────────────
+case "$TYPE" in
+  feat)     LABEL="Added" ;;
+  fix)      LABEL="Fixed" ;;
+  docs)     LABEL="Documentation" ;;
+  refactor) LABEL="Changed" ;;
+  perf)     LABEL="Changed" ;;
+  security) LABEL="Security" ;;
+  *)        LABEL="Changed" ;;
+esac
+
+# ── Build the entry line ──────────────────────────────────────────────────────
+if [ -n "$SCOPE" ]; then
+  ENTRY="- **${LABEL}** \`${SCOPE}\` — ${CLEAN}"
+else
+  ENTRY="- **${LABEL}** — ${CLEAN}"
+fi
+
+# ── Insert after "## [Unreleased]" in CHANGELOG.md ───────────────────────────
+CHANGELOG="CHANGELOG.md"
+
+if [ ! -f "$CHANGELOG" ]; then
+  echo "⚠️  post-commit: $CHANGELOG not found — skipping changelog update."
+  exit 0
+fi
+
+# Use awk to insert the new entry on the line immediately after [Unreleased]
+TMPFILE=$(mktemp)
+awk -v entry="$ENTRY" '
+  /^## \[Unreleased\]/ && !inserted {
+    print
+    print entry
+    inserted = 1
+    next
+  }
+  { print }
+' "$CHANGELOG" > "$TMPFILE" && mv "$TMPFILE" "$CHANGELOG"
+
+# ── Fold changelog update into the current commit ─────────────────────────────
+git add "$CHANGELOG"
+
+# Set the guard env var so the hook is a no-op for this amend
+export _CHANGELOG_HOOK_RUNNING=1
+git commit --amend --no-edit --quiet
+
+echo "📋 CHANGELOG.md updated."
