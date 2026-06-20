@@ -75,9 +75,17 @@ final class Mailer
      *
      * If only a .txt file exists the message falls back to plain-text.
      *
-     * @param array<string,string> $vars  Replacement map: key => value for {{key}} tokens.
+     * @param array<string,string> $vars    Replacement map: key => value for {{key}} tokens.
+     * @param array<string,string> $inline  Inline image attachments keyed by Content-ID
+     *                                      (bare, without angle brackets). Values are raw
+     *                                      image bytes. All parts are assumed image/png.
+     *                                      Reference them in the HTML template as
+     *                                      <img src="cid:{key}">. When provided the HTML
+     *                                      part is wrapped in a multipart/related envelope
+     *                                      so the images are always embedded regardless of
+     *                                      whether the recipient's client loads remote images.
      */
-    public function sendTemplate(string $to, string $subject, string $template, array $vars): void
+    public function sendTemplate(string $to, string $subject, string $template, array $vars, array $inline = []): void
     {
         $htmlFile = "{$this->templateDir}/{$template}.html";
         $textFile = "{$this->templateDir}/{$template}.txt";
@@ -92,7 +100,7 @@ final class Mailer
             $text = str_replace('{{' . $key . '}}', $value, $text);
         }
 
-        $this->send($to, $subject, $text, $html, $template);
+        $this->send($to, $subject, $text, $html, $template, $inline);
     }
 
     /**
@@ -102,16 +110,23 @@ final class Mailer
      * MIME envelope (plain-text part first, HTML part second). When omitted the
      * message is a simple text/plain message.
      *
-     * @param string|null $template  Template name (if sent via sendTemplate).
-     *                               Stored in the outbox record for traceability.
+     * When $inline is non-empty the HTML alternative is itself wrapped in a
+     * multipart/related envelope (RFC 2387) containing the HTML body followed
+     * by the inline image parts, each identified by a Content-ID header. The
+     * HTML should reference them as <img src="cid:{key}"> where {key} is the
+     * bare Content-ID (without angle brackets).
+     *
+     * @param string|null          $template  Template name (if sent via sendTemplate).
+     *                                        Stored in the outbox record for traceability.
+     * @param array<string,string> $inline    Content-ID => raw image bytes map.
      */
-    public function send(string $to, string $subject, string $textBody, ?string $htmlBody = null, ?string $template = null): void
+    public function send(string $to, string $subject, string $textBody, ?string $htmlBody = null, ?string $template = null, array $inline = []): void
     {
         // Strip header injection attempts from anything that ends up in headers.
         $to      = $this->sanitizeHeaderValue($to);
         $subject = $this->sanitizeHeaderValue($subject);
 
-        $message = $this->buildMessage($to, $subject, $textBody, $htmlBody);
+        $message = $this->buildMessage($to, $subject, $textBody, $htmlBody, $inline);
 
         $this->writeToFile($to, $message);
         $this->pipeToSendmail($to, $message);
@@ -120,11 +135,34 @@ final class Mailer
 
     // ─── Message builder ───────────────────────────────────────────────────────
 
+    /**
+     * Build the RFC 5322 / MIME message string.
+     *
+     * When $inline is non-empty the structure is:
+     *
+     *   multipart/mixed  (outer — carries both the message body and attachments)
+     *     multipart/alternative
+     *       text/plain
+     *       multipart/related          (RFC 2387 — HTML + embedded images)
+     *         text/html  (references images via <img src="cid:{id}">)
+     *         image/png  Content-ID:<id>  Content-Disposition: inline
+     *         …
+     *     image/png  Content-Disposition: attachment; filename="ticket-qr-{n}.png"
+     *     …
+     *
+     * This maximises client compatibility:
+     *   • Outlook / Apple Mail / Thunderbird render the CID inline images.
+     *   • Gmail (which strips/blocks CID references) receives the same PNG
+     *     files as named attachments the recipient can download and scan.
+     *
+     * @param array<string,string> $inline  Content-ID (bare) => raw PNG bytes.
+     */
     private function buildMessage(
         string  $to,
         string  $subject,
         string  $textBody,
         ?string $htmlBody,
+        array   $inline = [],
     ): string {
         $domain = substr(strrchr($this->fromAddress, '@') ?: '@localhost', 1);
         $msgId  = sprintf('<%s.%s@%s>', date('YmdHis'), bin2hex(random_bytes(8)), $domain);
@@ -142,32 +180,94 @@ final class Mailer
         ];
 
         if ($htmlBody !== null) {
-            // Unique boundary — random so it never accidentally appears in body text.
-            $boundary = '=_Part_' . bin2hex(random_bytes(12));
-
             // Normalize line endings to CRLF for both parts.
             $textBody = (string) preg_replace("/\r\n|\r|\n/", "\r\n", $textBody);
             $htmlBody = (string) preg_replace("/\r\n|\r|\n/", "\r\n", $htmlBody);
 
-            $headers = array_merge($baseHeaders, [
-                "Content-Type: multipart/alternative; boundary=\"{$boundary}\"",
-            ]);
+            // ── Build the HTML alternative ────────────────────────────────────
+            // When inline images are present, wrap HTML + images in multipart/related
+            // so CID references resolve in clients that support them (Outlook, etc.).
+            if ($inline !== []) {
+                $relBoundary = '=_Rel_' . bin2hex(random_bytes(12));
 
-            $body = "--{$boundary}\r\n"
-                  . "Content-Type: text/plain; charset=UTF-8\r\n"
-                  . "Content-Transfer-Encoding: 8bit\r\n"
-                  . "\r\n"
-                  . $textBody . "\r\n"
-                  . "\r\n"
-                  . "--{$boundary}\r\n"
-                  . "Content-Type: text/html; charset=UTF-8\r\n"
-                  . "Content-Transfer-Encoding: 8bit\r\n"
-                  . "\r\n"
-                  . $htmlBody . "\r\n"
-                  . "\r\n"
-                  . "--{$boundary}--";
+                $relBody = "--{$relBoundary}\r\n"
+                         . "Content-Type: text/html; charset=UTF-8\r\n"
+                         . "Content-Transfer-Encoding: base64\r\n"
+                         . "\r\n"
+                         . chunk_split(base64_encode($htmlBody), 76, "\r\n");
+
+                foreach ($inline as $cid => $imageBytes) {
+                    $relBody .= "--{$relBoundary}\r\n"
+                              . "Content-Type: image/png\r\n"
+                              . "Content-Transfer-Encoding: base64\r\n"
+                              . "Content-ID: <{$cid}>\r\n"
+                              . "Content-Disposition: inline\r\n"
+                              . "\r\n"
+                              . chunk_split(base64_encode($imageBytes), 76, "\r\n");
+                }
+                $relBody .= "--{$relBoundary}--";
+
+                $htmlPart = "Content-Type: multipart/related; boundary=\"{$relBoundary}\"\r\n"
+                          . "\r\n"
+                          . $relBody;
+            } else {
+                $htmlPart = "Content-Type: text/html; charset=UTF-8\r\n"
+                          . "Content-Transfer-Encoding: 8bit\r\n"
+                          . "\r\n"
+                          . $htmlBody;
+            }
+
+            // ── Assemble multipart/alternative (text + html) ──────────────────
+            $altBoundary = '=_Alt_' . bin2hex(random_bytes(12));
+
+            $altBody = "--{$altBoundary}\r\n"
+                     . "Content-Type: text/plain; charset=UTF-8\r\n"
+                     . "Content-Transfer-Encoding: 8bit\r\n"
+                     . "\r\n"
+                     . $textBody . "\r\n"
+                     . "\r\n"
+                     . "--{$altBoundary}\r\n"
+                     . $htmlPart . "\r\n"
+                     . "\r\n"
+                     . "--{$altBoundary}--";
+
+            if ($inline !== []) {
+                // ── Wrap in multipart/mixed so each QR PNG is ALSO a named ────
+                // attachment.  Gmail and similar webmail clients that block CID
+                // references will at least receive the QR images as downloadable
+                // files the recipient can scan from their downloads/phone.
+                $mixBoundary = '=_Mix_' . bin2hex(random_bytes(12));
+
+                $mixBody = "--{$mixBoundary}\r\n"
+                         . "Content-Type: multipart/alternative; boundary=\"{$altBoundary}\"\r\n"
+                         . "\r\n"
+                         . $altBody . "\r\n";
+
+                $attIdx = 1;
+                foreach ($inline as $imageBytes) {
+                    $filename = 'ticket-qr-' . $attIdx . '.png';
+                    $mixBody .= "\r\n--{$mixBoundary}\r\n"
+                              . "Content-Type: image/png; name=\"{$filename}\"\r\n"
+                              . "Content-Transfer-Encoding: base64\r\n"
+                              . "Content-Disposition: attachment; filename=\"{$filename}\"\r\n"
+                              . "\r\n"
+                              . chunk_split(base64_encode($imageBytes), 76, "\r\n");
+                    $attIdx++;
+                }
+                $mixBody .= "\r\n--{$mixBoundary}--";
+
+                $headers = array_merge($baseHeaders, [
+                    "Content-Type: multipart/mixed; boundary=\"{$mixBoundary}\"",
+                ]);
+                $body = $mixBody;
+            } else {
+                $headers = array_merge($baseHeaders, [
+                    "Content-Type: multipart/alternative; boundary=\"{$altBoundary}\"",
+                ]);
+                $body = $altBody;
+            }
         } else {
-            // Plain-text only — normalize CRLF and dot-stuff for safety.
+            // Plain-text only — normalize CRLF.
             $textBody = (string) preg_replace("/\r\n|\r|\n/", "\r\n", $textBody);
 
             $headers = array_merge($baseHeaders, [

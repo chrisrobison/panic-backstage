@@ -34,7 +34,7 @@ final class QrCode extends BaseEndpoint
         if ($text === '') {
             // 1x1 transparent placeholder keeps <img> tags from showing a broken icon.
             return $isPng
-                ? $this->blankPng()
+                ? self::blankPng()
                 : new Response(
                     '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>',
                     200,
@@ -47,10 +47,10 @@ final class QrCode extends BaseEndpoint
         $margin = 4;
 
         try {
-            $matrix = $this->encode($text);
+            $matrix = self::encode($text);
         } catch (\Throwable $e) {
             return $isPng
-                ? $this->blankPng()
+                ? self::blankPng()
                 : new Response(
                     '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>',
                     200,
@@ -59,22 +59,46 @@ final class QrCode extends BaseEndpoint
         }
 
         if ($isPng) {
-            $png = $this->renderPng($matrix, $size, $margin);
+            $png = self::renderPng($matrix, $size, $margin);
             return new Response($png, 200, [
                 'Content-Type'  => 'image/png',
                 'Cache-Control' => 'public, max-age=86400',
             ]);
         }
 
-        $svg = $this->renderSvg($matrix, $size, $margin);
+        $svg = self::renderSvg($matrix, $size, $margin);
         return new Response($svg, 200, [
             'Content-Type'  => 'image/svg+xml',
             'Cache-Control' => 'public, max-age=86400',
         ]);
     }
 
+    /**
+     * Generate raw PNG bytes for the given text without an HTTP round-trip.
+     * Intended for use by the mailer to embed QR codes as MIME inline
+     * attachments (CID references) so the image is always present regardless
+     * of whether the email client loads remote images.
+     *
+     * Returns an empty string when $text is blank or encoding fails.
+     *
+     * @return string Raw PNG bytes (image/png).
+     */
+    public static function generatePng(string $text, int $size = 300): string
+    {
+        if ($text === '') {
+            return '';
+        }
+        $size = max(64, min(1024, $size));
+        try {
+            $matrix = self::encode($text);
+        } catch (\Throwable) {
+            return '';
+        }
+        return self::renderPng($matrix, $size, 4);
+    }
+
     /** 1×1 transparent PNG placeholder for error / empty-text cases. */
-    private function blankPng(): Response
+    private static function blankPng(): Response
     {
         // Minimal valid 1×1 transparent PNG (hard-coded bytes).
         $png = base64_decode(
@@ -93,7 +117,7 @@ final class QrCode extends BaseEndpoint
      *
      * @return string Raw PNG bytes.
      */
-    private function renderPng(array $matrix, int $size, int $margin): string
+    private static function renderPng(array $matrix, int $size, int $margin): string
     {
         $count   = count($matrix);
         $dim     = $count + 2 * $margin;
@@ -123,7 +147,7 @@ final class QrCode extends BaseEndpoint
         return $png;
     }
 
-    private function renderSvg(array $matrix, int $size, int $margin): string
+    private static function renderSvg(array $matrix, int $size, int $margin): string
     {
         $count = count($matrix);
         $dim   = $count + 2 * $margin;
@@ -146,20 +170,20 @@ final class QrCode extends BaseEndpoint
     // ---- QR encoder (byte mode, ECC level M) ----
 
     /** @return array<int,array<int,int>> matrix of 0/1 */
-    private function encode(string $data): array
+    private static function encode(string $data): array
     {
         $ecLevel = 'M';
-        $version = $this->pickVersion(strlen($data), $ecLevel);
-        $bits    = $this->buildDataBits($data, $version, $ecLevel);
-        $codewords = $this->bitsToCodewords($bits, $version, $ecLevel);
-        $final   = $this->interleave($codewords, $version, $ecLevel);
-        return $this->buildMatrix($final, $version, $ecLevel);
+        $version = self::pickVersion(strlen($data), $ecLevel);
+        $bits    = self::buildDataBits($data, $version, $ecLevel);
+        $codewords = self::bitsToCodewords($bits, $version, $ecLevel);
+        $final   = self::interleave($codewords, $version, $ecLevel);
+        return self::buildMatrix($final, $version, $ecLevel);
     }
 
-    private function pickVersion(int $len, string $ecLevel): int
+    private static function pickVersion(int $len, string $ecLevel): int
     {
         for ($v = 1; $v <= 40; $v++) {
-            $cap = $this->dataCapacityCodewords($v, $ecLevel);
+            $cap = self::dataCapacityCodewords($v, $ecLevel);
             // header: 4 (mode) + char-count-indicator bits, +4 terminator margin -> bytes
             $ccBits = $v < 10 ? 8 : 16;
             $needBits = 4 + $ccBits + $len * 8;
@@ -170,7 +194,7 @@ final class QrCode extends BaseEndpoint
         throw new \RuntimeException('Payload too large for QR encoding');
     }
 
-    private function buildDataBits(string $data, int $version, string $ecLevel): string
+    private static function buildDataBits(string $data, int $version, string $ecLevel): string
     {
         $len = strlen($data);
         $ccBits = $version < 10 ? 8 : 16;
@@ -179,7 +203,7 @@ final class QrCode extends BaseEndpoint
         for ($i = 0; $i < $len; $i++) {
             $bits .= str_pad(decbin(ord($data[$i])), 8, '0', STR_PAD_LEFT);
         }
-        $capacityBits = $this->dataCapacityCodewords($version, $ecLevel) * 8;
+        $capacityBits = self::dataCapacityCodewords($version, $ecLevel) * 8;
         // terminator
         $bits .= str_repeat('0', min(4, max(0, $capacityBits - strlen($bits))));
         // pad to byte boundary
@@ -197,7 +221,7 @@ final class QrCode extends BaseEndpoint
     }
 
     /** @return array<int,int> data codewords */
-    private function bitsToCodewords(string $bits, int $version, string $ecLevel): array
+    private static function bitsToCodewords(string $bits, int $version, string $ecLevel): array
     {
         $cw = [];
         for ($i = 0, $n = strlen($bits); $i < $n; $i += 8) {
@@ -210,9 +234,9 @@ final class QrCode extends BaseEndpoint
      * Split data codewords into blocks, compute EC codewords per block, and
      * interleave per the QR spec. Returns the full bit-string to place.
      */
-    private function interleave(array $dataCodewords, int $version, string $ecLevel): string
+    private static function interleave(array $dataCodewords, int $version, string $ecLevel): string
     {
-        [$ecPerBlock, $group1Blocks, $group1Cw, $group2Blocks, $group2Cw] = $this->ecBlockInfo($version, $ecLevel);
+        [$ecPerBlock, $group1Blocks, $group1Cw, $group2Blocks, $group2Cw] = self::ecBlockInfo($version, $ecLevel);
 
         $blocks = [];
         $pos = 0;
@@ -227,7 +251,7 @@ final class QrCode extends BaseEndpoint
 
         $ecBlocks = [];
         foreach ($blocks as $block) {
-            $ecBlocks[] = $this->reedSolomon($block, $ecPerBlock);
+            $ecBlocks[] = self::reedSolomon($block, $ecPerBlock);
         }
 
         // interleave data
@@ -254,7 +278,7 @@ final class QrCode extends BaseEndpoint
             $bits .= str_pad(decbin($byte), 8, '0', STR_PAD_LEFT);
         }
         // remainder bits
-        $bits .= str_repeat('0', $this->remainderBits($version));
+        $bits .= str_repeat('0', self::remainderBits($version));
         return $bits;
     }
 
@@ -263,7 +287,7 @@ final class QrCode extends BaseEndpoint
     private static array $expTable = [];
     private static array $logTable = [];
 
-    private function initGalois(): void
+    private static function initGalois(): void
     {
         if (self::$expTable !== []) {
             return;
@@ -286,7 +310,7 @@ final class QrCode extends BaseEndpoint
         self::$logTable = $log;
     }
 
-    private function gfMul(int $a, int $b): int
+    private static function gfMul(int $a, int $b): int
     {
         if ($a === 0 || $b === 0) {
             return 0;
@@ -295,10 +319,10 @@ final class QrCode extends BaseEndpoint
     }
 
     /** @return array<int,int> EC codewords */
-    private function reedSolomon(array $data, int $ecCount): array
+    private static function reedSolomon(array $data, int $ecCount): array
     {
-        $this->initGalois();
-        $generator = $this->rsGenerator($ecCount);
+        self::initGalois();
+        $generator = self::rsGenerator($ecCount);
         $msg = array_merge($data, array_fill(0, $ecCount, 0));
         $dataLen = count($data);
         for ($i = 0; $i < $dataLen; $i++) {
@@ -307,20 +331,20 @@ final class QrCode extends BaseEndpoint
                 continue;
             }
             for ($j = 0; $j < count($generator); $j++) {
-                $msg[$i + $j] ^= $this->gfMul($generator[$j], $coef);
+                $msg[$i + $j] ^= self::gfMul($generator[$j], $coef);
             }
         }
         return array_slice($msg, $dataLen);
     }
 
-    private function rsGenerator(int $ecCount): array
+    private static function rsGenerator(int $ecCount): array
     {
         $g = [1];
         for ($i = 0; $i < $ecCount; $i++) {
             $next = array_fill(0, count($g) + 1, 0);
             for ($j = 0; $j < count($g); $j++) {
                 $next[$j] ^= $g[$j];
-                $next[$j + 1] ^= $this->gfMul($g[$j], self::$expTable[$i]);
+                $next[$j + 1] ^= self::gfMul($g[$j], self::$expTable[$i]);
             }
             $g = $next;
         }
@@ -329,29 +353,29 @@ final class QrCode extends BaseEndpoint
 
     // ---- Matrix construction ----
 
-    private function buildMatrix(string $bits, int $version, string $ecLevel): array
+    private static function buildMatrix(string $bits, int $version, string $ecLevel): array
     {
         $size = 17 + $version * 4;
         $matrix = array_fill(0, $size, array_fill(0, $size, null));
         $reserved = array_fill(0, $size, array_fill(0, $size, false));
 
-        $this->placeFinder($matrix, $reserved, 0, 0);
-        $this->placeFinder($matrix, $reserved, 0, $size - 7);
-        $this->placeFinder($matrix, $reserved, $size - 7, 0);
-        $this->placeSeparators($matrix, $reserved, $size);
-        $this->placeAlignment($matrix, $reserved, $version, $size);
-        $this->placeTiming($matrix, $reserved, $size);
+        self::placeFinder($matrix, $reserved, 0, 0);
+        self::placeFinder($matrix, $reserved, 0, $size - 7);
+        self::placeFinder($matrix, $reserved, $size - 7, 0);
+        self::placeSeparators($matrix, $reserved, $size);
+        self::placeAlignment($matrix, $reserved, $version, $size);
+        self::placeTiming($matrix, $reserved, $size);
         // dark module
         $matrix[$size - 8][8] = 1;
         $reserved[$size - 8][8] = true;
-        $this->reserveFormatAreas($reserved, $size);
+        self::reserveFormatAreas($reserved, $size);
 
-        $this->placeData($matrix, $reserved, $bits, $size);
+        self::placeData($matrix, $reserved, $bits, $size);
 
         // choose mask 0 (deterministic; acceptable for short tokens)
         $mask = 0;
-        $this->applyMask($matrix, $reserved, $mask, $size);
-        $this->placeFormatInfo($matrix, $ecLevel, $mask, $size);
+        self::applyMask($matrix, $reserved, $mask, $size);
+        self::placeFormatInfo($matrix, $ecLevel, $mask, $size);
 
         // collapse nulls to 0
         for ($r = 0; $r < $size; $r++) {
@@ -362,7 +386,7 @@ final class QrCode extends BaseEndpoint
         return $matrix;
     }
 
-    private function placeFinder(array &$m, array &$res, int $row, int $col): void
+    private static function placeFinder(array &$m, array &$res, int $row, int $col): void
     {
         for ($r = -1; $r <= 7; $r++) {
             for ($c = -1; $c <= 7; $c++) {
@@ -380,17 +404,17 @@ final class QrCode extends BaseEndpoint
         }
     }
 
-    private function placeSeparators(array &$m, array &$res, int $size): void
+    private static function placeSeparators(array &$m, array &$res, int $size): void
     {
         // handled implicitly by finder loop writing the -1..7 border as 0
     }
 
-    private function placeAlignment(array &$m, array &$res, int $version, int $size): void
+    private static function placeAlignment(array &$m, array &$res, int $version, int $size): void
     {
         if ($version < 2) {
             return;
         }
-        $positions = $this->alignmentPositions($version);
+        $positions = self::alignmentPositions($version);
         foreach ($positions as $r) {
             foreach ($positions as $c) {
                 // skip finder overlaps
@@ -408,7 +432,7 @@ final class QrCode extends BaseEndpoint
         }
     }
 
-    private function placeTiming(array &$m, array &$res, int $size): void
+    private static function placeTiming(array &$m, array &$res, int $size): void
     {
         for ($i = 8; $i < $size - 8; $i++) {
             $bit = ($i % 2 === 0) ? 1 : 0;
@@ -423,7 +447,7 @@ final class QrCode extends BaseEndpoint
         }
     }
 
-    private function reserveFormatAreas(array &$res, int $size): void
+    private static function reserveFormatAreas(array &$res, int $size): void
     {
         for ($i = 0; $i <= 8; $i++) {
             $res[8][$i] = true;
@@ -435,7 +459,7 @@ final class QrCode extends BaseEndpoint
         }
     }
 
-    private function placeData(array &$m, array $res, string $bits, int $size): void
+    private static function placeData(array &$m, array $res, string $bits, int $size): void
     {
         $dir = -1;
         $row = $size - 1;
@@ -466,7 +490,7 @@ final class QrCode extends BaseEndpoint
         }
     }
 
-    private function applyMask(array &$m, array $res, int $mask, int $size): void
+    private static function applyMask(array &$m, array $res, int $mask, int $size): void
     {
         for ($r = 0; $r < $size; $r++) {
             for ($c = 0; $c < $size; $c++) {
@@ -484,7 +508,7 @@ final class QrCode extends BaseEndpoint
         }
     }
 
-    private function placeFormatInfo(array &$m, string $ecLevel, int $mask, int $size): void
+    private static function placeFormatInfo(array &$m, string $ecLevel, int $mask, int $size): void
     {
         $ecBits = ['L' => 0b01, 'M' => 0b00, 'Q' => 0b11, 'H' => 0b10][$ecLevel];
         $data = ($ecBits << 3) | $mask;
@@ -519,13 +543,13 @@ final class QrCode extends BaseEndpoint
 
     // ---- spec tables ----
 
-    private function dataCapacityCodewords(int $version, string $ecLevel): int
+    private static function dataCapacityCodewords(int $version, string $ecLevel): int
     {
-        [$ec, $g1b, $g1c, $g2b, $g2c] = $this->ecBlockInfo($version, $ecLevel);
+        [$ec, $g1b, $g1c, $g2b, $g2c] = self::ecBlockInfo($version, $ecLevel);
         return $g1b * $g1c + $g2b * $g2c;
     }
 
-    private function remainderBits(int $version): int
+    private static function remainderBits(int $version): int
     {
         $map = [
             1 => 0, 2 => 7, 3 => 7, 4 => 7, 5 => 7, 6 => 7,
@@ -538,7 +562,7 @@ final class QrCode extends BaseEndpoint
         return $map[$version] ?? 0;
     }
 
-    private function alignmentPositions(int $version): array
+    private static function alignmentPositions(int $version): array
     {
         $table = [
             1 => [], 2 => [6, 18], 3 => [6, 22], 4 => [6, 26], 5 => [6, 30],
@@ -552,7 +576,7 @@ final class QrCode extends BaseEndpoint
      * EC block structure for level M, versions 1-10 (sufficient for short
      * token payloads). [ecCodewordsPerBlock, g1Blocks, g1Cw, g2Blocks, g2Cw].
      */
-    private function ecBlockInfo(int $version, string $ecLevel): array
+    private static function ecBlockInfo(int $version, string $ecLevel): array
     {
         // Level M only (we encode at M).
         $m = [

@@ -212,6 +212,7 @@ final class Webhooks extends BaseEndpoint
 
         $textLines = [];
         $htmlItems = [];
+        $inline    = [];   // Content-ID => raw PNG bytes for MIME multipart/related
         $n = 0;
         foreach ($tickets as $ticket) {
             $token = (string) ($ticket['token'] ?? '');
@@ -219,27 +220,39 @@ final class Webhooks extends BaseEndpoint
                 continue;
             }
             $n++;
-            $viewUrl  = $appUrl . '/t/' . rawurlencode($token);
-            // Use PNG for the email QR — SVG is not supported by Gmail or Outlook.
-            $qrUrl    = $appUrl . '/assets/qr.png?text=' . rawurlencode($token) . '&size=300';
-            $code     = htmlspecialchars((string) $ticket['code'], ENT_QUOTES, 'UTF-8');
+            $viewUrl = $appUrl . '/t/' . rawurlencode($token);
+            $code    = htmlspecialchars((string) $ticket['code'], ENT_QUOTES, 'UTF-8');
             $safeView = htmlspecialchars($viewUrl, ENT_QUOTES, 'UTF-8');
-            $safeQr   = htmlspecialchars($qrUrl, ENT_QUOTES, 'UTF-8');
+
+            // Generate QR PNG bytes directly (no HTTP round-trip) and embed as a
+            // MIME CID attachment so the image is always present regardless of
+            // whether the recipient's email client loads remote images.
+            $cid     = 'qr-' . $n . '-' . bin2hex(random_bytes(6)) . '@' . (getenv('APP_HOST') ?: 'localhost');
+            $pngBytes = QrCode::generatePng($token, 300);
+            if ($pngBytes !== '') {
+                $inline[$cid] = $pngBytes;
+                $qrSrc = 'cid:' . $cid;
+            } else {
+                // Fallback: external URL (e.g. if GD unavailable).
+                $qrSrc = htmlspecialchars(
+                    $appUrl . '/assets/qr.png?text=' . rawurlencode($token) . '&size=300',
+                    ENT_QUOTES, 'UTF-8'
+                );
+            }
 
             $textLines[] = 'Ticket ' . $n . '  (' . (string) $ticket['code'] . ')';
             $textLines[] = '  View ticket + QR: ' . $viewUrl;
-            $textLines[] = '  QR image only:    ' . $qrUrl;
             $textLines[] = '';
 
             // Wrap the QR image in a link so tapping it opens the ticket page
             // even when images are blocked.  Add a plain "View your ticket"
-            // link below for clients that do block images.
+            // link below for all clients.
             $htmlItems[] = '<div style="padding:16px 0;border-bottom:1px solid #2e2929;">'
                 . '<div style="font-size:13px;color:#a9a097;letter-spacing:1px;text-transform:uppercase;">Ticket ' . $n . '</div>'
                 . '<div style="margin-top:4px;font-size:16px;font-weight:bold;color:#fff;">' . $code . '</div>'
                 . '<div style="margin-top:14px;text-align:center;">'
                 . '<a href="' . $safeView . '" style="display:inline-block;line-height:0;border:2px solid #3a3434;border-radius:4px;">'
-                . '<img src="' . $safeQr . '" alt="QR code — tap to open your ticket" width="200" height="200"'
+                . '<img src="' . $qrSrc . '" alt="QR code — tap to open your ticket" width="200" height="200"'
                 . ' style="display:block;background:#ffffff;padding:10px;">'
                 . '</a>'
                 . '</div>'
@@ -268,7 +281,8 @@ final class Webhooks extends BaseEndpoint
                 'greeting'     => $greeting,
                 'tickets_html' => implode('', $htmlItems),
                 'tickets_text' => implode("\n", $textLines),
-            ]
+            ],
+            $inline
         );
     }
 }

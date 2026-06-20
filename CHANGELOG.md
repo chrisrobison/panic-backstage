@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `email` — Embed QR codes as MIME inline + attachment for maximum client compatibility
+- **Added** `admin` — Show provider env vars on payments settings page
 - **Added** `admin` — Show provider env vars on payments settings page
 - **Added** `changelog` — Add CHANGELOG.md and automated post-commit hook
 
