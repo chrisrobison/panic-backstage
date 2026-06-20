@@ -894,6 +894,12 @@
     <a href="#contract" class="section">The contract workflow</a>
     <a href="#counterparty" class="section">The counterparty</a>
     <a href="#contract-pdf" class="section">Downloading &amp; printing</a>
+    <a href="#e-sign" class="section">Electronic signatures</a>
+    <a href="#e-sign-send" class="section">Sending for e-signature</a>
+    <a href="#e-sign-signer" class="section">What the signer sees</a>
+    <a href="#e-sign-manage" class="section">Resend, void &amp; countersign</a>
+    <a href="#e-sign-audit" class="section">The audit log</a>
+    <a href="#e-sign-final" class="section">The executed PDF</a>
     <a href="#notifications" class="section">Automatic notifications</a>
     <a href="#private-events" class="section">Private event rentals</a>
     <a href="#sheet-sync" class="section">Google Sheet sync</a>
@@ -1319,19 +1325,42 @@
 
     <h3>The contract status ladder</h3>
 
-    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin: 20px 0; font-family:var(--font-ui); font-size:0.85rem;">
+    <p>Contracts move through two phases. First, the <strong>draft phase</strong> (internal review and approval), then the <strong>e-sign phase</strong> (sent out, signed by all parties, and fully executed). Each phase has its own status progression:</p>
+
+    <p style="font-family:var(--font-ui); font-size:0.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:6px;">Draft phase</p>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:20px; font-family:var(--font-ui); font-size:0.85rem;">
       <span style="background:#f3f4f6; border:1px solid #d1d5db; border-radius:6px; padding:6px 14px; font-weight:600;">Draft</span>
       <span style="color:#9ca3af;">→</span>
       <span style="background:#fef3c7; border:1px solid #fcd34d; border-radius:6px; padding:6px 14px; font-weight:600; color:#92400e;">Needs Review</span>
       <span style="color:#9ca3af;">→</span>
       <span style="background:#d1fae5; border:1px solid #6ee7b7; border-radius:6px; padding:6px 14px; font-weight:600; color:#065f46;">Approved</span>
       <span style="color:#9ca3af;">→</span>
-      <span style="background:#dbeafe; border:1px solid #93c5fd; border-radius:6px; padding:6px 14px; font-weight:600; color:#1e40af;">Sent</span>
-      <span style="color:#9ca3af;">→</span>
-      <span style="background:#e8650a; border:1px solid #b84e08; border-radius:6px; padding:6px 14px; font-weight:600; color:#fff;">Signed</span>
+      <span style="background:#ede9fe; border:1px solid #c4b5fd; border-radius:6px; padding:6px 14px; font-weight:600; color:#5b21b6;">Ready to Send</span>
     </div>
 
-    <p>The event can be moved to <strong>Booked</strong> once the contract reaches <strong>Approved</strong> status or better. You don't have to wait for the producer's signature — but getting it to <strong>Signed</strong> is always the goal.</p>
+    <p style="font-family:var(--font-ui); font-size:0.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:6px;">E-sign phase</p>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px; font-family:var(--font-ui); font-size:0.85rem;">
+      <span style="background:#dbeafe; border:1px solid #93c5fd; border-radius:6px; padding:6px 14px; font-weight:600; color:#1e40af;">Sent</span>
+      <span style="color:#9ca3af;">→</span>
+      <span style="background:#e0f2fe; border:1px solid #7dd3fc; border-radius:6px; padding:6px 14px; font-weight:600; color:#0c4a6e;">Viewed</span>
+      <span style="color:#9ca3af;">→</span>
+      <span style="background:#fef3c7; border:1px solid #fcd34d; border-radius:6px; padding:6px 14px; font-weight:600; color:#92400e;">Partially Signed</span>
+      <span style="color:#9ca3af;">→</span>
+      <span style="background:#d1fae5; border:1px solid #6ee7b7; border-radius:6px; padding:6px 14px; font-weight:600; color:#065f46;">Signed by Client</span>
+      <span style="color:#9ca3af;">→</span>
+      <span style="background:#dcfce7; border:1px solid #86efac; border-radius:6px; padding:6px 14px; font-weight:600; color:#14532d;">Countersigned</span>
+      <span style="color:#9ca3af;">→</span>
+      <span style="background:#e8650a; border:1px solid #b84e08; border-radius:6px; padding:6px 14px; font-weight:600; color:#fff;">Fully Executed ✓</span>
+    </div>
+    <div style="font-family:var(--font-ui); font-size:0.8rem; color:var(--muted); margin-bottom:20px;">
+      Terminal states (can occur at any point):
+      <span style="background:#f3f4f6; border:1px solid #d1d5db; border-radius:4px; padding:2px 8px; font-size:0.78rem; margin-left:4px;">Voided</span>
+      <span style="background:#fef2f2; border:1px solid #fca5a5; border-radius:4px; padding:2px 8px; font-size:0.78rem; margin-left:4px; color:#991b1b;">Declined</span>
+      <span style="background:#fef3c7; border:1px solid #fcd34d; border-radius:4px; padding:2px 8px; font-size:0.78rem; margin-left:4px; color:#78350f;">Expired</span>
+      <span style="background:#f3f4f6; border:1px solid #d1d5db; border-radius:4px; padding:2px 8px; font-size:0.78rem; margin-left:4px;">Cancelled</span>
+    </div>
+
+    <p>The event can be moved to <strong>Booked</strong> once the contract reaches <strong>Approved</strong> status or better. When a contract reaches <strong>Fully Executed</strong>, the event is automatically advanced to Booked.</p>
 
     <div class="callout warn">
       <span class="callout-title">⚠️ Unfilled contract terms</span>
@@ -1371,6 +1400,138 @@
       <p>Use <strong>Download PDF</strong> on mobile devices. The Print option relies on your device having a print-to-PDF option in its system print dialog — which not all phones support. Download PDF bypasses that limitation entirely.</p>
     </div>
 
+    <!-- ELECTRONIC SIGNATURES ──────────────────────────────────────────────── -->
+    <h2 id="e-sign">Electronic signatures</h2>
+
+    <p>Panic Backstage has a built-in electronic signature system — no DocuSign or third-party account required. Once a contract is approved, you send it for signature with a single click. Each signer receives a secure, personalised email with a time-limited signing link. When all parties have signed, the system generates a tamper-evident <strong>Final Executed PDF</strong> — the legally authoritative copy — and automatically advances the linked event to <strong>Booked</strong>.</p>
+
+    <div class="callout note">
+      <span class="callout-title">📋 No account needed for signers</span>
+      <p>The counterparty and other external signers do not need a Backstage account. They sign directly through a public link (<code>/sign.html?token=…</code>). The link is personalised, single-use, and expires after the configured time window (default 7 days).</p>
+    </div>
+
+    <h3 id="e-sign-send">Sending a contract for e-signature</h3>
+
+    <ol>
+      <li>Open the contract in the builder. It must be in <span class="ui-label tab">Approved</span> or <span class="ui-label tab">Ready to Send</span> status and have no missing required terms.</li>
+      <li>Click <span class="ui-label button">Send for Signature</span> in the right-hand panel. A confirmation dialog appears showing the signer list — name and email address for each party.</li>
+      <li>The counterparty's details are pre-filled from the contract's Counterparty fields. Add, remove, or edit signers as needed. You can include extra signers such as a guarantor or an artist representative.</li>
+      <li>Click <span class="ui-label button">Confirm &amp; Send</span>. Each signer receives a personalised <em>Please sign: [Contract Title]</em> email with a <strong>Review &amp; Sign</strong> button.</li>
+      <li>The contract status advances to <strong>Sent</strong>. The <em>Signers</em> panel in the right rail shows each signer's live status: Pending, Viewed, Signed, or Declined.</li>
+    </ol>
+
+    <table>
+      <tr><th>Signer status</th><th>Meaning</th></tr>
+      <tr><td><strong>Pending</strong></td><td>Email sent; signer has not yet opened their link</td></tr>
+      <tr><td><strong>Viewed</strong></td><td>Signer opened the link and saw the contract</td></tr>
+      <tr><td><strong>Signed</strong></td><td>Signer completed and submitted their signature</td></tr>
+      <tr><td><strong>Declined</strong></td><td>Signer clicked Decline (a note may be attached)</td></tr>
+    </table>
+
+    <div class="callout warn">
+      <span class="callout-title">⚠️ Missing required terms block sending</span>
+      <p>The <span class="ui-label button">Send for Signature</span> button is disabled if any required clause variable is still blank. Use the <em>Review</em> panel to find and fill what's missing before sending.</p>
+    </div>
+
+    <h3 id="e-sign-signer">What the signer sees</h3>
+
+    <p>When a signer clicks the <strong>Review &amp; Sign</strong> button in their email they land on a clean, mobile-friendly signing page. Here is what happens:</p>
+
+    <ol>
+      <li>The full contract text is displayed for review.</li>
+      <li>At the bottom, two signing methods are offered side by side:
+        <ul>
+          <li><strong>Type Signature</strong> — the signer types their name; it is rendered in a cursive font as a legal signature.</li>
+          <li><strong>Draw Signature</strong> — a canvas lets them draw their signature with a mouse or finger.</li>
+        </ul>
+      </li>
+      <li>The signer checks the consent box: <em>"I agree to use electronic records and signatures for this agreement…"</em></li>
+      <li>The <span class="ui-label button">Sign Agreement</span> button becomes active once a method is chosen and consent is given. Clicking it records the signature.</li>
+      <li>A confirmation screen thanks the signer and notes when the fully-executed copy will be emailed to them.</li>
+    </ol>
+
+    <p>If the signer decides not to sign, they can click <span class="ui-label button secondary">Decline</span> at any time. A short dialog lets them leave an optional note explaining why. You will be notified by email and the contract status will reflect the decline.</p>
+
+    <div class="callout tip">
+      <span class="callout-title">📱 Works on any device</span>
+      <p>The signing page is optimised for phones and tablets. The draw canvas is touch-enabled and renders at full device pixel ratio for crisp signature images on retina screens.</p>
+    </div>
+
+    <h3 id="e-sign-manage">Resending, voiding, and countersigning</h3>
+
+    <p>These actions are available in the <em>Signers</em> panel on the right side of the contract editor, visible once the contract has been sent.</p>
+
+    <table>
+      <tr><th>Action</th><th>When to use</th><th>Effect</th></tr>
+      <tr>
+        <td><span class="ui-label button secondary">Resend link</span></td>
+        <td>Signer says their link expired or they deleted the email</td>
+        <td>Generates a fresh signing link for that signer only and re-sends the email. The old link is immediately invalidated.</td>
+      </tr>
+      <tr>
+        <td><span class="ui-label button secondary">Void contract</span></td>
+        <td>Terms changed significantly; deal fell through; wrong contract sent</td>
+        <td>Cancels the signing process, invalidates all outstanding links, and records a reason. Status becomes <strong>Voided</strong>. You must start a new contract to re-engage.</td>
+      </tr>
+      <tr>
+        <td><span class="ui-label button">Countersign</span></td>
+        <td>All external signers have signed (status = Signed by Client)</td>
+        <td>Admin provides their own typed or drawn signature to countersign on behalf of the venue. Triggers final PDF generation and event advancement.</td>
+      </tr>
+    </table>
+
+    <div class="callout warn">
+      <span class="callout-title">⚠️ Void is permanent</span>
+      <p>Voiding a contract cannot be undone. All outstanding signing links become invalid immediately, and any signer who tries their link will see a message that it is no longer valid. If you need to fix terms and re-send, create a new contract (you can copy the deal terms) and send that one instead.</p>
+    </div>
+
+    <h3 id="e-sign-audit">The audit log</h3>
+
+    <p>Every action on a contract is recorded in an immutable <strong>Audit log</strong>. Open it from the contract editor's right rail by clicking <span class="ui-label tab">Audit log</span>. The log captures:</p>
+
+    <table>
+      <tr><th>Field</th><th>What it contains</th></tr>
+      <tr><td><strong>Action</strong></td><td>The event that occurred: <code>contract_sent</code>, <code>contract_viewed</code>, <code>contract_signed</code>, <code>contract_declined</code>, <code>contract_voided</code>, <code>countersigned</code>, <code>fully_executed</code>, and others.</td></tr>
+      <tr><td><strong>Signer</strong></td><td>Name and email of the person who triggered the action, or <em>Admin</em> for venue-side actions.</td></tr>
+      <tr><td><strong>Timestamp</strong></td><td>The exact date and time (UTC) the action occurred.</td></tr>
+      <tr><td><strong>IP address</strong></td><td>The IP address from which the signing action was performed. Useful for legal or dispute purposes.</td></tr>
+      <tr><td><strong>User agent</strong></td><td>The signer's browser/device string.</td></tr>
+    </table>
+
+    <div class="callout note">
+      <span class="callout-title">📋 Append-only</span>
+      <p>The audit log is append-only at the database level — no entry can ever be edited or deleted. It is reproduced in full on the last page of the Final Executed PDF as the audit certificate, giving both parties a permanent, self-contained record of every step in the signing lifecycle.</p>
+    </div>
+
+    <h3 id="e-sign-final">The Final Executed PDF</h3>
+
+    <p>When a contract reaches <strong>Fully Executed</strong> status, Backstage generates a single locked PDF that becomes the authoritative contract record. It contains:</p>
+
+    <ul>
+      <li>The full <strong>contract body</strong> exactly as it was approved — no edits are possible after the first signer signs.</li>
+      <li>A <strong>signature block</strong> for each signer showing:
+        <ul>
+          <li>Their typed or drawn signature (reproduced at full quality)</li>
+          <li>Full name, title (if provided), and company</li>
+          <li>Date, time, and IP address of signing</li>
+        </ul>
+      </li>
+      <li>A final <strong>Audit Certificate</strong> page listing every lifecycle event from contract creation through full execution.</li>
+      <li>A <strong>document hash</strong> — the SHA-256 fingerprint of the PDF bytes, stored in the database so the file's integrity can be verified at any time.</li>
+    </ul>
+
+    <p>To download the final PDF, open the contract and click <span class="ui-label button secondary">⬇ Download Final PDF</span> in the right rail. This button only appears on contracts in <strong>Fully Executed</strong> status.</p>
+
+    <div class="callout tip">
+      <span class="callout-title">💡 Verifying the document hasn't changed</span>
+      <p>The SHA-256 hash shown in the audit log and stored in the database lets you confirm the downloaded PDF is the original, unmodified copy. If the file's hash matches the database record, it hasn't been tampered with. If they differ, treat the file as suspect and contact Backstage support.</p>
+    </div>
+
+    <div class="callout note">
+      <span class="callout-title">📋 Email notification when fully executed</span>
+      <p>When a contract is fully executed, each signer automatically receives a <em>Your agreement is signed</em> email with a link to download their copy of the final PDF. Venue admins receive a separate notification confirming the execution.</p>
+    </div>
+
     <!-- NOTIFICATIONS ─────────────────────────────────────────────────────── -->
     <h2 id="notifications">Automatic notifications</h2>
 
@@ -1382,6 +1543,11 @@
       <tr><td>Status → Booked</td><td>All venue admins</td><td>Firm booking confirmation</td></tr>
       <tr><td>Status → Needs Assets</td><td>Producer + Booker</td><td>Request for flyers, press photos, social images</td></tr>
       <tr><td>Event date passes</td><td>Settlement team</td><td>Reminder to file settlement (auto-archive notification)</td></tr>
+      <tr><td colspan="3" style="background:#f9fafb; color:var(--muted); font-size:0.85rem; font-style:italic; padding:6px 12px;">Contract e-signature notifications</td></tr>
+      <tr><td>Contract sent for signature</td><td>Each signer</td><td>Personalised <em>Please review &amp; sign</em> email with their signing link</td></tr>
+      <tr><td>A signer signs</td><td>All venue admins</td><td>Confirmation of who signed, with a link to the contract</td></tr>
+      <tr><td>Contract fully executed</td><td>All signers + venue admins</td><td>Congratulations email with link to download the final executed PDF</td></tr>
+      <tr><td>Contract voided</td><td>All venue admins</td><td>Notification that the contract was voided and the reason given</td></tr>
     </table>
 
     <!-- PRIVATE EVENTS ──────────────────────────────────────────────────── -->
