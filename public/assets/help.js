@@ -750,7 +750,7 @@ const HELP_CONTENT = {
       <li><strong>Countersigned</strong> — venue has countersigned; generating the final PDF.</li>
       <li><strong>Fully Executed</strong> — all parties have signed. Final PDF is sealed and the linked event moves to <em>Booked</em>.</li>
     </ol>
-    <p><strong>Terminal statuses</strong> (can happen at any stage): <em>Voided</em> — admin cancelled the contract; <em>Declined</em> — a signer clicked "Decline"; <em>Expired</em> — signing links timed out before everyone signed.</p>
+    <p><strong>Terminal statuses</strong> (can happen at any stage): <em>Voided</em> — admin explicitly voided the contract; <em>Declined</em> — a signer clicked "Decline"; <em>Expired</em> — signing links timed out before everyone signed; <em>Cancelled</em> — contract manually cancelled before or during the signing process; <em>Superseded</em> — contract replaced by a newer version.</p>
 
     <h3>Who can sign</h3>
     <p>Contracts support multiple signers:</p>

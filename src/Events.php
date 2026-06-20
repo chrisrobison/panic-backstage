@@ -892,7 +892,7 @@ final class Events extends BaseEndpoint
 
             // ── Always notify admins on any status change ─────────────────────
             $admins = $this->db->all(
-                "SELECT name, email FROM users
+                "SELECT name, email, notify_event_updates FROM users
                   WHERE role = 'venue_admin'
                     AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'"
             );
@@ -926,6 +926,9 @@ final class Events extends BaseEndpoint
                     'event_admin_url' => htmlspecialchars($link,                                                    ENT_QUOTES, 'UTF-8'),
                 ];
                 foreach ($adminRecipients as $recipient) {
+                    if (!NotificationPreferences::wants($recipient, NotificationPreferences::EVENT_UPDATES)) {
+                        continue;
+                    }
                     $mailer->sendTemplate($recipient['email'], $subject, 'status-changed', $adminVars);
                 }
             }
@@ -990,7 +993,7 @@ final class Events extends BaseEndpoint
     private function notifyPrivateEventCreated(int $eventId): void
     {
         try {
-            $admins = $this->db->all("SELECT name, email FROM users WHERE role = 'venue_admin' AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'");
+            $admins = $this->db->all("SELECT name, email, notify_event_updates FROM users WHERE role = 'venue_admin' AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'");
             if (!$admins) return;
 
             $event = $this->db->one(
@@ -1032,6 +1035,9 @@ final class Events extends BaseEndpoint
 
             $mailer = new Mailer($this->root, $this->db);
             foreach ($admins as $admin) {
+                if (!NotificationPreferences::wants($admin, NotificationPreferences::EVENT_UPDATES)) {
+                    continue;
+                }
                 $mailer->sendTemplate($admin['email'], $subject, 'private-event-inquiry', $vars);
             }
         } catch (\Throwable $e) {

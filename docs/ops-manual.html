@@ -1050,7 +1050,9 @@
     <!-- CREATING AN EVENT ────────────────────────────────────────────────── -->
     <h2 id="create-event">Creating an event</h2>
 
-    <p>Click the <span class="ui-label button">+ New event</span> button in the top-right corner of the screen. A quick-create dialog will appear asking for just the essentials to get started.</p>
+    <p>Click the <span class="ui-label button">+ New event</span> button in the top-right corner of the screen. This opens the <strong>Event Creation Wizard</strong> — a 7-step guided form that collects everything needed for a new show: event basics, deal structure, contact details, financial terms, production requirements, and promotion settings. When you finish, the wizard creates both the event <em>and</em> a pre-populated contract draft in one click. This is the recommended path for any show that will have a booking agreement.</p>
+
+    <p>If you need a quick placeholder first and want to deal with the contract separately, click <strong>⚡ Quick Create instead</strong> in the wizard's sidebar. A compact modal appears: pick a template (or <em>Blank event</em>), confirm date, title, and door/show times, and click <em>Create event</em>. The new event opens immediately in its workspace. Any date already entered in the wizard carries over to the modal.</p>
 
     <p>The most important decision you make at creation time is <strong>Event Type</strong>. This changes how the event behaves throughout the system:</p>
 
@@ -1065,12 +1067,14 @@
       </div>
     </div>
 
-    <p style="margin-top:20px">Once you set the type to Private Event, the form changes layout to show client fields instead of booker fields. For detailed private event instructions, see <a href="#private-events">Private Event Rentals</a> later in this chapter.</p>
+    <p style="margin-top:20px">Once you set the type to Private Event, both the wizard and the Quick Create modal change layout to show client fields instead of booker/artist fields. For detailed private event instructions, see <a href="#private-events">Private Event Rentals</a> later in this chapter.</p>
 
-    <h3>Required fields at creation</h3>
+    <h3>Quick Create: minimum required fields</h3>
+
+    <p>Whether you use the full wizard or the Quick Create fallback, these are the minimum fields the system requires to create an event and hold the date:</p>
 
     <div class="form-mockup">
-      <div class="form-mockup-title">New Event — Quick Create</div>
+      <div class="form-mockup-title">Quick Create Modal — Minimum Fields</div>
       <div class="form-row">
         <div class="mock-field">
           <label>Title <span class="required-star">*</span></label>
@@ -1358,6 +1362,7 @@
       <span style="background:#fef2f2; border:1px solid #fca5a5; border-radius:4px; padding:2px 8px; font-size:0.78rem; margin-left:4px; color:#991b1b;">Declined</span>
       <span style="background:#fef3c7; border:1px solid #fcd34d; border-radius:4px; padding:2px 8px; font-size:0.78rem; margin-left:4px; color:#78350f;">Expired</span>
       <span style="background:#f3f4f6; border:1px solid #d1d5db; border-radius:4px; padding:2px 8px; font-size:0.78rem; margin-left:4px;">Cancelled</span>
+      <span style="background:#ede9fe; border:1px solid #c4b5fd; border-radius:4px; padding:2px 8px; font-size:0.78rem; margin-left:4px; color:#5b21b6;">Superseded</span>
     </div>
 
     <p>The event can be moved to <strong>Booked</strong> once the contract reaches <strong>Approved</strong> status or better. When a contract reaches <strong>Fully Executed</strong>, the event is automatically advanced to Booked.</p>

@@ -1011,10 +1011,13 @@ HTML;
     private function notifyAdminsOfSend(array $contract): void
     {
         try {
-            $admins = $this->db->all("SELECT email, name FROM users WHERE role = 'venue_admin'", []);
+            $admins = $this->db->all("SELECT email, name, notify_contracts FROM users WHERE role = 'venue_admin'", []);
             $mailer = new Mailer($this->root, $this->db);
             $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
             foreach ($admins as $admin) {
+                if (!NotificationPreferences::wants($admin, NotificationPreferences::CONTRACTS)) {
+                    continue;
+                }
                 $mailer->sendTemplate(
                     $admin['email'],
                     'Contract sent for signature: ' . ($contract['title'] ?? ''),
@@ -1038,10 +1041,13 @@ HTML;
     private function notifyAdminsOfVoid(array $contract, string $reason): void
     {
         try {
-            $admins = $this->db->all("SELECT email, name FROM users WHERE role = 'venue_admin'", []);
+            $admins = $this->db->all("SELECT email, name, notify_contracts FROM users WHERE role = 'venue_admin'", []);
             $mailer = new Mailer($this->root, $this->db);
             $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
             foreach ($admins as $admin) {
+                if (!NotificationPreferences::wants($admin, NotificationPreferences::CONTRACTS)) {
+                    continue;
+                }
                 $mailer->sendTemplate(
                     $admin['email'],
                     'Contract voided: ' . ($contract['title'] ?? ''),
