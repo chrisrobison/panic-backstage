@@ -410,7 +410,7 @@ final class AuthEndpoint extends BaseEndpoint
     private function notifyAdminsOfAccessRequest(string $name, string $email, string $phone, string $notes): void
     {
         $admins = $this->db->all(
-            "SELECT email FROM users WHERE role = 'venue_admin' AND access_status = 'active'"
+            "SELECT email, notify_access_requests FROM users WHERE role = 'venue_admin' AND access_status = 'active'"
         );
         if (!$admins) {
             return;
@@ -445,6 +445,9 @@ final class AuthEndpoint extends BaseEndpoint
 
         $mailer = new Mailer($this->root, $this->db);
         foreach ($admins as $admin) {
+            if (!NotificationPreferences::wants($admin, NotificationPreferences::ACCESS_REQUESTS)) {
+                continue;
+            }
             $mailer->sendTemplate((string) $admin['email'], 'Backstage — new access request', 'access-request', $vars);
         }
     }
@@ -827,6 +830,14 @@ final class AuthEndpoint extends BaseEndpoint
             }
             $updates[] = 'events_sort = ?';
             $params[]  = ($sort !== '' ? $sort : null);
+        }
+
+        // Email notification preferences — boolean opt-in flags, one per category.
+        foreach (NotificationPreferences::KEYS as $prefKey) {
+            if (array_key_exists($prefKey, $body)) {
+                $updates[] = "{$prefKey} = ?";
+                $params[]  = $body[$prefKey] ? 1 : 0;
+            }
         }
 
         if (!$updates) {

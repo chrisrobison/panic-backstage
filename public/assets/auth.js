@@ -735,6 +735,10 @@ class Preferences extends PanicElement {
         nav_collapsed:   Boolean(user.nav_collapsed),
         events_sort:     user.events_sort || '',
         hide_credential_setup_prompt: Boolean(user.hide_credential_setup_prompt),
+        // Email notification preferences. Absent (older /me payloads) ⇒ opted in.
+        notify_event_updates:   user.notify_event_updates   !== false,
+        notify_contracts:       user.notify_contracts       !== false,
+        notify_access_requests: user.notify_access_requests !== false,
       };
       this.render();
     } catch (err) {
@@ -781,6 +785,23 @@ class Preferences extends PanicElement {
       </div>
 
       <div class="account-section">
+        <h2>Email notifications</h2>
+        <p class="muted">Choose which system emails you receive. Account and sign-in emails (login links, email confirmations) are always sent.</p>
+        <label class="checkbox-row">
+          <input type="checkbox" data-pref="notify_event_updates" ${this.prefs.notify_event_updates ? 'checked' : ''}>
+          <span>Event updates — status changes and new private-event inquiries</span>
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" data-pref="notify_contracts" ${this.prefs.notify_contracts ? 'checked' : ''}>
+          <span>Contract activity — contracts sent, signed, or voided</span>
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" data-pref="notify_access_requests" ${this.prefs.notify_access_requests ? 'checked' : ''}>
+          <span>Access requests — alerts when someone requests Backstage access</span>
+        </label>
+      </div>
+
+      <div class="account-section">
         <h2>Sign-in nudges</h2>
         <label class="checkbox-row">
           <input type="checkbox" data-pref="remind_credential" ${this.prefs.hide_credential_setup_prompt ? '' : 'checked'}>
@@ -804,6 +825,8 @@ class Preferences extends PanicElement {
       body = { hide_credential_setup_prompt: !el.checked };
     } else if (field === 'nav_collapsed') {
       body = { nav_collapsed: el.checked };
+    } else if (field.startsWith('notify_')) {
+      body = { [field]: el.checked };
     } else {
       body = { [field]: el.value };
     }
@@ -814,6 +837,7 @@ class Preferences extends PanicElement {
       const merged = { ...current, ...body };
       if ('hide_credential_setup_prompt' in body) this.prefs.hide_credential_setup_prompt = body.hide_credential_setup_prompt;
       else if (field === 'nav_collapsed') this.prefs.nav_collapsed = el.checked;
+      else if (field.startsWith('notify_')) this.prefs[field] = el.checked;
       else this.prefs[field] = el.value;
       setAppUser(merged);
       if (field === 'nav_collapsed') {

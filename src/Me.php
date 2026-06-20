@@ -14,7 +14,8 @@ final class Me extends BaseEndpoint
             // on every load — not just immediately after sign-in.
             $row = $this->db->one(
                 'SELECT phone, password_hash, hide_credential_setup_prompt,
-                        default_landing, nav_collapsed, events_sort
+                        default_landing, nav_collapsed, events_sort,
+                        notify_event_updates, notify_contracts, notify_access_requests
                  FROM users WHERE id = ? LIMIT 1',
                 [(int) $user['id']]
             ) ?: [];
@@ -29,6 +30,11 @@ final class Me extends BaseEndpoint
             $user['default_landing']              = $row['default_landing'] ?? null;
             $user['nav_collapsed']                = (bool) ($row['nav_collapsed'] ?? false);
             $user['events_sort']                  = $row['events_sort'] ?? null;
+            // Email notification preferences default to ON (opted-in) when the
+            // column is missing, matching the migration default.
+            $user['notify_event_updates']         = (bool) ($row['notify_event_updates']   ?? true);
+            $user['notify_contracts']             = (bool) ($row['notify_contracts']       ?? true);
+            $user['notify_access_requests']       = (bool) ($row['notify_access_requests'] ?? true);
         }
 
         return $this->ok([

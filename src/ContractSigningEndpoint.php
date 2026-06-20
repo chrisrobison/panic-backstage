@@ -438,13 +438,16 @@ final class ContractSigningEndpoint extends BaseEndpoint
     {
         try {
             $admins = $this->db->all(
-                "SELECT email, name FROM users WHERE role = 'venue_admin'",
+                "SELECT email, name, notify_contracts FROM users WHERE role = 'venue_admin'",
                 []
             );
             $mailer  = new Mailer($this->root, $this->db);
             $appUrl  = rtrim((string) (getenv('APP_URL') ?: ''), '/');
 
             foreach ($admins as $admin) {
+                if (!NotificationPreferences::wants($admin, NotificationPreferences::CONTRACTS)) {
+                    continue;
+                }
                 $mailer->sendTemplate(
                     $admin['email'],
                     "Contract {$event}: " . ($contract['title'] ?? 'Contract'),
