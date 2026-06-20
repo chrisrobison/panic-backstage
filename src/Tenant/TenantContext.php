@@ -31,6 +31,44 @@ final class TenantContext
         public readonly PDO $db
     ) {}
 
+    // ── Static per-request context ────────────────────────────────────────────
+    //
+    // Set once at boot time (in public/api/index.php after resolve()) so that
+    // Mailer, Assets, GoogleSheets etc. can call TenantContext::current() without
+    // needing the context threaded through every constructor argument.
+
+    private static ?self $current = null;
+
+    /** Cache the resolved context for the lifetime of the request. */
+    public static function setCurrent(?self $ctx): void
+    {
+        self::$current = $ctx;
+    }
+
+    /** Return the cached context, or null when in single-tenant mode. */
+    public static function current(): ?self
+    {
+        return self::$current;
+    }
+
+    /**
+     * Return the per-tenant client data directory root.
+     *
+     * Multi-tenant: <app-root>/clients/<slug>
+     * Single-tenant fallback: <app-root>/storage  (preserves legacy behaviour)
+     *
+     * @param string $root  App root — the value of dirname(__DIR__, N) in callers.
+     */
+    public static function clientDir(string $root): string
+    {
+        $ctx = self::current();
+        if ($ctx !== null) {
+            return $root . '/clients/' . $ctx->tenant['slug'];
+        }
+        // Single-tenant: keep using storage/ so existing installs are unaffected.
+        return $root . '/storage';
+    }
+
     /**
      * Resolve the current request to a TenantContext.
      *

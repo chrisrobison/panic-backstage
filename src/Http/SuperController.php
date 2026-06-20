@@ -21,6 +21,7 @@ use PDO;
  *
  * Routes:
  *   GET  /super/tenants                            — HTML admin UI
+ *   GET  /api/super/venues                         — PUBLIC venue directory (login picker)
  *   POST /api/super/login                          — authenticate super admin
  *   POST /api/super/logout                         — end session
  *   GET  /api/super/tenants                        — list tenants + domains
@@ -62,6 +63,24 @@ final class SuperController
         $sub = substr($path, strlen('/api/super')) ?: '/';
 
         // ── Public (no auth required) ─────────────────────────────────────────
+        // Venue directory for the central login picker on the marketing site.
+        // Read-only and deliberately minimal: it exposes only each active
+        // tenant's display name and the URL to its own login page — never the
+        // database name, status, or any internal field.
+        if ($sub === '/venues' && $method === 'GET') {
+            self::listVenues();
+        }
+        // CORS preflight for the public venues endpoint (in case a caller adds
+        // non-simple headers). Safe to allow any origin — no credentials, GET only.
+        if ($sub === '/venues' && $method === 'OPTIONS') {
+            header('Access-Control-Allow-Origin: *');
+            header('Access-Control-Allow-Methods: GET, OPTIONS');
+            header('Access-Control-Allow-Headers: Content-Type, Accept');
+            header('Access-Control-Max-Age: 86400');
+            http_response_code(204);
+            exit;
+        }
+
         if ($sub === '/login' && $method === 'POST') {
             self::login();
         }
@@ -332,6 +351,66 @@ final class SuperController
 
         $db->prepare('DELETE FROM tenant_domains WHERE id = ? AND tenant_id = ?')->execute([$domainId, $tenantId]);
         self::jsonExit(['ok' => true]);
+    }
+
+    // ─── Public venue directory ────────────────────────────────────────────────
+
+    /**
+     * Public list of venues for the central login picker. Returns one entry per
+     * active tenant that has at least one domain, with the URL of that tenant's
+     * own login page (where the password/passkey step happens). No auth, no
+     * internal fields. Served from any host before tenant resolution.
+     *
+     * @return never
+     */
+    private static function listVenues(): never
+    {
+        // Public, read-only directory — safe to allow any origin so the
+        // marketing site can fetch it cross-origin.
+        header('Access-Control-Allow-Origin: *');
+
+        $rows = Connection::super()->query(
+            "SELECT t.slug, t.name, d.domain, d.is_primary
+               FROM tenants t
+               JOIN tenant_domains d ON d.tenant_id = t.id
+              WHERE t.status = 'active'
+              ORDER BY t.name ASC, t.id ASC, d.is_primary DESC, d.id ASC"
+        )->fetchAll();
+
+        // Keep the primary (or first) domain per tenant — rows are already
+        // ordered so the preferred domain for each tenant comes first.
+        $venues = [];
+        $seen   = [];
+        foreach ($rows as $r) {
+            $slug = (string) $r['slug'];
+            if (isset($seen[$slug])) {
+                continue;
+            }
+            $seen[$slug] = true;
+
+            $domain = (string) $r['domain'];
+            $scheme = self::isLocalDomain($domain) ? 'http' : 'https';
+            $venues[] = [
+                'slug'      => $slug,
+                'name'      => (string) $r['name'],
+                'domain'    => $domain,
+                'login_url' => $scheme . '://' . $domain . '/login.html',
+            ];
+        }
+
+        self::jsonExit(['venues' => $venues]);
+    }
+
+    /** Local/dev hostnames are served over http; everything else over https. */
+    private static function isLocalDomain(string $domain): bool
+    {
+        $host = strtolower(explode(':', $domain, 2)[0]);
+        return $host === 'localhost'
+            || str_ends_with($host, '.localhost')
+            || str_ends_with($host, '.test')
+            || str_ends_with($host, '.lvh.me')
+            || str_starts_with($host, '127.')
+            || $host === '::1';
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────

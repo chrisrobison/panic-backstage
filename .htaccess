@@ -11,6 +11,19 @@ RewriteEngine On
   </FilesMatch>
 </IfModule>
 
+# ── Security: block direct web access to the per-tenant client data tree ──────
+# clients/ sits outside public/ but is still under the document root, so Apache
+# would serve it if no rule intervened. Return 403 for any direct /clients/ hit;
+# legitimate access always goes through the /files/ gateway below.
+RewriteRule ^clients/ - [F,L]
+
+# ── Per-tenant file gateway ───────────────────────────────────────────────────
+# /files/{path} is resolved by files.php which looks up the tenant slug from
+# the current hostname, validates the path, and streams the file.
+# This keeps clients/{slug}/ outside the web root while still serving assets,
+# mail attachments, and contract PDFs under a clean per-tenant URL.
+RewriteRule ^files/(.+)$ public/files.php?_path=$1 [L,QSA]
+
 RewriteRule ^$ public/index.html [L]
 RewriteRule ^(assets|uploads)/(.*)$ public/$1/$2 [L]
 RewriteRule ^api(?:/(.*))?$ public/api/index.php [L,QSA]

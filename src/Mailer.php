@@ -10,8 +10,10 @@ namespace Panic;
  * envelope containing both a plain-text part and an HTML part. Plain-text-only
  * messages fall through to a simple text/plain message as before.
  *
- * A copy is always written to storage/mail/ for local inspection. Delivery
- * failures are logged but never thrown so a mail problem never breaks an auth flow.
+ * A copy is always written to disk for local inspection:
+ *   multi-tenant  →  clients/{slug}/mail/
+ *   single-tenant →  storage/mail/
+ * Delivery failures are logged but never thrown so a mail problem never breaks an auth flow.
  */
 final class Mailer
 {
@@ -31,7 +33,9 @@ final class Mailer
      */
     public function __construct(string $root, ?Database $db = null)
     {
-        $this->logDir      = $root . '/storage/mail';
+        // Multi-tenant: write mail copies to clients/{slug}/mail/
+        // Single-tenant fallback: storage/mail/ (unchanged behaviour)
+        $this->logDir      = \Panic\Tenant\TenantContext::clientDir($root) . '/mail';
         $this->templateDir = $root . '/storage/email-templates';
         $this->fromAddress = getenv('MAIL_FROM_ADDRESS') ?: ('noreply@' . (getenv('APP_HOST') ?: 'localhost'));
         $this->fromName    = getenv('MAIL_FROM_NAME') ?: 'Backstage';

@@ -60,23 +60,35 @@ final class TenantProvisioner
             $db->exec($sql);
         }
 
-        // Step 3: Ensure the per-tenant upload directory exists.
-        self::ensureUploadDirectory($slug);
+        // Step 3: Ensure the per-tenant client directory tree exists.
+        self::ensureClientDirectory($slug);
     }
 
     /**
-     * Create the per-tenant upload directory under storage/uploads/<slug>/
-     * if it does not already exist.
+     * Create the per-tenant client data directory tree under clients/<slug>/.
+     *
+     * Sub-directories created:
+     *   assets/    – uploaded event images, PDFs, etc.
+     *   logs/      – application and integration logs
+     *   mail/      – copies of every sent email (.eml files)
+     *   contracts/ – server-side contract PDF snapshots
+     *
+     * This replaces the old storage/uploads/<slug>/ single-directory approach.
+     * The clients/ tree lives outside public/ so files are never directly
+     * web-accessible; all HTTP access goes through the /files/ gateway.
      */
-    private static function ensureUploadDirectory(string $slug): void
+    private static function ensureClientDirectory(string $slug): void
     {
         // Validate slug to avoid directory traversal.
         if (!preg_match('/^[A-Za-z0-9_-]+$/', $slug)) {
             throw new \RuntimeException("Invalid tenant slug for directory creation: {$slug}");
         }
-        $dir = dirname(__DIR__, 2) . '/storage/uploads/' . $slug;
-        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
-            throw new \RuntimeException("Failed to create upload directory: {$dir}");
+        $base = dirname(__DIR__, 2) . '/clients/' . $slug;
+        foreach (['assets', 'logs', 'mail', 'contracts'] as $sub) {
+            $dir = $base . '/' . $sub;
+            if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+                throw new \RuntimeException("Failed to create client directory: {$dir}");
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ namespace Panic\Events;
 use Panic\BaseEndpoint;
 use Panic\Request;
 use Panic\Response;
+use Panic\Tenant\TenantContext;
 use function Panic\log_activity;
 use function Panic\slugify;
 
@@ -66,7 +67,19 @@ final class Assets extends BaseEndpoint
         $ext = $allowed[$mime];
         $base = slugify(pathinfo($file['name'], PATHINFO_FILENAME));
         $filename = time() . '-' . bin2hex(random_bytes(4)) . '-' . $base . '.' . $ext;
-        $dir = $this->root . '/public/uploads/events/' . $eventId;
+
+        // Multi-tenant: store under clients/{slug}/assets/events/{id}/
+        //               and expose as /files/assets/events/{id}/{file}.
+        // Single-tenant fallback: public/uploads/events/{id}/ (unchanged behaviour).
+        $ctx = TenantContext::current();
+        if ($ctx !== null) {
+            $dir  = $this->root . '/clients/' . $ctx->tenant['slug'] . '/assets/events/' . $eventId;
+            $path = 'files/assets/events/' . $eventId . '/' . $filename;
+        } else {
+            $dir  = $this->root . '/public/uploads/events/' . $eventId;
+            $path = 'uploads/events/' . $eventId . '/' . $filename;
+        }
+
         if (!is_dir($dir)) {
             mkdir($dir, 0775, true);
         }
@@ -74,7 +87,6 @@ final class Assets extends BaseEndpoint
         if (!move_uploaded_file($file['tmp_name'], $target)) {
             return Response::json(['error' => 'Could not store upload'], 500);
         }
-        $path = 'uploads/events/' . $eventId . '/' . $filename;
         $id = $this->db->insert('INSERT INTO event_assets (event_id, asset_type, title, filename, original_filename, file_path, uploaded_by_user_id, approval_status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
             $eventId, $request->body('asset_type', 'other'), $request->body('title') ?: $file['name'], $filename, $file['name'], $path, $this->userId(), 'needs_review', $request->body('notes')
         ]);
@@ -97,10 +109,26 @@ final class Assets extends BaseEndpoint
         $asset = $this->db->one('SELECT file_path FROM event_assets WHERE id=? AND event_id=?', [$assetId, $eventId]);
         $this->db->run('DELETE FROM event_assets WHERE id=? AND event_id=?', [$assetId, $eventId]);
         if ($asset && !empty($asset['file_path'])) {
-            $file = realpath($this->root . '/public/' . $asset['file_path']);
-            $uploads = realpath($this->root . '/public/uploads');
-            if ($file && $uploads && str_starts_with($file, $uploads) && is_file($file)) {
-                unlink($file);
+            $filePath = (string) $asset['file_path'];
+            if (str_starts_with($filePath, 'files/')) {
+                // Multi-tenant path: clients/{slug}/{relative}
+                $ctx = TenantContext::current();
+                if ($ctx !== null) {
+                    $relative  = substr($filePath, 6); // strip 'files/'
+                    $clientDir = $this->root . '/clients/' . $ctx->tenant['slug'];
+                    $base      = realpath($clientDir);
+                    $file      = realpath($clientDir . '/' . $relative);
+                    if ($file && $base && str_starts_with($file, $base . DIRECTORY_SEPARATOR) && is_file($file)) {
+                        unlink($file);
+                    }
+                }
+            } else {
+                // Legacy single-tenant path: public/uploads/...
+                $file    = realpath($this->root . '/public/' . $filePath);
+                $uploads = realpath($this->root . '/public/uploads');
+                if ($file && $uploads && str_starts_with($file, $uploads) && is_file($file)) {
+                    unlink($file);
+                }
             }
         }
         log_activity($this->db, $eventId, $this->userId(), 'asset deleted', ['asset_id' => $assetId]);

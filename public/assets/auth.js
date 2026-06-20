@@ -74,9 +74,33 @@ class LoginPage extends PanicElement {
       await this.renderTokenLanding(urlToken);
       return;
     }
+    // ── Handed-off email from the central venue picker ─────────────────────
+    // {APP_URL}/login.html?email=<addr> prefills the address and jumps straight
+    // to the password/passkey step, so a user who chose their venue on the
+    // marketing login lands directly on the credential prompt.
+    const presetEmail = (params.get('email') || '').trim().toLowerCase();
+    if (presetEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(presetEmail)) {
+      this.email = presetEmail;
+      this.showEmailStep();
+      await this.continueWithEmail(presetEmail);
+      return;
+    }
+
     this.email = '';
     this.showEmailStep();
     this.startConditionalPasskey();
+  }
+
+  /** Look up an email's sign-in methods and advance to the password/passkey step. */
+  async continueWithEmail(email) {
+    try {
+      const methods = await api('/auth/lookup', { method: 'POST', body: JSON.stringify({ email }) });
+      this.showMethodStep(email, methods);
+    } catch (err) {
+      // Fall back to the editable email step so the user can correct and retry.
+      this.email = email;
+      this.showEmailStep(err?.message || 'Enter your email to continue signing in.');
+    }
   }
 
   /** Step 0: explicit "Continue to your account" interstitial for magic-link URLs. */

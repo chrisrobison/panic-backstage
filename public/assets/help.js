@@ -654,7 +654,7 @@ const HELP_CONTENT = {
     <h2>Assets &amp; flyers</h2>
     <p>Assets are flyers, band photos, logos, social cards, and other files attached to the event.</p>
     <h3>Uploading</h3>
-    <p>Use the form at the bottom of the Assets panel. Give the file a title, pick a type, choose a file (PNG, JPG, GIF, WEBP, or PDF), add notes, and click <em>Upload asset</em>. Uploads go to local disk under <code>storage/uploads/events/&lt;id&gt;</code>.</p>
+    <p>Use the form at the bottom of the Assets panel. Give the file a title, pick a type, choose a file (PNG, JPG, GIF, WEBP, or PDF), add notes, and click <em>Upload asset</em>. Uploads are stored in the per-tenant client directory and served via the <code>/files/</code> URL prefix.</p>
     <h3>Asset types</h3>
     <ul>
       <li><strong>Flyer</strong> — the primary show flyer. The first approved flyer is shown on the public event page and on print packets.</li>
@@ -1138,7 +1138,7 @@ const HELP_CONTENT = {
     <h3>How do I delete an event?</h3>
     <p>Events are not deleted in the MVP. Move them to <em>canceled</em> instead — they drop off the calendar and active dashboard cards but stay queryable for reporting.</p>
     <h3>Where are uploaded files stored?</h3>
-    <p>Local disk under <code>storage/uploads/events/&lt;event id&gt;</code>. The web server serves them via the <code>public/uploads</code> symlink.</p>
+    <p>Uploaded files are stored in the per-tenant client directory at <code>clients/{tenant-slug}/assets/events/{id}/</code>. They are served over HTTP via the <code>/files/</code> URL prefix, which routes through a PHP gateway that validates tenant ownership before streaming the file.</p>
   `,
 
   troubleshooting: `
