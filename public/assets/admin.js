@@ -725,7 +725,7 @@ class AdminWizardDefaults extends PanicElement {
       if (val !== '') newDefaults[el.name] = val;
     });
     try {
-      const res = await api('/wizard-defaults', { method: 'PUT', body: { defaults: newDefaults } });
+      const res = await api('/wizard-defaults', { method: 'PUT', body: JSON.stringify({ defaults: newDefaults }) });
       this.defaults = res.defaults || newDefaults;
       publish('toast.show', { message: 'Wizard defaults saved.' });
     } catch (err) {
