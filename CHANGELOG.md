@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `messages` — Add missing CSS so inbox/archive/sent messages are visible
 - **Added** `messages` — System welcome message in every staff inbox
 - **Documentation** — Bring README up to date with multi-tenant SaaS, JWT auth, and Messages
 - **Added** `messages

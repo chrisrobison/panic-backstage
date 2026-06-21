@@ -46,7 +46,10 @@ pb-promote-broadcast-modal,
 pb-promote-assets-card,
 pb-promote-analytics-card,
 pb-promote-settings,
-pb-outbox-page {
+pb-outbox-page,
+pb-messages-inbox,
+pb-messages-archive,
+pb-messages-sent {
   display: block;
 }
 body {
@@ -3444,7 +3447,10 @@ button.promote-accent:hover,
   flex-direction: column;
 }
 
-pb-outbox-page {
+pb-outbox-page,
+pb-messages-inbox,
+pb-messages-archive,
+pb-messages-sent {
   flex: 1 1 0;
   min-height: 0;
   display: flex;
@@ -3641,7 +3647,10 @@ pb-outbox-page.detail-open .outbox-detail-pane {
   #app.workspace-outbox {
     overflow: visible !important;
   }
-  pb-outbox-page {
+  pb-outbox-page,
+  pb-messages-inbox,
+  pb-messages-archive,
+  pb-messages-sent {
     flex: none;
     display: block;
   }
@@ -3652,7 +3661,10 @@ pb-outbox-page.detail-open .outbox-detail-pane {
   .outbox-search-label { width: 100%; }
   .outbox-body { display: block; }
   .outbox-table-pane { max-height: 52vh; overflow-y: auto; }
-  pb-outbox-page.detail-open .outbox-detail-pane {
+  pb-outbox-page.detail-open .outbox-detail-pane,
+  pb-messages-inbox.detail-open .outbox-detail-pane,
+  pb-messages-archive.detail-open .outbox-detail-pane,
+  pb-messages-sent.detail-open .outbox-detail-pane {
     max-height: 55vh;
   }
   .outbox-detail-head { padding: 10px 14px; }
