@@ -4131,3 +4131,98 @@ pb-admin-wizard-defaults { display: block; }
   .wd-header { flex-direction: column; }
   .wd-save   { width: 100%; justify-content: center; }
 }
+
+/* ── Messages: nav badge, unread markers, compose modal ───────────────────── */
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+.nav-parent .nav-badge { margin-left: auto; }
+.nav-parent .nav-badge + .nav-chevron { margin-left: 8px; }
+.nav-children a .nav-badge { margin-left: auto; }
+.nav-children a.active .nav-badge { background: #fff; color: var(--red); }
+
+/* Unread row emphasis in the Inbox list */
+.outbox-row.msg-unread .outbox-subject,
+.outbox-row.msg-unread .outbox-to { font-weight: 800; }
+.msg-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--red);
+  vertical-align: middle;
+}
+.msg-compose-btn { white-space: nowrap; }
+
+/* Compose modal (appended to <body>; light theme) */
+.msg-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0,0,0,.45);
+}
+.msg-modal {
+  width: min(560px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.msg-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.msg-modal-head h2 { margin: 0; font-size: 18px; }
+.msg-modal-close {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--muted);
+}
+.msg-modal-form { display: grid; gap: 14px; padding: 20px; }
+.msg-modal-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-dim);
+}
+.msg-modal-form select,
+.msg-modal-form input,
+.msg-modal-form textarea {
+  font: inherit;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.msg-modal-form textarea { resize: vertical; min-height: 120px; }
+.msg-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
