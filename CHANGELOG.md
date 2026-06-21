@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** — Bring README up to date with multi-tenant SaaS, JWT auth, and Messages
 - **Added** `messages
 Inbox / Archive / Outbox` — In-app staff messaging (Inbox / Archive / Outbox)
 - **Fixed** `routing` — Route /t/{token} ticket-view URLs to PHP kernel

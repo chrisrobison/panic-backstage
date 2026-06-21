@@ -7,10 +7,11 @@ The app is intentionally boring to run:
 - PHP 8, served from `public/`
 - no Composer runtime dependencies
 - no npm, bundler, or frontend build step
-- MySQL with native PDO prepared statements
-- native PHP sessions, password hashing, CSRF tokens, and file uploads
+- MySQL with native PDO prepared statements (one database, or one database per tenant in SaaS mode)
+- stateless JWT auth (HS256, no library) with magic-link and passkey/WebAuthn sign-in — no server-side sessions in the tenant apps
 - static HTML/CSS/native Web Components that call JSON endpoints under `/api`
 - LARC/PAN loaded from a pinned CDN module for component coordination
+- optional multi-tenant SaaS mode: per-venue database + hostname, resolved per request (off by default — see [Multi-Tenant / SaaS Mode](#multi-tenant--saas-mode))
 
 ## Current Architecture
 
@@ -50,7 +51,9 @@ GET    /api/promote/credentials               -> src/Promote/Credentials.php
 POST/DELETE /api/promote/credentials[/{id}]
 ```
 
-Each endpoint receives a `Request`, returns a `Response`, and uses shared services such as `Database` and `Auth`.
+Each endpoint receives a `Request`, returns a `Response`, and uses shared services such as `Database` and `Auth`. Most endpoints extend `BaseEndpoint`, which centralises the current-user lookup and the role/capability checks.
+
+The single entrypoint `public/api/index.php` runs in one of two modes decided purely by environment: **single-tenant** (default — one `DB_*` database) or **multi-tenant SaaS** (active when `SUPER_DB_NAME` is set — the tenant database is resolved from the request hostname and injected into `Database`, leaving every endpoint class unchanged). See [Multi-Tenant / SaaS Mode](#multi-tenant--saas-mode).
 
 ## Project Layout
 
@@ -71,17 +74,34 @@ public/
 src/
   bootstrap.php           Autoloader and shared function include
   Kernel.php              API path resolver and request dispatch
+  BaseEndpoint.php        Shared endpoint base: current user + role/capability checks
   Request.php             HTTP request wrapper
   Response.php            JSON response wrapper
-  Database.php            PDO wrapper
-  Auth.php                Native session auth and CSRF
+  Database.php            PDO wrapper (single-tenant DB_*, or an injected tenant PDO)
+  Auth.php                Stateless JWT auth (HS256) — Bearer tokens, magic links, refresh tokens
+  Webauthn.php            Passkey / WebAuthn registration + login
+  Identity.php            Email → user resolution across primary + verified aliases
   Support.php             Small helper functions
   Dashboard.php
   Events.php
   Templates.php
   PublicEvents.php
   Invites.php
+  Messages.php            In-app staff messaging (Inbox / Archive / Outbox)
+  Outbox.php              Admin log of every transactional email sent (manage_users)
+  StaffMembers.php        Venue staff roster
+  NotificationPreferences.php  Per-user email/notification opt-ins
+  Mailer.php              Sendmail/MIME mailer; mirrors staff email into the inbox
+  WizardDefaults.php      Admin-configurable event-wizard defaults
+  Contracts.php / Contract*.php  Deal builder, clause library, rendering, e-signature
   Promote.php             Campaign CRUD top-level endpoint
+  Tenant/
+    TenantContext.php     Resolve HTTP_HOST → tenant row + tenant PDO (SaaS)
+    TenantProvisioner.php Create tenant DB, apply tenant migrations, make clients/<slug>/
+  Database/
+    Connection.php        SUPER/TENANT/PROVISION PDO factory (SaaS credential tiers)
+  Http/
+    SuperController.php    Super-admin console: tenant fleet + domains (/super, /api/super)
   Events/
     Tasks.php
     Blockers.php
@@ -109,17 +129,21 @@ src/
       TikTokAdapter.php     TikTok Content Posting API v2
 
 database/
-  schema.sql              Canonical full schema (single source of truth)
-  migrations/             Incremental changes applied on top of the baseline
+  schema.sql              Single-tenant baseline schema
+  migrations/             Single-tenant incremental changes (NNN_*.sql)
+  migrations/super/       Super-admin registry schema (tenants, tenant_domains)
+  migrations/tenant/      Per-tenant schema — the baseline for every tenant DB
   seed.php
 
 scripts/
-  migrate.php             Migration runner (records applied files)
+  migrate.php             Scope-aware migration runner (single / super / tenant / tenants)
 
-storage/
+storage/                  Single-tenant data root (uploads, mail, logs)
   uploads/events/
 
-.env.example              Environment variable template
+clients/                  SaaS per-tenant data roots: clients/<slug>/{assets,logs,mail,contracts}
+
+.env.example              Environment variable template (single-tenant + SaaS)
 ```
 
 ## Requirements
@@ -200,6 +224,15 @@ pending migrations, and re-running only applies what is new. Write migrations
 to be safe to re-run (`IF [NOT] EXISTS`, guarded `ALTER`s), since MySQL
 auto-commits DDL and a half-failed migration cannot be rolled back.
 
+The command above targets the single-tenant `DB_*` database. Multi-tenant
+deployments add two more migration scopes — `database/migrations/super/` (the
+super-admin registry) and `database/migrations/tenant/` (the baseline applied to
+every tenant database) — run with `migrate.php super`, `tenant <db>`, and
+`tenants`. See [Multi-Tenant / SaaS Mode](#multi-tenant--saas-mode). Note that
+some newer tables (outbox, messages, wizard defaults, contract signatures,
+notification preferences) currently live only as migrations on top of
+`schema.sql`, not yet folded into the single-tenant baseline.
+
 When the migration list grows long, fold it back into the baseline: dump a
 fully-migrated database's structure over `database/schema.sql` and clear
 `database/migrations/`. Regenerate with:
@@ -226,6 +259,96 @@ php scripts/import-fanview.php [path/to/export.csv]   # defaults to database/fan
 The importer keys on the provider's User ID, so re-running UPSERTs instead of
 duplicating. The raw export contains real customer PII and is **git-ignored**
 (`database/fanview.csv`) — keep it local; never commit it.
+
+## Multi-Tenant / SaaS Mode
+
+Panic Backstage runs in one of two modes, chosen entirely by environment
+configuration. **Single-tenant** is the default and original behaviour: one
+database configured via the `DB_*` vars (everything above this section assumes
+it). **Multi-tenant (SaaS)** mode activates the moment `SUPER_DB_NAME` is set —
+each venue ("tenant") gets its own database and its own hostname, resolved per
+request. Stand-alone installs are unaffected: with `SUPER_DB_NAME` blank the
+`DB_*` path is taken and nothing in this section applies.
+
+### How a request is routed (SaaS)
+
+`public/api/index.php` is the single entrypoint. When `SUPER_DB_NAME` is set:
+
+1. `/super` and `/api/super/*` are handled first by `Panic\Http\SuperController`
+   (the super-admin console) **before** any tenant is resolved, so they work
+   from any allowed host — or a dedicated `SUPER_HOST` — without a tenant DB.
+2. `GET /health` returns `{"ok":true}` without touching a tenant DB.
+3. Every other request is resolved to a tenant by
+   `Panic\Tenant\TenantContext::resolve()`: it reads `HTTP_HOST` (or
+   `X-Forwarded-Host` when `TRUST_PROXY=true`), validates it against
+   `ALLOWED_HOSTS` (supports `*.example.com` wildcard prefixes), and looks it up
+   in the super registry (`tenant_domains JOIN tenants WHERE domain = ? AND
+   status = 'active'`). An unrecognised host returns a branded "nothing here
+   yet" page (JSON for API clients); a host with no active tenant returns 404.
+4. The resolved tenant's PDO is injected into `Panic\Database`, and `APP_URL` is
+   rewritten to the matched tenant domain so email links, scanner URLs, and
+   WebAuthn origins all point at the correct host. Every endpoint class then
+   runs unchanged against the tenant's database.
+
+`TenantContext::current()` exposes the resolved context app-wide, and
+`TenantContext::clientDir()` returns the per-tenant data root —
+`clients/<slug>/` in SaaS, `storage/` single-tenant — used by the mailer, asset
+storage, contract PDFs, and logs.
+
+### Database credential tiers
+
+SaaS mode uses three credential sets (`src/Database/Connection.php`) so the
+runtime app user never holds DDL privileges:
+
+| Prefix | Used for | Falls back to |
+|---|---|---|
+| `SUPER_DB_*` | super-admin registry (`tenants`, `tenant_domains`) | — |
+| `TENANT_DB_*` | per-tenant runtime queries (SELECT/INSERT/UPDATE/DELETE) | `SUPER_DB_*` |
+| `PROVISION_DB_*` | elevated DDL (CREATE DATABASE / TABLE) for provisioning + migrations | `SUPER_DB_*` |
+
+All SaaS variables — plus `ALLOWED_HOSTS`, `TRUST_PROXY`, and `SUPER_HOST` — are
+documented in `.env.example`.
+
+### Super-admin console
+
+`Panic\Http\SuperController` serves both a small HTML UI (`/super`) and a JSON
+API (`/api/super/*`), authenticated by a super-admin **session cookie**
+(separate from the tenant apps' JWT auth). It manages the tenant fleet:
+
+```text
+GET    /api/super/venues                        public venue directory (login picker)
+POST   /api/super/login | /logout               super-admin session
+GET    /api/super/tenants                        list tenants + domains
+POST   /api/super/tenants                        create + provision a tenant
+GET    /api/super/tenants/{id}                   fetch one
+PATCH  /api/super/tenants/{id}                   update
+POST   /api/super/tenants/{id}/provision         re-provision the tenant DB
+POST   /api/super/tenants/{id}/domains           add a domain alias
+DELETE /api/super/tenants/{id}/domains/{domId}   remove a domain alias
+GET    /api/super/me                             current super admin
+```
+
+Creating a tenant runs `Panic\Tenant\TenantProvisioner`: it `CREATE DATABASE`s
+the tenant schema (idempotent), applies every `database/migrations/tenant/*.sql`
+in order, and creates the `clients/<slug>/{assets,logs,mail,contracts}` data
+tree — kept outside `public/` so tenant files are never directly web-accessible.
+
+### Migrations across scopes
+
+The runner (`scripts/migrate.php`) is scope-aware; each scope keeps its own
+`schema_migrations` ledger, so every command is idempotent:
+
+```bash
+php scripts/migrate.php                    # single-tenant DB (DB_*) — legacy default
+php scripts/migrate.php super              # super registry  (database/migrations/super/)
+php scripts/migrate.php tenant <database>  # one tenant DB   (database/migrations/tenant/)
+php scripts/migrate.php tenants            # every tenant in the super registry
+php scripts/migrate.php status [super | tenant <database> | tenants]
+```
+
+After adding a tenant-scoped migration, run `php scripts/migrate.php tenants` to
+roll it out to every existing venue; newly provisioned tenants pick it up
+automatically.
 
 ## Running Locally
 
@@ -398,14 +521,21 @@ templates**.
 Transactional email is handled by `src/Mailer.php`. It builds an RFC 5322
 message and pipes it to the system `/usr/sbin/sendmail` interface (the
 sendmail-compatible front end to the host MTA, e.g. Exim). Every message is
-also written to `storage/mail/*.eml` for local inspection, and any delivery
-failure is appended to `storage/mail/_delivery-errors.log` rather than thrown,
-so a mail problem never breaks an auth or invite flow.
+also written to `*.eml` for local inspection — `storage/mail/` single-tenant, or
+`clients/<slug>/mail/` in SaaS mode — and any delivery failure is appended to
+`_delivery-errors.log` rather than thrown, so a mail problem never breaks an
+auth or invite flow. Every sent message is also recorded in the `outbox` table
+(the admin **Outbox** / "All Email" view), and emails addressed to a staff user
+are mirrored into that user's in-app [Inbox](#in-app-messaging-messages).
 
 Email is sent for:
 
 - Collaborator invites (with a per-invite resend action).
 - Login / magic links and the admin welcome link.
+- Event status changes, private-event inquiries, and Intake-Complete hand-offs.
+- Contract send / signed / fully-executed / voided notifications.
+- Ticket purchase confirmations and comps.
+- Staff messages composed in the in-app Messages center.
 
 Relevant environment variables:
 
@@ -422,8 +552,40 @@ the invite link without sending, so an admin can copy and share it manually. The
 `POST /api/events/{id}/invites` endpoint mirrors this with a `send_email` flag.
 
 Deliverability to external inboxes depends on the host MTA plus SPF/DKIM/DMARC
-for the sending domain. Inspect `storage/mail/` and the host MTA log to confirm
-a given message was generated and accepted.
+for the sending domain. Inspect `storage/mail/` (or `clients/<slug>/mail/`) and
+the host MTA log to confirm a given message was generated and accepted.
+
+## In-App Messaging (Messages)
+
+The **Messages** nav group gives staff an in-app view of the notifications and
+messages they would otherwise only see by email, reusing the Outbox split-pane
+interface. It has three boxes:
+
+- **Inbox** — messages addressed to you: staff-to-staff messages plus system
+  notifications. Any outgoing email whose recipient matches a staff user account
+  is mirrored here by `Mailer` (pure account-auth templates like `magic-link`
+  and `confirm-email` are excluded). Tracks read/unread state.
+- **Archive** — inbox messages you've filed away.
+- **Outbox** — messages you've sent. Composing or replying creates the message
+  and also emails the recipient.
+
+Backed by the `messages` table (migration `019_messages.sql` single-tenant /
+`tenant/007_messages.sql`). A single row serves two views — `recipient_user_id`
+drives the Inbox, `sender_user_id` drives the Outbox. The frontend lives in
+`public/assets/messages.js`; the shell shows an unread badge on the Inbox link.
+
+```text
+GET    /api/messages?box=inbox|archive|sent     list (?q= &page= &limit=)
+GET    /api/messages/{id}                        one message (marks it read)
+POST   /api/messages                             compose / reply (+ emails the recipient)
+POST   /api/messages/{id}/archive | /unarchive   file / restore
+POST   /api/messages/{id}/read | /unread         toggle read state
+GET    /api/messages/recipients                  addressable users
+GET    /api/messages/unread-count                inbox unread count (nav badge)
+```
+
+The admin **Outbox** (`#outbox`, labelled "All Email", gated by `manage_users`)
+remains the global log of every transactional email the system has sent.
 
 ## Core Workflow
 
