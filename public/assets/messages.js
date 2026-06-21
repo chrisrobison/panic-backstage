@@ -37,6 +37,12 @@ class MessagesPage extends PanicElement {
     this._app = document.getElementById('app');
     if (this._app) this._app.classList.add('workspace-outbox');
 
+    // Restore user's preferred detail-pane height from last session.
+    try {
+      const saved = localStorage.getItem('pb-msg-detail-h');
+      if (saved) this.style.setProperty('--detail-h', saved);
+    } catch { /* storage unavailable */ }
+
     this.renderShell();
     this.load();
   }
@@ -121,6 +127,10 @@ class MessagesPage extends PanicElement {
             <tbody><tr><td colspan="3" class="outbox-empty">Loading…</td></tr></tbody>
           </table>
           <div class="outbox-pager" aria-live="polite"></div>
+        </div>
+
+        <div class="outbox-resize-bar" aria-hidden="true">
+          <span class="outbox-resize-handle">&#xb7;&#xb7;&#xb7;</span>
         </div>
 
         <div class="outbox-detail-pane" aria-label="Message detail" role="region" hidden>
@@ -369,6 +379,39 @@ class MessagesPage extends PanicElement {
       }, 300);
     });
     $('.msg-compose-btn', this)?.addEventListener('click', () => this.openCompose());
+
+    // Drag-to-resize handle between the message list and detail panes.
+    const bar = $('.outbox-resize-bar', this);
+    if (!bar) return;
+    bar.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      bar.setPointerCapture(e.pointerId);
+      this.classList.add('resizing');
+
+      const body = $('.outbox-body', this);
+      const detail = $('.outbox-detail-pane', this);
+      const startY = e.clientY;
+      const startH = detail.offsetHeight;
+
+      const onMove = (ev) => {
+        // Dragging upward (negative delta) expands the detail pane.
+        const delta = startY - ev.clientY;
+        const bodyH = body.offsetHeight;
+        const newH = Math.min(Math.max(startH + delta, 80), bodyH - 60);
+        this.style.setProperty('--detail-h', `${newH}px`);
+      };
+
+      const onUp = () => {
+        bar.removeEventListener('pointermove', onMove);
+        bar.removeEventListener('pointerup', onUp);
+        this.classList.remove('resizing');
+        const h = this.style.getPropertyValue('--detail-h');
+        if (h) try { localStorage.setItem('pb-msg-detail-h', h); } catch { /* storage unavailable */ }
+      };
+
+      bar.addEventListener('pointermove', onMove);
+      bar.addEventListener('pointerup', onUp);
+    });
   }
 }
 

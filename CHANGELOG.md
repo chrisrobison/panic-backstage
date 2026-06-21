@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `messages` — Drag-to-resize divider between message list and detail panes
 - **Fixed** `messages` — Reveal detail pane when a message is opened
 - **Fixed** `messages` — Add missing CSS so inbox/archive/sent messages are visible
 - **Added** `messages` — System welcome message in every staff inbox

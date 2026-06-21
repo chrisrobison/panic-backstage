@@ -3544,6 +3544,48 @@ pb-messages-sent {
 .pager-info   { flex: 1 1 auto; }
 .pager-pages  { font-variant-numeric: tabular-nums; }
 
+/* ── Resize bar (messages components drag-to-resize) ─────────────────────── */
+.outbox-resize-bar {
+  display: none;          /* shown only when .detail-open on parent component */
+  flex-shrink: 0;
+  height: 8px;
+  align-items: center;
+  justify-content: center;
+  cursor: row-resize;
+  background: var(--line);
+  user-select: none;
+  touch-action: none;
+  position: relative;
+  transition: background .15s;
+}
+.detail-open .outbox-resize-bar {
+  display: flex;
+}
+.outbox-resize-bar:hover {
+  background: #c8cfda;
+}
+.outbox-resize-handle {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 44px;
+  height: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 1px;
+  pointer-events: none;
+  transition: border-color .15s, color .15s;
+}
+.outbox-resize-bar:hover .outbox-resize-handle {
+  border-color: #8892a4;
+  color: var(--ink);
+}
+
 /* ── Detail pane ──────────────────────────────────────────────────────────── */
 .outbox-detail-pane {
   flex-shrink: 0;
@@ -3565,6 +3607,25 @@ pb-messages-archive.detail-open .outbox-detail-pane,
 pb-messages-sent.detail-open .outbox-detail-pane {
   max-height: 48vh;
   overflow: hidden;
+}
+
+/* Messages components override max-height with an explicit height variable
+   so the drag-to-resize handle can control the split precisely. */
+pb-messages-inbox .outbox-detail-pane,
+pb-messages-archive .outbox-detail-pane,
+pb-messages-sent .outbox-detail-pane {
+  transition: height .22s ease;
+}
+pb-messages-inbox.detail-open .outbox-detail-pane,
+pb-messages-archive.detail-open .outbox-detail-pane,
+pb-messages-sent.detail-open .outbox-detail-pane {
+  max-height: none;
+  height: var(--detail-h, 48vh);
+}
+pb-messages-inbox.resizing .outbox-detail-pane,
+pb-messages-archive.resizing .outbox-detail-pane,
+pb-messages-sent.resizing .outbox-detail-pane {
+  transition: none;
 }
 
 /* Scrollable inner wrapper */
@@ -3663,11 +3724,13 @@ pb-messages-sent.detail-open .outbox-detail-pane {
   .outbox-search-row { width: 100%; }
   .outbox-search-label { width: 100%; }
   .outbox-body { display: block; }
+  .outbox-resize-bar { display: none !important; }
   .outbox-table-pane { max-height: 52vh; overflow-y: auto; }
   pb-outbox-page.detail-open .outbox-detail-pane,
   pb-messages-inbox.detail-open .outbox-detail-pane,
   pb-messages-archive.detail-open .outbox-detail-pane,
   pb-messages-sent.detail-open .outbox-detail-pane {
+    height: auto;
     max-height: 55vh;
   }
   .outbox-detail-head { padding: 10px 14px; }
