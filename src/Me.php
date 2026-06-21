@@ -9,6 +9,16 @@ final class Me extends BaseEndpoint
     {
         $user = $this->auth->user();
         if ($user) {
+            // Drop the one-time welcome message into this user's inbox on first
+            // load. Idempotent + best-effort, so it covers every account-creation
+            // path without breaking app load if messaging isn't migrated yet.
+            WelcomeMessage::ensureFor(
+                $this->db,
+                (int) $user['id'],
+                $user['name']  ?? null,
+                $user['email'] ?? null
+            );
+
             // Enrich with credential state + UI preferences so the client can
             // decide whether to show the "set up a passkey or password" modal
             // on every load — not just immediately after sign-in.

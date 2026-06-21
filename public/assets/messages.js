@@ -242,7 +242,7 @@ class MessagesPage extends PanicElement {
     const body = $('.outbox-detail-body', this);
     if (body) {
       if (m.body_html) {
-        body.innerHTML = `<iframe class="outbox-email-frame" sandbox="allow-same-origin" title="Message body"></iframe>`;
+        body.innerHTML = `<iframe class="outbox-email-frame" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="Message body"></iframe>`;
         $('iframe', body).srcdoc = m.body_html;
       } else {
         body.innerHTML = `<pre class="outbox-raw-body">${esc(m.body_text || '(no body)')}</pre>`;
