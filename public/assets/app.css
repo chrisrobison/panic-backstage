@@ -3559,7 +3559,10 @@ pb-messages-sent {
 .outbox-detail-pane[hidden] {
   display: none;
 }
-pb-outbox-page.detail-open .outbox-detail-pane {
+pb-outbox-page.detail-open .outbox-detail-pane,
+pb-messages-inbox.detail-open .outbox-detail-pane,
+pb-messages-archive.detail-open .outbox-detail-pane,
+pb-messages-sent.detail-open .outbox-detail-pane {
   max-height: 48vh;
   overflow: hidden;
 }
