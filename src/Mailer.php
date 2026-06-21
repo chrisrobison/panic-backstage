@@ -130,7 +130,7 @@ final class Mailer
 
         $this->writeToFile($to, $message);
         $this->pipeToSendmail($to, $message);
-        $this->logToOutbox($to, $subject, $textBody, $htmlBody, $template);
+        $this->logToOutbox($to, $subject, $textBody, $htmlBody, $template, $inline);
     }
 
     // ─── Message builder ───────────────────────────────────────────────────────
@@ -348,11 +348,22 @@ final class Mailer
     /**
      * Persist the sent message to the outbox table.
      * Failures are silently swallowed so a DB issue never breaks a mail send.
+     *
+     * Inline images are embedded into the outgoing email as MIME parts referenced
+     * by `cid:` URLs, but a browser rendering the stored HTML has no way to resolve
+     * those references — so they appear as broken images in the admin outbox. To
+     * keep the stored copy self-contained, any `cid:` reference whose bytes we hold
+     * is inlined as a `data:` URI before the HTML is persisted.
+     *
+     * @param array<string,string> $inline  Content-ID (bare) => raw image bytes.
      */
-    private function logToOutbox(string $to, string $subject, string $textBody, ?string $htmlBody, ?string $template): void
+    private function logToOutbox(string $to, string $subject, string $textBody, ?string $htmlBody, ?string $template, array $inline = []): void
     {
         if ($this->db === null) {
             return;
+        }
+        if ($htmlBody !== null && $htmlBody !== '' && $inline !== []) {
+            $htmlBody = $this->inlineCidImages($htmlBody, $inline);
         }
         try {
             $this->db->run(
@@ -362,6 +373,44 @@ final class Mailer
         } catch (\Throwable) {
             // Never let outbox failures interrupt mail delivery.
         }
+    }
+
+    /**
+     * Replace `cid:{id}` image references with self-contained `data:` URIs so the
+     * stored HTML renders correctly in the admin outbox (where `cid:` can't resolve).
+     *
+     * @param array<string,string> $inline  Content-ID (bare) => raw image bytes.
+     */
+    private function inlineCidImages(string $html, array $inline): string
+    {
+        foreach ($inline as $cid => $bytes) {
+            if ($bytes === '') {
+                continue;
+            }
+            $mime    = $this->detectImageMime($bytes);
+            $dataUri = 'data:' . $mime . ';base64,' . base64_encode($bytes);
+            // Match cid:{id} with the id optionally wrapped in the surrounding quote.
+            $pattern = '/cid:' . preg_quote($cid, '/') . '/';
+            $html    = preg_replace($pattern, $dataUri, $html);
+        }
+        return $html;
+    }
+
+    /**
+     * Best-effort image MIME sniff from the leading magic bytes; defaults to PNG.
+     */
+    private function detectImageMime(string $bytes): string
+    {
+        if (strncmp($bytes, "\x89PNG\r\n\x1a\n", 8) === 0) {
+            return 'image/png';
+        }
+        if (strncmp($bytes, "\xFF\xD8\xFF", 3) === 0) {
+            return 'image/jpeg';
+        }
+        if (strncmp($bytes, 'GIF8', 4) === 0) {
+            return 'image/gif';
+        }
+        return 'image/png';
     }
 
     private function logError(string $to, int $exit, string $detail): void
