@@ -205,6 +205,18 @@ final class Kernel
             return [Outbox::class, ['outboxId' => $this->intOrNull($segments[1] ?? null)]];
         }
 
+        // Messages — in-app staff messaging (Inbox / Archive / Outbox)
+        //   /api/messages
+        //   /api/messages/recipients | /api/messages/unread-count
+        //   /api/messages/{id}[/archive|/unarchive|/read|/unread]
+        if ($segments[0] === 'messages') {
+            return [Messages::class, [
+                'sub'       => $segments[1] ?? null,
+                'messageId' => $this->intOrNull($segments[1] ?? null),
+                'action'    => $segments[2] ?? null,
+            ]];
+        }
+
         // Wizard defaults — admin-configurable defaults for the event wizard
         if ($segments[0] === 'wizard-defaults') {
             return [WizardDefaults::class, []];

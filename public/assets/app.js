@@ -12,6 +12,7 @@ import './help.js';
 import { HELP_SECTIONS } from './help.js';
 import './promote.js';
 import './outbox.js';
+import './messages.js';
 import './events.js';
 import './event-wizard.js';
 
@@ -37,6 +38,8 @@ class AppShell extends PanicElement {
       }
       this.applyCapabilities();
       this.applyUserPrefs();
+      subscribe('messages.changed', () => this.refreshUnread(), this.abort.signal);
+      this.refreshUnread();
       await this.route();
       this.maybeShowCredentialSetup();
     } catch {
@@ -69,6 +72,14 @@ class AppShell extends PanicElement {
         <a data-nav="dashboard" href="#dashboard" title="Dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
         <a data-nav="contacts" href="#contacts" title="Contacts" data-nav-contacts><i class="fa-solid fa-address-book" aria-hidden="true"></i>Contacts</a>
         <a data-nav="promote" href="#promote" title="Promote"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i>Promote</a>
+        <div class="nav-group" data-group="messages">
+          <button class="nav-parent" type="button" data-group-toggle="messages" aria-expanded="false" title="Messages"><i class="fa-solid fa-envelope" aria-hidden="true"></i><span class="nav-parent-label">Messages</span><span class="nav-badge" data-inbox-badge hidden></span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+          <div class="nav-children">
+            <a data-nav="inbox" href="#inbox" title="Inbox"><i class="fa-solid fa-inbox" aria-hidden="true"></i>Inbox<span class="nav-badge" data-inbox-badge hidden></span></a>
+            <a data-nav="archive" href="#archive" title="Archive"><i class="fa-solid fa-box-archive" aria-hidden="true"></i>Archive</a>
+            <a data-nav="sent" href="#sent" title="Outbox"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i>Outbox</a>
+          </div>
+        </div>
         <div class="nav-group" data-group="events">
           <button class="nav-parent" type="button" data-group-toggle="events" aria-expanded="false" title="Events"><i class="fa-solid fa-ticket" aria-hidden="true"></i><span class="nav-parent-label">Events</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
           <div class="nav-children">
@@ -95,7 +106,7 @@ class AppShell extends PanicElement {
             <a data-nav="admin-templates" href="#admin-templates" title="Admin templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
             <a data-nav="admin-contracts" href="#admin-contracts" title="Contracts"><i class="fa-solid fa-file-signature" aria-hidden="true"></i>Contracts</a>
             <a data-nav="admin-payments" href="#admin-payments" title="Payments"><i class="fa-solid fa-credit-card" aria-hidden="true"></i>Payments</a>
-            <a data-nav="outbox" href="#outbox" title="Outbox"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i>Outbox</a>
+            <a data-nav="outbox" href="#outbox" title="All sent email"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i>All Email</a>
           </div>
         </div>
         ${this.helpNavGroup()}
@@ -334,8 +345,24 @@ class AppShell extends PanicElement {
       return this.mount(outlet, 'pb-help-page', { anchor });
     }
     if (route === 'outbox') return this.mount(outlet, 'pb-outbox-page');
+    if (route === 'inbox') return this.mount(outlet, 'pb-messages-inbox');
+    if (route === 'archive') return this.mount(outlet, 'pb-messages-archive');
+    if (route === 'sent') return this.mount(outlet, 'pb-messages-sent');
     if (route === 'new-event') return this.mount(outlet, 'pb-event-wizard');
     return this.mount(outlet, 'pb-dashboard');
+  }
+
+  // Fetch the inbox unread count and reflect it in the Messages nav badges.
+  // Refreshed on load and whenever a component publishes `messages.changed`.
+  async refreshUnread() {
+    try {
+      const { unread } = await api('/messages/unread-count');
+      const n = Number(unread) || 0;
+      $$('[data-inbox-badge]', this).forEach((badge) => {
+        badge.textContent = n > 99 ? '99+' : String(n);
+        badge.hidden = n === 0;
+      });
+    } catch { /* messaging unavailable — leave badges hidden */ }
   }
 
   mount(outlet, tagName, props = {}) {

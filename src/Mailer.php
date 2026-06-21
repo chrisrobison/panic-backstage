@@ -19,6 +19,14 @@ final class Mailer
 {
     private const SENDMAIL = '/usr/sbin/sendmail';
 
+    /**
+     * Templates that are pure account-auth mechanics (login tokens, address
+     * verification). Their emails are NOT mirrored into the in-app inbox even
+     * when the recipient matches a staff user — the token already lives in the
+     * recipient's email and has no place in a browsable message list.
+     */
+    private const INBOX_TEMPLATE_DENYLIST = ['magic-link', 'confirm-email'];
+
     private string $logDir;
     private string $templateDir;
     private string $fromAddress;
@@ -26,6 +34,8 @@ final class Mailer
     /** @var string[] Extra envelope-only recipients (blind copies). */
     private array $bcc;
     private ?Database $db;
+    /** When true, a sent message is never mirrored into the in-app inbox. */
+    private bool $skipInboxCopy = false;
 
     /**
      * @param Database|null $db  When provided, each sent message is persisted
@@ -64,6 +74,17 @@ final class Mailer
             }
         }
         return $out;
+    }
+
+    /**
+     * Suppress mirroring this mailer's sends into the in-app inbox. Used by the
+     * Messages endpoint, which writes the canonical message row itself and only
+     * uses the mailer to deliver the email copy.
+     */
+    public function skipInboxCopy(): self
+    {
+        $this->skipInboxCopy = true;
+        return $this;
     }
 
     // ─── Public API ────────────────────────────────────────────────────────────
@@ -366,12 +387,60 @@ final class Mailer
             $htmlBody = $this->inlineCidImages($htmlBody, $inline);
         }
         try {
-            $this->db->run(
+            $outboxId = $this->db->insert(
                 'INSERT INTO outbox (to_address, subject, text_body, html_body, template) VALUES (?, ?, ?, ?, ?)',
                 [$to, $subject, $textBody !== '' ? $textBody : null, $htmlBody, $template]
             );
         } catch (\Throwable) {
             // Never let outbox failures interrupt mail delivery.
+            return;
+        }
+
+        $this->mirrorToInbox($to, $subject, $textBody, $htmlBody, $template, $outboxId);
+    }
+
+    /**
+     * Mirror an outgoing email into the in-app inbox when its recipient matches
+     * a staff user account. This is what makes system notifications (scheduling,
+     * status changes, contracts, …) browsable inside the app in addition to
+     * landing in the recipient's email. Auth-only templates are skipped, as are
+     * sends explicitly opted out via skipInboxCopy() (the staff compose path,
+     * which writes its own sender-attributed row).
+     *
+     * Failures are swallowed: a missing messages table (pre-migration) or any
+     * DB issue must never interrupt mail delivery.
+     */
+    private function mirrorToInbox(string $to, string $subject, string $textBody, ?string $htmlBody, ?string $template, int $outboxId): void
+    {
+        if ($this->db === null || $this->skipInboxCopy) {
+            return;
+        }
+        if ($template !== null && in_array($template, self::INBOX_TEMPLATE_DENYLIST, true)) {
+            return;
+        }
+
+        // Accept either a bare address or a "Name <addr>" header form.
+        $email = $to;
+        if (preg_match('/<([^>]+)>/', $to, $m)) {
+            $email = trim($m[1]);
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+
+        try {
+            $user = $this->db->one('SELECT id FROM users WHERE email = ? LIMIT 1', [$email]);
+            if (!$user) {
+                return;
+            }
+            $this->db->run(
+                'INSERT INTO messages
+                    (sender_user_id, recipient_user_id, recipient_email, subject, body_text, body_html, template, outbox_id)
+                 VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)',
+                [(int) $user['id'], $email, $subject, $textBody !== '' ? $textBody : null, $htmlBody, $template, $outboxId]
+            );
+        } catch (\Throwable) {
+            // messages table may not exist yet, or DB hiccup — ignore.
         }
     }
 
