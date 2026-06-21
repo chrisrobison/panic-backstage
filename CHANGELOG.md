@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `outbox` — Inline cid: images as data URIs so they render in admin outbox
 - **Added** `email` — Embed QR codes as MIME inline + attachment for maximum client compatibility
 - **Added** `admin` — Show provider env vars on payments settings page
 - **Added** `admin` — Show provider env vars on payments settings page
