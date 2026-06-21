@@ -27,6 +27,10 @@ RewriteRule ^files/(.+)$ public/files.php?_path=$1 [L,QSA]
 RewriteRule ^$ public/index.html [L]
 RewriteRule ^(assets|uploads)/(.*)$ public/$1/$2 [L]
 RewriteRule ^api(?:/(.*))?$ public/api/index.php [L,QSA]
+# Public ticket-view pretty URLs (/t/{token}) must reach the PHP kernel, not
+# the SPA catch-all below. Mirror the rule in public/.htaccess here so the
+# root-level rewrite engine sees it before falling through to index.html.
+RewriteRule ^t(?:/(.*))?$ public/api/index.php [L,QSA]
 RewriteRule ^(login|event|invite|scanner)\.html$ public/$1.html [L]
 
 RewriteCond %{REQUEST_FILENAME} !-f

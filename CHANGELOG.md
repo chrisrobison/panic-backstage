@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `routing` — Route /t/{token} ticket-view URLs to PHP kernel
 - **Added** `outbox` — Add backfill script to inline cid: images in historical rows
 - **Fixed** `outbox` — Inline cid: images as data URIs so they render in admin outbox
 - **Added** `email` — Embed QR codes as MIME inline + attachment for maximum client compatibility
