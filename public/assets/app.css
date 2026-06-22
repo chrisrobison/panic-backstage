@@ -432,6 +432,65 @@ pb-page-header { display: none; }
 .icon-bubble.green { background: #d9f2e5; color: var(--green); }
 .icon-bubble.blue { background: #dbeafe; color: var(--blue); }
 
+/* ── Onboarding / getting-started checklist ─────────────────────────────── */
+.onboarding-card {
+  padding: 24px;
+  margin-bottom: 28px;
+  border-left: 4px solid var(--blue, #3b82f6);
+}
+.onboarding-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.onboarding-title h2 { margin: 0 0 4px; font-size: 18px; }
+.onboarding-title p  { margin: 0; }
+.onboarding-progress {
+  height: 6px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.onboarding-progress-bar {
+  height: 100%;
+  background: var(--blue, #3b82f6);
+  border-radius: 999px;
+  transition: width .4s ease;
+}
+.onboarding-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.onboarding-step {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  transition: background .15s;
+}
+.onboarding-step:hover { background: var(--row-hover, rgba(0,0,0,.03)); }
+.onboarding-check { font-size: 20px; flex-shrink: 0; color: var(--muted); }
+.onboarding-step.is-done .onboarding-check { color: var(--green); }
+.onboarding-step-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.onboarding-step-body strong { font-size: 15px; }
+.onboarding-step-note { font-size: 13px; color: var(--muted); }
+.onboarding-step.is-done .onboarding-step-body strong { text-decoration: line-through; color: var(--muted); }
+/* ── end onboarding ─────────────────────────────────────────────────────── */
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(330px, .9fr);

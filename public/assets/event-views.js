@@ -152,7 +152,7 @@ async function openEventQuickCreate({ date = null } = {}) {
 
 class DashboardView extends PanicElement {
   async connect() {
-    publish('page.context', { title: 'Dashboard', blurb: 'Mabuhay Gardens show operations for the next two weeks.' });
+    publish('page.context', { title: 'Dashboard', blurb: 'Your show operations for the next two weeks.' });
     this.setLoading('Loading dashboard');
     try {
       const [dashboard, events] = await Promise.all([api('/dashboard'), api('/events')]);
@@ -168,20 +168,72 @@ class DashboardView extends PanicElement {
     const today = events[0] || allEvents[0] || {};
     const attention = events.filter((event) => event.primary_blocker || Number(event.open_items) || (!Number(event.approved_flyers) && ['confirmed', 'needs_assets', 'ready_to_announce'].includes(event.status))).slice(0, 4);
     const oldest = dashboard.highlights?.oldest_unsettled;
-    this.innerHTML = `${capabilities.manage_templates ? '<div class="page-head"><a class="button" href="#templates">Create From Template</a></div>' : ''}
-    <section class="metric-grid">
-      <article class="metric-card"><span class="icon-bubble"><i class="fa-solid fa-microphone" aria-hidden="true"></i></span><h3>Next Show<br>${esc(today.title || 'No event')}</h3><p>Doors ${esc(timeLabel(today.doors_time))}<br>Starts ${esc(timeLabel(today.show_time))}</p>${badge(today.status || 'empty')}</article>
-      ${this.metric('!', 'Open Items', dashboard.cards.blockers, `${dashboard.cards.urgentItems || 0} due soon`, 'red')}
-      ${this.metric('', 'Empty / Hold', dashboard.cards.empty, dashboard.highlights?.next_empty_date ? shortDate(eventDate({ date: dashboard.highlights.next_empty_date })) : 'No holds soon', '')}
-      ${this.metric('', 'Needs Flyer', dashboard.cards.needsAssets, `${dashboard.cards.ready || 0} ready to announce`, 'amber')}
-      ${this.metric('$', 'Unsettled', dashboard.cards.unsettled, oldest ? oldest.title : 'All settled', 'red')}
-    </section>
-    <section class="dashboard-grid">
-      <article class="panel"><div class="section-head padded"><h2>Next 14 Days</h2><a class="button secondary small" href="#calendar">Calendar</a></div>${table(events)}</article>
-      <article class="panel"><div class="section-head padded"><h2>Needs Attention</h2><a class="button secondary small" href="#events">All Events</a></div>
-        <div class="attention-list">${attention.length ? attention.map((event) => `<a class="attention-card ${event.primary_blocker ? '' : 'amber'}" href="#event-${esc(event.id)}"><span class="icon-bubble ${event.primary_blocker ? 'red' : 'amber'}">!</span><span><strong>${esc(event.title)}</strong><p>${esc(event.primary_blocker || 'Flyer or publish step needs review')}</p><small>${esc(shortDate(eventDate(event)))}</small></span><span class="arrow"></span></a>`).join('') : emptyState('No urgent items in the demo window.')}</div>
-      </article>
-    </section>`;
+    this.innerHTML = `
+      ${this.onboardingCard(dashboard.onboarding)}
+      ${capabilities.manage_templates ? '<div class="page-head"><a class="button" href="#templates">Create From Template</a></div>' : ''}
+      <section class="metric-grid">
+        <article class="metric-card"><span class="icon-bubble"><i class="fa-solid fa-microphone" aria-hidden="true"></i></span><h3>Next Show<br>${esc(today.title || 'No event')}</h3><p>Doors ${esc(timeLabel(today.doors_time))}<br>Starts ${esc(timeLabel(today.show_time))}</p>${badge(today.status || 'empty')}</article>
+        ${this.metric('!', 'Open Items', dashboard.cards.blockers, `${dashboard.cards.urgentItems || 0} due soon`, 'red')}
+        ${this.metric('', 'Empty / Hold', dashboard.cards.empty, dashboard.highlights?.next_empty_date ? shortDate(eventDate({ date: dashboard.highlights.next_empty_date })) : 'No holds soon', '')}
+        ${this.metric('', 'Needs Flyer', dashboard.cards.needsAssets, `${dashboard.cards.ready || 0} ready to announce`, 'amber')}
+        ${this.metric('$', 'Unsettled', dashboard.cards.unsettled, oldest ? oldest.title : 'All settled', 'red')}
+      </section>
+      <section class="dashboard-grid">
+        <article class="panel"><div class="section-head padded"><h2>Next 14 Days</h2><a class="button secondary small" href="#calendar">Calendar</a></div>${table(events)}</article>
+        <article class="panel"><div class="section-head padded"><h2>Needs Attention</h2><a class="button secondary small" href="#events">All Events</a></div>
+          <div class="attention-list">${attention.length ? attention.map((event) => `<a class="attention-card ${event.primary_blocker ? '' : 'amber'}" href="#event-${esc(event.id)}"><span class="icon-bubble ${event.primary_blocker ? 'red' : 'amber'}">!</span><span><strong>${esc(event.title)}</strong><p>${esc(event.primary_blocker || 'Flyer or publish step needs review')}</p><small>${esc(shortDate(eventDate(event)))}</small></span><span class="arrow"></span></a>`).join('') : emptyState('No urgent items in the next two weeks.')}</div>
+        </article>
+      </section>`;
+
+    // Wire dismiss button after render
+    const dismissBtn = this.querySelector('[data-dismiss-onboarding]');
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', () => this._dismissOnboarding());
+    }
+  }
+
+  onboardingCard(onboarding) {
+    if (!onboarding) return '';
+    const { steps, completed, total } = onboarding;
+    const allDone = completed === total;
+    const pct = Math.round((completed / total) * 100);
+
+    const stepItems = steps.map((s) => `
+      <li class="onboarding-step${s.done ? ' is-done' : ''}">
+        <span class="onboarding-check" aria-hidden="true">
+          ${s.done ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-regular fa-circle"></i>'}
+        </span>
+        <span class="onboarding-step-body">
+          <strong>${esc(s.label)}</strong>
+          <span class="onboarding-step-note">${esc(s.note)}</span>
+        </span>
+        ${!s.done ? `<a class="button secondary small" href="${esc(s.href)}">Go →</a>` : ''}
+      </li>`).join('');
+
+    return `
+      <article class="panel onboarding-card" aria-label="Getting started checklist">
+        <div class="onboarding-header">
+          <div class="onboarding-title">
+            <h2>${allDone ? '🎉 You\'re all set!' : 'Get started with Backstage'}</h2>
+            <p class="muted">${allDone ? 'Everything is configured. Dismiss this card whenever you\'re ready.' : `${completed} of ${total} steps complete`}</p>
+          </div>
+          <button class="button secondary small" data-dismiss-onboarding type="button" aria-label="Dismiss setup checklist">
+            Dismiss
+          </button>
+        </div>
+        <div class="onboarding-progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
+          <div class="onboarding-progress-bar" style="width:${pct}%"></div>
+        </div>
+        <ul class="onboarding-steps">${stepItems}</ul>
+      </article>`;
+  }
+
+  async _dismissOnboarding() {
+    try {
+      await api('/auth/preferences', { method: 'POST', body: JSON.stringify({ onboarding_dismissed: true }) });
+    } catch { /* best-effort */ }
+    // Remove the card from the DOM immediately without a full re-render
+    this.querySelector('.onboarding-card')?.remove();
   }
 
   metric(symbol, label, value, note, tone) {

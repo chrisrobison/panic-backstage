@@ -35,13 +35,113 @@ final class Dashboard extends BaseEndpoint
             'unsettled' => $this->count("SELECT COUNT(*) c FROM events e LEFT JOIN event_settlements s ON s.event_id = e.id WHERE e.status = 'completed' AND s.id IS NULL AND $scopeSql AND $settlementSql", array_merge($scopeParams, $settlementParams)),
         ];
         return $this->ok([
-            'cards' => $cards,
-            'events' => $events,
+            'cards'      => $cards,
+            'events'     => $events,
             'highlights' => [
                 'next_empty_date' => $nextEmpty['date'] ?? null,
                 'oldest_unsettled' => $oldestUnsettled,
             ],
+            'onboarding' => $this->onboardingChecklist(),
         ]);
+    }
+
+    /**
+     * Build the getting-started checklist for venue_admins.
+     *
+     * Returns null when the checklist should not be shown (non-admin role,
+     * or the current user has dismissed it). Each step has:
+     *   key     — stable identifier used by the frontend
+     *   label   — what the user needs to do
+     *   done    — whether the step is complete (detected from DB state)
+     *   href    — deep-link hash the "Go →" button navigates to
+     *
+     * @return array<string,mixed>|null
+     */
+    private function onboardingChecklist(): ?array
+    {
+        // Only venue_admins see the checklist.
+        if (!$this->isVenueAdmin()) {
+            return null;
+        }
+
+        // Respect the user's dismiss choice.
+        $user = $this->db->one(
+            'SELECT onboarding_dismissed FROM users WHERE id = ? LIMIT 1',
+            [$this->userId()]
+        );
+        if ($user && (bool) $user['onboarding_dismissed']) {
+            return null;
+        }
+
+        $steps = [
+            [
+                'key'   => 'venue_details',
+                'label' => 'Add your venue details',
+                'note'  => 'Name, address and timezone — used in contracts and emails.',
+                'done'  => (bool) $this->db->one(
+                    "SELECT 1 FROM venues WHERE address IS NOT NULL AND address != '' LIMIT 1"
+                ),
+                'href'  => '#admin-venue',
+            ],
+            [
+                'key'   => 'contract_template',
+                'label' => 'Create a contract template',
+                'note'  => 'Build the standard agreement you send every artist.',
+                'done'  => (bool) $this->db->one('SELECT 1 FROM contract_templates LIMIT 1'),
+                'href'  => '#admin-contracts',
+            ],
+            [
+                'key'   => 'payment_processing',
+                'label' => 'Connect payment processing',
+                'note'  => 'Square or Stripe — needed to sell tickets through the app.',
+                'done'  => $this->isPaymentConfigured(),
+                'href'  => '#admin-payments',
+            ],
+            [
+                'key'   => 'staff_member',
+                'label' => 'Invite a staff member',
+                'note'  => 'Add a booker, manager or door person to your team.',
+                'done'  => $this->count('SELECT COUNT(*) c FROM users WHERE status = \'active\'') > 1,
+                'href'  => '#admin-staff',
+            ],
+            [
+                'key'   => 'first_event',
+                'label' => 'Create your first event',
+                'note'  => 'Book a show and walk through the full workflow.',
+                'done'  => (bool) $this->db->one(
+                    "SELECT 1 FROM events WHERE status NOT IN ('empty') LIMIT 1"
+                ),
+                'href'  => '#calendar',
+            ],
+        ];
+
+        $completed = count(array_filter($steps, fn ($s) => $s['done']));
+
+        return [
+            'steps'     => $steps,
+            'completed' => $completed,
+            'total'     => count($steps),
+        ];
+    }
+
+    /**
+     * Detect whether at least one payment provider has been configured.
+     * Checks payment_settings.active_provider against available env credentials.
+     */
+    private function isPaymentConfigured(): bool
+    {
+        $row = $this->db->one('SELECT active_provider, settings_json FROM payment_settings LIMIT 1');
+        if (!$row) {
+            return false;
+        }
+        $provider = (string) ($row['active_provider'] ?? '');
+        $settings = json_decode((string) ($row['settings_json'] ?? '{}'), true) ?: [];
+
+        return match ($provider) {
+            'square'  => !empty($settings['access_token']) || (getenv('SQUARE_ACCESS_TOKEN') !== false && getenv('SQUARE_ACCESS_TOKEN') !== ''),
+            'stripe'  => !empty($settings['secret_key'])   || (getenv('STRIPE_SECRET_KEY')   !== false && getenv('STRIPE_SECRET_KEY')   !== ''),
+            default   => false,
+        };
     }
 
     private function count(string $sql, array $params = []): int

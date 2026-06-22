@@ -809,6 +809,11 @@ final class AuthEndpoint extends BaseEndpoint
             $params[]  = $body['hide_credential_setup_prompt'] ? 1 : 0;
         }
 
+        if (array_key_exists('onboarding_dismissed', $body)) {
+            $updates[] = 'onboarding_dismissed = ?';
+            $params[]  = $body['onboarding_dismissed'] ? 1 : 0;
+        }
+
         if (array_key_exists('default_landing', $body)) {
             $landing = (string) $body['default_landing'];
             if ($landing !== '' && !in_array($landing, self::LANDING_ROUTES, true)) {
