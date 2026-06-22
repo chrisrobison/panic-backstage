@@ -38,6 +38,7 @@ class AppShell extends PanicElement {
       }
       this.applyCapabilities();
       this.applyUserPrefs();
+      this._loadVenueName();
       subscribe('messages.changed', () => this.refreshUnread(), this.abort.signal);
       this.refreshUnread();
       await this.route();
@@ -45,6 +46,16 @@ class AppShell extends PanicElement {
     } catch {
       location.href = appUrl('login.html');
     }
+  }
+
+  /** Fetch the primary venue name from the API and update the sidebar label. */
+  _loadVenueName() {
+    api('/venues').then((data) => {
+      const name = data?.venues?.[0]?.name;
+      if (!name) return;
+      const span = $('[data-venue-label] .venue-name', this);
+      if (span) span.textContent = name;
+    }).catch(() => { /* non-critical — label stays as 'Venue' */ });
   }
 
   /**
@@ -112,7 +123,7 @@ class AppShell extends PanicElement {
         ${this.helpNavGroup()}
       </nav>
       <div class="side-card"><span class="bolt"></span><strong>Good shows.<br><span>No surprises.</span></strong></div>
-      <button class="venue-switch" type="button"><i class="fa-solid fa-building" aria-hidden="true"></i>Mabuhay Gardens</button>
+      <button class="venue-switch" type="button" data-venue-label><i class="fa-solid fa-building" aria-hidden="true"></i><span class="venue-name">Venue</span></button>
       <p class="copyright">&copy; 2026 Panic Backstage</p>
     </aside>
     <header class="topbar">

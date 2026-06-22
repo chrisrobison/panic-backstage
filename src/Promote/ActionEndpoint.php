@@ -22,7 +22,6 @@ use function Panic\log_activity;
 final class ActionEndpoint extends BaseEndpoint
 {
     private const FROM_ADDRESS = 'events@panicbooking.com';
-    private const FROM_NAME    = 'Mabuhay Gardens';
 
     /** Public config fields — safe to expose; no API keys or secrets. */
     private const PUBLIC_CONFIG_FIELDS = [
@@ -156,7 +155,8 @@ final class ActionEndpoint extends BaseEndpoint
             ], 422);
         }
 
-        $fromHeader = self::FROM_NAME . ' <' . self::FROM_ADDRESS . '>';
+        $fromName   = getenv('VENUE_NAME') ?: getenv('MAIL_FROM_NAME') ?: 'Backstage';
+        $fromHeader = $fromName . ' <' . self::FROM_ADDRESS . '>';
         $headers    = implode("\r\n", [
             'From: '         . $fromHeader,
             'Reply-To: '     . $fromHeader,

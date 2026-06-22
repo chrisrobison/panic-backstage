@@ -169,11 +169,12 @@ final class BroadcastAdapters
         }
 
         $privacyLevel = (string) ($config['privacy_level'] ?? 'PUBLIC_TO_EVERYONE');
+        $handle       = (string) ($config['handle']        ?? getenv('VENUE_TIKTOK_HANDLE') ?: '');
         $variant      = $this->fetchVariant((int) $post['id'], 'tiktok');
         $caption      = $variant['body'] ?? (string) ($post['master_text'] ?? $post['title'] ?? '');
         $imageUrl     = $this->resolveImageUrl($post, (int) ($event['id'] ?? 0));
 
-        return (new TikTokAdapter($token, $privacyLevel))
+        return (new TikTokAdapter($token, $privacyLevel, $handle))
             ->dispatch($event, $post, $caption, $imageUrl, $sendMode);
     }
 
@@ -268,8 +269,8 @@ final class BroadcastAdapters
 
         $provider   = (string) ($config['provider'] ?? '');
         $listId     = (string) ($config['list_id'] ?? '');
-        $fromName   = (string) ($config['from_name'] ?? 'Mabuhay Gardens');
-        $fromEmail  = (string) ($config['from_email'] ?? 'hello@mabuhaygardens.com');
+        $fromName   = (string) ($config['from_name'] ?? getenv('VENUE_NAME') ?: getenv('MAIL_FROM_NAME') ?: 'Venue');
+        $fromEmail  = (string) ($config['from_email'] ?? getenv('VENUE_EMAIL') ?: getenv('MAIL_FROM_ADDRESS') ?: 'noreply@localhost');
         $senderId   = (int)    ($config['sender_id'] ?? 0);
 
         if (!$provider) {
@@ -296,7 +297,7 @@ final class BroadcastAdapters
         $bodyText = $variant['body']  ?? (string) ($post['master_text'] ?? '');
 
         if (!$subject) {
-            $subject = 'Upcoming event at Mabuhay Gardens';
+            $subject = 'Upcoming event at ' . (getenv('VENUE_NAME') ?: 'Our Venue');
         }
 
         $scheduledAt = ($sendMode === 'scheduled') ? ($post['scheduled_at'] ?? null) : null;

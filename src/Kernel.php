@@ -268,6 +268,11 @@ final class Kernel
             return [Promote::class, ['eventId' => null]];
         }
 
+        // Venues + resources listing (lightweight; used by the calendar zone map and sidebar)
+        if ($segments[0] === 'venues') {
+            return [Venues::class, []];
+        }
+
         // Events + sub-resources
         if ($segments[0] === 'events') {
             if (($segments[1] ?? '') === 'from-template') {

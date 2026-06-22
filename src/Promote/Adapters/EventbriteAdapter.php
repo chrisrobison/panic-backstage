@@ -154,9 +154,9 @@ final class EventbriteAdapter
     private function buildDescriptionHtml(array $event, array $post): string
     {
         $body      = trim((string) ($post['master_text'] ?? ''));
-        $venue     = (string) ($event['venue_name']  ?? 'Mabuhay Gardens');
-        $city      = (string) ($event['venue_city']  ?? 'San Francisco');
-        $state     = (string) ($event['venue_state'] ?? 'CA');
+        $venue     = (string) ($event['venue_name']  ?? getenv('VENUE_NAME') ?: 'Venue');
+        $city      = (string) ($event['venue_city']  ?? getenv('VENUE_CITY') ?: '');
+        $state     = (string) ($event['venue_state'] ?? getenv('VENUE_STATE') ?: '');
         $age       = (string) ($event['age_restriction'] ?? '');
         $doors     = (string) ($event['doors_time'] ?? '');
         $show      = (string) ($event['show_time']  ?? '');

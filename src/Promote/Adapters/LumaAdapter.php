@@ -137,7 +137,7 @@ final class LumaAdapter
     private function buildDescriptionMd(array $event, array $post): string
     {
         $body      = trim((string) ($post['master_text'] ?? ''));
-        $venue     = (string) ($event['venue_name']     ?? 'Mabuhay Gardens');
+        $venue     = (string) ($event['venue_name']     ?? getenv('VENUE_NAME') ?: 'Venue');
         $city      = (string) ($event['venue_city']     ?? 'San Francisco');
         $state     = (string) ($event['venue_state']    ?? 'CA');
         $age       = (string) ($event['age_restriction'] ?? '');
@@ -197,12 +197,17 @@ final class LumaAdapter
 
         // Fall back to venue name + city
         if ($city) {
-            $prefix = $venueName ?: 'Mabuhay Gardens';
+            $prefix = $venueName ?: getenv('VENUE_NAME') ?: 'Venue';
             return "$prefix, $city" . ($state ? ", $state" : '');
         }
 
-        // Hard-coded fallback — better than nothing
-        return 'Mabuhay Gardens, San Francisco, CA';
+        // Last-resort fallback using configured venue name
+        $fallbackName = getenv('VENUE_NAME') ?: 'Venue';
+        $fallbackCity = getenv('VENUE_CITY') ?: '';
+        $fallbackState = getenv('VENUE_STATE') ?: '';
+        return $fallbackCity
+            ? "$fallbackName, $fallbackCity" . ($fallbackState ? ", $fallbackState" : '')
+            : $fallbackName;
     }
 
     // ── Private: HTTP ─────────────────────────────────────────────────────────

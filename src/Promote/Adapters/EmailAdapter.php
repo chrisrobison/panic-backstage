@@ -83,7 +83,7 @@ final class EmailAdapter
             'settings'   => [
                 'subject_line' => $subject,
                 'title'        => $campaignName,
-                'from_name'    => $this->fromName ?: 'Mabuhay Gardens',
+                'from_name'    => $this->fromName ?: getenv('VENUE_NAME') ?: getenv('MAIL_FROM_NAME') ?: 'Venue',
                 'reply_to'     => $this->fromEmail,
             ],
         ];
@@ -269,7 +269,7 @@ final class EmailAdapter
      */
     private function buildHtml(string $bodyText, array $event, string $provider): string
     {
-        $venueName = htmlspecialchars($event['venue_name'] ?? 'Mabuhay Gardens', ENT_QUOTES | ENT_HTML5);
+        $venueName = htmlspecialchars($event['venue_name'] ?? getenv('VENUE_NAME') ?: 'Venue', ENT_QUOTES | ENT_HTML5);
         $bodyHtml  = nl2br(htmlspecialchars($bodyText, ENT_QUOTES | ENT_HTML5));
 
         $unsub = match ($provider) {

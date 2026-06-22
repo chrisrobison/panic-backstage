@@ -46,6 +46,10 @@ final class Mailer
         // Multi-tenant: write mail copies to clients/{slug}/mail/
         // Single-tenant fallback: storage/mail/ (unchanged behaviour)
         $this->logDir      = \Panic\Tenant\TenantContext::clientDir($root) . '/mail';
+        // Global template directory — always the authoritative source.
+        // Per-client overrides live in clients/{slug}/email-templates/ and
+        // are checked first by resolveTemplate(); only templates a client has
+        // explicitly customised need to be present there.
         $this->templateDir = $root . '/storage/email-templates';
         $this->fromAddress = getenv('MAIL_FROM_ADDRESS') ?: ('noreply@' . (getenv('APP_HOST') ?: 'localhost'));
         $this->fromName    = getenv('MAIL_FROM_NAME') ?: 'Backstage';
@@ -106,13 +110,35 @@ final class Mailer
      *                                      so the images are always embedded regardless of
      *                                      whether the recipient's client loads remote images.
      */
+    /**
+     * Resolve the path to a template file using a client-first cascade:
+     *   1. clients/{slug}/email-templates/{template}.{ext}  — client customisation
+     *   2. storage/email-templates/{template}.{ext}          — global default
+     *
+     * The .html and .txt variants are resolved independently, so a client can
+     * override just the HTML body while the plain-text falls back to the global.
+     * Returns null when neither file exists.
+     */
+    private function resolveTemplate(string $template, string $ext): ?string
+    {
+        // Client-specific override (only present when the template has been customised)
+        $clientDir = dirname($this->logDir);  // …/clients/{slug}
+        $clientFile = $clientDir . '/email-templates/' . $template . '.' . $ext;
+        if (is_file($clientFile)) {
+            return $clientFile;
+        }
+        // Global default
+        $globalFile = $this->templateDir . '/' . $template . '.' . $ext;
+        return is_file($globalFile) ? $globalFile : null;
+    }
+
     public function sendTemplate(string $to, string $subject, string $template, array $vars, array $inline = []): void
     {
-        $htmlFile = "{$this->templateDir}/{$template}.html";
-        $textFile = "{$this->templateDir}/{$template}.txt";
+        $htmlPath = $this->resolveTemplate($template, 'html');
+        $textPath = $this->resolveTemplate($template, 'txt');
 
-        $html = is_file($htmlFile) ? (string) file_get_contents($htmlFile) : null;
-        $text = is_file($textFile) ? (string) file_get_contents($textFile) : '';
+        $html = $htmlPath !== null ? (string) file_get_contents($htmlPath) : null;
+        $text = $textPath !== null ? (string) file_get_contents($textPath) : '';
 
         foreach ($vars as $key => $value) {
             if ($html !== null) {

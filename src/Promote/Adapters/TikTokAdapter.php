@@ -50,6 +50,7 @@ final class TikTokAdapter
     public function __construct(
         private readonly string $accessToken,
         private readonly string $privacyLevel = 'PUBLIC_TO_EVERYONE',
+        private readonly string $handle = '',
     ) {}
 
     /**
@@ -82,7 +83,7 @@ final class TikTokAdapter
             [$status, $itemId] = $this->pollStatus($publishId, $sendMode);
 
             $externalUrl = $itemId
-                ? "https://www.tiktok.com/@mabuhaygardens/video/{$itemId}"
+                ? ('https://www.tiktok.com/' . ($this->handle ? "@{$this->handle}/" : '') . "video/{$itemId}")
                 : null;
 
             return [

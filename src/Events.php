@@ -105,7 +105,7 @@ final class Events extends BaseEndpoint
         return $this->ok([
             'events' => $events,
             'users' => $this->accessibleUsers(),
-            'venues' => $this->db->all('SELECT * FROM venues ORDER BY name'),
+            'venues' => $this->db->all('SELECT * FROM venues ORDER BY sort_order, name'),
             'statuses' => self::STATUSES,
             'types' => self::TYPES,
             'range' => [
@@ -184,7 +184,7 @@ final class Events extends BaseEndpoint
             'settlement' => $settlement,
             'activity' => $this->db->all('SELECT a.*, u.name user_name FROM event_activity_log a LEFT JOIN users u ON u.id = a.user_id WHERE a.event_id = ? ORDER BY a.created_at DESC LIMIT 80', [$id]),
             'users' => $this->assignmentUsersForEvent($id),
-            'venues' => $this->db->all('SELECT * FROM venues ORDER BY name'),
+            'venues' => $this->db->all('SELECT * FROM venues ORDER BY sort_order, name'),
             'taskTemplates' => $this->db->all("SELECT id, name FROM event_templates WHERE checklist_json IS NOT NULL AND checklist_json != '[]' ORDER BY name"),
             'nextAction' => $nextAction,
             'readiness' => $readiness,
@@ -731,17 +731,28 @@ final class Events extends BaseEndpoint
      */
     private function checkRoomConflict(int $venueId, string $date, ?string $doorsTime, ?string $endTime, ?int $excludeId = null): ?Response
     {
-        $venue = $this->db->one('SELECT slug FROM venues WHERE id = ? LIMIT 1', [$venueId]);
-        $slug  = $venue['slug'] ?? '';
+        $venue = $this->db->one('SELECT zone, venue_group FROM venues WHERE id = ? LIMIT 1', [$venueId]);
+        $zone  = $venue['zone']        ?? null;
+        $group = $venue['venue_group'] ?? null;
         $ids   = [$venueId];
-        // "Both rooms" booking conflicts with all floors; a single-floor booking
-        // also conflicts with any "both rooms" event on the same day.
-        if ($slug === 'mabuhay-both') {
-            $others = $this->db->all("SELECT id FROM venues WHERE slug IN ('mabuhay-upstairs','mabuhay-gardens')");
-            foreach ($others as $r) { $ids[] = (int) $r['id']; }
-        } elseif (in_array($slug, ['mabuhay-upstairs', 'mabuhay-gardens'], true)) {
-            $both = $this->db->one("SELECT id FROM venues WHERE slug = 'mabuhay-both' LIMIT 1");
-            if ($both) $ids[] = (int) $both['id'];
+        // Generic group conflict: a 'both' (whole-building) booking conflicts
+        // with every specific room in the same group, and a room booking also
+        // conflicts with any whole-building event on the same day.
+        // venue_group and zone are set in the DB (see migration 020_resources.sql).
+        if ($group !== null) {
+            if ($zone === 'both') {
+                $others = $this->db->all(
+                    "SELECT id FROM venues WHERE venue_group = ? AND zone != 'both'",
+                    [$group]
+                );
+                foreach ($others as $r) { $ids[] = (int) $r['id']; }
+            } else {
+                $both = $this->db->one(
+                    "SELECT id FROM venues WHERE venue_group = ? AND zone = 'both' LIMIT 1",
+                    [$group]
+                );
+                if ($both) { $ids[] = (int) $both['id']; }
+            }
         }
         $ph   = implode(',', array_fill(0, count($ids), '?'));
         $args = array_values(array_map('intval', $ids));
@@ -918,7 +929,7 @@ final class Events extends BaseEndpoint
                     'status_color'    => $statusColor,
                     'event_date'      => htmlspecialchars((string) $event['date'],                                  ENT_QUOTES, 'UTF-8'),
                     'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
-                    'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'),     ENT_QUOTES, 'UTF-8'),
+                    'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? getenv('VENUE_NAME') ?: 'Venue'),     ENT_QUOTES, 'UTF-8'),
                     'promoter_name'   => htmlspecialchars((string) ($event['promoter_name'] ?? '—'),               ENT_QUOTES, 'UTF-8'),
                     'booker_name'     => $isPrivate
                         ? 'N/A (private event)'
@@ -945,14 +956,14 @@ final class Events extends BaseEndpoint
                     'status_color'    => '#16a34a',
                     'event_date'      => htmlspecialchars((string) $event['date'],                              ENT_QUOTES, 'UTF-8'),
                     'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
-                    'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),
+                    'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? getenv('VENUE_NAME') ?: 'Venue'), ENT_QUOTES, 'UTF-8'),
                     'promoter_name'   => htmlspecialchars((string) ($event['promoter_name'] ?? 'You'),         ENT_QUOTES, 'UTF-8'),
-                    'booker_name'     => 'Mabuhay Gardens',
+                    'booker_name'     => getenv('VENUE_NAME') ?: 'Venue',
                     'event_admin_url' => htmlspecialchars($link,                                                ENT_QUOTES, 'UTF-8'),
                 ];
                 $mailer->sendTemplate(
                     $event['promoter_email'],
-                    "[Mabuhay Gardens] Your event is confirmed: {$event['title']}",
+                    '[' . (getenv('VENUE_NAME') ?: 'Backstage') . "] Your event is confirmed: {$event['title']}",
                     'status-changed',
                     $clientVars
                 );
@@ -964,7 +975,7 @@ final class Events extends BaseEndpoint
                     'event_name'      => htmlspecialchars((string) $event['title'],                             ENT_QUOTES, 'UTF-8'),
                     'event_date'      => htmlspecialchars((string) $event['date'],                              ENT_QUOTES, 'UTF-8'),
                     'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
-                    'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),
+                    'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? getenv('VENUE_NAME') ?: 'Venue'), ENT_QUOTES, 'UTF-8'),
                     'event_admin_url' => htmlspecialchars($link,                                                ENT_QUOTES, 'UTF-8'),
                 ];
                 $externalRecipients = array_filter([
@@ -975,7 +986,7 @@ final class Events extends BaseEndpoint
                     if (!filter_var($recipient['email'], FILTER_VALIDATE_EMAIL)) continue;
                     $mailer->sendTemplate(
                         $recipient['email'],
-                        "[Mabuhay Gardens] Promo materials needed: {$event['title']}",
+                        '[' . (getenv('VENUE_NAME') ?: 'Backstage') . "] Promo materials needed: {$event['title']}",
                         'needs-assets',
                         $assetsVars + ['recipient_name' => htmlspecialchars((string) $recipient['name'], ENT_QUOTES, 'UTF-8')]
                     );
@@ -1022,7 +1033,7 @@ final class Events extends BaseEndpoint
                 'event_name'       => htmlspecialchars((string) $event['title'],                       ENT_QUOTES, 'UTF-8'),
                 'event_date'       => htmlspecialchars((string) $event['date'],                        ENT_QUOTES, 'UTF-8'),
                 'event_time'       => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
-                'event_venue'      => htmlspecialchars((string) ($event['venue_name'] ?? 'Mabuhay Gardens'), ENT_QUOTES, 'UTF-8'),
+                'event_venue'      => htmlspecialchars((string) ($event['venue_name'] ?? getenv('VENUE_NAME') ?: 'Venue'), ENT_QUOTES, 'UTF-8'),
                 'client_name'      => htmlspecialchars((string) ($event['promoter_name'] ?? '—'),     ENT_QUOTES, 'UTF-8'),
                 'client_email'     => htmlspecialchars((string) ($event['promoter_email'] ?? '—'),    ENT_QUOTES, 'UTF-8'),
                 'client_phone'     => htmlspecialchars((string) ($event['promoter_phone'] ?? '—'),    ENT_QUOTES, 'UTF-8'),

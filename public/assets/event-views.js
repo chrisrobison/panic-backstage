@@ -7,20 +7,16 @@ import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publ
 // Statuses valid for private events (no public-promo stages).
 const PRIVATE_EVENT_STATUSES = ['empty', 'proposed', 'confirmed', 'booked', 'completed', 'settled', 'canceled'];
 
-// On the calendar a day cell is split by floor: Upstairs sits in the top half,
-// Downstairs in the bottom half, and a whole-building "Both Rooms" booking
-// straddles the divider. The dot colour denotes the venue floor (see legend).
-// Zones are keyed by stable slug; an unrecognised venue falls to downstairs.
-const VENUE_ZONE = {
-  'mabuhay-upstairs': { zone: 'up',   label: 'Upstairs' },
-  'mabuhay-gardens':  { zone: 'down', label: 'Downstairs (21+)' },
-  'mabuhay-both':     { zone: 'both', label: 'Both Rooms' },
-};
+// On the calendar a day cell is split by resource zone: venues with zone='up'
+// render in the top half, zone='down' in the bottom, zone='both' straddles
+// the divider. The zone field is configured in the venues table (see migration
+// 020_resources.sql) so this code contains no hardcoded venue names or slugs.
 function venueZoneMap(venues) {
   const map = new Map();
   (venues || []).forEach((venue) => {
-    const cfg = VENUE_ZONE[venue.slug] || { zone: 'down', label: String(venue.name || 'Venue') };
-    map.set(Number(venue.id), cfg);
+    const zone  = venue.zone  || 'down';
+    const label = venue.name  || 'Venue';
+    map.set(Number(venue.id), { zone, label });
   });
   return map;
 }
@@ -236,17 +232,23 @@ class EventCalendar extends PanicElement {
   }
 
   _legend() {
-    return `<div class="calendar-legend" aria-label="Venue floor colour key">`
-      + `<span class="legend-item"><span class="status-dot room-up"></span>Upstairs</span>`
-      + `<span class="legend-item"><span class="status-dot room-down"></span>Downstairs (21+)</span>`
-      + `<span class="legend-item"><span class="status-dot room-both"></span>Both Rooms</span>`
-      + `</div>`;
+    // Build legend from the actual zones present in the venue list — no hardcoded labels.
+    const seen = new Map();
+    (this._venues || []).forEach((v) => {
+      const zone = v.zone || 'down';
+      if (!seen.has(zone)) seen.set(zone, v.name || 'Venue');
+    });
+    if (!seen.size) return '';
+    const items = [...seen.entries()]
+      .map(([zone, label]) => `<span class="legend-item"><span class="status-dot ${roomTone(zone)}"></span>${esc(label)}</span>`)
+      .join('');
+    return `<div class="calendar-legend" aria-label="Venue resource colour key">${items}</div>`;
   }
 
   // ── Top-level render ──────────────────────────────────────────────────────
 
   render() {
-    publish('page.context', { title: 'Calendar', blurb: `Dynamic booking window for Mabuhay Gardens.${this.canCreate ? ' Click any day to create.' : ''}` });
+    publish('page.context', { title: 'Calendar', blurb: `Booking calendar.${this.canCreate ? ' Click any day to create an event.' : ''}` });
     const monthLabel = this.month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
     this.innerHTML = `<section class="calendar-page">
       <article class="panel calendar-shell">

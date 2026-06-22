@@ -54,7 +54,7 @@ final class CopyGenerator
         $doorsTime   = (string) ($event['doors_time'] ?? '');
         $showTime    = (string) ($event['show_time'] ?? '');
         $ageRestr    = (string) ($event['age_restriction'] ?? '');
-        $venue       = (string) ($event['venue_name'] ?? 'Mabuhay Gardens');
+        $venue       = (string) ($event['venue_name'] ?? getenv('VENUE_NAME') ?: 'Venue');
         $ticketUrl   = $targetUrl ?: (string) ($event['ticket_url'] ?? '');
 
         $dateFormatted  = $eventDate ? date('l, F j, Y', strtotime($eventDate)) : '';
@@ -65,6 +65,18 @@ final class CopyGenerator
         $ticketLine     = $ticketUrl ? "\nTickets: $ticketUrl" : '';
         $shortDesc      = $masterText !== '' ? $masterText : $eventTitle;
 
+        // Build venue hashtags from VENUE_HASHTAGS env var (comma-separated, no #).
+        // Falls back to a generic LiveMusic tag so copy is never blank.
+        $hashtagsRaw  = getenv('VENUE_HASHTAGS') ?: 'LiveMusic';
+        $venueHashtags = implode(' ', array_map(
+            static fn ($t) => '#' . ltrim(trim($t), '#'),
+            array_filter(explode(',', $hashtagsRaw))
+        ));
+        // Press contact email
+        $pressEmail   = getenv('VENUE_PRESS_EMAIL') ?: getenv('VENUE_EMAIL') ?: getenv('MAIL_FROM_ADDRESS') ?: '';
+        // Venue sign-off line for email copy
+        $teamSignoff  = '— The ' . (getenv('VENUE_NAME') ?: 'Venue') . ' Team';
+
         return match ($channel) {
             'instagram' => [
                 'channel'  => 'instagram',
@@ -74,7 +86,7 @@ final class CopyGenerator
                     "$shortDesc\n\n" .
                     "$dateFormatted @ $venue$doorsText$showText$ageText\n\n" .
                     ($ticketUrl ? "Link in bio for tickets 🎟️\n\n" : '') .
-                    "#MabuhayGardens #LiveMusic #SFMusic #BayAreaMusic",
+                    $venueHashtags,
                     2200
                 ),
                 'warnings' => [
@@ -106,7 +118,7 @@ final class CopyGenerator
                 'body'     => $this->trimTo(
                     "$eventTitle 🎶 $dateShort @ $venue" .
                     ($ticketUrl ? " 🎟️ Link in bio" : '') .
-                    " #LiveMusic #MabuhayGardens #SFShows",
+                    " $venueHashtags",
                     2200
                 ),
                 'warnings' => [
@@ -124,7 +136,7 @@ final class CopyGenerator
                     "🎶 $eventTitle | $dateShort @ $venue" .
                     ($ageText ? $ageText : '') .
                     ($ticketUrl ? "\n🎟️ $ticketUrl" : '') .
-                    "\n#LiveMusic #MabuhayGardens #SFMusic",
+                    "\n$venueHashtags",
                     280
                 ),
                 'warnings' => [
@@ -143,7 +155,7 @@ final class CopyGenerator
                     "$shortDesc\n\n" .
                     "$dateFormatted @ $venue$doorsText$showText$ageText" .
                     ($ticketUrl ? "\n\nTickets: $ticketUrl" : '') .
-                    "\n\n#LiveMusic #MabuhayGardens #SFMusic",
+                    "\n\n$venueHashtags",
                     500
                 ),
                 'warnings' => [
@@ -183,7 +195,7 @@ final class CopyGenerator
                     ($ageText ? "Age: $ageRestr\n" : '') .
                     $ticketLine . "\n\n" .
                     "See you there!\n" .
-                    "— The Mabuhay Gardens Team",
+                    $teamSignoff,
                     0  // no hard limit for email
                 ),
                 'warnings' => [
@@ -204,7 +216,7 @@ final class CopyGenerator
                     ($ageText ? "Age: $ageRestr\n" : '') .
                     $ticketLine . "\n\n" .
                     "Hope to see you there!\n" .
-                    "— The Mabuhay Gardens Team",
+                    $teamSignoff,
                     0
                 ),
                 'warnings' => [
@@ -282,7 +294,7 @@ final class CopyGenerator
                 ),
                 'warnings' => [
                     'Resident Advisor is primarily artist-driven — ensure the headlining artist has claimed their RA page.',
-                    'Submit through ra.co/promoters after creating a Promoter account for Mabuhay Gardens.',
+                    'Submit through ra.co/promoters after creating a Promoter account for your venue.',
                     'RA is strongest for electronic music events — effectiveness varies by genre.',
                     'Manual submission: copy this text into the RA event submission form.',
                     'Allow 24–48 hours for RA editorial review before the event goes live.',
@@ -357,7 +369,7 @@ final class CopyGenerator
                     "\n" .
                     "$shortDesc\n" .
                     $ticketLine . "\n\n" .
-                    "Media contact: press@mabuhaygardens.com",
+                    ($pressEmail ? "Media contact: $pressEmail" : ''),
                     0
                 ),
                 'warnings' => [

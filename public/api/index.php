@@ -40,6 +40,16 @@ if ($superDbName !== '') {
     $ctx = Panic\Tenant\TenantContext::resolve();
     Panic\Tenant\TenantContext::setCurrent($ctx);   // make slug available app-wide
 
+    // ── Per-client .env overlay ──────────────────────────────────────────────
+    // Load clients/{slug}/.env on top of the global .env so each tenant can
+    // override VENUE_NAME, MAIL_FROM_*, social credentials, etc. without
+    // touching the shared config. Values here win over the global file.
+    $slug = (string)($ctx->tenant['slug'] ?? '');
+    if ($slug !== '') {
+        Panic\Env::load($root . '/clients/' . $slug . '/.env');
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     // ── Per-tenant APP_URL ───────────────────────────────────────────────────
     // The static .env value is meaningless in SaaS mode — every tenant has its
     // own hostname. Derive scheme (honouring TRUST_PROXY) and use the domain
@@ -61,4 +71,12 @@ if ($superDbName !== '') {
 
 // ── Single-tenant mode (existing behaviour, zero changes) ─────────────────────
 // No SUPER_DB_NAME → connect using DB_* env vars exactly as before.
+// Also try clients/{hostname}/.env as an optional overlay so self-hosted
+// installs can keep base config in .env and override per-domain values below.
+$_stHost = Panic\Tenant\TenantContext::host();
+if ($_stHost !== '') {
+    Panic\Env::load($root . '/clients/' . $_stHost . '/.env');
+}
+unset($_stHost);
+
 Panic\Kernel::boot($root)->handle()->send();
