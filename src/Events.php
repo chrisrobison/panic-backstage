@@ -105,7 +105,7 @@ final class Events extends BaseEndpoint
         return $this->ok([
             'events' => $events,
             'users' => $this->accessibleUsers(),
-            'venues' => $this->db->all('SELECT * FROM venues ORDER BY sort_order, name'),
+            'venues' => $this->db->all('SELECT * FROM venues ORDER BY name'),
             'statuses' => self::STATUSES,
             'types' => self::TYPES,
             'range' => [
@@ -184,7 +184,7 @@ final class Events extends BaseEndpoint
             'settlement' => $settlement,
             'activity' => $this->db->all('SELECT a.*, u.name user_name FROM event_activity_log a LEFT JOIN users u ON u.id = a.user_id WHERE a.event_id = ? ORDER BY a.created_at DESC LIMIT 80', [$id]),
             'users' => $this->assignmentUsersForEvent($id),
-            'venues' => $this->db->all('SELECT * FROM venues ORDER BY sort_order, name'),
+            'venues' => $this->db->all('SELECT * FROM venues ORDER BY name'),
             'taskTemplates' => $this->db->all("SELECT id, name FROM event_templates WHERE checklist_json IS NOT NULL AND checklist_json != '[]' ORDER BY name"),
             'nextAction' => $nextAction,
             'readiness' => $readiness,

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `venues` — Remove sort_order from ORDER BY — column not on venues table
 - **Added** `multitenancy` — De-Mabuhay, resources table, layered .env, template inheritance
 - **Fixed** `calendar` — Use local date parts in isoDate to avoid UTC offset showing wrong day
 - **Fixed** `messages` — Iframe fills detail pane via flexbox — resizes with drag

@@ -18,7 +18,7 @@ final class Venues extends BaseEndpoint
             return $denied;
         }
 
-        $venues    = $this->db->all('SELECT * FROM venues ORDER BY sort_order, name');
+        $venues    = $this->db->all('SELECT * FROM venues ORDER BY name');
         $resources = $this->db->all(
             'SELECT * FROM resources WHERE active = 1 ORDER BY venue_id, sort_order, name'
         );
