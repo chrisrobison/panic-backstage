@@ -36,6 +36,7 @@ class MessagesPage extends PanicElement {
 
     this._app = document.getElementById('app');
     if (this._app) this._app.classList.add('workspace-outbox');
+    publish('page.context', { title: this.boxTitle, blurb: this.boxBlurb });
 
     // Restore user's preferred detail-pane height from last session.
     try {
@@ -101,10 +102,6 @@ class MessagesPage extends PanicElement {
     const personCol = this.isSent ? 'To' : 'From';
     this.innerHTML = `
       <div class="outbox-head">
-        <div class="outbox-title-row">
-          <h1>${esc(this.boxTitle)}</h1>
-          <p class="subtle">${esc(this.boxBlurb)}</p>
-        </div>
         <div class="outbox-search-row">
           <label class="outbox-search-label" aria-label="Search messages">
             <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>

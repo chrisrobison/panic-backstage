@@ -203,14 +203,14 @@ class EventWorkspace extends PanicElement {
     }, this.abort.signal);
   }
 
-  /** Patch the .event-top header elements without re-rendering the workspace. */
+  /** Re-publish the topbar page context and patch the publish button after an in-place event update. */
   _updateHeader(data) {
     const event = data.event;
     const isPrivate = event.event_type === 'private_event';
-    const h1 = $('section.event-top h1', this);
-    if (h1) h1.innerHTML = `${esc(event.title)}${isPrivate ? ' <span class="badge-private" title="Private venue rental">🔒</span>' : ''}`;
-    const subtitle = $('section.event-top p.subtle', this);
-    if (subtitle) subtitle.textContent = `${shortDate(eventDate(event))} at ${event.venue_name}`;
+    publish('page.context', {
+      title: `${event.title}${isPrivate ? ' 🔒' : ''}`,
+      blurb: `${shortDate(eventDate(event))} at ${event.venue_name}`,
+    });
     const publishBtn = $('[data-publish]', this);
     if (publishBtn) publishBtn.textContent = Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page';
   }
@@ -245,11 +245,13 @@ class EventWorkspace extends PanicElement {
         ${toggleableTabs.map(t => `<label class="section-toggle-item"><input type="checkbox" data-section-toggle="${esc(t)}"${prefs[t] !== false ? ' checked' : ''}> ${esc(SECTION_LABELS[t] || titleCase(t))}</label>`).join('')}
       </div>
     </details>`;
+    publish('page.context', {
+      title: `${event.title}${isPrivate ? ' 🔒' : ''}`,
+      blurb: `${shortDate(eventDate(event))} at ${event.venue_name}`,
+    });
     this.innerHTML = `<section class="event-top">
       <div>
         <a class="back-link" href="#events">&lt;- Back to Events</a>
-        <h1>${esc(event.title)}${isPrivate ? ' <span class="badge-private" title="Private venue rental">🔒</span>' : ''}</h1>
-        <p class="subtle">${esc(shortDate(eventDate(event)))} at ${esc(event.venue_name)}</p>
       </div>
       <div class="event-actions">
         ${isPrivate ? '' : `<a class="button promote-accent" href="#promote-event-${esc(String(event.id))}"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Promote</a>`}

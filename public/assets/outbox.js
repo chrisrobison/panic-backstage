@@ -1,4 +1,4 @@
-import { esc, api, PanicElement, $, $$ } from './core.js';
+import { esc, api, publish, PanicElement, $, $$ } from './core.js';
 
 // ── Outbox page ───────────────────────────────────────────────────────────────
 // Browsable list of every transactional email the system has sent.
@@ -42,6 +42,7 @@ class OutboxPage extends PanicElement {
     // Remove workspace padding so our split-pane can fill edge-to-edge.
     this._app = document.getElementById('app');
     if (this._app) this._app.classList.add('workspace-outbox');
+    publish('page.context', { title: 'Outbox', blurb: 'All outgoing transactional email sent by this system.' });
 
     this.renderShell();
     this.load();
@@ -102,10 +103,6 @@ class OutboxPage extends PanicElement {
   renderShell() {
     this.innerHTML = `
       <div class="outbox-head">
-        <div class="outbox-title-row">
-          <h1>Outbox</h1>
-          <p class="subtle">All outgoing transactional email sent by this system.</p>
-        </div>
         <div class="outbox-search-row">
           <label class="outbox-search-label" aria-label="Search messages">
             <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>

@@ -173,14 +173,8 @@ class PromoteCampaignList extends PanicElement {
   }
 
   render(events) {
-    this.innerHTML = `<section class="page-head">
-      <div>
-        <h1><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Panic Promote</h1>
-        <a class="button ghost small" href="#help-promote-overview" title="Promote help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i> Help</a>
-        <p class="subtle">Promotion command center &mdash; turn upcoming shows into coordinated promotions.</p>
-      </div>
-    </section>
-    <div class="promote-campaign-grid" data-campaign-grid>
+    publish('page.context', { title: 'Panic Promote', blurb: 'Promotion command center — turn upcoming shows into coordinated promotions.' });
+    this.innerHTML = `<div class="promote-campaign-grid" data-campaign-grid>
       ${events.length ? events.map((e) => this.eventCard(e)).join('') : `<div class="panel padded"><p class="muted">No upcoming events found. Add events to get started.</p></div>`}
     </div>`;
 
@@ -286,12 +280,12 @@ class PromoteCampaignOverview extends PanicElement {
     const s = settings || {};
     const eventDate = e.date ? new Date(`${e.date}T12:00:00`) : null;
 
+    publish('page.context', {
+      title: e.title || 'Promote',
+      blurb: `${e.venue_name || ''}${e.venue_city ? ` — ${e.venue_city}` : ''}`,
+    });
     this.innerHTML = `<section class="page-head">
-      <div>
-        <nav class="promote-breadcrumb"><a href="#promote">&larr; Promote</a></nav>
-        <h1 class="promote-overview-title">${esc(e.title || '')}</h1>
-        <p class="subtle">${esc(e.venue_name || '')}${e.venue_city ? ` &mdash; ${esc(e.venue_city)}` : ''}</p>
-      </div>
+      <nav class="promote-breadcrumb"><a href="#promote">&larr; Promote</a></nav>
       <div class="promote-head-actions">
         <button class="primary" data-new-post><i class="fa-solid fa-plus" aria-hidden="true"></i> New Post</button>
         <button class="primary promote-broadcast-btn" data-broadcast-all><i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> Broadcast</button>

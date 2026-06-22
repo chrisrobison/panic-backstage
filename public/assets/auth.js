@@ -573,6 +573,7 @@ function renderCredentialSetupBody(user, isRefresh = false) {
 
 class AccountSettings extends PanicElement {
   async connect() {
+    publish('page.context', { title: 'Account Settings', blurb: 'Manage your profile and login methods.' });
     this.setLoading('Loading account settings');
     try {
       const [data, me] = await Promise.all([
@@ -594,10 +595,7 @@ class AccountSettings extends PanicElement {
 
   render() {
     const passkeySupported = Boolean(window.PublicKeyCredential);
-    this.innerHTML = `<section class="page-head">
-      <div><h1>Account Settings</h1><p class="subtle">Manage your profile and login methods.</p></div>
-    </section>
-    <div class="panel padded" style="max-width: 560px">
+    this.innerHTML = `<div class="panel padded" style="max-width: 560px">
 
       <div class="account-section">
         <h2>Profile</h2>
@@ -750,6 +748,7 @@ const LANDING_OPTIONS = [
 
 class Preferences extends PanicElement {
   async connect() {
+    publish('page.context', { title: 'Preferences', blurb: 'Tune how Backstage looks and behaves for your account.' });
     this.setLoading('Loading preferences');
     try {
       let user = getAppUser();
@@ -773,10 +772,7 @@ class Preferences extends PanicElement {
   render() {
     const landing = this.prefs.default_landing;
     const sort = this.prefs.events_sort;
-    this.innerHTML = `<section class="page-head">
-      <div><h1>Preferences</h1><p class="subtle">Tune how Backstage looks and behaves for your account.</p></div>
-    </section>
-    <div class="panel padded" style="max-width: 560px">
+    this.innerHTML = `<div class="panel padded" style="max-width: 560px">
 
       <div class="account-section">
         <h2>Landing page</h2>

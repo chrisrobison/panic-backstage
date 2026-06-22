@@ -1,4 +1,4 @@
-import { getRefreshToken, clearTokens, appUrl, setAppUser, publish, subscribe, api, broadcastEventData, refreshSection, table, PanicElement, $, $$ } from './core.js';
+import { getRefreshToken, clearTokens, appUrl, setAppUser, esc, publish, subscribe, api, broadcastEventData, refreshSection, table, PanicElement, $, $$ } from './core.js';
 import { openCredentialSetupModal } from './auth.js';
 import './core.js';
 import './print.js';
@@ -119,6 +119,7 @@ class AppShell extends PanicElement {
       <button class="drawer-toggle" data-drawer-open type="button" aria-label="Open navigation menu" aria-expanded="false" title="Menu"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
       <button class="nav-toggle" data-nav-toggle type="button" aria-label="Toggle navigation" aria-expanded="true" title="Toggle navigation"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
       <a class="mobile-brand" href="#dashboard"><span class="brand-mark"></span><span>Panic Backstage</span></a>
+      <pb-page-header></pb-page-header>
       <label class="search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input data-search placeholder="Search events..." aria-label="Search events"></label>
       <button class="topbar-create" data-action="new-event" type="button" title="Create event" aria-label="Create event"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>New event</span></button>
       <span class="session-pill" data-user-pill>…</span>
@@ -366,6 +367,7 @@ class AppShell extends PanicElement {
   }
 
   mount(outlet, tagName, props = {}) {
+    publish('page.context', { title: '', blurb: '' }); // clear topbar header before new page mounts
     const element = document.createElement(tagName);
     Object.assign(element, props);
     outlet.replaceChildren(element);
@@ -376,3 +378,21 @@ class AppShell extends PanicElement {
   }
 }
 customElements.define('pb-app-shell', AppShell);
+
+// ── pb-page-header ────────────────────────────────────────────────────────────
+// Lives inside the topbar. Listens for `page.context` events published by each
+// page component and renders the current page title and blurb compactly.
+class PageHeaderElement extends PanicElement {
+  connect() {
+    this.render('', '');
+    subscribe('page.context', ({ title = '', blurb = '' } = {}) => {
+      this.render(title, blurb);
+    }, this.abort.signal);
+  }
+
+  render(title, blurb) {
+    if (!title) { this.innerHTML = ''; return; }
+    this.innerHTML = `<span class="ph-title">${esc(title)}</span>${blurb ? `<span class="ph-blurb">${esc(blurb)}</span>` : ''}`;
+  }
+}
+customElements.define('pb-page-header', PageHeaderElement);

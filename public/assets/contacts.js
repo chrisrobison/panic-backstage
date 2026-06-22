@@ -17,6 +17,7 @@ const optedBadge = (c) => Number(c.marketing_opted_in)
 class ContactsPage extends PanicElement {
   async connect() {
     this.state = { q: '', opted: '', sort: 'last_name', dir: 'asc', page: 1, limit: 50 };
+    publish('page.context', { title: 'Contacts', blurb: 'Your audience from ticketing — search, segment, and keep details current for event email.' });
     this.setLoading('Loading contacts');
     try {
       this.renderShell(await this.fetch());
@@ -43,7 +44,6 @@ class ContactsPage extends PanicElement {
 
   renderShell(data) {
     this.innerHTML = `<section class="page-head">
-        <div><h1>Contacts ${helpLink('contacts', 'Contacts')}</h1><p class="subtle">Your audience from ticketing &mdash; search, segment, and keep details current for event email.</p></div>
         <button class="button" data-add type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add contact</button>
       </section>
       <section class="contacts-kpis" data-kpis></section>

@@ -156,6 +156,7 @@ async function openEventQuickCreate({ date = null } = {}) {
 
 class DashboardView extends PanicElement {
   async connect() {
+    publish('page.context', { title: 'Dashboard', blurb: 'Mabuhay Gardens show operations for the next two weeks.' });
     this.setLoading('Loading dashboard');
     try {
       const [dashboard, events] = await Promise.all([api('/dashboard'), api('/events')]);
@@ -171,10 +172,7 @@ class DashboardView extends PanicElement {
     const today = events[0] || allEvents[0] || {};
     const attention = events.filter((event) => event.primary_blocker || Number(event.open_items) || (!Number(event.approved_flyers) && ['confirmed', 'needs_assets', 'ready_to_announce'].includes(event.status))).slice(0, 4);
     const oldest = dashboard.highlights?.oldest_unsettled;
-    this.innerHTML = `<section class="page-head">
-      <div><h1>Dashboard</h1><p class="subtle">Mabuhay Gardens show operations for the next two weeks.</p></div>
-      ${capabilities.manage_templates ? '<a class="button" href="#templates">Create From Template</a>' : ''}
-    </section>
+    this.innerHTML = `${capabilities.manage_templates ? '<div class="page-head"><a class="button" href="#templates">Create From Template</a></div>' : ''}
     <section class="metric-grid">
       <article class="metric-card"><span class="icon-bubble"><i class="fa-solid fa-microphone" aria-hidden="true"></i></span><h3>Next Show<br>${esc(today.title || 'No event')}</h3><p>Doors ${esc(timeLabel(today.doors_time))}<br>Starts ${esc(timeLabel(today.show_time))}</p>${badge(today.status || 'empty')}</article>
       ${this.metric('!', 'Open Items', dashboard.cards.blockers, `${dashboard.cards.urgentItems || 0} due soon`, 'red')}
@@ -248,15 +246,10 @@ class EventCalendar extends PanicElement {
   // ── Top-level render ──────────────────────────────────────────────────────
 
   render() {
+    publish('page.context', { title: 'Calendar', blurb: `Dynamic booking window for Mabuhay Gardens.${this.canCreate ? ' Click any day to create.' : ''}` });
     const monthLabel = this.month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
     this.innerHTML = `<section class="calendar-page">
-      <div class="page-head">
-        <div>
-          <h1>Calendar</h1>
-          <p class="subtle">Dynamic booking window for Mabuhay Gardens.${this.canCreate ? ' <span class="muted small">Click any day to create.</span>' : ''}</p>
-        </div>
-        ${this.canCreate ? '<button class="button" data-action="quick-new" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> New event</button>' : ''}
-      </div>
+      ${this.canCreate ? '<div class="page-head"><button class="button" data-action="quick-new" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> New event</button></div>' : ''}
       <article class="panel calendar-shell">
         <div class="calendar-toolbar">
           <div class="calendar-controls">
@@ -501,6 +494,7 @@ class PipelineBoard extends PanicElement {
     this.showAll = false;
     this.start = isoDate(new Date());
     this.end = isoDate(addDays(new Date(), 14));
+    publish('page.context', { title: 'Pipeline', blurb: 'Move events from holds to settlement.' });
     this.setLoading('Loading pipeline');
     try {
       await this.reload();
@@ -542,7 +536,6 @@ class PipelineBoard extends PanicElement {
       <label class="date-field">To <input type="date" data-end value="${esc(this.end)}" ${this.showAll ? 'disabled' : ''}></label>
     </div>`;
     this.innerHTML = `<section class="calendar-page">
-      <div class="page-head"><div><h1>Pipeline</h1><p class="subtle">Move events from holds to settlement.</p></div></div>
       ${controls}
       <section class="pipeline-board">${statuses.filter((s) => !['settled', 'canceled'].includes(s)).map((status) => {
         const items = events.filter((event) => event.status === status);
@@ -576,6 +569,7 @@ class EventsList extends PanicElement {
     this.showPast = false;
     const sortPref = getAppUser()?.events_sort;
     this.sort = { key: 'date', dir: (sortPref === 'asc' || sortPref === 'desc') ? sortPref : 'asc' };
+    publish('page.context', { title: 'Events', blurb: 'Search, open, and advance every show.' });
     subscribe('events.search', ({ query }) => { this.query = query.toLowerCase(); this.render(this.data); }, this.abort.signal);
     this.setLoading('Loading events');
     try {
@@ -606,7 +600,7 @@ class EventsList extends PanicElement {
       .filter((event) => !this.query || String(event.title).toLowerCase().includes(this.query))
       .filter((event) => this.showPast || !event.date || event.date >= cutoff);
     const hiddenPast = all.filter((event) => event.date && event.date < cutoff).length;
-    this.innerHTML = `<div class="page-head"><div><h1>Events</h1><p class="subtle">Search, open, and advance every show.</p></div>${data.capabilities?.manage_templates ? '<a class="button" href="#templates">Create Event</a>' : ''}</div><article class="panel"><div class="list-controls"><label class="checkbox-inline"><input type="checkbox" data-show-past ${this.showPast ? 'checked' : ''}> Show past events${hiddenPast && !this.showPast ? ` <span class="muted">(${hiddenPast} hidden)</span>` : ''}</label></div>${table(events, this.sort)}</article>`;
+    this.innerHTML = `${data.capabilities?.manage_templates ? '<div class="page-head"><a class="button" href="#templates">Create Event</a></div>' : ''}<article class="panel"><div class="list-controls"><label class="checkbox-inline"><input type="checkbox" data-show-past ${this.showPast ? 'checked' : ''}> Show past events${hiddenPast && !this.showPast ? ` <span class="muted">(${hiddenPast} hidden)</span>` : ''}</label></div>${table(events, this.sort)}</article>`;
     $$('[data-sort-key]', this).forEach((button) => button.addEventListener('click', () => this.toggleSort(button.dataset.sortKey)));
     $('[data-show-past]', this)?.addEventListener('change', (event) => { this.showPast = event.target.checked; this.render(this.data); });
   }
@@ -615,6 +609,7 @@ class EventsList extends PanicElement {
 
 class TemplatePicker extends PanicElement {
   async connect() {
+    publish('page.context', { title: 'Templates', blurb: 'Start the demo by programming a repeatable Mabuhay night.' });
     this.setLoading('Loading templates');
     try {
       const data = await api('/templates');
@@ -626,7 +621,7 @@ class TemplatePicker extends PanicElement {
 
   render(templates) {
     const tomorrow = isoDate(addDays(new Date(), 14));
-    this.innerHTML = `<div class="page-head"><div><h1>Templates</h1><p class="subtle">Start the demo by programming a repeatable Mabuhay night.</p></div></div>
+    this.innerHTML = `
     <section class="pipeline-board">${templates.map((template) => `<article class="pipe-card template-card">
       <h2>${esc(template.name)}</h2><p>${esc(titleCase(template.event_type))} at ${esc(template.venue_name)}</p>
       <form data-template="${esc(template.id)}" class="grid-form compact">

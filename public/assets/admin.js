@@ -20,14 +20,12 @@ const ADMIN_TABS = [
 class AdminPage extends PanicElement {
   connect() {
     this.tab = ADMIN_TABS.find((t) => t.key === this.initialTab) ? this.initialTab : 'users';
+    publish('page.context', { title: 'Admin', blurb: 'Manage login accounts, the staff roster, event templates, and contract sections.' });
     this.render();
   }
 
   render() {
     this.innerHTML = `
-      <section class="page-head">
-        <div><h1>Admin</h1><p class="subtle">Manage login accounts, the staff roster, event templates, and contract sections.</p></div>
-      </section>
       <nav class="workspace-tabs tabs admin-tabs">
         ${ADMIN_TABS.map((t) => `<a data-admin-tab="${esc(t.key)}" href="#admin-${esc(t.key)}" class="${t.key === this.tab ? 'active' : ''}"><i class="fa-solid ${esc(t.icon)}" aria-hidden="true"></i> ${esc(t.title)}</a>`).join('')}
       </nav>

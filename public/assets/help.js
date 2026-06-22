@@ -1460,9 +1460,9 @@ class HelpPage extends PanicElement {
       return `<section class="help-section" id="help-${esc(item.slug)}">${body}<p class="help-back"><a href="#help-welcome">&uarr; Back to top</a></p></section>`;
     }).join('');
 
+    publish('page.context', { title: 'Backstage Help', blurb: 'How the app works — onboarding, events, lineup, assets, settlement, and everything in between.' });
     this.innerHTML = `
       <section class="page-head">
-        <div><h1>Backstage Help</h1><p class="subtle">How the app works — onboarding, events, lineup, assets, settlement, and everything in between.</p></div>
         <a class="button secondary" href="#dashboard">Back to Dashboard</a>
       </section>
       <div class="help-layout">

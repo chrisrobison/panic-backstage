@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `shell` — Add pb-page-header component — move page titles to topbar
 - **Added** `messages` — Drag-to-resize divider between message list and detail panes
 - **Fixed** `messages` — Reveal detail pane when a message is opened
 - **Fixed** `messages` — Add missing CSS so inbox/archive/sent messages are visible

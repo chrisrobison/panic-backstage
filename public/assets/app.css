@@ -343,6 +343,29 @@ h3 { margin-bottom: 8px; font-size: 15px; }
   font-weight: 760;
   white-space: nowrap;
 }
+
+/* pb-page-header — page title + blurb shown in the topbar on desktop */
+pb-page-header { display: none; }
+.ph-title {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+.ph-blurb {
+  display: block;
+  font-size: 12px;
+  color: rgba(255,255,255,.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
 .workspace { padding: 30px 34px 38px; min-width: 0; }
 .app-footer {
   background: var(--black);
@@ -1537,7 +1560,6 @@ pb-event-summary, pb-event-readiness, pb-event-next-action { display: contents; 
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    margin-right: auto;
     width: 42px;
     height: 42px;
     background: transparent;
@@ -1549,6 +1571,16 @@ pb-event-summary, pb-event-readiness, pb-event-next-action { display: contents; 
     transition: opacity .15s;
   }
   .nav-toggle:hover { opacity: 1; }
+
+  pb-page-header {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    gap: 2px;
+  }
 
   /* Collapsed → icon-only rail. */
   .app-shell.nav-collapsed { grid-template-columns: 84px minmax(0, 1fr); }
