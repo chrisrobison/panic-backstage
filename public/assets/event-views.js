@@ -249,7 +249,6 @@ class EventCalendar extends PanicElement {
     publish('page.context', { title: 'Calendar', blurb: `Dynamic booking window for Mabuhay Gardens.${this.canCreate ? ' Click any day to create.' : ''}` });
     const monthLabel = this.month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
     this.innerHTML = `<section class="calendar-page">
-      ${this.canCreate ? '<div class="page-head"><button class="button" data-action="quick-new" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> New event</button></div>' : ''}
       <article class="panel calendar-shell">
         <div class="calendar-toolbar">
           <div class="calendar-controls">
@@ -270,6 +269,7 @@ class EventCalendar extends PanicElement {
               </button>
             </div>
             <a class="button secondary small" href="#pipeline">Pipeline</a>
+            ${this.canCreate ? '<button class="button small" data-action="quick-new" type="button" title="New event" aria-label="New event"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>' : ''}
           </div>
         </div>
         ${this.viewMode === 'grid' ? this._renderGrid() : this._renderAgenda()}
