@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mabuhay Gardens + Broadway Studios — Operations Manual</title>
+<title>Venue Operations Manual</title>
 <style>
   /* ── Reset & Base ─────────────────────────────────────────────────────────── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -876,7 +876,7 @@
 <nav class="sidebar">
   <div class="sidebar-header">
     <span class="sidebar-logo">Panic Backstage</span>
-    <div class="sidebar-title">Mabuhay Gardens<br>Operations Manual</div>
+    <div class="sidebar-title">Venue<br>Operations Manual</div>
     <div class="sidebar-edition">Staff Edition · June 2026</div>
   </div>
   <nav>
@@ -961,7 +961,7 @@
 
 <!-- Cover -->
 <section id="cover" class="cover">
-  <div class="cover-label">Mabuhay Gardens + Broadway Studios</div>
+  <div class="cover-label">Venue Operations Manual</div>
   <h1>Operations Manual</h1>
   <p class="sub">A plain-English guide to booking shows, running nights, and closing events — written for the people who actually do the work.</p>
   <div class="cover-divider"></div>
@@ -984,7 +984,7 @@
     <p>When you're staring at a field you don't recognize, click the <strong>?</strong> link next to the section heading to open the in-app reference for that area. When you want to understand <em>why</em> something works the way it does, or how all the pieces fit together across a show's lifecycle, that's what this manual is for.</p>
 
     <h2>A note on Panic Backstage</h2>
-    <p>Panic Backstage is the internal management system for Mabuhay Gardens and Broadway Studios. It tracks every show from the moment someone asks "are you free on the 14th?" all the way through settlement and closing the books. It's the single source of truth — what's in Backstage is what's real.</p>
+    <p>Panic Backstage is the internal management system for your venue. It tracks every show from the moment someone asks "are you free on the 14th?" all the way through settlement and closing the books. It's the single source of truth — what's in Backstage is what's real.</p>
     <p>Staff access Backstage through a web browser. Most things you'd want to do during a show (check in guests, scan tickets, look up the run sheet) work fine on a phone.</p>
 
     <div class="callout note">
@@ -1037,9 +1037,9 @@
 
     <p>The calendar color-codes by room:</p>
     <ul>
-      <li><strong>Mabuhay Gardens Downstairs</strong> — orange tones</li>
-      <li><strong>Mabuhay Gardens Upstairs</strong> — blue tones</li>
-      <li><strong>Broadway Studios</strong> — green tones</li>
+      <li><strong>Downstairs</strong> — orange tones</li>
+      <li><strong>Upstairs</strong> — blue tones</li>
+      <li><strong>Additional spaces</strong> — green tones</li>
     </ul>
 
     <div class="callout warn">
@@ -1088,7 +1088,7 @@
       <div class="form-row">
         <div class="mock-field">
           <label>Location <span class="required-star">*</span></label>
-          <div class="mock-input">Mabuhay Gardens — Downstairs</div>
+          <div class="mock-input">Your Venue — Downstairs</div>
         </div>
         <div class="mock-field">
           <label>Event Type <span class="required-star">*</span></label>
@@ -1147,7 +1147,7 @@
           <div style="flex:1; background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:14px 18px;">
             <span style="display:inline-block; background:#d97706; color:#fff; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; padding:2px 8px; border-radius:4px; margin-bottom:6px;">Intake Complete</span>
             <div style="font-weight:700; font-size:0.95rem; margin-bottom:2px;">Details confirmed; contract being built</div>
-            <div style="font-size:0.82rem; color:#6b7280;">Deposit, capacity, ticket price, and age restriction locked in. Colleen drafts the contract.</div>
+            <div style="font-size:0.82rem; color:#6b7280;">Deposit, capacity, ticket price, and age restriction locked in. The venue admin drafts the contract.</div>
           </div>
         </div>
         <div style="display:flex; align-items:center; gap:16px; margin-bottom:2px;">
@@ -1287,7 +1287,7 @@
       </div>
     </div>
 
-    <p>When the status changes to Intake Complete, the system automatically emails Colleen (the venue admin) with a notification so she can begin contract drafting.</p>
+    <p>When the status changes to Intake Complete, the system automatically emails venue admins with a notification so they can begin contract drafting.</p>
 
     <div class="callout tip">
       <span class="callout-title">💡 Load-in time</span>
@@ -1302,7 +1302,7 @@
     <p>When a show reaches Booked:</p>
     <ul>
       <li>The date is locked — the system treats this as a firm commitment</li>
-      <li>Colleen and all venue admins are notified</li>
+      <li>All venue admins are notified</li>
       <li>The event moves from the "pending" part of the pipeline to the "active show" section</li>
       <li>The next step is getting promotional assets from the producer</li>
     </ul>
@@ -1374,7 +1374,7 @@
 
     <h3 id="counterparty">The counterparty</h3>
 
-    <p>Every contract has two parties: the <strong>venue</strong> (Mabuhay Gardens or Broadway Studios) and the <strong>counterparty</strong> — whoever is on the other side of the deal.</p>
+    <p>Every contract has two parties: the <strong>venue</strong> and the <strong>counterparty</strong> — whoever is on the other side of the deal.</p>
 
     <table>
       <tr><th>Scenario</th><th>Counterparty is…</th></tr>
@@ -1544,7 +1544,7 @@
 
     <table>
       <tr><th>When</th><th>Who gets an email</th><th>Why</th></tr>
-      <tr><td>Status → Intake Complete</td><td>Colleen (venue admin)</td><td>Signal to begin contract drafting</td></tr>
+      <tr><td>Status → Intake Complete</td><td>Venue admins</td><td>Signal to begin contract drafting</td></tr>
       <tr><td>Status → Booked</td><td>All venue admins</td><td>Firm booking confirmation</td></tr>
       <tr><td>Status → Needs Assets</td><td>Producer + Booker</td><td>Request for flyers, press photos, social images</td></tr>
       <tr><td>Event date passes</td><td>Settlement team</td><td>Reminder to file settlement (auto-archive notification)</td></tr>
@@ -1567,7 +1567,7 @@
       <li><strong>No promotion</strong> — the Promote, Needs Assets, and Published stages don't exist</li>
       <li><strong>Shorter pipeline</strong> — Hold → Intake Complete → Booked → Archived → Settled</li>
       <li><strong>Different form</strong> — uses Client / Primary Contact fields instead of Producer/Booker</li>
-      <li><strong>Colleen auto-assigned</strong> — she is automatically set as the event owner on creation</li>
+      <li><strong>Venue admin auto-assigned</strong> — a venue admin is automatically set as the event owner on creation</li>
       <li><strong>Visual distinction</strong> — shows a 🔒 lock icon on the calendar chip and event header</li>
     </ul>
 
@@ -1607,7 +1607,7 @@
 
     <div class="callout note">
       <span class="callout-title">💰 Rental pricing</span>
-      <p>For rental pricing guidance, contact Tom Watson at <strong>tom@themab.org</strong>. The approximate ranges are Downstairs ~$2,000/day and Upstairs ~$3,000/day, but actual quotes depend on the event type, duration, and requirements.</p>
+      <p>For rental pricing guidance, contact venue management. The approximate ranges are Downstairs ~$2,000/day and Upstairs ~$3,000/day, but actual quotes depend on the event type, duration, and requirements.</p>
     </div>
 
     <p>When a private event is confirmed (status → Booked), the client automatically receives a "Your event is confirmed" email at the address listed in the Client / Primary Contact field.</p>
@@ -2829,7 +2829,7 @@
             <span>✅ Invite collaborators to events</span>
             <span>✅ Manage contacts (CRM)</span>
           </div>
-          <p style="margin-top:10px; color:var(--muted); font-style:italic;">Typical holders: Colleen (venue manager), Tom Watson, ownership</p>
+          <p style="margin-top:10px; color:var(--muted); font-style:italic;">Typical holders: venue manager, management, ownership</p>
         </div>
       </div>
 
@@ -2929,7 +2929,7 @@
 
     <div class="callout note">
       <span class="callout-title">📌 venue_admin always has full event access</span>
-      <p>A user with the <code>venue_admin</code> global role automatically has full access to every event — the same as <code>event_owner</code> — without needing an invite. This means Colleen can manage any event regardless of who created it.</p>
+      <p>A user with the <code>venue_admin</code> global role automatically has full access to every event — the same as <code>event_owner</code> — without needing an invite. This means venue admins can manage any event regardless of who created it.</p>
     </div>
 
     <h2 id="roles-scenarios">Practical scenarios</h2>
@@ -2957,7 +2957,7 @@
       <div style="display:grid; gap:10px; font-size:0.88rem;">
         <div style="display:flex; gap:12px; align-items:flex-start; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
           <span style="background:var(--brand); color:#fff; padding:2px 8px; border-radius:4px; font-size:0.72rem; font-weight:700; flex-shrink:0; white-space:nowrap; margin-top:2px;">venue_admin</span>
-          <span style="color:rgba(255,255,255,0.75);">Full-time management staff who need to do everything — Colleen, Tom, ownership managers</span>
+          <span style="color:rgba(255,255,255,0.75);">Full-time management staff who need to do everything — venue managers, ownership</span>
         </div>
         <div style="display:flex; gap:12px; align-items:flex-start; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
           <span style="background:#475569; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.72rem; font-weight:700; flex-shrink:0; white-space:nowrap; margin-top:2px;">global_viewer</span>
@@ -2996,7 +2996,7 @@
 
 <!-- Footer -->
 <footer style="background: var(--sidebar-bg); color: rgba(255,255,255,0.4); text-align:center; padding:32px; font-family:var(--font-ui); font-size:0.8rem; margin-top:0;">
-  <p>Mabuhay Gardens + Broadway Studios — Operations Manual · Panic Backstage · June 2026</p>
+  <p>Venue Operations Manual · Panic Backstage</p>
   <p style="margin-top:4px; opacity:0.6;">This is a living document. Submit corrections or additions to the Backstage development team.</p>
 </footer>
 

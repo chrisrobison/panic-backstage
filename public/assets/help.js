@@ -157,7 +157,7 @@ const HELP_CONTENT = {
     <h3>Sessions</h3>
     <p>Sessions persist via access + refresh tokens stored in your browser. If a session expires mid-use, the app silently refreshes; if the refresh fails you're bounced back to the login page with your email pre-filled.</p>
 
-    <p class="muted small">Demo admin (when seeded): <code>admin@mabuhay.local</code> / <code>changeme</code>.</p>
+    <p class="muted small">Demo admin (when seeded): <code>admin@venue.local</code> / <code>changeme</code>.</p>
   `,
 
   account: `
@@ -226,7 +226,7 @@ const HELP_CONTENT = {
 
   dashboard: `
     <h2>Dashboard</h2>
-    <p>The dashboard summarises Mabuhay show operations for the next two weeks.</p>
+    <p>The dashboard summarises your venue's show operations for the next two weeks.</p>
     <ul>
       <li><strong>Next Show</strong> — top-of-fold card with doors and show times and current status.</li>
       <li><strong>Open Items / Empty / Needs Flyer / Unsettled</strong> — counters that link straight to the relevant work.</li>
@@ -421,12 +421,12 @@ const HELP_CONTENT = {
 
   'private-events': `
     <h2>Private events &amp; rentals</h2>
-    <p>A <strong>private event</strong> is a venue rental where a client books Mabuhay Gardens for their own occasion — a corporate event, private party, wedding reception, album release, film shoot, or similar. Private events are never publicly listed and follow a different workflow from public shows.</p>
+    <p>A <strong>private event</strong> is a venue rental where a client books your venue for their own occasion — a corporate event, private party, wedding reception, album release, film shoot, or similar. Private events are never publicly listed and follow a different workflow from public shows.</p>
 
     <h3>How a rental inquiry comes in</h3>
     <ol>
       <li>A staff member creates a new event and sets <strong>Type → Private Event</strong>. The form immediately switches to the private event layout.</li>
-      <li>Backstage automatically assigns <strong>Colleen</strong> as the event owner and sends an inquiry notification email to all venue admins listing the client details, date, estimated guests, and AV/catering requirements.</li>
+      <li>Backstage automatically assigns <strong>a venue admin</strong> as the event owner and sends an inquiry notification email to all venue admins listing the client details, date, estimated guests, and AV/catering requirements.</li>
       <li>The event starts at <em>Hold</em> status. The date is informally blocked on the calendar while the rental is being worked out.</li>
     </ol>
 
@@ -442,7 +442,7 @@ const HELP_CONTENT = {
       <li><strong>Internal notes</strong> — staff-only notes not shared with the client.</li>
       <li><strong>Paid deposit</strong> — deposit received; required before moving to Intake Complete.</li>
     </ul>
-    <p class="muted small">💰 For rental pricing, contact <strong>Tom Watson</strong>: <a href="mailto:tom@themab.org">tom@themab.org</a></p>
+    <p class="muted small">💰 For rental pricing, contact venue management.</p>
     <p>The public-show fields (ticket price, ticket URL, public description, Booker section) are hidden for private events. The Promote, Public Page, and Publish Public Page buttons are also hidden — private events are never publicly announced through Backstage.</p>
 
     <h3>Status workflow</h3>
@@ -462,7 +462,7 @@ const HELP_CONTENT = {
     <h3>Contacts and notifications</h3>
     <ul>
       <li><strong>On creation</strong> — all venue admins receive a <em>New Private Event Inquiry</em> email with the full client details, AV requirements, and a direct link to the event.</li>
-      <li><strong>When Intake Complete</strong> — Colleen and Tom Watson both receive an <em>Intake Complete — Contract Needed</em> email with the event details and a numbered checklist: Colleen drafts the contract → Tom co-signs → contract sent to client for signature → upload signed copy → advance to Booked.</li>
+      <li><strong>When Intake Complete</strong> — venue admins receive an <em>Intake Complete — Contract Needed</em> email with the event details and a numbered checklist: venue admin drafts the contract → management co-signs → contract sent to client for signature → upload signed copy → advance to Booked.</li>
       <li><strong>When booked</strong> — the client receives a confirmation email that their event is confirmed. All venue admins are also notified of the status change.</li>
     </ul>
 
@@ -1071,7 +1071,7 @@ const HELP_CONTENT = {
     <ol>
       <li><strong>Empty</strong> — the date slot exists but nothing is confirmed for it yet.</li>
       <li><strong>Hold</strong> — a show idea or inquiry is live; the band/promoter deal is not yet confirmed. The date is informally held. Requires title, date, venue, door/end times, and a producer/artist contact.</li>
-      <li><strong>Intake Complete</strong> — deal structure is agreed and a contract is being built. Age restriction, ticket price, capacity, and a deposit amount must be set. When this status is set, Colleen and Tom Watson are automatically emailed with next steps for the contract.</li>
+      <li><strong>Intake Complete</strong> — deal structure is agreed and a contract is being built. Age restriction, ticket price, capacity, and a deposit amount must be set. When this status is set, venue admins and management are automatically emailed with next steps for the contract.</li>
       <li><strong>Booked</strong> — a signed contract (or approved contract in the contract builder) plus a confirmed deposit. The show is locked.</li>
       <li><strong>Needs Assets</strong> — booked but blocked on flyer, artist photos, bio, or social content. An automatic email is sent to the producer/artist when this status is set.</li>
       <li><strong>Ready To Announce</strong> — the approved flyer is in, ticketing is set up, and the event is ready to flip public.</li>
@@ -1102,7 +1102,7 @@ const HELP_CONTENT = {
     <h2>End-to-end show workflow</h2>
 
     <h3>Public shows</h3>
-    <p>A typical Mabuhay public show moves through these phases:</p>
+    <p>A typical public show moves through these phases:</p>
     <ol>
       <li><strong>Program the night</strong> — pick a template (Templates page), set the date, and create the event. Status: <em>Empty</em>.</li>
       <li><strong>Lock in the deal</strong> — add the producer/artist contact and the booker contact. Status advances to <em>Hold</em>. The date is informally held while terms are confirmed.</li>
@@ -1161,7 +1161,7 @@ const HELP_CONTENT = {
 
   'promote-overview': `
     <h2>What is Panic Promote?</h2>
-    <p>Panic Promote is the built-in marketing engine for Mabuhay Gardens. Once you have an event in Backstage, Promote helps you write, approve, and push announcements to every platform you use — Facebook, Instagram, Eventbrite, Luma, Foopee, Funcheap, your email list, and more — without leaving the app.</p>
+    <p>Panic Promote is the built-in marketing engine for your venue. Once you have an event in Backstage, Promote helps you write, approve, and push announcements to every platform you use — Facebook, Instagram, Eventbrite, Luma, Foopee, Funcheap, your email list, and more — without leaving the app.</p>
     <h3>The core workflow</h3>
     <ol>
       <li><strong>Open the event</strong> in the event workspace and click the <em>Promote</em> button in the top-right action bar.</li>
@@ -1338,14 +1338,14 @@ const HELP_CONTENT = {
     <h3>Step 1 — Create an Organizer on eventbrite.com</h3>
     <ol>
       <li>Log in to <a href="https://www.eventbrite.com" target="_blank" rel="noreferrer">eventbrite.com</a> with the account whose API key you have.</li>
-      <li>Click <em>Create event</em> — Eventbrite prompts you to create an Organizer profile on the first use. Name it <strong>Mabuhay Gardens</strong>.</li>
+      <li>Click <em>Create event</em> — Eventbrite prompts you to create an Organizer profile on the first use. Name it <strong>your venue name</strong>.</li>
     </ol>
     <h3>Step 2 — Save credentials in Backstage</h3>
     <ol>
       <li>Go to <strong>Settings → Promote</strong>.</li>
       <li>In the <strong>Eventbrite</strong> card, enter the API Key (private token from <a href="https://www.eventbrite.com/account-settings/apps" target="_blank" rel="noreferrer">eventbrite.com/account-settings/apps</a>).</li>
       <li>Click <em>Fetch Org ID</em> — Backstage calls the API and auto-fills the Organizer ID.</li>
-      <li>Optionally enter a pre-created Eventbrite Venue ID for Mabuhay Gardens.</li>
+      <li>Optionally enter a pre-created Eventbrite Venue ID for your venue.</li>
       <li>Click <em>Save</em>.</li>
     </ol>
     <h3>Troubleshooting</h3>
@@ -1361,7 +1361,7 @@ const HELP_CONTENT = {
     <p>Both platforms use the same Facebook Developer App. Facebook posts to your Page; Instagram publishes image + caption to your Business account.</p>
     <h3>Requirements</h3>
     <ul>
-      <li>A <strong>Facebook Page</strong> for Mabuhay Gardens (not a personal profile).</li>
+      <li>A <strong>Facebook Page</strong> for your venue (not a personal profile).</li>
       <li>An <strong>Instagram Business or Creator account</strong> linked to that Page.</li>
       <li>A <strong>Facebook Developer App</strong> at <a href="https://developers.facebook.com" target="_blank" rel="noreferrer">developers.facebook.com</a>.</li>
     </ul>

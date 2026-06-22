@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** — Remove venue-specific proper names from help and ops manual
 - **Added** `promote` — Public ICS + RSS event syndication feeds
 - **Added** `dashboard` — Getting-started onboarding checklist for venue admins
 - **Fixed** `venues` — Remove sort_order from ORDER BY — column not on venues table
