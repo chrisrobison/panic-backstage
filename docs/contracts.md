@@ -27,15 +27,13 @@ the same source of truth can drive the contract, settlement, and reporting.
 Contract types (`contract_type` enum): `private_event`, `promoter_show`,
 `artist_performance`, `recurring_night`, `fundraiser`, `house_show`, `other`.
 
-Status workflow: `draft → needs_review → approved → sent → signed`
-(plus `canceled`, `superseded`). Marking **sent/signed** is blocked until every
-required term on an included section is filled **and** at least one version exists.
+Status workflow — **draft phase**: `draft → needs_review → approved → sent` (internal review and approval). **E-sign phase**: `sent → viewed → partially_signed → signed_by_client → fully_executed` (the in-app signing lifecycle; see [E-signature](#e-signature) below). Terminal statuses (at any point): `voided`, `declined`, `canceled`, `superseded`. Advancing to `sent` is blocked until every required term on every included section is filled **and** at least one rendered version exists.
 
 ---
 
 ## Data model
 
-The baseline `database/schema.sql` creates six contract tables:
+The baseline `database/schema.sql` plus migration `017_contract_signatures.sql` create the contract tables:
 
 - `contract_modules` — clause library (`module_key` unique, `body_template`,
   `required_fields_json`, `risk_level`, `is_locked`, `is_active`).
@@ -98,9 +96,16 @@ POST   /api/contracts/{id}/reevaluate      re-run smart selection on auto sectio
 POST   /api/contracts/{id}/sections        add a section (module or custom)
 PATCH  /api/contracts/{id}/sections        bulk update (include / order / title / body)
 DELETE /api/contracts/{id}/sections/{sid}  remove a section
+GET    /api/contracts/{id}/download        download the final executed PDF (JWT-authed)
 GET/POST/PATCH/DELETE /api/contract-modules[/{id}]      clause library (admin)
 GET/POST/PATCH/DELETE /api/contract-templates[/{id}]    templates (admin)
 GET/POST              /api/events/{id}/contracts        per-event list/create
+
+# Public signing routes (no JWT — authenticated by one-time token hash):
+GET  /api/signing/{token}          load contract HTML + signer info for the signing page
+POST /api/signing/{token}/viewed   record that the signer opened the link
+POST /api/signing/{token}/sign     submit typed or drawn signature (+ consent flag)
+POST /api/signing/{token}/decline  decline to sign (records reason, voids contract)
 ```
 
 ---
@@ -213,8 +218,58 @@ preview HTML is rendered to a Letter-size PDF in the browser.
   to the deal-terms form group in `ContractEditor.dealFormHtml()`. Free-form
   terms don't need a column — use a contract variable instead.
 
+---
+
+## E-signature
+
+Panic Backstage has a built-in electronic signature system — no DocuSign or third-party account required. The default provider (`SIGNATURE_PROVIDER=internal`) manages the entire signing lifecycle in-house using secure one-time magic links.
+
+### Providers
+
+| `SIGNATURE_PROVIDER` | Status |
+|---|---|
+| `internal` *(default)* | Fully implemented — magic-link flow, typed + drawn signatures, audit log, final PDF |
+| `dropbox_sign` | Wired interface (struct + HMAC verify implemented); `createEnvelope`, `getEnvelopeStatus`, `downloadFinalPdf` are TODO stubs |
+| `docusign` | Not implemented — throws `RuntimeException` at startup if selected |
+
+Set via `.env`: `SIGNATURE_PROVIDER=internal` (or omit — `internal` is the default).
+
+### Signing workflow
+
+1. Admin clicks **Send for Signature** on an `approved` contract.
+2. Each signer receives a personalised email with a time-limited one-time link (`SIGNATURE_TOKEN_TTL_HOURS`, default 168 h / 7 days). Only the `sha256` hash of the token is stored.
+3. Signer opens the link → contract HTML is rendered for review → they choose **Type signature** (cursive font rendering) or **Draw signature** (touch/mouse canvas).
+4. Signer ticks the e-sign consent checkbox and clicks **Sign Agreement**. The raw token is consumed and nulled; signature text and/or PNG image path are stored on the `contract_signers` row.
+5. Each signing action advances the contract status:
+   - `sent` → `viewed` (first signer opens their link)
+   - `viewed` → `partially_signed` (at least one but not all have signed)
+   - `partially_signed` → `signed_by_client` (all non-venue signers done; venue still pending)
+   - `signed_by_client` → `fully_executed` (venue countersigns)
+   - Any signer `decline` → contract flips to `declined`
+6. On `fully_executed`: `ContractPdfService` generates the final signed PDF server-side (contract body + signature blocks + audit certificate), stores the SHA-256 hash, and sets `contracts.final_pdf_path`. The linked event is advanced to `booked`. All signers and venue admins receive a "fully executed" email with a download link.
+
+### Database tables (migration `017_contract_signatures.sql`)
+
+| Table | Purpose |
+|---|---|
+| `contract_signers` | One row per signer per contract: name, email, role (`venue`/`counterparty`), status, `signing_token_hash`, `signed_at`, `signature_text`, `signature_image_path`, `ip_address`, `user_agent`, `token_expires_at` |
+| `contract_audit_log` | Append-only event log (never editable): `event_type`, `actor_id`, `metadata_json`, `ip_address`, `user_agent`, `created_at` |
+
+Audit event types: `signer_link_opened`, `signer_consented`, `signer_signed`, `signer_declined`, `contract_fully_executed`, `pdf_generated`, `pdf_hash_created`, `provider_error`.
+
+### Security
+
+- Token stored only as `sha256(token)` — the raw 64-byte random token is never persisted.
+- Comparison via `hash_equals()` to prevent timing attacks.
+- Tokens expire and are nulled after first use (signing or declining).
+- Voided and fully-executed contracts cannot be signed.
+- Signer IP + User-Agent are recorded at signing time for audit trail.
+- The final executed PDF is SHA-256 hashed and the hash stored alongside it for tamper-evidence verification.
+
+---
+
 ## Not yet built (future)
 
-E-signature integration, redline/diff history, an AI "suggest clauses" helper,
-and flowing accepted deal terms into `event_settlements` (the money columns are
+Redline/diff history between contract versions, an AI "suggest clauses" helper,
+and automatically flowing accepted deal terms into `event_settlements` (the deal-term columns are
 already queryable for this).

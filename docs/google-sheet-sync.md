@@ -1,7 +1,7 @@
 # Google Sheet Sync
 
-Panic Backstage keeps its events in sync with a Google Sheet (the "MabEvents
-Tracker") in **both** directions:
+Panic Backstage keeps its events in sync with a Google Sheet (your venue's
+tracking sheet) in **both** directions:
 
 - **Inbound (sheet → app):** a cron downloads the sheet every 5 minutes and
   UPSERTs rows into the database. This is the original, long-standing path.
@@ -24,8 +24,8 @@ how to operate and troubleshoot the sync.
 | Row key | event `slug` / `external_id` | `external_id` in **column A** |
 | Retry | next cron tick | `sheet_sync_queue` outbox + `scripts/push-sheet-queue.php` |
 
-The target spreadsheet is the **MabEvents Tracker**, tab **`Tracker`**, sheet id
-`1STS6et19iDHxtLvK2HVfqmAzs1HUa9GgF25KqBikRRE`.
+The target spreadsheet and tab name are configured via `SHEET_ID` and `SHEET_TAB`
+in `.env` (see `.env.example`).
 
 ---
 

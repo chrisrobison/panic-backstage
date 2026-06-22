@@ -4,7 +4,7 @@
 
 ## What is a private event?
 
-A private event is a venue rental where a client books Mabuhay Gardens for their own occasion, such as a corporate party, private birthday, album release, film shoot, wedding reception, or similar event.
+A private event is a venue rental where a client books your venue for their own occasion, such as a corporate party, private birthday, album release, film shoot, wedding reception, or similar event.
 
 Unlike a public show, a private event is never listed publicly, never promoted, and never given a public ticket page. Everything stays internal.
 
@@ -18,7 +18,7 @@ Once the event type is set:
 
 * The form changes to a rental-specific layout.
 * Ticket fields and booker sections are removed.
-* Colleen is automatically assigned as the event owner.
+* A venue admin is automatically assigned as the event owner.
 * All venue admins receive an email with the client details and event information.
 * The event starts at **Hold** status, which informally blocks the date on the calendar.
 
@@ -61,7 +61,7 @@ Required for **Hold** status:
 * Paid deposit — record once received
 * Internal notes — anything staff needs to know that the client should not see
 
-> 💰 **Rental pricing:** Contact Tom Watson at [tom@themab.org](mailto:tom@themab.org).
+> 💰 **Rental pricing:** Contact venue management for a quote.
 
 ---
 
@@ -108,9 +108,9 @@ Select the **Private Event Rental** template. This template already includes:
 
 Move the contract through the normal contract workflow:
 
-**Draft → Needs Review → Approved → Sent → Signed**
+**Draft → Needs Review → Approved → Sent → (e-sign flow) → Fully Executed**
 
-The event cannot advance to **Booked** until the contract is at least **Approved**. **Sent** or **Signed** is even better.
+The event cannot advance to **Booked** until the contract is at least **Approved**. Once sent for e-signature, the system tracks each signer's progress automatically and generates a tamper-evident Final Executed PDF when everyone has signed.
 
 ---
 
@@ -143,7 +143,7 @@ The system handles several private-event tasks automatically.
 
 ### On creation
 
-* Colleen is assigned as the event owner.
+* A venue admin is assigned as the event owner.
 * All venue admins are emailed with the inquiry details.
 
 ### When the event is booked

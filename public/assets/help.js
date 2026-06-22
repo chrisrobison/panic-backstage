@@ -1065,7 +1065,7 @@ const HELP_CONTENT = {
 
   statuses: `
     <h2>Event status reference</h2>
-    <p>Events move through these statuses, roughly left to right on the pipeline. The vocabulary is shared with the MabEvents Google Sheet so both tools stay in sync:</p>
+    <p>Events move through these statuses, roughly left to right on the pipeline. The vocabulary is shared with any connected Google Sheet so both tools stay in sync:</p>
 
     <h3>Public show statuses</h3>
     <ol>

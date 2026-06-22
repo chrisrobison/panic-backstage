@@ -270,7 +270,7 @@ Bluesky uses the **AT Protocol** and authenticates with your Bluesky **handle** 
 
 - A Bluesky account at [bsky.app](https://bsky.app)
 - An **App Password** created in your account settings
-- Your Bluesky **handle** (e.g. `mabuhaygardens.bsky.social`)
+- Your Bluesky **handle** (e.g. `yourvenue.bsky.social`)
 
 #### Step-by-step setup
 
@@ -280,7 +280,7 @@ Bluesky uses the **AT Protocol** and authenticates with your Bluesky **handle** 
 4. Copy the generated password immediately — it won't be shown again.
 5. In Backstage → **Promote → Settings → Credentials**, select **Bluesky** and enter:
    - **Access Token** — the App Password (not your login password!)
-   - **Config → handle** — your full Bluesky handle (e.g. `mabuhaygardens.bsky.social`)
+   - **Config → handle** — your full Bluesky handle (e.g. `yourvenue.bsky.social`)
 
 #### Things to watch out for
 
@@ -374,7 +374,7 @@ The Mailchimp adapter creates a **Regular Campaign**, sets the HTML and plain-te
    - **Access Token** — Mailchimp API key
    - **Config → provider** — `mailchimp`
    - **Config → list_id** — your Audience ID
-   - **Config → from_name** — e.g. `Mabuhay Gardens`
+   - **Config → from_name** — e.g. `Your Venue Name`
    - **Config → from_email** — a verified sender address in your Mailchimp account
 
 #### Things to watch out for
@@ -409,7 +409,7 @@ The SendGrid adapter creates a **Single Send** (a one-time email blast), sets th
    - **Access Token** — SendGrid API key
    - **Config → provider** — `sendgrid`
    - **Config → list_id** — your Contact List ID
-   - **Config → from_name** — e.g. `Mabuhay Gardens`
+   - **Config → from_name** — e.g. `Your Venue Name`
    - **Config → from_email** — verified sender address
    - **Config → sender_id** — numeric Sender ID from step 5
 

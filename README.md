@@ -49,6 +49,17 @@ GET    /api/promote/campaigns/{id}/health     -> src/Promote/PromotionHealth.php
 GET    /api/promote/campaigns/{id}/analytics  -> src/Promote/Analytics.php
 GET    /api/promote/credentials               -> src/Promote/Credentials.php
 POST/DELETE /api/promote/credentials[/{id}]
+
+# Public contract signing (no JWT — authenticated by one-time token hash):
+GET    /api/signing/{token}                  -> src/ContractSigningEndpoint.php
+POST   /api/signing/{token}/viewed
+POST   /api/signing/{token}/sign
+POST   /api/signing/{token}/decline
+
+# Public event syndication feeds (no JWT):
+GET    /api/feed                             -> src/Feed.php  (discovery index)
+GET    /api/feed/events.ics                  -> src/Feed.php  (iCalendar)
+GET    /api/feed/events.rss                  -> src/Feed.php  (RSS 2.0)
 ```
 
 Each endpoint receives a `Request`, returns a `Response`, and uses shared services such as `Database` and `Auth`. Most endpoints extend `BaseEndpoint`, which centralises the current-user lookup and the role/capability checks.
@@ -198,7 +209,7 @@ php database/seed.php
 Seed admin login:
 
 ```text
-email: admin@mabuhay.local
+email: admin@venue.local
 password: changeme
 ```
 
@@ -376,7 +387,7 @@ Then open `http://localhost:8000/backstage/`. Static assets, API calls, invite l
 
 ## Venue Demo Walkthrough
 
-The seeded Mabuhay Gardens demo is designed for a venue operations walkthrough.
+The seeded demo is designed for a venue operations walkthrough.
 
 Reset and launch locally:
 
@@ -388,7 +399,7 @@ php -S localhost:8000 -t public public/router.php
 Login:
 
 ```text
-email: admin@mabuhay.local
+email: admin@venue.local
 password: changeme
 ```
 
@@ -438,7 +449,7 @@ built-in `fetch`/`WebSocket` (Node 21+) and the system Chromium/Chrome. It:
 Override the defaults via env vars when your data differs — e.g.:
 
 ```bash
-SHOT_EMAIL=admin@mabuhay.local SHOT_EVENT_ID=641027 SHOT_CONTRACT_ID=10 \
+SHOT_EMAIL=admin@venue.local SHOT_EVENT_ID=641027 SHOT_CONTRACT_ID=10 \
   node scripts/screenshots.mjs
 ```
 
@@ -491,12 +502,26 @@ Staging checklist:
 - The server can reach `https://cdn.jsdelivr.net/npm/@larcjs/core@3.0.1/pan.mjs`, or LARC should be vendored in a future offline-demo pass.
 - Run `php database/seed.php` only when resetting demo data is acceptable.
 
+## Public Event Feeds
+
+Events with `public_visibility = 1` are exposed as machine-readable syndication
+feeds — no authentication required:
+
+```text
+GET /api/feed                → JSON discovery index (lists ICS + RSS URLs)
+GET /api/feed/events.ics     → iCalendar (subscribe in Google / Apple Calendar)
+GET /api/feed/events.rss     → RSS 2.0 (news aggregators, "what's on" widgets)
+```
+
+Optional query params for both formats: `?venue={slug}`, `?days={N}`, `?past=1`,
+`?limit={N}` (default 500, max 1000). Canceled events are excluded.
+
 ## Google Sheet Sync
 
-Events stay in sync with the MabEvents Tracker Google Sheet in both directions:
-an inbound cron imports the sheet every 5 minutes, and app edits are pushed back
-up to the sheet in real time (with a cron-based retry fallback). Outbound writes
-authenticate as a Google service account.
+Events stay in sync with a Google Sheet in both directions: an inbound cron
+imports the sheet every 5 minutes, and app edits are pushed back up to the sheet
+in real time (with a cron-based retry fallback). Outbound writes authenticate as
+a Google service account.
 
 See [`docs/google-sheet-sync.md`](docs/google-sheet-sync.md) for setup
 (service-account key, sharing, permissions), the field/column mapping, and
@@ -506,15 +531,27 @@ troubleshooting.
 
 A structured contract system: capture the deal as queryable terms, auto-assemble
 the document from reusable clause modules via templates with smart
-(condition-based) clause selection, then render to a client-side PDF. Ships a
-clause library and seven starter templates covering every contract type.
+(condition-based) clause selection, render to PDF, and send for electronic
+signature — no DocuSign or third-party account required. Ships a clause library
+and seven starter templates covering every contract type.
 
-The contract tables are part of the baseline `database/schema.sql`; seed the
+**Built-in e-signature workflow** (`src/ContractSigningEndpoint.php`): once a
+contract is approved, staff click *Send for Signature*. Each signer receives a
+personalised, time-limited one-time link by email. They review the contract HTML,
+type or draw their signature, tick a consent checkbox, and sign. Status
+progresses through `sent → viewed → partially_signed → signed_by_client →
+fully_executed`. On full execution the system generates a tamper-evident Final
+Executed PDF (contract body + signature blocks + audit certificate), stores its
+SHA-256 hash, and automatically advances the linked event to *Booked*. An
+optional `SIGNATURE_PROVIDER=dropbox_sign` stub is wired for future Dropbox Sign
+integration (API skeleton present; HTTP calls are TODO).
+
+The contract tables are part of the baseline `database/schema.sql`; apply
+migration `017_contract_signatures.sql` for the e-signature tables, then seed the
 clause library with `php database/seed_contracts.php`. See
-[`docs/contracts.md`](docs/contracts.md)
-for the data model, API, condition engine, and how to extend it. End-user help
-is in the app under **Help → Contracts & deal builder** and **Contract library &
-templates**.
+[`docs/contracts.md`](docs/contracts.md) for the data model, signing API,
+condition engine, and how to extend it. End-user help is in the app under
+**Help → Contracts & deal builder** and **Help → Electronic signatures**.
 
 ## Email
 
