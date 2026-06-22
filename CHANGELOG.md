@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `promote` — Public ICS + RSS event syndication feeds
 - **Added** `dashboard` — Getting-started onboarding checklist for venue admins
 - **Fixed** `venues` — Remove sort_order from ORDER BY — column not on venues table
 - **Added** `multitenancy` — De-Mabuhay, resources table, layered .env, template inheritance

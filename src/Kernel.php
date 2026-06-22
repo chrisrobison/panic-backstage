@@ -268,6 +268,14 @@ final class Kernel
             return [Promote::class, ['eventId' => null]];
         }
 
+        // Public syndication feeds (unauthenticated):
+        //   GET /api/feed                → JSON index of available feeds
+        //   GET /api/feed/events.ics     → iCalendar subscription
+        //   GET /api/feed/events.rss     → RSS 2.0
+        if ($segments[0] === 'feed') {
+            return [Feed::class, ['format' => $segments[1] ?? '']];
+        }
+
         // Venues + resources listing (lightweight; used by the calendar zone map and sidebar)
         if ($segments[0] === 'venues') {
             return [Venues::class, []];
@@ -325,6 +333,7 @@ final class Kernel
         return in_array($class, [
             AuthEndpoint::class,
             PublicEvents::class,
+            Feed::class,                // public ICS/RSS syndication of public_visibility events
             Invites::class,
             Me::class,                  // returns null user gracefully when unauthenticated
             PublicTickets::class,        // public ticket browse + checkout
