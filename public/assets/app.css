@@ -3472,11 +3472,19 @@ button.promote-accent:hover,
 
 /* When the outbox page is mounted, make the workspace a flush flex container
    so the outbox page can fill it edge-to-edge and control its own scroll. */
+/* Lock the shell to the viewport height when split-pane layout is active,
+   so the flex chain is properly constrained top-to-bottom. */
+.app-shell:has(#app.workspace-outbox) {
+  height: 100vh;
+  overflow: hidden;
+}
+
 #app.workspace-outbox {
   padding: 0 !important;
   overflow: hidden !important;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 pb-outbox-page,
@@ -3646,13 +3654,16 @@ pb-messages-sent.detail-open .outbox-detail-pane {
 pb-messages-inbox .outbox-detail-pane,
 pb-messages-archive .outbox-detail-pane,
 pb-messages-sent .outbox-detail-pane {
-  transition: height .22s ease;
+  transition: flex-basis .22s ease;
 }
 pb-messages-inbox.detail-open .outbox-detail-pane,
 pb-messages-archive.detail-open .outbox-detail-pane,
 pb-messages-sent.detail-open .outbox-detail-pane {
   max-height: none;
-  height: var(--detail-h, 48vh);
+  /* Use flex-basis so the pane participates in the flex split properly;
+     the table pane above (flex: 1 1 0) fills whatever is left over. */
+  flex: 0 0 var(--detail-h, 48vh);
+  overflow: hidden;
 }
 pb-messages-inbox.resizing .outbox-detail-pane,
 pb-messages-archive.resizing .outbox-detail-pane,
