@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** — Resolve three server errors breaking dashboard and venues endpoint
 - **Documentation** — Sync all docs with current feature state; remove venue-specific names
 - **Documentation** — Remove venue-specific proper names from help and ops manual
 - **Added** `promote` — Public ICS + RSS event syndication feeds

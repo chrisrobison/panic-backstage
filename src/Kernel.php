@@ -61,11 +61,11 @@ final class Kernel
         }
 
         // Auth (all actions are POST; public at kernel level)
-        if ($segments[0] === 'auth') {
+        if (($segments[0] ?? '') === 'auth') {
             return [AuthEndpoint::class, ['action' => $segments[1] ?? '']];
         }
 
-        // Current user info
+        // Current user info (also handles bare /api with no further segments)
         if ($segments === [] || $segments[0] === 'me') {
             return [Me::class, []];
         }

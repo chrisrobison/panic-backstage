@@ -128,6 +128,13 @@ abstract class BaseEndpoint implements Endpoint
         return $capabilities;
     }
 
+    protected function requireAuth(string $message = 'Authentication required'): ?Response
+    {
+        return $this->userId() === null
+            ? Response::json(['error' => $message], 401)
+            : null;
+    }
+
     protected function requireGlobalCapability(string $capability): ?Response
     {
         return $this->hasGlobalCapability($capability) ? null : $this->forbidden();
