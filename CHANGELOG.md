@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `messages` — Iframe fills detail pane via flexbox — resizes with drag
 - **Fixed** `messages` — Proper flexbox split — lock shell height, use flex-basis for detail pane
 - **Added** `calendar` — Move New event button into toolbar as '+' icon after Pipeline
 - **Added** `shell` — Add pb-page-header component — move page titles to topbar

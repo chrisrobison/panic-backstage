@@ -3673,11 +3673,12 @@ pb-messages-sent.resizing .outbox-detail-pane {
 
 /* Scrollable inner wrapper */
 .outbox-detail-inner {
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Sticky header inside the detail pane */
@@ -3725,13 +3726,18 @@ pb-messages-sent.resizing .outbox-detail-pane {
 
 /* Body: iframe for HTML, pre for plain-text */
 .outbox-detail-body {
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  min-height: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;   /* plain-text <pre> still scrolls here */
 }
 .outbox-email-frame {
   display: block;
+  flex: 1 1 0;        /* fill whatever the detail pane gives */
+  min-height: 0;
   width: 100%;
-  min-height: 420px;
   border: 0;
   background: #fff;
 }
@@ -3778,7 +3784,7 @@ pb-messages-sent.resizing .outbox-detail-pane {
   }
   .outbox-detail-head { padding: 10px 14px; }
   .outbox-detail-actions { width: 100%; justify-content: flex-end; }
-  .outbox-email-frame { min-height: 320px; }
+  .outbox-email-frame { min-height: 180px; } /* floor for very small screens */
 
   /* Responsive table: hide Template column, stack cells with labels */
   .outbox-table thead { display: none; }
