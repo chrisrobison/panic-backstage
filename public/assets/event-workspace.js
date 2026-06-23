@@ -4,6 +4,8 @@
 import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
 import { openPrintWindow } from './print.js';
 import './paint-splat.js';
+import './event-vendors.js';
+import './event-execution.js';
 
 function factCell(label, value) {
   return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
@@ -147,8 +149,10 @@ const SECTION_LABELS = {
   'open-items': 'Open Items',
   contracts:    'Contracts',
   invites:      'Invites',
+  vendors:      'Vendors',
   settlement:   'Settlement',
   ticketing:    'Ticketing',
+  execution:    'Execution',
   activity:     'Activity',
 };
 
@@ -230,7 +234,7 @@ class EventWorkspace extends PanicElement {
     const data = this.data;
     const event = data.event;
     const isPrivate = event.event_type === 'private_event';
-    const tabs = ['overview', 'details', 'assets', 'tasks', ...(isPrivate ? [] : ['lineup']), 'schedule', 'staffing', 'guest-list', 'open-items', 'activity'];
+    const tabs = ['overview', 'details', 'assets', 'tasks', ...(isPrivate ? [] : ['lineup']), 'schedule', 'staffing', 'vendors', 'guest-list', 'open-items', 'execution', 'activity'];
     if (can(data, 'view_contracts')) tabs.splice(tabs.length - 1, 0, 'contracts');
     if (can(data, 'manage_invites')) tabs.splice(tabs.length - 1, 0, 'invites');
     if (can(data, 'view_settlement') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'settlement');
@@ -285,12 +289,14 @@ class EventWorkspace extends PanicElement {
     ${isPrivate ? '' : '<pb-lineup-editor id="lineup"></pb-lineup-editor>'}
     <pb-run-sheet id="schedule"></pb-run-sheet>
     <pb-staffing-manager id="staffing"></pb-staffing-manager>
+    <pb-event-vendors id="vendors"></pb-event-vendors>
     <pb-guest-list-manager id="guest-list"></pb-guest-list-manager>
     <pb-open-items id="open-items"></pb-open-items>
     ${can(data, 'view_contracts') ? '<pb-event-contracts id="contracts"></pb-event-contracts>' : ''}
     ${can(data, 'manage_invites') ? '<pb-invite-manager id="invites"></pb-invite-manager>' : ''}
     ${(!isPrivate && can(data, 'view_settlement')) ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
     ${(!isPrivate && can(data, 'manage_ticketing')) ? '<pb-ticketing-admin id="ticketing"></pb-ticketing-admin>' : ''}
+    <pb-event-execution id="execution"></pb-event-execution>
     <section id="activity" class="panel"><div class="section-head padded"><h2>Activity ${helpLink('activity', 'Activity Log')}</h2></div><ul class="timeline">${data.activity.map(activityEntry).join('')}</ul></section>`;
     $('pb-event-summary', this).data = data;
     $('pb-event-next-action', this).data = data;
@@ -300,6 +306,7 @@ class EventWorkspace extends PanicElement {
     if ($('pb-lineup-editor', this)) $('pb-lineup-editor', this).data = data;
     $('pb-run-sheet', this).data = data;
     $('pb-staffing-manager', this).data = data;
+    $('pb-event-vendors', this).data = data;
     $('pb-guest-list-manager', this).data = data;
     $('pb-open-items', this).data = data;
     $('pb-asset-manager', this).data = data;
@@ -307,6 +314,12 @@ class EventWorkspace extends PanicElement {
     if ($('pb-invite-manager', this)) $('pb-invite-manager', this).data = data;
     if ($('pb-settlement-form', this)) $('pb-settlement-form', this).data = data;
     if ($('pb-ticketing-admin', this)) $('pb-ticketing-admin', this).data = data;
+    const execEl = $('pb-event-execution', this);
+    if (execEl) {
+      execEl.eventId             = event.id;
+      execEl.canEdit             = can(data, 'manage_execution');
+      execEl.canManageIncidents  = can(data, 'manage_incidents');
+    }
     $('[data-publish]', this)?.addEventListener('click', () => this.togglePublic());
     $$('[data-print]', this).forEach((button) => button.addEventListener('click', () => {
       button.closest('details.print-menu')?.removeAttribute('open');

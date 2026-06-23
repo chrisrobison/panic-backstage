@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `ui` — Vendors panel for event workspace
 - **Added** `ui` — Leads inbox and deal evaluator front-end
 - **Added** — Venue operating system upgrade — lifecycle, security, and financial controls
 - **Fixed** `outbox` — Show email body in detail pane
