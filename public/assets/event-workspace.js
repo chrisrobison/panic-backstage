@@ -154,6 +154,7 @@ const SECTION_LABELS = {
   settlement:   'Settlement',
   ticketing:    'Ticketing',
   execution:    'Execution',
+  payments:     'Payments',
   closeout:     'Closeout',
   activity:     'Activity',
 };
@@ -239,6 +240,7 @@ class EventWorkspace extends PanicElement {
     const tabs = ['overview', 'details', 'assets', 'tasks', ...(isPrivate ? [] : ['lineup']), 'schedule', 'staffing', 'vendors', 'guest-list', 'open-items', 'execution', 'activity'];
     if (can(data, 'view_contracts')) tabs.splice(tabs.length - 1, 0, 'contracts');
     if (can(data, 'manage_invites')) tabs.splice(tabs.length - 1, 0, 'invites');
+    if (can(data, 'manage_payments')) tabs.splice(tabs.length - 1, 0, 'payments');
     if (can(data, 'view_settlement') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'settlement');
     if (can(data, 'manage_ticketing') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'ticketing');
     if (can(data, 'manage_ledger') || can(data, 'finalize_closeout')) tabs.splice(tabs.length - 1, 0, 'closeout');
@@ -277,8 +279,10 @@ class EventWorkspace extends PanicElement {
           </div>
         </details>` : ''}
         ${(!isPrivate && can(data, 'publish_event')) ? `<button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>` : ''}
+        ${can(data, 'manage_contracts') ? `<button class="secondary" data-portal-toggle title="Generate a read-only portal link for a promoter or client"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i> Share Portal Link</button>` : ''}
       </div>
     </section>
+    <pb-portal-panel id="portalPanel"></pb-portal-panel>
     <nav class="workspace-tabs tabs">${tabs.map((tab, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${tab}">${esc(titleCase(tab))}</a>`).join('')}</nav>
     <pb-event-summary></pb-event-summary>
     <pb-event-next-action></pb-event-next-action>
@@ -297,6 +301,7 @@ class EventWorkspace extends PanicElement {
     <pb-open-items id="open-items"></pb-open-items>
     ${can(data, 'view_contracts') ? '<pb-event-contracts id="contracts"></pb-event-contracts>' : ''}
     ${can(data, 'manage_invites') ? '<pb-invite-manager id="invites"></pb-invite-manager>' : ''}
+    ${can(data, 'manage_payments') ? '<pb-event-payments id="payments"></pb-event-payments>' : ''}
     ${(!isPrivate && can(data, 'view_settlement')) ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
     ${(!isPrivate && can(data, 'manage_ticketing')) ? '<pb-ticketing-admin id="ticketing"></pb-ticketing-admin>' : ''}
     <pb-event-execution id="execution"></pb-event-execution>
@@ -316,6 +321,8 @@ class EventWorkspace extends PanicElement {
     $('pb-asset-manager', this).data = data;
     if ($('pb-event-contracts', this)) $('pb-event-contracts', this).data = data;
     if ($('pb-invite-manager', this)) $('pb-invite-manager', this).data = data;
+    const paymentsEl = $('pb-event-payments', this);
+    if (paymentsEl) { paymentsEl.eventId = data.event.id; paymentsEl.data = data; }
     if ($('pb-settlement-form', this)) $('pb-settlement-form', this).data = data;
     if ($('pb-ticketing-admin', this)) $('pb-ticketing-admin', this).data = data;
     const closeoutEl = $('pb-event-closeout', this);
@@ -327,6 +334,11 @@ class EventWorkspace extends PanicElement {
       execEl.canManageIncidents  = can(data, 'manage_incidents');
     }
     $('[data-publish]', this)?.addEventListener('click', () => this.togglePublic());
+    const portalPanel = $('pb-portal-panel', this);
+    if (portalPanel) {
+      portalPanel.eventId = event.id;
+      $('[data-portal-toggle]', this)?.addEventListener('click', () => portalPanel.toggle());
+    }
     $$('[data-print]', this).forEach((button) => button.addEventListener('click', () => {
       button.closest('details.print-menu')?.removeAttribute('open');
       openPrintWindow(button.dataset.print, this.data);
@@ -511,8 +523,240 @@ class EventDetailsForm extends HTMLElement {
   }
 }
 
+// ── Portal link panel ─────────────────────────────────────────────────────────
+// Generates and lists time-limited read-only portal links for promoters/clients.
+// Staff-only — the panel is hidden when manage_contracts capability is absent.
+class PortalPanel extends PanicElement {
+  connect() {
+    this._eventId = null;
+    this._links   = [];
+    this._open    = false;
+    this.render();
+  }
+
+  set eventId(id) {
+    this._eventId = id;
+  }
+
+  /** Toggle the panel open/closed and load links on first open. */
+  async toggle() {
+    this._open = !this._open;
+    this.render();
+    if (this._open && this._links.length === 0) {
+      await this.loadLinks();
+    }
+  }
+
+  async loadLinks() {
+    try {
+      const res = await api(`/portal/${this._eventId}/list-links`);
+      this._links = res.links || [];
+    } catch (_) {
+      this._links = [];
+    }
+    this.render();
+  }
+
+  async createLink(label, ttlDays) {
+    try {
+      const res = await api(`/portal/${this._eventId}/create-link`, {
+        method: 'POST',
+        body: JSON.stringify({ event_id: this._eventId, label, ttl_days: ttlDays }),
+      });
+      if (res.url) {
+        await this.loadLinks();
+        // Show the new URL in the copy box
+        const newInput = $(`[data-portal-url="${res.token}"]`, this);
+        if (newInput) newInput.select();
+      }
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Failed to generate link.', tone: 'error' });
+    }
+  }
+
+  async revokeLink(tokenId) {
+    try {
+      await api(`/portal/${tokenId}/revoke`, { method: 'POST' });
+      await this.loadLinks();
+      publish('toast.show', { message: 'Portal link revoked.' });
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Failed to revoke link.', tone: 'error' });
+    }
+  }
+
+  render() {
+    if (!this._open) {
+      this.innerHTML = ''; // collapsed — nothing to show (button is in the workspace toolbar)
+      return;
+    }
+
+    const active = (this._links || []).filter(l => !Number(l.is_revoked) && new Date(l.expires_at) > new Date());
+    const revoked = (this._links || []).filter(l => Number(l.is_revoked) || new Date(l.expires_at) <= new Date());
+
+    const linkRows = active.map(l => `
+      <div class="portal-link-row">
+        <div class="portal-link-meta">
+          <span class="portal-link-label">${esc(l.label || 'Portal link')}</span>
+          <span class="portal-link-info">Used ${l.use_count}x &nbsp;·&nbsp; Expires ${shortDate(new Date(l.expires_at))}</span>
+        </div>
+        <input class="portal-link-url" type="text" readonly value="${esc(l.url)}" data-portal-url="${esc(l.token)}" onclick="this.select()">
+        <div class="portal-link-actions">
+          <button class="secondary small" onclick="navigator.clipboard.writeText(${JSON.stringify(l.url)}).then(()=>publish('toast.show',{message:'Link copied!'}))">Copy</button>
+          <button class="danger small" data-revoke="${esc(String(l.id))}">Revoke</button>
+        </div>
+      </div>`).join('');
+
+    const revokedNote = revoked.length
+      ? `<p class="portal-revoked-note">${revoked.length} revoked / expired link${revoked.length === 1 ? '' : 's'} not shown.</p>`
+      : '';
+
+    this.innerHTML = `<div class="portal-panel card">
+      <div class="portal-panel-head">
+        <strong>Share Portal Link</strong>
+        <button class="secondary small" data-portal-close>Close</button>
+      </div>
+      <p class="portal-panel-blurb">Generate a read-only link for a promoter or client. The link shows event details, contract status, payments, and invoice — no login required.</p>
+      <form class="portal-create-form" data-create-form>
+        <input type="text" name="label" placeholder="Label, e.g. &quot;Sent to Jane Smith&quot;" class="portal-label-input">
+        <select name="ttl_days" class="portal-ttl-select">
+          <option value="7">Expires in 7 days</option>
+          <option value="14">Expires in 14 days</option>
+          <option value="30" selected>Expires in 30 days</option>
+          <option value="60">Expires in 60 days</option>
+          <option value="90">Expires in 90 days</option>
+        </select>
+        <button type="submit" class="primary small">Generate Link</button>
+      </form>
+      ${active.length ? `<div class="portal-links-list">${linkRows}</div>` : '<p class="portal-empty">No active links yet.</p>'}
+      ${revokedNote}
+    </div>`;
+
+    $('[data-portal-close]', this)?.addEventListener('click', () => this.toggle());
+    $('[data-create-form]', this)?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form    = e.target;
+      const label   = form.label.value.trim();
+      const ttlDays = parseInt(form.ttl_days.value, 10) || 30;
+      form.querySelector('[type="submit"]').disabled = true;
+      await this.createLink(label, ttlDays);
+      form.querySelector('[type="submit"]').disabled = false;
+      form.label.value = '';
+    });
+    $$('[data-revoke]', this).forEach(btn => btn.addEventListener('click', async () => {
+      const id = parseInt(btn.dataset.revoke, 10);
+      btn.disabled = true;
+      await this.revokeLink(id);
+    }));
+  }
+}
+
 customElements.define('pb-event-workspace', EventWorkspace);
 customElements.define('pb-event-summary', EventSummary);
 customElements.define('pb-event-readiness', EventReadiness);
 customElements.define('pb-event-next-action', EventNextAction);
 customElements.define('pb-event-details-form', EventDetailsForm);
+customElements.define('pb-portal-panel', PortalPanel);
+
+// ── Event Payments panel ─────────────────────────────────────────────────────
+// Lists event_payments rows and provides "Send Invoice Link" for pending or
+// invoiced payments — creates a Stripe Payment Link without an SDK.
+
+class EventPayments extends PanicElement {
+  set eventId(id) { this._eventId = id; }
+  set data(d)     { this._data = d; this._load(); }
+
+  async _load() {
+    const id = this._eventId;
+    if (!id) return;
+    try {
+      const res = await api(`/events/${id}/payments`);
+      this._render(res);
+    } catch (err) {
+      this.innerHTML = `<section class="panel" id="payments"><div class="section-head padded"><h2>Payments</h2></div><p class="muted padded">Could not load payments.</p></section>`;
+    }
+  }
+
+  _render(res) {
+    const id       = this._eventId;
+    const payments = res.payments || [];
+    const summary  = res.summary  || {};
+    const canSend  = can(this._data, 'manage_payments');
+
+    const statusChip = (s) => {
+      const tone = { pending: 'yellow', received: 'green', invoiced: 'blue',
+                     failed: 'red', refunded: 'gray', voided: 'gray' }[s] || '';
+      return `<span class="chip${tone ? ` chip-${esc(tone)}` : ''}">${esc(s)}</span>`;
+    };
+
+    const rows = payments.length
+      ? payments.map(p => {
+          const sendBtn = canSend && ['pending','invoiced'].includes(p.status)
+            ? `<button class="small secondary" data-send-link="${esc(String(p.id))}" title="Create or re-send a Stripe payment link">Send Invoice Link</button>`
+            : '';
+          const linkCell = p.external_ref
+            ? `<span class="muted small" title="${esc(p.external_ref)}">Link sent</span>`
+            : '';
+          return `<tr>
+            <td>${esc(p.payment_type)}</td>
+            <td>${esc(money(p.amount))} ${esc(p.currency || 'USD')}</td>
+            <td>${statusChip(p.status)}</td>
+            <td>${esc(p.method || '—')}</td>
+            <td>${esc(p.due_date || '—')}</td>
+            <td>${linkCell}${sendBtn}</td>
+          </tr>`;
+        }).join('')
+      : `<tr><td colspan="6" class="muted">${emptyState('No payment records yet.')}</td></tr>`;
+
+    const depositBar = summary.deposit_required > 0 ? `
+      <div class="summary-row">
+        <span class="label">Deposit Required</span>
+        <span class="value">${esc(money(summary.deposit_required))}</span>
+      </div>
+      <div class="summary-row">
+        <span class="label">Deposit Received</span>
+        <span class="value">${esc(money(summary.deposit_received))}</span>
+      </div>
+      <div class="summary-row">
+        <span class="label">Deposit Outstanding</span>
+        <span class="value${summary.deposit_outstanding > 0 ? ' value-warn' : ''}">${esc(money(summary.deposit_outstanding))}</span>
+      </div>` : '';
+
+    this.innerHTML = `
+      <section class="panel" id="payments">
+        <div class="section-head padded">
+          <h2>Payments ${helpLink('payments', 'Payments')}</h2>
+        </div>
+        ${depositBar ? `<div class="summary-block">${depositBar}</div>` : ''}
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>Type</th><th>Amount</th><th>Status</th><th>Method</th><th>Due</th><th>Actions</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </section>`;
+
+    this.querySelectorAll('[data-send-link]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const pid = parseInt(btn.dataset.sendLink, 10);
+        btn.disabled = true;
+        btn.textContent = 'Sending…';
+        try {
+          const result = await api(`/events/${id}/payments/${pid}/send-link`, { method: 'POST' });
+          if (result.payment_link) {
+            await navigator.clipboard.writeText(result.payment_link).catch(() => {});
+            publish('toast.show', { message: 'Payment link created and copied to clipboard.' });
+          }
+          this._load();
+        } catch (err) {
+          publish('toast.show', { message: 'Failed to create payment link: ' + (err.message || 'Unknown error'), tone: 'error' });
+          btn.disabled = false;
+          btn.textContent = 'Send Invoice Link';
+        }
+      });
+    });
+  }
+}
+
+customElements.define('pb-event-payments', EventPayments);

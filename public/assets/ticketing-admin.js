@@ -582,6 +582,10 @@ class TicketingAdmin extends PanicElement {
 // ── Global payment-provider switch (venue admin) ──────────────────────────────
 // Standalone control for the active payment processor + default currency.
 // Mounted on the Admin page (its own tab) — gated to manage_users on the server.
+//
+// Also renders the POS Location Mapping section: maps Square POS terminal
+// location IDs to venues so incoming POS webhooks are routed to the right
+// event ledger automatically.
 
 class PaymentSettingsPanel extends PanicElement {
   connect() {
@@ -591,7 +595,10 @@ class PaymentSettingsPanel extends PanicElement {
   async load() {
     this.setLoading('Loading payment settings');
     try {
-      this.settings = await api('/payment-settings');
+      [this.settings, this.posData] = await Promise.all([
+        api('/payment-settings'),
+        api('/pos-location-map').catch(() => ({ mappings: [], venues: [] })),
+      ]);
       this.render();
     } catch (error) {
       this.showError(error);
@@ -622,7 +629,8 @@ class PaymentSettingsPanel extends PanicElement {
       </div>
       ${this.envSectionHtml('square', 'Square', env.square || [], s.active_provider)}
       ${this.envSectionHtml('stripe', 'Stripe', env.stripe || [], s.active_provider)}
-    </section>`;
+    </section>
+    ${this.posLocationMapHtml()}`;
 
     // Switch visible env section when the provider select changes.
     const providerSelect = $('select[name="active_provider"]', this);
@@ -634,6 +642,120 @@ class PaymentSettingsPanel extends PanicElement {
       this.settings = await api('/payment-settings', { method: 'PATCH', body: JSON.stringify(values) });
       publish('toast.show', { message: 'Payment settings saved.' });
       this.render();
+    });
+
+    this.bindPosLocationMap();
+  }
+
+  // ── POS Location Mapping ────────────────────────────────────────────────────
+
+  posLocationMapHtml() {
+    const mappings = (this.posData && this.posData.mappings) || [];
+    const venues   = (this.posData && this.posData.venues)   || [];
+
+    const venueOptions = venues.map((v) =>
+      `<option value="${esc(v.id)}">${esc(v.name)}</option>`
+    ).join('');
+
+    const categoryOptions = [
+      ['bar_sales',     'Bar Sales'],
+      ['merch_share',   'Merch Share'],
+      ['other_revenue', 'Other Revenue'],
+    ].map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
+
+    const tableRows = mappings.length
+      ? mappings.map((m) => `
+        <tr data-mapping-id="${esc(m.id)}">
+          <td data-label="Provider">${esc(titleCase(m.pos_provider))}</td>
+          <td data-label="Location ID"><code>${esc(m.location_id)}</code></td>
+          <td data-label="Venue">${esc(m.venue_name || m.venue_id)}</td>
+          <td data-label="Default category">${esc(titleCase(m.default_category.replace(/_/g, ' ')))}</td>
+          <td data-label="Status">${m.is_active ? '<span class="badge status-published">Active</span>' : '<span class="badge status-canceled">Inactive</span>'}</td>
+          <td data-label="Notes">${esc(m.notes || '—')}</td>
+          <td class="row-actions">
+            <button type="button" class="link danger" data-delete-mapping="${esc(m.id)}">Remove</button>
+          </td>
+        </tr>`).join('')
+      : `<tr><td colspan="7" class="empty-state">No POS location mappings yet.</td></tr>`;
+
+    return `<section class="panel" id="pos-location-map" style="margin-top:1.5rem">
+      <div class="section-head padded">
+        <h2>POS Location Mapping</h2>
+        <p class="subtle" style="font-weight:normal;font-size:.9em;margin:.25rem 0 0">
+          Maps Square POS terminal locations to venues. When a sale arrives on the
+          POS webhook, the location ID is looked up here to determine which venue
+          (and which ledger category) to write to.
+        </p>
+      </div>
+      <div class="padded">
+        <div style="overflow-x:auto">
+          <table class="data-table" id="pos-map-table">
+            <thead>
+              <tr>
+                <th>Provider</th><th>Location ID</th><th>Venue</th>
+                <th>Default category</th><th>Status</th><th>Notes</th><th></th>
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="section-head padded sub-head"><h3>Add mapping</h3></div>
+      <div class="padded">
+        <form class="grid-form" data-form="pos-map-add">
+          <label>Square Location ID
+            <input name="location_id" required placeholder="e.g. LXXXXXXXXXXXXXXXXX"
+              style="font-family:monospace">
+          </label>
+          <label>Venue
+            <select name="venue_id" required>
+              <option value="">— select venue —</option>
+              ${venueOptions}
+            </select>
+          </label>
+          <label>Default category
+            <select name="default_category">
+              ${categoryOptions}
+            </select>
+          </label>
+          <label>Notes (optional)
+            <input name="notes" placeholder="e.g. main bar terminal">
+          </label>
+          <div class="form-actions"><button>Add mapping</button></div>
+        </form>
+      </div>
+    </section>`;
+  }
+
+  bindPosLocationMap() {
+    const addForm = $('form[data-form="pos-map-add"]', this);
+    if (addForm) {
+      addForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+          await api('/pos-location-map', { method: 'POST', body: JSON.stringify(formData(e.target)) });
+          publish('toast.show', { message: 'POS location mapping added.' });
+          this.posData = await api('/pos-location-map').catch(() => this.posData);
+          this.render();
+        } catch (err) {
+          publish('toast.show', { tone: 'error', message: err.message });
+        }
+      });
+    }
+
+    $$('[data-delete-mapping]', this).forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.deleteMapping;
+        if (!confirm('Remove this POS location mapping?')) return;
+        try {
+          await api(`/pos-location-map/${id}`, { method: 'DELETE' });
+          publish('toast.show', { message: 'Mapping removed.' });
+          this.posData = await api('/pos-location-map').catch(() => this.posData);
+          this.render();
+        } catch (err) {
+          publish('toast.show', { tone: 'error', message: err.message });
+        }
+      });
     });
   }
 

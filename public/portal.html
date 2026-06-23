@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Event Portal — Panic Backstage</title>
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <style>
+    /* ── Reset ──────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Tokens ─────────────────────────────────────────────────────────── */
+    :root {
+      --font-serif:  Georgia, 'Times New Roman', serif;
+      --font-sans:   -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --font-mono:   'Courier New', Courier, monospace;
+      --color-ink:   #111;
+      --color-mid:   #555;
+      --color-muted: #888;
+      --color-bg:    #f8f7f4;
+      --color-card:  #fff;
+      --color-border:#d0cfc8;
+      --color-accent:#1a56c4;
+      --color-danger:#b91c1c;
+      --color-ok:    #15803d;
+      --color-warn:  #b45309;
+      --radius:      6px;
+      --shadow:      0 1px 4px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+    }
+
+    /* ── Page shell ─────────────────────────────────────────────────────── */
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-bg);
+      color: var(--color-ink);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 64px;
+    }
+
+    header {
+      width: 100%;
+      max-width: 760px;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .header-brand {
+      font-family: var(--font-serif);
+      font-size: 1.25rem;
+      color: var(--color-ink);
+      font-weight: normal;
+    }
+    .header-brand small {
+      display: block;
+      font-family: var(--font-sans);
+      font-size: .8rem;
+      color: var(--color-muted);
+      margin-top: 2px;
+    }
+
+    /* ── Cards ──────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--color-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 28px 32px;
+      width: 100%;
+      max-width: 760px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-family: var(--font-serif);
+      font-size: 1.1rem;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* ── Event header card ──────────────────────────────────────────────── */
+    .event-title {
+      font-family: var(--font-serif);
+      font-size: 1.6rem;
+      margin-bottom: 6px;
+    }
+    .event-meta {
+      font-size: .9rem;
+      color: var(--color-mid);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .event-meta span { white-space: nowrap; }
+
+    /* Status badge */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: .78rem;
+      font-weight: 600;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+    .badge-ok      { background: #dcfce7; color: var(--color-ok); }
+    .badge-warn    { background: #fef3c7; color: var(--color-warn); }
+    .badge-neutral { background: #f1f0ec; color: var(--color-mid); }
+    .badge-accent  { background: #dbeafe; color: var(--color-accent); }
+    .badge-danger  { background: #fee2e2; color: var(--color-danger); }
+
+    /* ── Contract status ────────────────────────────────────────────────── */
+    .contract-status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .contract-status p { font-size: .875rem; color: var(--color-mid); margin-top: 4px; }
+
+    /* ── Tables ─────────────────────────────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .875rem;
+    }
+    thead th {
+      text-align: left;
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--color-muted);
+      padding: 0 8px 10px;
+      border-bottom: 1px solid var(--color-border);
+    }
+    tbody td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #f0eeea;
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    .text-right { text-align: right; }
+
+    /* Totals row */
+    .totals-row td {
+      padding-top: 14px;
+      font-weight: 600;
+      border-top: 2px solid var(--color-border);
+      border-bottom: none;
+    }
+
+    /* ── Summary stat ───────────────────────────────────────────────────── */
+    .stat-row {
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .stat label {
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--color-muted);
+    }
+    .stat strong {
+      font-size: 1.25rem;
+    }
+    .stat .ok { color: var(--color-ok); }
+    .stat .warn { color: var(--color-warn); }
+
+    /* ── Empty state ────────────────────────────────────────────────────── */
+    .empty {
+      text-align: center;
+      padding: 24px;
+      color: var(--color-muted);
+      font-size: .9rem;
+      font-style: italic;
+    }
+
+    /* ── Loading / error ────────────────────────────────────────────────── */
+    .loading {
+      text-align: center;
+      padding: 60px 24px;
+      color: var(--color-mid);
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--color-border);
+      border-top-color: var(--color-accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status-screen {
+      text-align: center;
+      padding: 40px 24px;
+    }
+    .status-icon { font-size: 3rem; margin-bottom: 16px; }
+    .status-screen h2 { font-family: var(--font-serif); font-size: 1.4rem; margin-bottom: 10px; }
+    .status-screen p  { color: var(--color-mid); font-size: .95rem; line-height: 1.6; }
+
+    /* ── Footer ─────────────────────────────────────────────────────────── */
+    footer {
+      width: 100%;
+      max-width: 760px;
+      margin-top: 8px;
+      font-size: .8rem;
+      color: var(--color-muted);
+      text-align: center;
+      line-height: 1.8;
+    }
+    footer a { color: var(--color-muted); }
+
+    @media (max-width: 480px) {
+      .card { padding: 20px 16px; }
+      .event-title { font-size: 1.3rem; }
+      .stat-row { gap: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    Panic Backstage
+    <small>Client Event Portal</small>
+  </div>
+</header>
+
+<!-- Loading state -->
+<div id="loadingCard" class="card">
+  <div class="loading">
+    <div class="spinner"></div>
+    Loading your event details…
+  </div>
+</div>
+
+<!-- Error state -->
+<div id="errorCard" class="card" style="display:none">
+  <div class="status-screen">
+    <div class="status-icon">&#9888;&#65039;</div>
+    <h2>Link Unavailable</h2>
+    <p id="errorMsg">This portal link has expired or is no longer valid. Please contact us for a new link.</p>
+  </div>
+</div>
+
+<!-- Portal content (hidden until loaded) -->
+<div id="portalContent" style="display:none">
+
+  <!-- Event header -->
+  <div class="card" id="eventCard">
+    <h1 class="event-title" id="eventTitle"></h1>
+    <div class="event-meta" id="eventMeta"></div>
+    <div id="eventBadge"></div>
+  </div>
+
+  <!-- Contract status -->
+  <div class="card">
+    <div class="card-title">Contract Status</div>
+    <div id="contractContent"></div>
+  </div>
+
+  <!-- Payments -->
+  <div class="card">
+    <div class="card-title">Payment Summary</div>
+    <div id="paymentsContent"></div>
+  </div>
+
+  <!-- Invoice / Ledger -->
+  <div class="card">
+    <div class="card-title">Invoice</div>
+    <div id="invoiceContent"></div>
+  </div>
+
+</div>
+
+<!-- Footer -->
+<footer id="portalFooter" style="display:none">
+  Questions? Contact us at
+  <a href="mailto:info@panicbooking.com">info@panicbooking.com</a>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = String(str ?? '');
+    return d.innerHTML;
+  }
+
+  function show(id) { document.getElementById(id).style.display = ''; }
+  function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+  function fmt(dateStr) {
+    if (!dateStr) return '—';
+    const d = new Date(String(dateStr).replace(' ', 'T'));
+    if (isNaN(d)) return dateStr;
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' });
+  }
+
+  function fmtTime(timeStr) {
+    if (!timeStr) return null;
+    // timeStr may be "HH:MM:SS" or an ISO datetime string
+    const parts = /(\d{1,2}):(\d{2})/.exec(timeStr);
+    if (!parts) return null;
+    const h = parseInt(parts[1], 10);
+    const m = parseInt(parts[2], 10);
+    const ampm = h >= 12 ? 'pm' : 'am';
+    const h12  = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  }
+
+  function money(amount, currency) {
+    const n = parseFloat(amount) || 0;
+    try {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format(n);
+    } catch (_) {
+      return `$${n.toFixed(2)}`;
+    }
+  }
+
+  function statusBadge(status) {
+    const map = {
+      draft:          ['badge-neutral', 'Draft'],
+      sent:           ['badge-warn',    'Sent'],
+      signed:         ['badge-accent',  'Signed'],
+      fully_executed: ['badge-ok',      'Fully Executed'],
+      voided:         ['badge-danger',  'Voided'],
+      declined:       ['badge-danger',  'Declined'],
+      // event statuses
+      empty:          ['badge-neutral', 'Empty'],
+      hold:           ['badge-neutral', 'Hold'],
+      proposed:       ['badge-neutral', 'Proposed'],
+      confirmed:      ['badge-accent',  'Confirmed'],
+      booked:         ['badge-ok',      'Booked'],
+      completed:      ['badge-ok',      'Completed'],
+      settled:        ['badge-ok',      'Settled'],
+      canceled:       ['badge-danger',  'Canceled'],
+    };
+    const [cls, label] = map[status] || ['badge-neutral', status || 'Unknown'];
+    return `<span class="badge ${esc(cls)}">${esc(label)}</span>`;
+  }
+
+  function paymentStatusBadge(status) {
+    const map = {
+      pending:  ['badge-warn',    'Pending'],
+      received: ['badge-ok',      'Received'],
+      failed:   ['badge-danger',  'Failed'],
+      refunded: ['badge-warn',    'Refunded'],
+      voided:   ['badge-neutral', 'Voided'],
+    };
+    const [cls, label] = map[status] || ['badge-neutral', status || ''];
+    return `<span class="badge ${esc(cls)}">${esc(label)}</span>`;
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
+
+  function renderEvent(event) {
+    document.getElementById('eventTitle').textContent = event.title || 'Untitled Event';
+    document.title = `${event.title || 'Event'} — Client Portal`;
+
+    const meta = [];
+    if (event.show_time || event.doors_time) {
+      const parts = [];
+      const t = fmtTime(event.show_time || event.doors_time);
+      if (t) parts.push(`Show: ${t}`);
+      const d = fmtTime(event.doors_time);
+      if (d && event.show_time) parts.push(`Doors: ${d}`);
+      meta.push(`<span>${esc(parts.join(' &nbsp;·&nbsp; '))}</span>`);
+    }
+    if (event.age_restriction) {
+      meta.push(`<span>Ages: ${esc(event.age_restriction)}</span>`);
+    }
+    document.getElementById('eventMeta').innerHTML = meta.join('');
+    document.getElementById('eventBadge').innerHTML = statusBadge(event.status);
+  }
+
+  function renderContract(contract) {
+    const el = document.getElementById('contractContent');
+    if (!contract) {
+      el.innerHTML = '<div class="empty">No contract on file for this event.</div>';
+      return;
+    }
+    const statusDescriptions = {
+      draft:          'A contract has been drafted and is awaiting review.',
+      sent:           'The contract has been sent and is awaiting your signature.',
+      signed:         'The contract has been signed. Awaiting counter-signature from the venue.',
+      fully_executed: 'The contract has been fully executed by all parties.',
+      voided:         'This contract has been voided.',
+      declined:       'This contract was declined.',
+    };
+    const description = statusDescriptions[contract.status] || 'Contract is in progress.';
+    el.innerHTML = `
+      <div class="contract-status">
+        <div>
+          ${statusBadge(contract.status)}
+          <p>${esc(description)}</p>
+        </div>
+      </div>`;
+  }
+
+  function renderPayments(payments) {
+    const el = document.getElementById('paymentsContent');
+    if (!payments || payments.length === 0) {
+      el.innerHTML = '<div class="empty">No payment records on file.</div>';
+      return;
+    }
+
+    let totalReceived = 0;
+    let totalPending  = 0;
+    payments.forEach(p => {
+      const amt = parseFloat(p.amount) || 0;
+      if (p.status === 'received') totalReceived += amt;
+      else if (p.status === 'pending') totalPending += amt;
+    });
+
+    const currency = payments[0]?.currency || 'USD';
+
+    const rows = payments.map(p => `
+      <tr>
+        <td>${esc((p.payment_type || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))}</td>
+        <td>${p.due_date ? esc(fmt(p.due_date)) : '—'}</td>
+        <td>${p.received_at ? esc(fmt(p.received_at)) : '—'}</td>
+        <td>${paymentStatusBadge(p.status)}</td>
+        <td class="text-right">${esc(money(p.amount, p.currency))}</td>
+      </tr>`).join('');
+
+    const totalRow = `
+      <tr class="totals-row">
+        <td colspan="4">Total Received</td>
+        <td class="text-right">${esc(money(totalReceived, currency))}</td>
+      </tr>
+      ${totalPending > 0 ? `<tr class="totals-row">
+        <td colspan="4">Pending</td>
+        <td class="text-right">${esc(money(totalPending, currency))}</td>
+      </tr>` : ''}`;
+
+    el.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Due</th>
+            <th>Received</th>
+            <th>Status</th>
+            <th class="text-right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+          ${totalRow}
+        </tbody>
+      </table>`;
+  }
+
+  function renderInvoice(ledger) {
+    const el = document.getElementById('invoiceContent');
+    if (!ledger || ledger.length === 0) {
+      el.innerHTML = '<div class="empty">No invoice lines on file.</div>';
+      return;
+    }
+
+    let totalRevenue = 0;
+    let totalPayments = 0;
+    const currency = ledger[0]?.currency || 'USD';
+
+    const rows = ledger.map(entry => {
+      const amt = parseFloat(entry.amount) || 0;
+      if (entry.line_type === 'revenue') totalRevenue += amt;
+      else if (entry.line_type === 'payment') totalPayments += amt;
+      const typeLabel = entry.line_type === 'payment' ? 'Credit' : 'Charge';
+      return `
+        <tr>
+          <td>${esc(entry.description || entry.category || 'Item')}</td>
+          <td>${esc(typeLabel)}</td>
+          <td class="text-right">${esc(money(entry.amount, entry.currency))}</td>
+        </tr>`;
+    }).join('');
+
+    const balance = totalRevenue - totalPayments;
+    const balanceClass = balance <= 0 ? 'ok' : 'warn';
+
+    el.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th>Type</th>
+            <th class="text-right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+          <tr class="totals-row">
+            <td colspan="2">Subtotal Billed</td>
+            <td class="text-right">${esc(money(totalRevenue, currency))}</td>
+          </tr>
+          ${totalPayments > 0 ? `<tr class="totals-row">
+            <td colspan="2">Credits Applied</td>
+            <td class="text-right">${esc(money(totalPayments, currency))}</td>
+          </tr>` : ''}
+          <tr class="totals-row">
+            <td colspan="2"><strong>Balance Due</strong></td>
+            <td class="text-right"><strong class="${esc(balanceClass)}">${esc(money(Math.max(0, balance), currency))}</strong></td>
+          </tr>
+        </tbody>
+      </table>`;
+  }
+
+  // ── Bootstrap ────────────────────────────────────────────────────────────
+
+  window.addEventListener('DOMContentLoaded', function () {
+    const params = new URLSearchParams(window.location.search);
+    const token  = params.get('token') || '';
+
+    if (!token) {
+      document.getElementById('errorMsg').textContent =
+        'No portal token found in the URL. Please use the link provided by the venue.';
+      hide('loadingCard');
+      show('errorCard');
+      return;
+    }
+
+    const apiBase = (function () {
+      // Works whether the page lives at /portal.html or a subdirectory
+      const base = window.location.pathname.replace(/\/[^/]*$/, '');
+      return (base === '' ? '' : base) + '/api';
+    }());
+
+    fetch(apiBase + '/portal/view?token=' + encodeURIComponent(token))
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Request failed'); });
+        return res.json();
+      })
+      .then(function (data) {
+        renderEvent(data.event || {});
+        renderContract(data.contract || null);
+        renderPayments(data.payments || []);
+        renderInvoice(data.invoice || []);
+
+        hide('loadingCard');
+        show('portalContent');
+        show('portalFooter');
+      })
+      .catch(function (err) {
+        document.getElementById('errorMsg').textContent =
+          (err && err.message) || 'Unable to load your event details. The link may have expired.';
+        hide('loadingCard');
+        show('errorCard');
+      });
+  });
+
+}());
+</script>
+</body>
+</html>

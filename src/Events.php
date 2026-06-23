@@ -269,6 +269,9 @@ final class Events extends BaseEndpoint
                 'changes' => [['field' => 'Status', 'from' => (string) $existing['status'], 'to' => $newStatus]],
             ]);
             $this->notifyStatusChange($id, (string) $existing['status'], $newStatus);
+            if ($newStatus === 'published') {
+                $this->maybeAutoPublish($id);
+            }
             $this->pushToSheet($id);
             return $this->ok(['ok' => true]);
         }
@@ -344,6 +347,9 @@ final class Events extends BaseEndpoint
         );
         if (isset($body['status']) && $body['status'] !== $wasStatus) {
             $this->notifyStatusChange($id, $wasStatus, $body['status']);
+            if ($body['status'] === 'published') {
+                $this->maybeAutoPublish($id);
+            }
         }
         log_activity($this->db, $id, $this->userId(), 'event updated', $this->diffEvent($old, $body));
         $this->pushToSheet($id);
@@ -1011,6 +1017,131 @@ final class Events extends BaseEndpoint
             }
         } catch (\Throwable $e) {
             @error_log("status-change notification failed for event {$eventId}: {$e->getMessage()}");
+        }
+    }
+
+    /**
+     * If auto-publish is enabled in promote_auto_publish_settings, create a
+     * broadcast for the event's most recent promote post and dispatch it to
+     * every configured destination.
+     *
+     * Mirrors the logic in Promote\Broadcasts::create() but runs internally
+     * (no HTTP round-trip) and is attributed as trigger_source=auto_publish
+     * in the activity log.  Best-effort — never throws.
+     */
+    private function maybeAutoPublish(int $eventId): void
+    {
+        try {
+            $settings = $this->db->one(
+                'SELECT auto_publish_enabled, auto_publish_destinations
+                 FROM promote_auto_publish_settings
+                 LIMIT 1'
+            );
+            if (!$settings || !(int) $settings['auto_publish_enabled']) {
+                return;
+            }
+
+            $destinations = $settings['auto_publish_destinations']
+                ? json_decode((string) $settings['auto_publish_destinations'], true)
+                : [];
+
+            if (empty($destinations) || !is_array($destinations)) {
+                error_log("Auto-publish: enabled but no destinations configured for event {$eventId}. Skipping.");
+                return;
+            }
+
+            // Use the most recently created post for this event.
+            $post = $this->db->one(
+                "SELECT * FROM promote_posts WHERE event_id = ? ORDER BY created_at DESC LIMIT 1",
+                [$eventId]
+            );
+            if (!$post) {
+                error_log("Auto-publish: event {$eventId} reached published status but has no promote post. Skipping.");
+                return;
+            }
+
+            $postId = (int) $post['id'];
+
+            // Load the full event row (with venue join) as adapters expect it.
+            $event = $this->db->one(
+                'SELECT e.*, v.name venue_name, v.city venue_city, v.state venue_state
+                 FROM events e LEFT JOIN venues v ON v.id = e.venue_id WHERE e.id = ?',
+                [$eventId]
+            ) ?? [];
+
+            // Build destination map for group lookup.
+            $placeholders = implode(',', array_fill(0, count($destinations), '?'));
+            $destRecords  = $this->db->all(
+                "SELECT * FROM promote_destinations WHERE destination_key IN ($placeholders)",
+                array_values($destinations)
+            );
+            $destMap = [];
+            foreach ($destRecords as $d) {
+                $destMap[(string) $d['destination_key']] = $d;
+            }
+
+            $pdo = $this->db->pdo();
+            $pdo->beginTransaction();
+            try {
+                $broadcastId = $this->db->insert(
+                    'INSERT INTO promote_broadcasts (event_id, post_id, created_by_user_id, send_mode, status)
+                     VALUES (?, ?, NULL, ?, ?)',
+                    [$eventId, $postId, 'now', 'queued']
+                );
+
+                $adapter = new Promote\BroadcastAdapters($this->db);
+                $statuses = [];
+
+                foreach ($destinations as $destKey) {
+                    $dest      = $destMap[$destKey] ?? null;
+                    $destGroup = $dest ? (string) $dest['destination_group'] : 'unknown';
+                    $destStatus = $dest ? (string) $dest['status'] : 'manual_submission';
+
+                    $dispatched = $adapter->dispatch($destKey, $destStatus, 'now', $event, $post);
+
+                    $this->db->insert(
+                        'INSERT INTO promote_broadcast_results
+                            (broadcast_id, destination_key, destination_group, status, external_url, error_message, response_json)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        [
+                            $broadcastId,
+                            $destKey,
+                            $destGroup,
+                            $dispatched['status'],
+                            $dispatched['external_url'],
+                            $dispatched['error_message'],
+                            $dispatched['response_json'],
+                        ]
+                    );
+                    $statuses[] = $dispatched['status'];
+                }
+
+                $anyFailed = in_array('failed', $statuses, true);
+                $allFailed = count($statuses) > 0
+                    && count(array_filter($statuses, fn ($s) => $s === 'failed')) === count($statuses);
+                $broadcastStatus = match (true) {
+                    $allFailed  => 'failed',
+                    $anyFailed  => 'partial_failure',
+                    default     => 'completed',
+                };
+                $this->db->run(
+                    'UPDATE promote_broadcasts SET status = ? WHERE id = ?',
+                    [$broadcastStatus, $broadcastId]
+                );
+
+                $pdo->commit();
+            } catch (\Throwable $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+
+            log_activity($this->db, $eventId, $this->userId(), 'auto-publish triggered', [
+                'broadcast_id' => $broadcastId,
+                'post_id'      => $postId,
+                'destinations' => $destinations,
+            ]);
+        } catch (\Throwable $e) {
+            @error_log("auto-publish failed for event {$eventId}: {$e->getMessage()}");
         }
     }
 
