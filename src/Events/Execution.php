@@ -13,7 +13,7 @@ use function Panic\log_activity;
  *
  *   GET    /api/events/{id}/execution              list records (incidents filtered by capability)
  *   POST   /api/events/{id}/execution              create a record
- *   PATCH  /api/events/{id}/execution/{rid}        update a record
+ *   PATCH  /api/events/{id}/execution/{rid}        update a record (or resolve when resolve:true)
  *   DELETE /api/events/{id}/execution/{rid}        delete
  *
  * Incident records (record_type='incident' or is_restricted=1) are only
@@ -25,7 +25,7 @@ use function Panic\log_activity;
  *   read_event         — see non-incident records
  *   view_incidents     — also see incident/restricted records
  *   manage_execution   — create/edit any record
- *   manage_incidents   — create/edit incident/restricted records
+ *   manage_incidents   — create/edit incident/restricted records; resolve incidents
  */
 final class Execution extends BaseEndpoint
 {
@@ -49,6 +49,14 @@ final class Execution extends BaseEndpoint
         } else {
             if ($denied = $this->requireEventCapability($eventId, 'read_event')) {
                 return $denied;
+            }
+        }
+
+        // Route PATCH with resolve:true to the resolve handler
+        if ($request->method() === 'PATCH' && $recordId !== null) {
+            $b = $request->body();
+            if (!empty($b['resolve'])) {
+                return $this->resolve($eventId, (int) $recordId, $request);
             }
         }
 
@@ -172,6 +180,11 @@ final class Execution extends BaseEndpoint
             'type'      => $type,
         ]);
 
+        // Notify venue admins when an incident is logged
+        if ($type === 'incident') {
+            $this->notifyIncident($eventId, $id, $b['summary'] ?? '');
+        }
+
         // Link to ledger if this is a chargeable change order/overage
         if (in_array($type, ['change_order','overage','damage'], true) && !empty($b['amount'])) {
             $category = match($type) {
@@ -237,6 +250,56 @@ final class Execution extends BaseEndpoint
         $this->db->run('UPDATE event_execution_records SET ' . implode(', ', $sets) . ' WHERE id = ?', $params);
 
         return $this->ok(['ok' => true]);
+    }
+
+    private function resolve(int $eventId, int $recId, Request $request): Response
+    {
+        if (!$this->hasEventCapability($eventId, 'manage_incidents')) {
+            return $this->forbidden('manage_incidents required');
+        }
+        $b = $request->body();
+        $notes = trim((string)($b['resolution_notes'] ?? ''));
+        if ($notes === '') {
+            return Response::json(['error' => 'resolution_notes is required to resolve an incident'], 422);
+        }
+
+        $this->db->run(
+            'UPDATE event_execution_records SET resolved_at=NOW(), resolved_by_id=?, resolution_notes=? WHERE id=? AND event_id=?',
+            [$this->userId(), $notes, $recId, $eventId]
+        );
+        log_activity($this->db, $eventId, $this->userId(), 'incident resolved', ['record_id' => $recId]);
+        return $this->ok(['resolved' => true]);
+    }
+
+    private function notifyIncident(int $eventId, int $recordId, string $summary): void
+    {
+        // Get venue admins who have notify_event_updates = 1
+        $admins = $this->db->all(
+            "SELECT email, name FROM users WHERE role='venue_admin' AND notify_event_updates=1 AND access_status='active'"
+        );
+        $event = $this->db->one('SELECT title FROM events WHERE id=?', [$eventId]);
+        $eventTitle = $event['title'] ?? 'Event #' . $eventId;
+
+        $appUrl = getenv('APP_URL') ?: 'https://backstage';
+        $loggedAt = date('Y-m-d H:i:s');
+        $loggedBy = $this->db->one('SELECT name FROM users WHERE id=?', [$this->userId()]);
+        $loggedByName = $loggedBy['name'] ?? 'Unknown';
+
+        foreach ($admins as $admin) {
+            (new \Panic\Mailer($this->root, $this->db))->sendTemplate(
+                $admin['email'],
+                "Incident logged: {$eventTitle}",
+                'incident-notification',
+                [
+                    'event_title' => $eventTitle,
+                    'summary'     => $summary,
+                    'logged_at'   => $loggedAt,
+                    'logged_by'   => $loggedByName,
+                    'app_url'     => $appUrl,
+                    'event_id'    => (string) $eventId,
+                ]
+            );
+        }
     }
 
     private function delete(int $eventId, int $recordId): Response

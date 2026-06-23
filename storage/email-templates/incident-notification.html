@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px">
+  <div style="background:#dc3545;color:#fff;padding:16px;border-radius:8px 8px 0 0">
+    <h2 style="margin:0">&#9888;&#65039; Incident Logged</h2>
+  </div>
+  <div style="border:1px solid #ddd;border-top:0;padding:20px;border-radius:0 0 8px 8px">
+    <p>An incident has been logged for <strong>{{event_title}}</strong>.</p>
+    <table style="width:100%;border-collapse:collapse">
+      <tr><td style="padding:6px 0;color:#666">Summary:</td><td>{{summary}}</td></tr>
+      <tr><td style="padding:6px 0;color:#666">Logged at:</td><td>{{logged_at}}</td></tr>
+      <tr><td style="padding:6px 0;color:#666">Logged by:</td><td>{{logged_by}}</td></tr>
+    </table>
+    <p style="margin-top:20px">
+      <a href="{{app_url}}/#event-{{event_id}}" style="background:#0d6efd;color:#fff;padding:10px 20px;border-radius:4px;text-decoration:none">
+        View &amp; Resolve Incident
+      </a>
+    </p>
+  </div>
+</body>
+</html>

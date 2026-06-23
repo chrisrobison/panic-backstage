@@ -67,6 +67,9 @@ const EXEC_STYLES = `
 .exec-record-edit-form textarea,
 .exec-record-edit-form input[type=number] { width:100%;box-sizing:border-box; }
 .exec-record-edit-actions { display:flex;gap:0.5rem;margin-top:0.25rem; }
+.exec-resolved-badge { display:inline-flex;align-items:center;gap:4px;color:#198754;font-weight:600;font-size:0.85em; }
+.exec-resolve-form { margin-top:0.5rem;display:flex;flex-direction:column;gap:0.4rem;width:100%; }
+.exec-resolve-form textarea { width:100%;box-sizing:border-box; }
 `;
 
 function injectStyles() {
@@ -101,6 +104,15 @@ function typeBadge(type) {
   return `<span class="badge" style="background:${color};color:#fff;font-size:0.75em;padding:2px 7px;border-radius:3px;display:inline-flex;align-items:center;gap:4px;"><i class="fa-solid ${icon}" aria-hidden="true"></i>${label}</span>`;
 }
 
+// Render resolved badge or resolve button placeholder for incident records
+function resolvedHtml(rec) {
+  if (rec.record_type !== 'incident' && !Number(rec.is_restricted)) return '';
+  if (rec.resolved_at) {
+    return `<span class="exec-resolved-badge"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Resolved ${esc(shortDate(new Date(String(rec.resolved_at).replace(' ','T'))))}</span>`;
+  }
+  return `<span data-exec-resolve-slot></span>`;
+}
+
 // Render one record card (view mode)
 function renderCard(rec) {
   const icon    = TYPE_ICON[rec.record_type]  || 'fa-note-sticky';
@@ -122,6 +134,7 @@ function renderCard(rec) {
     <div class="exec-record-foot">
       ${amtHtml}
       <span>by ${esc(rec.creator_name || '')}</span>
+      ${resolvedHtml(rec)}
       <span data-exec-actions></span>
     </div>
   </article>`;
@@ -314,6 +327,25 @@ class EventExecution extends PanicElement {
       p.addEventListener('click', () => p.classList.toggle('expanded'));
     });
 
+    // Inject resolve button for unresolved incident records (requires manage_incidents)
+    if (this.canManageIncidents) {
+      $$('[data-exec-id]', listEl).forEach(article => {
+        const recId = article.dataset.execId;
+        const rec   = this._records.find(r => String(r.id) === recId);
+        if (!rec) return;
+        if (rec.record_type !== 'incident' && !Number(rec.is_restricted)) return;
+        if (rec.resolved_at) return;
+        const slot = $('[data-exec-resolve-slot]', article);
+        if (!slot) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'secondary small';
+        btn.textContent = 'Resolve';
+        btn.addEventListener('click', () => this._startResolve(article, rec));
+        slot.replaceWith(btn);
+      });
+    }
+
     if (!this.canEdit) return;
 
     // Inject edit/delete buttons into each card footer's actions slot
@@ -331,6 +363,48 @@ class EventExecution extends PanicElement {
       $(`[data-exec-delete="${CSS.escape(recId)}"]`, actionsEl).addEventListener('click', () => {
         this._deleteRecord(recId);
       });
+    });
+  }
+
+  // ── Resolve incident inline form ────────────────────────────────────────────
+  _startResolve(article, rec) {
+    const foot = $('.exec-record-foot', article);
+    if (!foot) return;
+    // Append resolve form below the footer
+    const formHtml = `<div class="exec-resolve-form" data-exec-resolve-form>
+      <label style="font-size:0.9em;font-weight:600;color:#333">Resolution notes (required)
+        <textarea name="resolution_notes" rows="3" placeholder="Describe how this incident was resolved…"></textarea>
+      </label>
+      <div class="exec-record-edit-actions">
+        <button type="button" class="button small" data-exec-resolve-submit>Mark Resolved</button>
+        <button type="button" class="secondary small" data-exec-resolve-cancel>Cancel</button>
+      </div>
+    </div>`;
+    foot.insertAdjacentHTML('afterend', formHtml);
+
+    const formEl = $('[data-exec-resolve-form]', article);
+    $('[data-exec-resolve-cancel]', formEl).addEventListener('click', () => {
+      formEl.remove();
+    });
+    $('[data-exec-resolve-submit]', formEl).addEventListener('click', async () => {
+      const notes = formEl.querySelector('textarea[name=resolution_notes]').value.trim();
+      if (!notes) {
+        publish('toast.show', { message: 'Resolution notes are required.', tone: 'error' });
+        return;
+      }
+      const submitBtn = $('[data-exec-resolve-submit]', formEl);
+      if (submitBtn) submitBtn.disabled = true;
+      try {
+        await api(`/events/${this.eventId}/execution/${rec.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ resolve: true, resolution_notes: notes }),
+        });
+        publish('toast.show', { message: 'Incident marked as resolved.' });
+        await this._load();
+      } catch (err) {
+        publish('toast.show', { message: err.message || 'Failed to resolve incident.', tone: 'error' });
+        if (submitBtn) submitBtn.disabled = false;
+      }
     });
   }
 

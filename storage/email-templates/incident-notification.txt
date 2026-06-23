@@ -1,0 +1,14 @@
+Incident logged for {{event_title}}
+
+An execution record flagged as an incident has been logged.
+
+Event: {{event_title}}
+Summary: {{summary}}
+Logged at: {{logged_at}}
+Logged by: {{logged_by}}
+
+Log in to review and resolve:
+{{app_url}}/#event-{{event_id}}
+
+---
+Panic Backstage — Venue Operations
