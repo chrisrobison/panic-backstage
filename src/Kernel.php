@@ -161,9 +161,23 @@ final class Kernel
         }
 
         // Payment provider webhooks (unauthenticated; verified by signature):
-        //   POST /api/webhooks/stripe | /api/webhooks/square
+        //   POST /api/webhooks/stripe       → ticketing (online checkout)
+        //   POST /api/webhooks/square       → ticketing (online checkout)
+        //   POST /api/webhooks/square-pos   → POS bar/merch sales → ledger
         if ($segments[0] === 'webhooks') {
+            if (($segments[1] ?? '') === 'square-pos') {
+                return [PosWebhook::class, []];
+            }
             return [Webhooks::class, ['provider' => $segments[1] ?? null]];
+        }
+
+        // POS location mapping (admin; manage_users gate inside endpoint):
+        //   GET    /api/pos-location-map
+        //   POST   /api/pos-location-map
+        //   PATCH  /api/pos-location-map/{id}
+        //   DELETE /api/pos-location-map/{id}
+        if ($segments[0] === 'pos-location-map') {
+            return [PosLocationMap::class, ['mappingId' => $this->intOrNull($segments[1] ?? null)]];
         }
 
         // Door scanner redeem (scanner-token auth, NOT JWT):
@@ -219,6 +233,14 @@ final class Kernel
         // CRM follow-up reminder cron endpoint
         if ($segments[0] === 'crm-followups') {
             return [CrmFollowups::class, []];
+        }
+
+        // Client portal — token-gated read-only event view for promoters/clients
+        if ($segments[0] === 'portal') {
+            $action  = $segments[1] ?? 'view';
+            $tokenId = $this->intOrNull($segments[2] ?? null);
+            $eventId = $this->intOrNull($segments[2] ?? null);
+            return [Portal::class, ['action' => $action, 'tokenId' => $tokenId, 'eventId' => $eventId]];
         }
 
         // Venue policy
@@ -402,7 +424,9 @@ final class Kernel
             Invites::class,
             Me::class,                  // returns null user gracefully when unauthenticated
             PublicTickets::class,        // public ticket browse + checkout
-            Webhooks::class,            // payment provider webhooks, authenticated by signature
+            Webhooks::class,            // payment provider webhooks (ticketing), authenticated by signature
+            PosWebhook::class,          // Square POS webhook (bar/merch ledger), authenticated by signature
+            Portal::class,              // Client portal — public view gated by signed token (no JWT)
             ContractWebhooks::class,    // contract provider webhooks, authenticated by signature
             ContractSigningEndpoint::class, // public signing flow, authenticated by token hash
             TicketView::class,          // public ticket page, looked up by token hash

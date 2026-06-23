@@ -7,11 +7,32 @@ Each item is a self-contained feature that builds on the new backend infrastruct
 
 ## High Priority
 
-### POS Integration
-- **Goal:** Square POS (bar/merch) sales automatically appear as `bar_sales` / `merch_share` ledger entries instead of manual entry.
-- **Approach:** Square Webhooks → `/api/webhooks/square` → insert into `event_ledger_entries` (source='pos', source_ref_id=square_payment_id). Match to event by date + venue.
-- **Needs:** Square API key (already in `.env`), Square location ID, event-to-POS-location mapping.
-- **Effort:** ~2–3 days.
+### POS Integration ✅ IMPLEMENTED
+
+Square POS bar and merch sales are now automatically imported as ledger entries.
+
+**What was built:**
+- `database/migrations/034_pos_location_map.sql` — `pos_location_map` table mapping Square location IDs to venues; also adds `source_ref_str VARCHAR(255)` to `event_ledger_entries` for string-typed external references.
+- `database/migrations/tenant/022_pos_location_map.sql` — same migration for multi-tenant installs.
+- `src/PosWebhook.php` — handles `POST /api/webhooks/square-pos`; verifies HMAC-SHA256 signature (identical algorithm to `SquareProvider`), matches payment to an in-progress event by venue + date, writes a `bar_sales`/`merch_share`/`other_revenue` ledger entry, idempotent on Square payment ID.
+- `src/PosLocationMap.php` — CRUD endpoint `GET/POST/PATCH/DELETE /api/pos-location-map` (venue_admin only).
+- `src/Kernel.php` — routes `square-pos` to `PosWebhook` and adds `pos-location-map` route; both added to public/auth lists.
+- `public/assets/ticketing-admin.js` — "POS Location Mapping" section added to the Admin → Payments tab; lists existing mappings and provides an add/remove form.
+- `.env.example` — documents `SQUARE_POS_WEBHOOK_SECRET` and `SQUARE_POS_WEBHOOK_URL`.
+
+**Setup required:**
+1. Run the migration: `php scripts/migrate.php`
+2. In Square Dashboard → Developers → Webhooks, add a new subscription:
+   - URL: `https://yourdomain.com/api/webhooks/square-pos`
+   - Events: `payment.updated`
+   - Copy the signing secret into `.env` as `SQUARE_POS_WEBHOOK_SECRET`
+3. Set `SQUARE_POS_WEBHOOK_URL=https://yourdomain.com/api/webhooks/square-pos` in `.env`
+4. In Admin → Payments → POS Location Mapping, add a row mapping your Square Location ID to the venue and choose the default ledger category (bar_sales / merch_share / other_revenue)
+
+**How it works at runtime:**
+- Square sends `payment.updated` with `status=COMPLETED` to the POS webhook URL
+- The handler verifies the HMAC, looks up the location mapping, checks idempotency, finds the active event at the venue for today's date, and inserts a ledger entry with `source='pos_import'` and `source_ref_str=<square_payment_id>`
+- If no active event is found or no mapping exists, the payment is logged and skipped (Square gets a 200 to stop retrying)
 
 ### Payroll Export
 - **Goal:** Export actual labor hours (clock-in/out from `event_staffing`) in a format usable by payroll systems (CSV, QuickBooks IIF, or Gusto API).
