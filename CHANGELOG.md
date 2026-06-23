@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `ui` — Closeout and billing ledger panel for event workspace
 - **Added** `ui` — Execution records panel for event workspace
 - **Added** `ui` — Vendors panel for event workspace
 - **Added** `ui` — Leads inbox and deal evaluator front-end
