@@ -118,10 +118,16 @@ final class Staffing extends BaseEndpoint
         if ($denied = $this->requireEventCapability($eventId, $cap)) {
             return $denied;
         }
-        // POST /staffing/from-capacity → clear + auto-populate from capacity tiers
+        // POST /staffing/from-capacity → clear + auto-populate (with optional preview mode)
         if ($action === 'from-capacity') {
             return $request->method() === 'POST'
                 ? $this->fromCapacity($request, $eventId)
+                : Response::methodNotAllowed();
+        }
+        // POST /staffing/preview → non-destructive preview of capacity-based recommendation
+        if ($action === 'preview') {
+            return $request->method() === 'POST'
+                ? $this->previewCapacity($request, $eventId)
                 : Response::methodNotAllowed();
         }
         return match ($request->method()) {
@@ -213,41 +219,148 @@ final class Staffing extends BaseEndpoint
     }
 
     /**
+     * POST /api/events/{id}/staffing/preview
+     * Non-destructive preview of the capacity-based staffing recommendation.
+     * Returns the suggested staffing tier and a diff against current shifts.
+     * Nothing is written to the database.
+     */
+    private function previewCapacity(Request $request, int $eventId): Response
+    {
+        $capacity = $this->resolveCapacity($request, $eventId);
+        if ($capacity <= 0) {
+            return Response::json(['error' => 'capacity is required'], 422);
+        }
+
+        $tier    = $this->tierForCapacity($capacity);
+        $current = $this->staffingFor($eventId);
+
+        // Build diff: what roles are new, unchanged, or removed
+        $currentRoleCounts = [];
+        foreach ($current as $shift) {
+            $currentRoleCounts[$shift['role']] = ($currentRoleCounts[$shift['role']] ?? 0) + 1;
+        }
+
+        $diff = [];
+        foreach ($tier as $entry) {
+            $role       = $entry['role'];
+            $suggested  = (int) ($entry['count'] ?? 1);
+            $existing   = $currentRoleCounts[$role] ?? 0;
+            $diff[]     = [
+                'role'      => $role,
+                'suggested' => $suggested,
+                'existing'  => $existing,
+                'delta'     => $suggested - $existing,
+                'action'    => match(true) {
+                    $existing === 0    => 'add',
+                    $suggested > $existing => 'increase',
+                    $suggested < $existing => 'decrease',
+                    default            => 'no_change',
+                },
+            ];
+        }
+
+        // Roles in current but not in suggested
+        foreach (array_keys($currentRoleCounts) as $role) {
+            $inSuggested = array_filter($tier, fn($t) => $t['role'] === $role);
+            if (empty($inSuggested)) {
+                $diff[] = [
+                    'role'      => $role,
+                    'suggested' => 0,
+                    'existing'  => $currentRoleCounts[$role],
+                    'delta'     => -$currentRoleCounts[$role],
+                    'action'    => 'remove',
+                ];
+            }
+        }
+
+        $hasManualShifts = !empty(array_filter($current, fn($s) => ($s['source'] ?? 'manual') === 'manual'));
+
+        return $this->ok([
+            'capacity'          => $capacity,
+            'suggested'         => $tier,
+            'diff'              => $diff,
+            'has_manual_shifts' => $hasManualShifts,
+            'current_count'     => count($current),
+            'suggested_count'   => array_sum(array_column($tier, 'count')),
+        ]);
+    }
+
+    /**
      * POST /api/events/{id}/staffing/from-capacity
-     * Clear existing shifts and rebuild from capacity-based staffing tiers.
-     * Reads capacity from the request body; falls back to the event's capacity field.
+     * Rebuild from capacity-based staffing tiers.
+     *
+     * By default this is NON-DESTRUCTIVE: it only adds missing roles and
+     * does not remove manually-edited shifts.
+     *
+     * Pass {"replace": true} in the request body to revert to the old
+     * destructive behavior (clear all existing shifts first).
+     *
+     * Sets source='generated' on all auto-populated rows.
      */
     private function fromCapacity(Request $request, int $eventId): Response
+    {
+        $capacity = $this->resolveCapacity($request, $eventId);
+        if ($capacity <= 0) {
+            return Response::json(['error' => 'capacity is required (set it on the event or pass it in the request body)'], 422);
+        }
+
+        $replace = !empty($request->body('replace')) || ($request->query('replace') === '1');
+        $tier    = $this->tierForCapacity($capacity);
+
+        $pdo = $this->db->pdo();
+        $pdo->beginTransaction();
+
+        try {
+            if ($replace) {
+                // Old destructive behaviour: clear everything first.
+                $this->db->run('DELETE FROM event_staffing WHERE event_id = ?', [$eventId]);
+            }
+
+            $current     = $this->staffingFor($eventId);
+            $currentRoles = [];
+            foreach ($current as $shift) {
+                $currentRoles[$shift['role']] = ($currentRoles[$shift['role']] ?? 0) + 1;
+            }
+
+            $added = 0;
+            foreach ($tier as $entry) {
+                $role    = $entry['role'];
+                $needed  = max(1, (int) ($entry['count'] ?? 1));
+                $existing = $replace ? 0 : ($currentRoles[$role] ?? 0);
+                $toAdd   = $needed - $existing;
+
+                for ($i = 0; $i < $toAdd; $i++) {
+                    $this->db->run(
+                        'INSERT INTO event_staffing (event_id, role, status, source) VALUES (?, ?, ?, ?)',
+                        [$eventId, $role, 'scheduled', 'generated']
+                    );
+                    $added++;
+                }
+            }
+
+            $pdo->commit();
+
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            return Response::json(['error' => 'Staffing update failed: ' . $e->getMessage()], 500);
+        }
+
+        log_activity($this->db, $eventId, $this->userId(), 'staffing auto-populated', [
+            'capacity' => $capacity,
+            'shifts_added' => $added,
+            'replaced' => $replace,
+        ]);
+        return $this->ok(['staffing' => $this->staffingFor($eventId), 'shifts_added' => $added]);
+    }
+
+    private function resolveCapacity(Request $request, int $eventId): int
     {
         $capacity = (int) $request->body('capacity', 0);
         if ($capacity <= 0) {
             $event    = $this->db->one('SELECT capacity FROM events WHERE id = ?', [$eventId]);
             $capacity = (int) ($event['capacity'] ?? 0);
         }
-        if ($capacity <= 0) {
-            return Response::json(['error' => 'capacity is required (set it on the event or pass it in the request body)'], 422);
-        }
-
-        $tier = $this->tierForCapacity($capacity);
-
-        // Atomically replace staffing.
-        $this->db->run('DELETE FROM event_staffing WHERE event_id = ?', [$eventId]);
-        foreach ($tier as $entry) {
-            $role  = $entry['role'];
-            $count = max(1, (int) ($entry['count'] ?? 1));
-            for ($i = 0; $i < $count; $i++) {
-                $this->db->run(
-                    'INSERT INTO event_staffing (event_id, role, status) VALUES (?, ?, ?)',
-                    [$eventId, $role, 'scheduled']
-                );
-            }
-        }
-        $total = array_sum(array_column($tier, 'count'));
-        log_activity($this->db, $eventId, $this->userId(), 'staffing auto-populated', [
-            'capacity' => $capacity,
-            'shifts'   => $total,
-        ]);
-        return $this->ok(['staffing' => $this->staffingFor($eventId)]);
+        return $capacity;
     }
 
     /**

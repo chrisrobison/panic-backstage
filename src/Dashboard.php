@@ -33,6 +33,16 @@ final class Dashboard extends BaseEndpoint
             'urgentItems' => $this->count("SELECT COUNT(*) c FROM event_blockers b JOIN events e ON e.id = b.event_id WHERE b.status IN ('open','waiting') AND b.due_date <= DATE_ADD(CURDATE(), INTERVAL 2 DAY) AND $scopeSql", $scopeParams),
             'published' => $this->count("SELECT COUNT(*) c FROM events e WHERE e.status = 'published' AND e.date >= CURDATE() AND $scopeSql", $scopeParams),
             'unsettled' => $this->count("SELECT COUNT(*) c FROM events e LEFT JOIN event_settlements s ON s.event_id = e.id WHERE e.status = 'completed' AND s.id IS NULL AND $scopeSql AND $settlementSql", array_merge($scopeParams, $settlementParams)),
+            // New operational counts
+            'leadsNeedingReview' => $this->isVenueAdmin()
+                ? $this->count("SELECT COUNT(*) c FROM leads WHERE status IN ('new','triage','evaluating','needs_review')")
+                : 0,
+            'contractsAwaitingSignature' => $this->count("SELECT COUNT(*) c FROM contracts c2 JOIN events e ON e.id = c2.event_id WHERE c2.status IN ('sent','partially_signed') AND $scopeSql", $scopeParams),
+            'depositsOverdue' => $this->count("SELECT COUNT(*) c FROM events e JOIN event_payments ep ON ep.event_id = e.id WHERE ep.payment_type='deposit' AND ep.status='pending' AND ep.due_date < CURDATE() AND $scopeSql", $scopeParams),
+            'eventsAwaitingCloseout' => $this->count("SELECT COUNT(*) c FROM events e LEFT JOIN event_closeout_state ecs ON ecs.event_id = e.id WHERE e.status='completed' AND (ecs.id IS NULL OR ecs.status NOT IN ('finalized')) AND $scopeSql", $scopeParams),
+            'overdueFollowups' => $this->isVenueAdmin()
+                ? $this->count("SELECT COUNT(*) c FROM client_notes WHERE type IN ('task','followup') AND is_done=0 AND due_date < CURDATE()")
+                : 0,
         ];
         return $this->ok([
             'cards'      => $cards,

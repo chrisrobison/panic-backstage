@@ -200,6 +200,34 @@ final class Kernel
             return [Dashboard::class, []];
         }
 
+        // Leads pipeline
+        if ($segments[0] === 'leads') {
+            $leadId  = $this->intOrNull($segments[1] ?? null);
+            $child   = $segments[2] ?? null;
+            $childId = $this->intOrNull($segments[3] ?? null);
+            return [Leads::class, ['leadId' => $leadId, 'child' => $child, 'childId' => $childId]];
+        }
+
+        // CRM profiles
+        if ($segments[0] === 'crm-profiles') {
+            $profileId = $this->intOrNull($segments[1] ?? null);
+            $child     = $segments[2] ?? null;
+            $childId   = $this->intOrNull($segments[3] ?? null);
+            return [CrmProfiles::class, ['profileId' => $profileId, 'child' => $child, 'childId' => $childId]];
+        }
+
+        // Venue policy
+        if ($segments[0] === 'venue-policy') {
+            $policyId = $this->intOrNull($segments[1] ?? null);
+            $sub      = ($segments[1] ?? '') === 'history' ? 'history' : null;
+            return [VenuePolicy::class, ['policyId' => $policyId, 'sub' => $sub]];
+        }
+
+        // Systems inventory
+        if ($segments[0] === 'systems-inventory') {
+            return [SystemsInventory::class, ['itemId' => $this->intOrNull($segments[1] ?? null)]];
+        }
+
         // Outbox — sent-mail log (admin; manage_users gate inside endpoint)
         if ($segments[0] === 'outbox') {
             return [Outbox::class, ['outboxId' => $this->intOrNull($segments[1] ?? null)]];
@@ -293,9 +321,37 @@ final class Kernel
             if ($child === 'tasks' && ($segments[3] ?? '') === 'from-template') {
                 return [Events\Tasks::class, ['eventId' => $eventId, 'fromTemplateId' => $this->intOrNull($segments[4] ?? null)]];
             }
-            // Auto-populate staffing from capacity tiers
-            if ($child === 'staffing' && ($segments[3] ?? '') === 'from-capacity') {
-                return [Events\Staffing::class, ['eventId' => $eventId, 'action' => 'from-capacity']];
+            // Auto-populate staffing from capacity tiers (also accepts /preview)
+            if ($child === 'staffing' && in_array($segments[3] ?? '', ['from-capacity','preview'], true)) {
+                return [Events\Staffing::class, ['eventId' => $eventId, 'action' => $segments[3]]];
+            }
+            // Payments: /events/{id}/payments[/{pid}[/waive-deposit]]
+            if ($child === 'payments') {
+                $payAction = ($segments[4] ?? '') !== '' ? $segments[4] : null;
+                return [Events\Payments::class, [
+                    'eventId'   => $eventId,
+                    'paymentId' => $childId,
+                    'action'    => $payAction,
+                ]];
+            }
+            // Ledger: /events/{id}/ledger[/summary|/finalize|/reopen|/{eid}]
+            if ($child === 'ledger') {
+                $sub     = $segments[3] ?? null;
+                $lAction = in_array($sub, ['summary','finalize','reopen'], true) ? $sub : null;
+                $entryId = $lAction === null ? $this->intOrNull($sub) : null;
+                return [Events\Ledger::class, [
+                    'eventId' => $eventId,
+                    'entryId' => $entryId,
+                    'action'  => $lAction,
+                ]];
+            }
+            // Vendors: /events/{id}/vendors[/{vid}]
+            if ($child === 'vendors') {
+                return [Events\Vendors::class, ['eventId' => $eventId, 'vendorId' => $childId]];
+            }
+            // Execution records: /events/{id}/execution[/{rid}]
+            if ($child === 'execution') {
+                return [Events\Execution::class, ['eventId' => $eventId, 'recordId' => $childId]];
             }
             return match ($child) {
                 'tasks'      => [Events\Tasks::class,    ['eventId' => $eventId, 'taskId'     => $childId]],

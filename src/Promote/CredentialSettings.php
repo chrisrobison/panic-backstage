@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Panic\Promote;
 
 use Panic\BaseEndpoint;
+use Panic\CredentialEncryption;
 use Panic\Request;
 use Panic\Response;
 
@@ -58,7 +59,8 @@ final class CredentialSettings extends BaseEndpoint
         );
 
         $creds = $this->db->all(
-            'SELECT destination_key, status, config, error_message, connected_at, updated_at
+            'SELECT destination_key, status, config, error_message, connected_at, updated_at,
+                    (enc_access_token IS NOT NULL OR access_token IS NOT NULL) has_token
              FROM promote_credentials WHERE venue_id = ?',
             [$venueId]
         );
@@ -80,7 +82,8 @@ final class CredentialSettings extends BaseEndpoint
                 'config'            => $cred && $cred['config'] ? json_decode((string) $cred['config'], true) : null,
                 'error_message'     => $cred ? $cred['error_message'] : null,
                 'connected_at'      => $cred ? $cred['connected_at'] : null,
-                'has_token'         => false,   // never expose the token
+                'has_token'         => $cred ? (bool) $cred['has_token'] : false,
+                // Secrets are NEVER returned — has_token is the presence indicator only.
             ];
         }
 
@@ -119,9 +122,26 @@ final class CredentialSettings extends BaseEndpoint
             return Response::json(['error' => 'config must be a JSON object'], 422);
         }
 
+        // Encrypt tokens before storage.
+        // Falls back to storing plaintext when encryption is not configured
+        // (dev environments without CREDENTIAL_ENCRYPTION_KEY set).
+        $encAccessToken  = null;
+        $encRefreshToken = null;
+        if (CredentialEncryption::isConfigured()) {
+            if ($accessToken !== null) {
+                $encAccessToken = CredentialEncryption::encrypt($accessToken);
+                $accessToken    = null;  // do not store plaintext when encrypted
+            }
+            if ($refreshToken !== null) {
+                $encRefreshToken = CredentialEncryption::encrypt($refreshToken);
+                $refreshToken    = null;
+            }
+        }
+
         // Determine new status
-        $status      = $accessToken ? 'connected' : 'needs_auth';
-        $connectedAt = $accessToken ? date('Y-m-d H:i:s') : null;
+        $hasToken    = ($encAccessToken !== null) || ($accessToken !== null);
+        $status      = $hasToken ? 'connected' : 'needs_auth';
+        $connectedAt = $hasToken ? date('Y-m-d H:i:s') : null;
 
         // Upsert
         $existing = $this->db->one(
@@ -130,16 +150,28 @@ final class CredentialSettings extends BaseEndpoint
         );
 
         if ($existing) {
-            $sets  = ['status = ?', 'error_message = NULL', 'updated_at = NOW()'];
+            $sets   = ['status = ?', 'error_message = NULL', 'updated_at = NOW()'];
             $params = [$status];
 
-            if ($accessToken !== null) {
+            if ($encAccessToken !== null) {
+                $sets[]   = 'enc_access_token = ?';
+                $params[] = $encAccessToken;
+                $sets[]   = 'access_token = NULL';   // clear plaintext
+                $sets[]   = 'enc_key_version = 1';
+                $sets[]   = 'connected_at = ?';
+                $params[] = $connectedAt;
+            } elseif ($accessToken !== null) {
+                // No encryption configured — store plaintext temporarily.
                 $sets[]   = 'access_token = ?';
                 $params[] = $accessToken;
                 $sets[]   = 'connected_at = ?';
                 $params[] = $connectedAt;
             }
-            if ($refreshToken !== null) {
+            if ($encRefreshToken !== null) {
+                $sets[]   = 'enc_refresh_token = ?';
+                $params[] = $encRefreshToken;
+                $sets[]   = 'refresh_token = NULL';
+            } elseif ($refreshToken !== null) {
                 $sets[]   = 'refresh_token = ?';
                 $params[] = $refreshToken;
             }
@@ -156,9 +188,17 @@ final class CredentialSettings extends BaseEndpoint
         } else {
             $this->db->insert(
                 'INSERT INTO promote_credentials
-                    (venue_id, destination_key, access_token, refresh_token, config, status, connected_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [$venueId, $destKey, $accessToken, $refreshToken, $config, $status, $connectedAt]
+                    (venue_id, destination_key, access_token, refresh_token,
+                     enc_access_token, enc_refresh_token, enc_key_version,
+                     config, status, connected_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [
+                    $venueId, $destKey,
+                    $accessToken, $refreshToken,          // plaintext (NULL if encrypted)
+                    $encAccessToken, $encRefreshToken,    // ciphertext (NULL if no key)
+                    CredentialEncryption::isConfigured() ? 1 : 0,
+                    $config, $status, $connectedAt,
+                ]
             );
         }
 
@@ -184,6 +224,7 @@ final class CredentialSettings extends BaseEndpoint
         $this->db->run(
             "UPDATE promote_credentials
              SET access_token = NULL, refresh_token = NULL, token_expires_at = NULL,
+                 enc_access_token = NULL, enc_refresh_token = NULL,
                  status = 'needs_auth', error_message = NULL, connected_at = NULL
              WHERE destination_key = ?",
             [$destKey]

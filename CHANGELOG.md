@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** — Venue operating system upgrade — lifecycle, security, and financial controls
 - **Fixed** `outbox` — Show email body in detail pane
 - **Documentation** — Rename traing.md to training.md
 - **Documentation** — Add staff training lesson plan for initial app intro session

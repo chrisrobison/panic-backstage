@@ -14,6 +14,12 @@ abstract class BaseEndpoint implements Endpoint
             'view_settlement', 'edit_settlement',
             'view_contracts', 'manage_contracts', 'approve_contracts',
             'manage_ticketing',
+            // New capabilities
+            'manage_payments', 'waive_deposit',
+            'manage_vendors',
+            'manage_ledger', 'finalize_closeout',
+            'view_execution', 'manage_execution',
+            'view_incidents', 'manage_incidents',
         ],
         'event_owner' => [
             'read_event', 'edit_event', 'publish_event', 'delete_event',
@@ -23,19 +29,29 @@ abstract class BaseEndpoint implements Endpoint
             'view_settlement', 'edit_settlement',
             'view_contracts', 'manage_contracts', 'approve_contracts',
             'manage_ticketing',
+            // New capabilities
+            'manage_payments',
+            'manage_vendors',
+            'manage_ledger',
+            'view_execution', 'manage_execution',
         ],
         'promoter' => [
             'read_event', 'edit_event', 'manage_lineup', 'manage_tasks', 'manage_schedule',
             'manage_open_items', 'manage_guest_list', 'manage_staffing', 'view_public_page',
             'view_contracts',
+            'view_execution',
         ],
         'band' => ['read_event', 'upload_assets', 'view_assigned_tasks'],
         'artist' => ['read_event', 'upload_assets', 'view_assigned_tasks'],
         'designer' => ['read_event', 'upload_assets', 'manage_assets'],
-        'staff' => ['read_event', 'manage_tasks', 'manage_schedule', 'manage_open_items', 'manage_guest_list', 'manage_staffing'],
+        'staff' => [
+            'read_event', 'manage_tasks', 'manage_schedule', 'manage_open_items',
+            'manage_guest_list', 'manage_staffing',
+            'view_execution', 'manage_execution',
+        ],
         'viewer' => ['read_event'],
         // global_viewer: read-only access to every event — no edits, no publishing, no admin actions.
-        'global_viewer' => ['read_event', 'view_settlement', 'view_contracts', 'view_public_page'],
+        'global_viewer' => ['read_event', 'view_settlement', 'view_contracts', 'view_public_page', 'view_execution'],
     ];
 
     private const EVENT_CAPABILITY_KEYS = [
@@ -46,18 +62,35 @@ abstract class BaseEndpoint implements Endpoint
         'view_settlement', 'edit_settlement', 'view_public_page', 'view_assigned_tasks',
         'view_contracts', 'manage_contracts', 'approve_contracts',
         'manage_ticketing',
+        // New capabilities
+        'manage_payments', 'waive_deposit',
+        'manage_vendors',
+        'manage_ledger', 'finalize_closeout',
+        'view_execution', 'manage_execution',
+        'view_incidents', 'manage_incidents',
     ];
 
     private const GLOBAL_CAPABILITIES = [
-        'venue_admin' => ['view_all_events', 'create_events', 'manage_templates', 'manage_users', 'manage_staff_roster', 'manage_contract_library', 'view_all_contracts', 'manage_contacts'],
-        'event_owner' => [],
+        'venue_admin' => [
+            'view_all_events', 'create_events', 'manage_templates', 'manage_users',
+            'manage_staff_roster', 'manage_contract_library', 'view_all_contracts',
+            'manage_contacts',
+            // New global capabilities
+            'manage_leads', 'view_leads',
+            'manage_crm_profiles',
+            'manage_venue_policy',
+            'manage_systems_inventory',
+            'admin_credential_encryption',
+            'reopen_settlement',
+        ],
+        'event_owner' => ['view_leads'],
         'promoter' => [],
         'band' => [],
         'artist' => [],
         'designer' => [],
-        'staff' => [],
+        'staff' => ['view_leads'],
         'viewer' => [],
-        'global_viewer' => ['view_all_events'],
+        'global_viewer' => ['view_all_events', 'view_leads'],
     ];
 
     private array $eventAccessCache = [];

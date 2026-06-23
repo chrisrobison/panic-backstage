@@ -376,7 +376,8 @@ final class BroadcastAdapters
     private function loadCredential(string $destKey, int $venueId): array
     {
         $row = $this->db->one(
-            'SELECT access_token, refresh_token, token_expires_at, config, status
+            'SELECT access_token, refresh_token, enc_access_token, enc_refresh_token,
+                    token_expires_at, config, status
              FROM promote_credentials
              WHERE destination_key = ? AND venue_id = ? AND status = ?',
             [$destKey, $venueId, 'connected']
@@ -385,6 +386,18 @@ final class BroadcastAdapters
         if (!$row) {
             return [];
         }
+
+        // Transparently decrypt tokens (falls back to plaintext for pre-migration rows).
+        $row['access_token']  = \Panic\CredentialEncryption::decryptCredentialField(
+            $row['enc_access_token']  ?? null,
+            $row['access_token']      ?? null
+        );
+        $row['refresh_token'] = \Panic\CredentialEncryption::decryptCredentialField(
+            $row['enc_refresh_token'] ?? null,
+            $row['refresh_token']     ?? null
+        );
+        // Remove the raw encrypted columns — callers should never see ciphertext.
+        unset($row['enc_access_token'], $row['enc_refresh_token']);
 
         // Decode the JSON config field
         if (!empty($row['config'])) {

@@ -682,22 +682,39 @@ final class Events extends BaseEndpoint
             }
         }
 
-        // Booked: requires a contract — either the legacy contract_url field
-        // or a contract record in the contracts table at an actionable status.
+        // Booked: requires BOTH an executed contract AND a received/waived deposit.
+        // "Sent", "approved", or "draft" contract does NOT satisfy the contract requirement.
         if ($newStatus === 'booked') {
+            // ── Contract gate ───────────────────────────────────────────────
             $hasContractUrl    = !empty($event['contract_url']);
-            $hasContractRecord = false;
-            if (!$hasContractUrl && !empty($event['id'])) {
+            $hasExecutedContract = false;
+            if (!empty($event['id'])) {
                 $contractRow = $this->db->one(
-                    "SELECT id FROM contracts WHERE event_id = ? AND status IN ('approved','sent','signed') LIMIT 1",
+                    "SELECT id, status FROM contracts WHERE event_id = ? AND status IN ('signed','fully_executed') LIMIT 1",
                     [(int) $event['id']]
                 );
-                $hasContractRecord = (bool) $contractRow;
+                $hasExecutedContract = (bool) $contractRow;
             }
-            if (!$hasContractUrl && !$hasContractRecord) {
+            // Also accept the legacy contract_url as a stand-in for small installs
+            if (!$hasContractUrl && !$hasExecutedContract) {
                 $missing[] = $isPrivate
-                    ? 'Signed rental contract (use the Contracts tab to create one, or paste a Contract URL)'
-                    : 'Signed or approved contract (use the Contracts tab to create one, or paste a Contract URL)';
+                    ? 'Signed rental contract (use the Contracts tab or paste a Contract URL; sent/approved contracts are not enough)'
+                    : 'Fully executed contract (use the Contracts tab; contract must be signed, not just sent or approved)';
+            }
+
+            // ── Deposit gate ────────────────────────────────────────────────
+            $depositStatus = (string) ($event['deposit_status'] ?? 'not_required');
+            if (!in_array($depositStatus, ['received', 'waived', 'not_required'], true)) {
+                // Check whether there's even a deposit required
+                $depositRequired = ($event['deposit_amount'] ?? 0) > 0;
+                if ($depositRequired) {
+                    $missing[] = match ($depositStatus) {
+                        'requested'           => 'Deposit requested but not yet received (use Payments tab to record receipt, or waive it)',
+                        'partially_received'  => 'Deposit only partially received (record full payment or waive the remainder)',
+                        'refunded'            => 'Deposit was refunded — a new deposit is required before booking',
+                        default               => 'Deposit required before booking (use Payments tab)',
+                    };
+                }
             }
         }
 
