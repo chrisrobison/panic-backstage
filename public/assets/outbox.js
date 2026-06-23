@@ -94,7 +94,7 @@ class OutboxPage extends PanicElement {
       this.viewMode = 'html';
       this.renderDetail();
     } catch (err) {
-      // No-op: if it fails, leave the current selection.
+      console.error('[outbox] loadMessage failed:', err);
     }
   }
 

@@ -3707,6 +3707,15 @@ pb-messages-sent.detail-open .outbox-detail-pane {
   max-height: 48vh;
   overflow: hidden;
 }
+/* The outbox pane needs an explicit height (not just max-height) so that its
+   flex children — .outbox-detail-inner → .outbox-detail-body → the iframe —
+   have a definite container to fill.  Without this, every child's
+   flex: 1 1 0 / min-height: 0 resolves to 0 px in an auto-height flex column
+   and the email body is invisible.  max-height is kept so the CSS transition
+   still animates from 0 → 48 vh (rendered height = min(transitioning-max-h, h)). */
+pb-outbox-page.detail-open .outbox-detail-pane {
+  height: 48vh;
+}
 
 /* Messages components override max-height with an explicit height variable
    so the drag-to-resize handle can control the split precisely. */
