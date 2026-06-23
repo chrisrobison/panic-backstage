@@ -274,12 +274,15 @@ final class CrmProfiles extends BaseEndpoint
     /**
      * Called after settlement/closeout to auto-create follow-up tasks.
      * Creates tasks in client_notes for thank-you, feedback, rebooking, etc.
+     * When $root is provided, sends a summary notification email to all active
+     * venue admins who have event-update notifications enabled.
      */
     public static function createFollowupTasks(
         Database $db,
         int $eventId,
         int $profileId,
-        ?int $assignedUserId
+        ?int $assignedUserId,
+        ?string $root = null
     ): void {
         $tasks = [
             ['type' => 'followup', 'body' => 'Send thank-you message to client/promoter', 'days' => 1],
@@ -295,6 +298,79 @@ final class CrmProfiles extends BaseEndpoint
                 [$profileId, $assignedUserId, $t['type'], $t['body'] . " (Event #$eventId)", $due]
             );
         }
+
+        // Send summary notification email to venue admins (requires $root for Mailer)
+        if ($root !== null) {
+            $admins = $db->all(
+                "SELECT email, name FROM users WHERE role='venue_admin' AND notify_event_updates=1 AND access_status='active'"
+            );
+            $profileRow = $db->one('SELECT name FROM client_profiles WHERE id=?', [$profileId]);
+            $profileName = $profileRow['name'] ?? 'client';
+            foreach ($admins as $admin) {
+                (new \Panic\Mailer($root, $db))->send(
+                    $admin['email'],
+                    "Follow-up tasks created: " . $profileName,
+                    "Post-event follow-up tasks have been automatically created for " . $profileName . ".\n\n" .
+                    "Tasks due in the next 30 days:\n" .
+                    "- Thank-you message (due 1 day after event)\n" .
+                    "- Feedback / satisfaction check-in (due 3 days)\n" .
+                    "- Rebooking discussion (due 14 days)\n" .
+                    "- Testimonial or review request (due 7 days)\n\n" .
+                    "Log in to Backstage to manage: " . (getenv('APP_URL') ?: '')
+                );
+            }
+        }
+    }
+
+    /**
+     * Cron-callable: find all unfinished follow-up notes due today or overdue
+     * (up to 7 days past due) and send one reminder email per assignee.
+     * Returns the total number of overdue/due notes found.
+     */
+    public static function sendFollowupReminders(Database $db, string $root): int
+    {
+        $due = $db->all(
+            "SELECT cn.id, cn.profile_id, cn.body, cn.due_date, cn.type,
+                    cp.name profile_name, cp.email profile_email,
+                    u.email assignee_email, u.name assignee_name
+             FROM client_notes cn
+             JOIN client_profiles cp ON cp.id = cn.profile_id
+             LEFT JOIN users u ON u.role = 'venue_admin' AND u.access_status = 'active'
+             WHERE cn.is_done = 0
+               AND cn.type IN ('task','followup')
+               AND cn.due_date BETWEEN DATE_SUB(CURDATE(), INTERVAL 7 DAY) AND CURDATE()
+             ORDER BY cn.due_date, cp.name
+             LIMIT 50"
+        );
+
+        if (empty($due)) {
+            return 0;
+        }
+
+        // Group by assignee email, send one summary per person
+        $byEmail = [];
+        foreach ($due as $note) {
+            $email = $note['assignee_email'] ?? null;
+            if ($email) {
+                $byEmail[$email][] = $note;
+            }
+        }
+
+        foreach ($byEmail as $email => $notes) {
+            $lines = array_map(
+                fn($n) => "• [{$n['due_date']}] {$n['profile_name']}: {$n['body']}",
+                $notes
+            );
+            (new \Panic\Mailer($root, $db))->send(
+                $email,
+                count($notes) . ' follow-up task(s) due — Backstage CRM',
+                "You have " . count($notes) . " CRM follow-up task(s) due:\n\n" .
+                implode("\n", $lines) . "\n\n" .
+                "Log in: " . (getenv('APP_URL') ?: '')
+            );
+        }
+
+        return count($due);
     }
 
     private function updateProfileAggregates(int $profileId): void

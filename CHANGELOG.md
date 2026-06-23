@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** — CRM follow-up task email delivery and daily reminder endpoint
 - **Added** — Incident resolution workflow with venue admin email notifications
 - **Added** — Payroll export CSV for per-event and batch date-range staffing hours
 - **Documentation** `ops-manual` — Add lead pipeline, deposit gate, vendors, execution, closeout, and venue policy chapters

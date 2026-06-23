@@ -216,6 +216,11 @@ final class Kernel
             return [CrmProfiles::class, ['profileId' => $profileId, 'child' => $child, 'childId' => $childId]];
         }
 
+        // CRM follow-up reminder cron endpoint
+        if ($segments[0] === 'crm-followups') {
+            return [CrmFollowups::class, []];
+        }
+
         // Venue policy
         if ($segments[0] === 'venue-policy') {
             $policyId = $this->intOrNull($segments[1] ?? null);

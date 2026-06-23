@@ -1,0 +1,9 @@
+CRM Follow-Up Reminders — {{count}} task(s) due
+
+{{tasks}}
+
+Log in to Backstage to mark tasks complete:
+{{app_url}}/#crm-profiles
+
+---
+Panic Backstage Venue Operations
