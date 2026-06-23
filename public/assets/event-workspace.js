@@ -277,8 +277,10 @@ class EventWorkspace extends PanicElement {
           </div>
         </details>` : ''}
         ${(!isPrivate && can(data, 'publish_event')) ? `<button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>` : ''}
+        ${can(data, 'manage_contracts') ? `<button class="secondary" data-portal-toggle title="Generate a read-only portal link for a promoter or client"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i> Share Portal Link</button>` : ''}
       </div>
     </section>
+    <pb-portal-panel id="portalPanel"></pb-portal-panel>
     <nav class="workspace-tabs tabs">${tabs.map((tab, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${tab}">${esc(titleCase(tab))}</a>`).join('')}</nav>
     <pb-event-summary></pb-event-summary>
     <pb-event-next-action></pb-event-next-action>
@@ -327,6 +329,11 @@ class EventWorkspace extends PanicElement {
       execEl.canManageIncidents  = can(data, 'manage_incidents');
     }
     $('[data-publish]', this)?.addEventListener('click', () => this.togglePublic());
+    const portalPanel = $('pb-portal-panel', this);
+    if (portalPanel) {
+      portalPanel.eventId = event.id;
+      $('[data-portal-toggle]', this)?.addEventListener('click', () => portalPanel.toggle());
+    }
     $$('[data-print]', this).forEach((button) => button.addEventListener('click', () => {
       button.closest('details.print-menu')?.removeAttribute('open');
       openPrintWindow(button.dataset.print, this.data);
@@ -511,8 +518,136 @@ class EventDetailsForm extends HTMLElement {
   }
 }
 
+// ── Portal link panel ─────────────────────────────────────────────────────────
+// Generates and lists time-limited read-only portal links for promoters/clients.
+// Staff-only — the panel is hidden when manage_contracts capability is absent.
+class PortalPanel extends PanicElement {
+  connect() {
+    this._eventId = null;
+    this._links   = [];
+    this._open    = false;
+    this.render();
+  }
+
+  set eventId(id) {
+    this._eventId = id;
+  }
+
+  /** Toggle the panel open/closed and load links on first open. */
+  async toggle() {
+    this._open = !this._open;
+    this.render();
+    if (this._open && this._links.length === 0) {
+      await this.loadLinks();
+    }
+  }
+
+  async loadLinks() {
+    try {
+      const res = await api(`/portal/${this._eventId}/list-links`);
+      this._links = res.links || [];
+    } catch (_) {
+      this._links = [];
+    }
+    this.render();
+  }
+
+  async createLink(label, ttlDays) {
+    try {
+      const res = await api(`/portal/${this._eventId}/create-link`, {
+        method: 'POST',
+        body: JSON.stringify({ event_id: this._eventId, label, ttl_days: ttlDays }),
+      });
+      if (res.url) {
+        await this.loadLinks();
+        // Show the new URL in the copy box
+        const newInput = $(`[data-portal-url="${res.token}"]`, this);
+        if (newInput) newInput.select();
+      }
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Failed to generate link.', tone: 'error' });
+    }
+  }
+
+  async revokeLink(tokenId) {
+    try {
+      await api(`/portal/${tokenId}/revoke`, { method: 'POST' });
+      await this.loadLinks();
+      publish('toast.show', { message: 'Portal link revoked.' });
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Failed to revoke link.', tone: 'error' });
+    }
+  }
+
+  render() {
+    if (!this._open) {
+      this.innerHTML = ''; // collapsed — nothing to show (button is in the workspace toolbar)
+      return;
+    }
+
+    const active = (this._links || []).filter(l => !Number(l.is_revoked) && new Date(l.expires_at) > new Date());
+    const revoked = (this._links || []).filter(l => Number(l.is_revoked) || new Date(l.expires_at) <= new Date());
+
+    const linkRows = active.map(l => `
+      <div class="portal-link-row">
+        <div class="portal-link-meta">
+          <span class="portal-link-label">${esc(l.label || 'Portal link')}</span>
+          <span class="portal-link-info">Used ${l.use_count}x &nbsp;·&nbsp; Expires ${shortDate(new Date(l.expires_at))}</span>
+        </div>
+        <input class="portal-link-url" type="text" readonly value="${esc(l.url)}" data-portal-url="${esc(l.token)}" onclick="this.select()">
+        <div class="portal-link-actions">
+          <button class="secondary small" onclick="navigator.clipboard.writeText(${JSON.stringify(l.url)}).then(()=>publish('toast.show',{message:'Link copied!'}))">Copy</button>
+          <button class="danger small" data-revoke="${esc(String(l.id))}">Revoke</button>
+        </div>
+      </div>`).join('');
+
+    const revokedNote = revoked.length
+      ? `<p class="portal-revoked-note">${revoked.length} revoked / expired link${revoked.length === 1 ? '' : 's'} not shown.</p>`
+      : '';
+
+    this.innerHTML = `<div class="portal-panel card">
+      <div class="portal-panel-head">
+        <strong>Share Portal Link</strong>
+        <button class="secondary small" data-portal-close>Close</button>
+      </div>
+      <p class="portal-panel-blurb">Generate a read-only link for a promoter or client. The link shows event details, contract status, payments, and invoice — no login required.</p>
+      <form class="portal-create-form" data-create-form>
+        <input type="text" name="label" placeholder="Label, e.g. &quot;Sent to Jane Smith&quot;" class="portal-label-input">
+        <select name="ttl_days" class="portal-ttl-select">
+          <option value="7">Expires in 7 days</option>
+          <option value="14">Expires in 14 days</option>
+          <option value="30" selected>Expires in 30 days</option>
+          <option value="60">Expires in 60 days</option>
+          <option value="90">Expires in 90 days</option>
+        </select>
+        <button type="submit" class="primary small">Generate Link</button>
+      </form>
+      ${active.length ? `<div class="portal-links-list">${linkRows}</div>` : '<p class="portal-empty">No active links yet.</p>'}
+      ${revokedNote}
+    </div>`;
+
+    $('[data-portal-close]', this)?.addEventListener('click', () => this.toggle());
+    $('[data-create-form]', this)?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form    = e.target;
+      const label   = form.label.value.trim();
+      const ttlDays = parseInt(form.ttl_days.value, 10) || 30;
+      form.querySelector('[type="submit"]').disabled = true;
+      await this.createLink(label, ttlDays);
+      form.querySelector('[type="submit"]').disabled = false;
+      form.label.value = '';
+    });
+    $$('[data-revoke]', this).forEach(btn => btn.addEventListener('click', async () => {
+      const id = parseInt(btn.dataset.revoke, 10);
+      btn.disabled = true;
+      await this.revokeLink(id);
+    }));
+  }
+}
+
 customElements.define('pb-event-workspace', EventWorkspace);
 customElements.define('pb-event-summary', EventSummary);
 customElements.define('pb-event-readiness', EventReadiness);
 customElements.define('pb-event-next-action', EventNextAction);
 customElements.define('pb-event-details-form', EventDetailsForm);
+customElements.define('pb-portal-panel', PortalPanel);
