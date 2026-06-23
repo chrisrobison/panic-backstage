@@ -321,8 +321,8 @@ final class Kernel
             if ($child === 'tasks' && ($segments[3] ?? '') === 'from-template') {
                 return [Events\Tasks::class, ['eventId' => $eventId, 'fromTemplateId' => $this->intOrNull($segments[4] ?? null)]];
             }
-            // Auto-populate staffing from capacity tiers (also accepts /preview)
-            if ($child === 'staffing' && in_array($segments[3] ?? '', ['from-capacity','preview'], true)) {
+            // Auto-populate staffing from capacity tiers (also accepts /preview and /export)
+            if ($child === 'staffing' && in_array($segments[3] ?? '', ['from-capacity','preview','export'], true)) {
                 return [Events\Staffing::class, ['eventId' => $eventId, 'action' => $segments[3]]];
             }
             // Payments: /events/{id}/payments[/{pid}[/waive-deposit]]

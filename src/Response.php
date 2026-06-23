@@ -22,6 +22,14 @@ final class Response
         return self::json(['error' => 'Method not allowed'], 405);
     }
 
+    public static function csv(string $content, string $filename): self
+    {
+        return new self($content, 200, [
+            'Content-Type'        => 'text/csv; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
     public function send(): void
     {
         http_response_code($this->status);

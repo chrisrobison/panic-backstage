@@ -130,6 +130,12 @@ final class Staffing extends BaseEndpoint
                 ? $this->previewCapacity($request, $eventId)
                 : Response::methodNotAllowed();
         }
+        // GET /staffing/export → payroll CSV download
+        if ($action === 'export') {
+            return $request->method() === 'GET'
+                ? $this->export($eventId)
+                : Response::methodNotAllowed();
+        }
         return match ($request->method()) {
             'GET'    => $this->index($eventId),
             'POST'   => $this->create($request, $eventId),
@@ -431,6 +437,75 @@ final class Staffing extends BaseEndpoint
     {
         $value = (string) ($value ?? '');
         return $value === '' ? null : $value;
+    }
+
+    /**
+     * GET /api/events/{id}/staffing/export
+     * Download a payroll CSV for all staffing rows on this event.
+     */
+    private function export(int $eventId): Response
+    {
+        $rows = $this->db->all(
+            'SELECT
+               e.id          event_id,
+               e.title       event_title,
+               DATE(e.show_time) event_date,
+               sm.name       staff_name,
+               sm.email      staff_email,
+               sm.phone      staff_phone,
+               es.role,
+               es.source,
+               es.clock_in,
+               es.clock_out,
+               es.actual_hours,
+               es.estimated_hours,
+               es.approved_overtime_hours,
+               es.notes
+             FROM event_staffing es
+             JOIN events e ON e.id = es.event_id
+             LEFT JOIN staff_members sm ON sm.id = es.staff_member_id
+             WHERE es.event_id = ?
+             ORDER BY es.role, sm.name',
+            [$eventId]
+        );
+
+        $csv      = $this->buildCsvContent($rows);
+        $filename = 'payroll-event-' . $eventId . '-' . date('Y-m-d') . '.csv';
+        return Response::csv($csv, $filename);
+    }
+
+    /**
+     * Build a CSV string from an array of payroll row arrays.
+     * Each row must have the 14 payroll columns in the correct order.
+     *
+     * @param  array[] $rows
+     */
+    private function buildCsvContent(array $rows): string
+    {
+        $csv = "Event ID,Event Title,Event Date,Staff Name,Email,Phone,Role,Source,Clock In,Clock Out,Actual Hours,Est Hours,OT Hours,Notes\n";
+        foreach ($rows as $row) {
+            $fields = [
+                $row['event_id'],
+                $row['event_title'],
+                $row['event_date'],
+                $row['staff_name'],
+                $row['staff_email'],
+                $row['staff_phone'],
+                $row['role'],
+                $row['source'],
+                $row['clock_in'],
+                $row['clock_out'],
+                $row['actual_hours'],
+                $row['estimated_hours'],
+                $row['approved_overtime_hours'],
+                $row['notes'],
+            ];
+            $csv .= implode(',', array_map(
+                fn($v) => '"' . str_replace('"', '""', (string) ($v ?? '')) . '"',
+                $fields
+            )) . "\n";
+        }
+        return $csv;
     }
 
     public function staffingFor(int $eventId): array

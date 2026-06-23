@@ -22,7 +22,7 @@ function staffingTierFor(capacity) {
   for (const tier of STAFFING_TIERS) { if (cap <= tier.max) return tier.roles; }
   return STAFFING_TIERS[STAFFING_TIERS.length - 1].roles;
 }
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, apiUrl, getToken, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
 
 // ---- Editable record lists: read-only review tables with hover-to-edit ----
 // These power the Tasks / Lineup / Run Sheet / Staffing / Guest / Open Items
@@ -285,11 +285,17 @@ class StaffingManager extends HTMLElement {
       ? `<button type="button" class="small secondary" data-auto-staff title="Clear all shifts and rebuild from capacity-based staffing tiers">Auto-fill (${capacity} cap)</button>`
       : '';
 
+    // Export payroll CSV button: shown to anyone with manage_staffing access.
+    const exportBtn = editable
+      ? `<button type="button" class="small secondary" data-export-payroll title="Download payroll CSV for this event">Export CSV</button>`
+      : '';
+
     this.innerHTML = `<section class="panel">
       <div class="section-head padded">
         <h2>Staffing ${helpLink('staffing', 'Staffing')}</h2>
         <div class="section-head-actions">
           <div class="staffing-totals muted">${totalShifts} shift${totalShifts === 1 ? '' : 's'} &middot; ${confirmed} confirmed${tbd ? ` &middot; ${tbd} TBD` : ''}</div>
+          ${exportBtn}
           ${autoFillBtn}
           ${addToggle('Add shift', editable)}
         </div>
@@ -361,6 +367,27 @@ class StaffingManager extends HTMLElement {
         await refreshSection(this);
       } catch (err) {
         publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
+
+    // Export payroll CSV
+    $('[data-export-payroll]', this)?.addEventListener('click', async () => {
+      const btn = $('[data-export-payroll]', this);
+      try {
+        if (btn) btn.disabled = true;
+        const url = apiUrl(`/events/${eventId}/staffing/export`);
+        const resp = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+        if (!resp.ok) throw new Error(`Export failed (${resp.status})`);
+        const blob = await resp.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `payroll-event-${eventId}-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } catch (err) {
+        publish('toast.show', { message: err.message || 'CSV export failed.', tone: 'error' });
+      } finally {
+        if (btn) btn.disabled = false;
       }
     });
 
