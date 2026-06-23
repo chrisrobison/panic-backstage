@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `QBO/Xero stubs` — Accounting integration framework (QBO/Xero stubs) and Stripe payment link generation
 - **Fixed** — Add Portal route and isPublic() registration to Kernel.php
 - **Added** — Auto-publish event to Promote destinations when status reaches 'published'
 - **Added** — Client portal — token-gated read-only event view for promoters and clients

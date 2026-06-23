@@ -154,6 +154,7 @@ const SECTION_LABELS = {
   settlement:   'Settlement',
   ticketing:    'Ticketing',
   execution:    'Execution',
+  payments:     'Payments',
   closeout:     'Closeout',
   activity:     'Activity',
 };
@@ -239,6 +240,7 @@ class EventWorkspace extends PanicElement {
     const tabs = ['overview', 'details', 'assets', 'tasks', ...(isPrivate ? [] : ['lineup']), 'schedule', 'staffing', 'vendors', 'guest-list', 'open-items', 'execution', 'activity'];
     if (can(data, 'view_contracts')) tabs.splice(tabs.length - 1, 0, 'contracts');
     if (can(data, 'manage_invites')) tabs.splice(tabs.length - 1, 0, 'invites');
+    if (can(data, 'manage_payments')) tabs.splice(tabs.length - 1, 0, 'payments');
     if (can(data, 'view_settlement') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'settlement');
     if (can(data, 'manage_ticketing') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'ticketing');
     if (can(data, 'manage_ledger') || can(data, 'finalize_closeout')) tabs.splice(tabs.length - 1, 0, 'closeout');
@@ -299,6 +301,7 @@ class EventWorkspace extends PanicElement {
     <pb-open-items id="open-items"></pb-open-items>
     ${can(data, 'view_contracts') ? '<pb-event-contracts id="contracts"></pb-event-contracts>' : ''}
     ${can(data, 'manage_invites') ? '<pb-invite-manager id="invites"></pb-invite-manager>' : ''}
+    ${can(data, 'manage_payments') ? '<pb-event-payments id="payments"></pb-event-payments>' : ''}
     ${(!isPrivate && can(data, 'view_settlement')) ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
     ${(!isPrivate && can(data, 'manage_ticketing')) ? '<pb-ticketing-admin id="ticketing"></pb-ticketing-admin>' : ''}
     <pb-event-execution id="execution"></pb-event-execution>
@@ -318,6 +321,8 @@ class EventWorkspace extends PanicElement {
     $('pb-asset-manager', this).data = data;
     if ($('pb-event-contracts', this)) $('pb-event-contracts', this).data = data;
     if ($('pb-invite-manager', this)) $('pb-invite-manager', this).data = data;
+    const paymentsEl = $('pb-event-payments', this);
+    if (paymentsEl) { paymentsEl.eventId = data.event.id; paymentsEl.data = data; }
     if ($('pb-settlement-form', this)) $('pb-settlement-form', this).data = data;
     if ($('pb-ticketing-admin', this)) $('pb-ticketing-admin', this).data = data;
     const closeoutEl = $('pb-event-closeout', this);
@@ -651,3 +656,107 @@ customElements.define('pb-event-readiness', EventReadiness);
 customElements.define('pb-event-next-action', EventNextAction);
 customElements.define('pb-event-details-form', EventDetailsForm);
 customElements.define('pb-portal-panel', PortalPanel);
+
+// ── Event Payments panel ─────────────────────────────────────────────────────
+// Lists event_payments rows and provides "Send Invoice Link" for pending or
+// invoiced payments — creates a Stripe Payment Link without an SDK.
+
+class EventPayments extends PanicElement {
+  set eventId(id) { this._eventId = id; }
+  set data(d)     { this._data = d; this._load(); }
+
+  async _load() {
+    const id = this._eventId;
+    if (!id) return;
+    try {
+      const res = await api(`/events/${id}/payments`);
+      this._render(res);
+    } catch (err) {
+      this.innerHTML = `<section class="panel" id="payments"><div class="section-head padded"><h2>Payments</h2></div><p class="muted padded">Could not load payments.</p></section>`;
+    }
+  }
+
+  _render(res) {
+    const id       = this._eventId;
+    const payments = res.payments || [];
+    const summary  = res.summary  || {};
+    const canSend  = can(this._data, 'manage_payments');
+
+    const statusChip = (s) => {
+      const tone = { pending: 'yellow', received: 'green', invoiced: 'blue',
+                     failed: 'red', refunded: 'gray', voided: 'gray' }[s] || '';
+      return `<span class="chip${tone ? ` chip-${esc(tone)}` : ''}">${esc(s)}</span>`;
+    };
+
+    const rows = payments.length
+      ? payments.map(p => {
+          const sendBtn = canSend && ['pending','invoiced'].includes(p.status)
+            ? `<button class="small secondary" data-send-link="${esc(String(p.id))}" title="Create or re-send a Stripe payment link">Send Invoice Link</button>`
+            : '';
+          const linkCell = p.external_ref
+            ? `<span class="muted small" title="${esc(p.external_ref)}">Link sent</span>`
+            : '';
+          return `<tr>
+            <td>${esc(p.payment_type)}</td>
+            <td>${esc(money(p.amount))} ${esc(p.currency || 'USD')}</td>
+            <td>${statusChip(p.status)}</td>
+            <td>${esc(p.method || '—')}</td>
+            <td>${esc(p.due_date || '—')}</td>
+            <td>${linkCell}${sendBtn}</td>
+          </tr>`;
+        }).join('')
+      : `<tr><td colspan="6" class="muted">${emptyState('No payment records yet.')}</td></tr>`;
+
+    const depositBar = summary.deposit_required > 0 ? `
+      <div class="summary-row">
+        <span class="label">Deposit Required</span>
+        <span class="value">${esc(money(summary.deposit_required))}</span>
+      </div>
+      <div class="summary-row">
+        <span class="label">Deposit Received</span>
+        <span class="value">${esc(money(summary.deposit_received))}</span>
+      </div>
+      <div class="summary-row">
+        <span class="label">Deposit Outstanding</span>
+        <span class="value${summary.deposit_outstanding > 0 ? ' value-warn' : ''}">${esc(money(summary.deposit_outstanding))}</span>
+      </div>` : '';
+
+    this.innerHTML = `
+      <section class="panel" id="payments">
+        <div class="section-head padded">
+          <h2>Payments ${helpLink('payments', 'Payments')}</h2>
+        </div>
+        ${depositBar ? `<div class="summary-block">${depositBar}</div>` : ''}
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>Type</th><th>Amount</th><th>Status</th><th>Method</th><th>Due</th><th>Actions</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </section>`;
+
+    this.querySelectorAll('[data-send-link]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const pid = parseInt(btn.dataset.sendLink, 10);
+        btn.disabled = true;
+        btn.textContent = 'Sending…';
+        try {
+          const result = await api(`/events/${id}/payments/${pid}/send-link`, { method: 'POST' });
+          if (result.payment_link) {
+            await navigator.clipboard.writeText(result.payment_link).catch(() => {});
+            publish('toast.show', { message: 'Payment link created and copied to clipboard.' });
+          }
+          this._load();
+        } catch (err) {
+          publish('toast.show', { message: 'Failed to create payment link: ' + (err.message || 'Unknown error'), tone: 'error' });
+          btn.disabled = false;
+          btn.textContent = 'Send Invoice Link';
+        }
+      });
+    });
+  }
+}
+
+customElements.define('pb-event-payments', EventPayments);

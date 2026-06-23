@@ -32,7 +32,7 @@ final class Payments extends BaseEndpoint
                                     'promoter_payment','client_payment','other'];
     private const METHODS       = ['cash','check','ach','wire','credit_card','stripe','square',
                                     'venmo','zelle','other'];
-    private const STATUSES      = ['pending','received','failed','refunded','voided'];
+    private const STATUSES      = ['pending','invoiced','received','failed','refunded','voided'];
 
     public function handle(Request $request): Response
     {
@@ -43,6 +43,14 @@ final class Payments extends BaseEndpoint
         // Waive deposit — high-privilege action
         if ($action === 'waive-deposit' && $request->method() === 'POST') {
             return $this->waiveDeposit($request, $eventId);
+        }
+
+        // Send a Stripe payment link for a pending/invoiced payment record.
+        if ($action === 'send-link' && $request->method() === 'POST') {
+            if ($denied = $this->requireEventCapability($eventId, 'manage_payments')) {
+                return $denied;
+            }
+            return $this->sendPaymentLink($eventId, $request, $paymentId);
         }
 
         $cap = $request->method() === 'GET' ? 'read_event' : 'manage_payments';
@@ -324,6 +332,133 @@ final class Payments extends BaseEndpoint
             'UPDATE events SET deposit_status = ? WHERE id = ?',
             [$status, $eventId]
         );
+    }
+
+    // ── Stripe payment link ───────────────────────────────────────────────────
+
+    /**
+     * Creates a Stripe Payment Link for the given payment record and marks it
+     * as 'invoiced'. The link URL is returned so the caller can email/copy it.
+     *
+     * Endpoint: POST /api/events/{id}/payments/{pid}/send-link
+     *
+     * @param int      $eventId   Event context (from URL)
+     * @param Request  $request   Incoming request (body: payment_id fallback)
+     * @param int|null $paymentId Payment ID from URL segment; falls back to body
+     */
+    private function sendPaymentLink(int $eventId, Request $request, ?int $paymentId): Response
+    {
+        $b = $request->body();
+
+        // Resolve payment ID: prefer URL param, fall back to request body.
+        $resolvedId = $paymentId > 0 ? $paymentId : (int) ($b['payment_id'] ?? 0);
+        if ($resolvedId <= 0) {
+            return Response::json(['error' => 'payment_id is required'], 422);
+        }
+
+        // Load the payment record.
+        $payment = $this->db->one(
+            'SELECT * FROM event_payments WHERE id = ? AND event_id = ?',
+            [$resolvedId, $eventId]
+        );
+        if (!$payment) {
+            return $this->notFound('Payment record not found');
+        }
+        if ((float) $payment['amount'] <= 0) {
+            return Response::json(['error' => 'Payment amount must be greater than 0'], 422);
+        }
+
+        $stripeKey = getenv('STRIPE_SECRET_KEY') ?: '';
+        if (!$stripeKey || str_starts_with($stripeKey, 'your_')) {
+            return Response::json(['error' => 'Stripe not configured — set STRIPE_SECRET_KEY in .env'], 503);
+        }
+
+        $event       = $this->db->one('SELECT title FROM events WHERE id = ?', [$eventId]);
+        $amountCents = (int) round((float) $payment['amount'] * 100);
+        $currency    = strtolower($payment['currency'] ?? 'usd');
+        $label       = ucfirst(str_replace('_', ' ', $payment['payment_type'])) . ' — ' . ($event['title'] ?? 'Event');
+
+        // Step 1: create a one-time Price object.
+        $priceResponse = $this->stripePost($stripeKey, 'prices', [
+            'currency'              => $currency,
+            'unit_amount'           => $amountCents,
+            'product_data[name]'    => $label,
+        ]);
+
+        if (!isset($priceResponse['id'])) {
+            return Response::json([
+                'error'  => 'Failed to create Stripe price',
+                'detail' => $priceResponse['error']['message'] ?? $priceResponse,
+            ], 502);
+        }
+
+        // Step 2: create the Payment Link.
+        $linkResponse = $this->stripePost($stripeKey, 'payment_links', [
+            'line_items[0][price]'    => $priceResponse['id'],
+            'line_items[0][quantity]' => 1,
+        ]);
+
+        if (!isset($linkResponse['url'])) {
+            return Response::json([
+                'error'  => 'Failed to create Stripe payment link',
+                'detail' => $linkResponse['error']['message'] ?? $linkResponse,
+            ], 502);
+        }
+
+        $url    = $linkResponse['url'];
+        $linkId = $linkResponse['id'];
+
+        // Persist the link reference and mark the payment as invoiced.
+        $this->db->run(
+            "UPDATE event_payments
+             SET status = 'invoiced', external_ref = ?,
+                 notes = CONCAT(COALESCE(notes, ''), ' | Invoice link sent: ', ?)
+             WHERE id = ?",
+            [$linkId, date('Y-m-d'), $resolvedId]
+        );
+
+        // Audit trail.
+        $this->db->run(
+            'INSERT INTO event_payment_audit
+             (payment_id, event_id, user_id, action, note)
+             VALUES (?, ?, ?, ?, ?)',
+            [$resolvedId, $eventId, $this->userId(), 'invoice_link_sent',
+             'Stripe payment link: ' . $url]
+        );
+
+        log_activity($this->db, $eventId, $this->userId(), 'Stripe payment link sent', [
+            'payment_id'     => $resolvedId,
+            'stripe_link_id' => $linkId,
+            'amount'         => $payment['amount'],
+        ]);
+
+        return $this->ok(['payment_link' => $url, 'stripe_link_id' => $linkId]);
+    }
+
+    /**
+     * Minimal Stripe REST helper — no SDK required.
+     * Uses HTTP Basic auth with the secret key as the username.
+     */
+    private function stripePost(string $key, string $endpoint, array $params): array
+    {
+        $ch = curl_init('https://api.stripe.com/v1/' . $endpoint);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query($params),
+            CURLOPT_USERPWD        => $key . ':',
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+            CURLOPT_TIMEOUT        => 15,
+        ]);
+        $body   = curl_exec($ch);
+        $errno  = curl_errno($ch);
+        curl_close($ch);
+
+        if ($errno) {
+            return ['error' => ['message' => 'cURL error ' . $errno]];
+        }
+
+        return json_decode((string) $body, true) ?? [];
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

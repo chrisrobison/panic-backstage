@@ -345,6 +345,9 @@ final class Ledger extends BaseEndpoint
 
         log_activity($this->db, $eventId, $this->userId(), 'closeout finalized', []);
 
+        // Trigger accounting sync if a provider is configured and enabled.
+        (new \Panic\Accounting($this->db, $this->root))->onCloseoutFinalized($eventId);
+
         return $this->ok(['ok' => true, 'status' => 'finalized']);
     }
 
