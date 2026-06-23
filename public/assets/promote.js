@@ -1828,15 +1828,23 @@ class PromoteSettings extends PanicElement {
   async connect() {
     this.venueId = 1;
     this.saving = {};
+    this.autoPublishSaving = false;
+    this.autoPublishSettings = null;
+    this.autoPublishDestinations = [];
     await this.load();
   }
 
   async load() {
     this.innerHTML = '<div class="loading-state padded">Loading platform connections…</div>';
     try {
-      const data = await api(`/promote/credentials?venue_id=${this.venueId}`);
-      this.venues = data.venues || [];
-      this.credentials = data.credentials || [];
+      const [credData, apData] = await Promise.all([
+        api(`/promote/credentials?venue_id=${this.venueId}`),
+        api('/promote/auto-publish').catch(() => ({ settings: null, destinations: [] })),
+      ]);
+      this.venues = credData.venues || [];
+      this.credentials = credData.credentials || [];
+      this.autoPublishSettings = apData.settings || { auto_publish_enabled: 0, auto_publish_destinations_array: [] };
+      this.autoPublishDestinations = apData.destinations || [];
       this.render();
     } catch (err) {
       this.innerHTML = `<div class="error-text padded">Failed to load credentials: ${esc(String(err?.message || err))}</div>`;
@@ -1875,6 +1883,8 @@ class PromoteSettings extends PanicElement {
       </section>
     `).join('');
 
+    const autoPublishHtml = this.renderAutoPublishSection();
+
     this.innerHTML = `
       <div class="promote-settings-page">
         <div class="promote-settings-header">
@@ -1885,6 +1895,7 @@ class PromoteSettings extends PanicElement {
           <p class="subtle">Connect platforms so Panic Promote can post automatically. API keys and tokens are stored securely per venue and never exposed after saving.</p>
           ${venueSel}
         </div>
+        ${autoPublishHtml}
         ${groupsHtml}
       </div>`;
 
@@ -1894,11 +1905,103 @@ class PromoteSettings extends PanicElement {
       this.load();
     });
 
+    // Wire up auto-publish section
+    this.wireAutoPublish();
+
     // Wire up card forms
     for (const [destKey] of Object.entries(PLATFORM_FIELDS)) {
       this.wireCard(destKey);
     }
   }
+
+  renderAutoPublishSection() {
+    const s = this.autoPublishSettings || {};
+    const enabled = Number(s.auto_publish_enabled) === 1;
+    const selectedDests = Array.isArray(s.auto_publish_destinations_array) ? s.auto_publish_destinations_array : [];
+    const allDests = this.autoPublishDestinations || [];
+
+    const destCheckboxes = allDests.length
+      ? allDests.map((d) => `
+          <label class="check-label" style="margin-right:1rem">
+            <input type="checkbox" name="ap_dest" value="${esc(d.destination_key)}" ${selectedDests.includes(d.destination_key) ? 'checked' : ''}>
+            ${esc(d.label)}
+            <span class="badge ${d.status === 'connected' ? 'success' : ''}" style="font-size:0.7em;margin-left:4px">${esc(d.status)}</span>
+          </label>`).join('')
+      : '<p class="muted" style="margin:0">No destinations configured yet — connect platforms below first.</p>';
+
+    return `
+      <section class="promote-settings-group" data-auto-publish-section>
+        <h3 class="promote-settings-group-title"><i class="fa-solid fa-bolt" aria-hidden="true"></i> Auto-Publish</h3>
+        <div class="promote-settings-card" style="max-width:640px">
+          <p class="subtle" style="margin-top:0">When enabled, Backstage will automatically broadcast an event's most recent Promote post to the selected destinations as soon as the event status changes to <strong>Published</strong>.</p>
+          <div class="form-row" style="margin-bottom:0.75rem">
+            <label class="check-label">
+              <input type="checkbox" data-ap-enabled ${enabled ? 'checked' : ''}>
+              Auto-publish when event reaches <strong>Published</strong> status
+            </label>
+          </div>
+          <div data-ap-dest-section style="${enabled ? '' : 'opacity:0.45;pointer-events:none'}">
+            <p style="margin:0.5rem 0 0.4rem;font-weight:600;font-size:0.9em">Destinations to broadcast to:</p>
+            <div style="display:flex;flex-wrap:wrap;gap:0.35rem 0">
+              ${destCheckboxes}
+            </div>
+          </div>
+          <div style="margin-top:1rem">
+            <button class="button primary small" data-ap-save ${this.autoPublishSaving ? 'disabled' : ''}>
+              ${this.autoPublishSaving ? '<i class="fa-solid fa-spinner fa-spin"></i> Saving…' : '<i class="fa-solid fa-floppy-disk"></i> Save auto-publish settings'}
+            </button>
+          </div>
+        </div>
+      </section>`;
+  }
+
+  wireAutoPublish() {
+    const enabledCb = this.$('[data-ap-enabled]');
+    const destSection = this.$('[data-ap-dest-section]');
+    const saveBtn = this.$('[data-ap-save]');
+
+    if (!enabledCb) return;
+
+    enabledCb.addEventListener('change', () => {
+      if (destSection) {
+        destSection.style.opacity = enabledCb.checked ? '' : '0.45';
+        destSection.style.pointerEvents = enabledCb.checked ? '' : 'none';
+      }
+    });
+
+    saveBtn?.addEventListener('click', () => this.saveAutoPublish());
+  }
+
+  async saveAutoPublish() {
+    if (this.autoPublishSaving) return;
+    this.autoPublishSaving = true;
+    const enabledCb = this.$('[data-ap-enabled]');
+    const destChecks = Array.from(this.$$('[name="ap_dest"]') || this.querySelectorAll('[name="ap_dest"]'));
+    const enabled = enabledCb?.checked ? 1 : 0;
+    const destinations = destChecks.filter((cb) => cb.checked).map((cb) => cb.value);
+
+    try {
+      const result = await api('/promote/auto-publish', {
+        method: 'PATCH',
+        body: JSON.stringify({ auto_publish_enabled: enabled, auto_publish_destinations: destinations }),
+      });
+      this.autoPublishSettings = result.settings || this.autoPublishSettings;
+      publish('toast.show', { message: 'Auto-publish settings saved.', tone: 'success' });
+    } catch (err) {
+      publish('toast.show', { message: `Save failed: ${err?.message || err}`, tone: 'error' });
+    } finally {
+      this.autoPublishSaving = false;
+      // Re-render only the auto-publish section to avoid losing state elsewhere
+      const section = this.$('[data-auto-publish-section]');
+      if (section) {
+        section.outerHTML = this.renderAutoPublishSection();
+        this.wireAutoPublish();
+      }
+    }
+  }
+
+  // Scoped querySelectorAll helper (mirrors the $ helper below)
+  $$(sel) { return this.querySelectorAll(sel); }
 
   renderCard(destKey, def, cred) {
     const status = cred.cred_status || 'needs_auth';

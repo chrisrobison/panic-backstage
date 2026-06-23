@@ -257,6 +257,10 @@ final class Kernel
 
         // Panic Promote — /api/promote/...
         if ($segments[0] === 'promote') {
+            // GET|PATCH /api/promote/auto-publish — global auto-publish settings
+            if (($segments[1] ?? '') === 'auto-publish') {
+                return [Promote\AutoPublishSettings::class, []];
+            }
             // GET /api/promote/eventbrite/org — one-time setup helper
             if (($segments[1] ?? '') === 'eventbrite' && ($segments[2] ?? '') === 'org') {
                 return [Promote\EventbriteSetup::class, []];

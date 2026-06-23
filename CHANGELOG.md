@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** — Auto-publish event to Promote destinations when status reaches 'published'
 - **Added** — Client portal — token-gated read-only event view for promoters and clients
 - **Added** — CRM follow-up task email delivery and daily reminder endpoint
 - **Added** — Incident resolution workflow with venue admin email notifications
