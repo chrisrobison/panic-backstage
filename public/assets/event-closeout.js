@@ -52,12 +52,21 @@ function formatDate(value) {
 // ── Main component ────────────────────────────────────────────────────────────
 class EventCloseout extends PanicElement {
   // Properties set by the workspace before mounting
-  // this.eventId   – string/number
-  // this.canEdit   – bool
-  // this.canFinalize – bool
+  // Properties set by the workspace after DOM insertion:
+  //   eventId, canEdit, canFinalize
+  // Use a backing field + setter so load() fires when eventId is assigned,
+  // not on connect() — connect() fires before the workspace sets the property.
+
+  get eventId()  { return this._eventId; }
+  set eventId(v) {
+    this._eventId = v;
+    if (v) this.load();
+  }
 
   async connect() {
-    await this.load();
+    // load() is triggered by set eventId() once the workspace wires us up.
+    // Guard here handles the rare case where eventId was set before insertion.
+    if (this._eventId) await this.load();
   }
 
   async load() {

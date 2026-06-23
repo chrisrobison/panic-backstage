@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** — Guard eventId in closeout and execution connect() to prevent load before workspace wires the property
 - **Fixed** `pos` — Explicit active_event_id override — staff pin POS to a specific event instead of date-guessing
 - **Added** `QBO/Xero stubs` — Accounting integration framework (QBO/Xero stubs) and Stripe payment link generation
 - **Fixed** — Add Portal route and isPublic() registration to Kernel.php

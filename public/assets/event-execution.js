@@ -145,6 +145,12 @@ class EventExecution extends PanicElement {
   // Properties set by the workspace before mount
   // eventId, canEdit, canManageIncidents
 
+  get eventId()  { return this._eventId; }
+  set eventId(v) {
+    this._eventId = v;
+    if (v) this._load();
+  }
+
   connect() {
     injectStyles();
     this._records   = [];
@@ -153,7 +159,9 @@ class EventExecution extends PanicElement {
     this._loading   = true;
     this._error     = null;
     this.render();
-    this._load();
+    // _load() is triggered by set eventId() once the workspace wires us up.
+    // Guard handles the rare case where eventId was set before DOM insertion.
+    if (this._eventId) this._load();
   }
 
   async _load() {
