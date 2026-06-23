@@ -6,6 +6,7 @@ import { openPrintWindow } from './print.js';
 import './paint-splat.js';
 import './event-vendors.js';
 import './event-execution.js';
+import './event-closeout.js';
 
 function factCell(label, value) {
   return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
@@ -153,6 +154,7 @@ const SECTION_LABELS = {
   settlement:   'Settlement',
   ticketing:    'Ticketing',
   execution:    'Execution',
+  closeout:     'Closeout',
   activity:     'Activity',
 };
 
@@ -239,6 +241,7 @@ class EventWorkspace extends PanicElement {
     if (can(data, 'manage_invites')) tabs.splice(tabs.length - 1, 0, 'invites');
     if (can(data, 'view_settlement') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'settlement');
     if (can(data, 'manage_ticketing') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'ticketing');
+    if (can(data, 'manage_ledger') || can(data, 'finalize_closeout')) tabs.splice(tabs.length - 1, 0, 'closeout');
     const user = getAppUser();
     const userId = user?.id ?? 'anon';
     const toggleableTabs = tabs.filter(t => t !== 'details');
@@ -297,6 +300,7 @@ class EventWorkspace extends PanicElement {
     ${(!isPrivate && can(data, 'view_settlement')) ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
     ${(!isPrivate && can(data, 'manage_ticketing')) ? '<pb-ticketing-admin id="ticketing"></pb-ticketing-admin>' : ''}
     <pb-event-execution id="execution"></pb-event-execution>
+    ${(can(data, 'manage_ledger') || can(data, 'finalize_closeout')) ? '<pb-event-closeout id="closeout"></pb-event-closeout>' : ''}
     <section id="activity" class="panel"><div class="section-head padded"><h2>Activity ${helpLink('activity', 'Activity Log')}</h2></div><ul class="timeline">${data.activity.map(activityEntry).join('')}</ul></section>`;
     $('pb-event-summary', this).data = data;
     $('pb-event-next-action', this).data = data;
@@ -314,6 +318,8 @@ class EventWorkspace extends PanicElement {
     if ($('pb-invite-manager', this)) $('pb-invite-manager', this).data = data;
     if ($('pb-settlement-form', this)) $('pb-settlement-form', this).data = data;
     if ($('pb-ticketing-admin', this)) $('pb-ticketing-admin', this).data = data;
+    const closeoutEl = $('pb-event-closeout', this);
+    if (closeoutEl) { closeoutEl.eventId = data.event.id; closeoutEl.canEdit = can(data, 'manage_ledger'); closeoutEl.canFinalize = can(data, 'finalize_closeout'); }
     const execEl = $('pb-event-execution', this);
     if (execEl) {
       execEl.eventId             = event.id;
