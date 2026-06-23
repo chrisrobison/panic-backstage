@@ -19,6 +19,16 @@ export const HELP_SECTIONS = [
     ],
   },
   {
+    group: 'Lead Pipeline',
+    key: 'leads',
+    icon: 'fa-solid fa-funnel',
+    items: [
+      { slug: 'leads',         title: 'Leads inbox' },
+      { slug: 'lead-evaluation', title: 'Deal evaluator' },
+      { slug: 'lead-convert', title: 'Converting a lead to an event' },
+    ],
+  },
+  {
     group: 'Working with the App',
     key: 'working',
     icon: 'fa-solid fa-compass',
@@ -45,17 +55,30 @@ export const HELP_SECTIONS = [
       { slug: 'lineup',       title: 'Lineup &amp; bands' },
       { slug: 'schedule',     title: 'Schedule &amp; run sheet' },
       { slug: 'staffing',     title: 'Staffing' },
+      { slug: 'vendors',      title: 'Vendors &amp; COI tracking' },
       { slug: 'open-items',   title: 'Open items' },
       { slug: 'guest-list',   title: 'Guest list &amp; door' },
+      { slug: 'execution',    title: 'Live execution records' },
       { slug: 'assets',       title: 'Assets &amp; flyers' },
       { slug: 'invites',      title: 'Invites &amp; collaborators' },
       { slug: 'contracts',    title: 'Contracts &amp; deal builder' },
+      { slug: 'deposit-gate', title: 'Deposit gate &amp; payments' },
       { slug: 'e-signatures', title: 'Electronic signatures' },
       { slug: 'ticketing',    title: 'Ticketing &amp; door' },
       { slug: 'settlement',   title: 'Settlement' },
       { slug: 'publish',      title: 'Publishing the public page' },
       { slug: 'print',        title: 'Printable packets' },
       { slug: 'activity',     title: 'Activity log' },
+    ],
+  },
+  {
+    group: 'Closeout &amp; Billing',
+    key: 'closeout',
+    icon: 'fa-solid fa-file-invoice-dollar',
+    items: [
+      { slug: 'closeout',          title: 'Closeout overview' },
+      { slug: 'closeout-ledger',   title: 'The financial ledger' },
+      { slug: 'closeout-finalize', title: 'Finalizing closeout' },
     ],
   },
   {
@@ -1155,6 +1178,334 @@ const HELP_CONTENT = {
     <p>Check that the file is under the server's <code>upload_max_filesize</code> and is one of the accepted types (PNG, JPG, GIF, WEBP, PDF). The server enforces type by both extension and MIME via <code>finfo</code>.</p>
     <h3>Asset won't approve</h3>
     <p>Only promoters and admins can approve assets. Bands and designers can upload but not approve.</p>
+  `,
+
+  // ── Lead Pipeline ──────────────────────────────────────────────────────────
+
+  leads: `
+    <h2>Leads Inbox</h2>
+    <p>The Leads Inbox is the first stop for new booking inquiries. It lives at the top of the sidebar under the <strong>Leads</strong> nav item and collects every inbound request before it becomes a confirmed event.</p>
+
+    <h3>Status pipeline</h3>
+    <p>Leads move through a defined status pipeline:</p>
+    <ol>
+      <li><strong>New</strong> — just arrived; not yet reviewed.</li>
+      <li><strong>Triage</strong> — someone is looking at it and deciding whether to pursue.</li>
+      <li><strong>Evaluating</strong> — the deal is being assessed (see <a href="#help-lead-evaluation">Deal evaluator</a>).</li>
+      <li><strong>Needs Review</strong> — evaluation is complete but a decision-maker hasn't approved it yet.</li>
+      <li><strong>Approved</strong> — approved to convert to an event.</li>
+      <li><strong>Declined</strong> — the inquiry was declined.</li>
+      <li><strong>Canceled</strong> — the lead was withdrawn or abandoned.</li>
+      <li><strong>Converted</strong> — successfully converted to a real event.</li>
+    </ol>
+    <div class="warn"><strong>Important:</strong> A lead in <strong>Needs Review</strong> status gets a ⚠️ badge in the sidebar. These leads need attention before they stall — venue admins see a "Leads Needing Review" count on the dashboard.</div>
+
+    <h3>Where leads come from</h3>
+    <ul>
+      <li><strong>Website form</strong> — submitted through the venue's booking inquiry form.</li>
+      <li><strong>Promoter outreach</strong> — a promoter reached out directly.</li>
+      <li><strong>Peerspace</strong> — inquiry originating from Peerspace.</li>
+      <li><strong>Eventective</strong> — inquiry originating from Eventective.</li>
+      <li><strong>Giggster</strong> — inquiry originating from Giggster.</li>
+      <li><strong>Phone</strong> — someone called in.</li>
+      <li><strong>Email</strong> — direct email inquiry.</li>
+      <li><strong>Manual entry</strong> — created by staff directly in Backstage.</li>
+    </ul>
+
+    <h3>Creating a lead</h3>
+    <ol>
+      <li>Click <strong>New Lead</strong> in the Leads section.</li>
+      <li>Fill in the title, event type, venue, contact info, source, and requested date.</li>
+      <li>Save. The lead is created with status <em>New</em>.</li>
+    </ol>
+
+    <h3>Moving a lead through statuses</h3>
+    <p>Open a lead to see its detail panel. The status buttons along the top of the detail panel advance or revert the lead's status. Click the appropriate button to move it forward — for example from <em>Triage</em> to <em>Evaluating</em> once you've begun the deal evaluation.</p>
+    <div class="tip"><strong>Tip:</strong> Run the <a href="#help-lead-evaluation">Deal Evaluator</a> before moving a lead to <em>Approved</em>. The evaluation results are preserved for audit even after the lead is converted.</div>
+  `,
+
+  'lead-evaluation': `
+    <h2>Deal Evaluator</h2>
+    <p>The Deal Evaluator is in the right section of the Lead detail panel. It helps you model the financial feasibility of a booking before committing to it. All math is performed server-side — never trust numbers computed locally in the browser.</p>
+
+    <h3>Input fields</h3>
+    <ul>
+      <li><strong>Room Capacity</strong> — the legal maximum occupancy of the space.</li>
+      <li><strong>Expected Attendance</strong> — your projected headcount for this event.</li>
+      <li><strong>Ticket Price</strong> — the price charged per ticket.</li>
+      <li><strong>Ticket Fee / ticket</strong> — any per-ticket fee added on top (e.g. processing fee).</li>
+      <li><strong>Rental Fee</strong> — flat room rental fee, if applicable.</li>
+      <li><strong>Artist Guarantee</strong> — the minimum payout guaranteed to the artist regardless of ticket sales.</li>
+      <li><strong>Projected Bar Spend</strong> — your estimate of total bar revenue for the night.</li>
+      <li><strong>Bar Minimum</strong> — the minimum bar spend required by the contract. If the client's bar spend is below this, the minimum kicks in.</li>
+      <li><strong>Labor Forecast</strong> — projected labor costs (staff, security, sound, etc.).</li>
+      <li><strong>Production Costs</strong> — AV, staging, lighting, and related production expenses.</li>
+      <li><strong>Facility Costs</strong> — cleaning, utilities, permit fees, and other facility overhead.</li>
+      <li><strong>Other Costs</strong> — any additional costs not captured above.</li>
+    </ul>
+
+    <h3>Running the evaluation</h3>
+    <p>Fill in the fields and click <strong>Calculate</strong>. The server computes all results and returns them immediately.</p>
+
+    <h3>Results</h3>
+    <ul>
+      <li><strong>Gross Revenue</strong> — total of ticket sales + ticket fees + bar revenue + rental fee.</li>
+      <li><strong>Estimated Cost</strong> — sum of all cost inputs.</li>
+      <li><strong>Venue Net</strong> — Gross Revenue minus Estimated Cost.</li>
+      <li><strong>Margin %</strong> — Venue Net as a percentage of Gross Revenue.</li>
+      <li><strong>Break-even Tickets</strong> — how many tickets must sell to cover all fixed costs.</li>
+      <li><strong>Minimum Tickets to Cover Guarantee</strong> — the ticket count at which the artist guarantee is covered by door receipts.</li>
+    </ul>
+
+    <h3>Risk flags</h3>
+    <p>The evaluator automatically highlights financial risks. Each flag has a severity:</p>
+    <ul>
+      <li><span style="color:#dc2626;font-weight:600">&#x1F534; negative_margin</span> — costs exceed revenue at projected attendance. The show loses money as modeled.</li>
+      <li><span style="color:#dc2626;font-weight:600">&#x1F534; venue_net_negative_with_guarantee</span> — the venue loses money even with the artist guarantee factored in.</li>
+      <li><span style="color:#d97706;font-weight:600">&#x1F7E1; low_margin_under_15_pct</span> — a margin exists but is thin (under 15%). Proceed carefully.</li>
+      <li><span style="color:#d97706;font-weight:600">&#x1F7E1; attendance_below_break_even</span> — projected attendance won't cover fixed costs.</li>
+      <li><span style="color:#d97706;font-weight:600">&#x1F7E1; bar_spend_below_minimum</span> — the client's bar estimate is below the bar minimum; the minimum will kick in regardless.</li>
+      <li><span style="color:#ea580c;font-weight:600">&#x1F7E0; projected_attendance_exceeds_capacity</span> — the headcount assumption exceeds the room's legal limit.</li>
+    </ul>
+    <div class="note"><strong>Note:</strong> Risk flags are advisory — they help you spot problems early but do not block approval. Document your reasoning in the lead notes if you proceed despite a flag.</div>
+  `,
+
+  'lead-convert': `
+    <h2>Converting a Lead to an Event</h2>
+    <p>When a lead has been approved (or is in <em>Evaluating</em> status), it can be promoted into a real event in Backstage.</p>
+
+    <h3>How to convert</h3>
+    <ol>
+      <li>Open the lead in the Leads Inbox.</li>
+      <li>Confirm the lead is in <strong>Approved</strong> or <strong>Evaluating</strong> status.</li>
+      <li>Click <strong>Convert to Event</strong> in the detail panel.</li>
+      <li>Backstage creates the event atomically and links it to the lead.</li>
+      <li>You are taken directly to the new event workspace.</li>
+    </ol>
+
+    <h3>What happens to the lead</h3>
+    <p>The lead is marked <strong>Converted</strong> and locked. Its evaluation results and all notes are preserved as a permanent audit record — you can always return to the lead to see the financial modeling that informed the booking decision.</p>
+
+    <div class="note"><strong>Note:</strong> A converted lead cannot be edited or re-converted. If the event falls through, mark the lead <em>Canceled</em> separately after voiding or canceling the event.</div>
+    <div class="tip"><strong>Tip:</strong> After conversion, open the new event and use the <a href="#help-event-wizard">Event Creation Wizard</a> or the <a href="#help-contracts">Contracts</a> tab to build the formal booking agreement.</div>
+  `,
+
+  // ── Vendors ─────────────────────────────────────────────────────────────────
+
+  vendors: `
+    <h2>Vendors &amp; COI Tracking</h2>
+    <p>The Vendors panel tracks every external vendor hired for an event: caterers, photographers, security firms, AV companies, DJs, decorators, and any other outside party brought in for the show.</p>
+
+    <h3>Vendor columns</h3>
+    <ul>
+      <li><strong>Vendor Name</strong> — the company or individual's name.</li>
+      <li><strong>Service Category</strong> — what they're providing (Catering, Photography, Security, AV, DJ, Décor, etc.).</li>
+      <li><strong>Contact</strong> — the vendor's contact name and/or email.</li>
+      <li><strong>Quote</strong> — the original quoted amount.</li>
+      <li><strong>Approved</strong> — the amount approved by the venue for billing purposes.</li>
+      <li><strong>Actual</strong> — the final actual cost once the work is done.</li>
+      <li><strong>COI Status</strong> — Certificate of Insurance status (see below).</li>
+      <li><strong>Payment</strong> — payment status.</li>
+      <li><strong>Confirmed</strong> — whether the vendor has confirmed they'll be on-site.</li>
+    </ul>
+
+    <h3>Adding and editing vendors</h3>
+    <p>Click <strong>Add Vendor</strong> to open the vendor form. Fill in the name, category, contact info, and quote amount, then save. The new vendor appears in the table.</p>
+    <p>To edit any vendor, click <strong>Edit</strong> on its row. You can update all fields inline, including the approved and actual amounts and all COI details.</p>
+
+    <h3>COI tracking</h3>
+    <p>Certificates of Insurance (COI) are often required before a vendor is allowed to work at your venue. The COI status values are:</p>
+    <ul>
+      <li><span style="color:#6b7280;font-weight:600">not_required</span> (Grey) — no COI is needed for this vendor.</li>
+      <li><span style="color:#d97706;font-weight:600">pending</span> (Yellow) — COI has been requested but not yet received.</li>
+      <li><span style="color:#16a34a;font-weight:600">received</span> (Green) — COI is on file; vendor is cleared to work.</li>
+      <li><span style="color:#dc2626;font-weight:600">expired</span> (Red) — COI was received but is past its expiry date. The vendor cannot work until they provide a current certificate.</li>
+    </ul>
+    <div class="warn"><strong>Important:</strong> Never allow a vendor with an <em>expired</em> COI to work the event. Request an updated certificate and change the status to <em>received</em> once it's on file.</div>
+
+    <h3>Payment status</h3>
+    <p>Track vendor payments through their lifecycle:</p>
+    <ul>
+      <li><strong>Unpaid</strong> — no payment has been made yet.</li>
+      <li><strong>Invoiced</strong> — an invoice has been received; payment is pending.</li>
+      <li><strong>Paid</strong> — vendor has been paid in full.</li>
+      <li><strong>Refunded</strong> — a refund was issued.</li>
+    </ul>
+
+    <h3>Confirmed badge</h3>
+    <p>When a vendor confirms they'll be on-site for the event, mark them confirmed. The row displays a green <strong>✓ Confirmed</strong> badge so the event manager can see at a glance which vendors are locked in.</p>
+
+    <h3>Totals row</h3>
+    <p>The bottom of the Vendors panel shows a totals row summing the <strong>Quote</strong>, <strong>Approved</strong>, and <strong>Actual</strong> columns across all vendors.</p>
+
+    <div class="tip"><strong>Tip:</strong> The Vendors panel feeds into Closeout Billing — actual amounts flow into vendor cost ledger entries automatically. Keep <em>Actual</em> amounts current so your closeout P&amp;L is accurate.</div>
+  `,
+
+  // ── Execution Records ────────────────────────────────────────────────────────
+
+  execution: `
+    <h2>Live Execution Records</h2>
+    <p>The Execution tab captures real-time records during the event: incidents, change orders, bar notes, property damage, overages, and other notable occurrences. These records create a factual, timestamped account of what actually happened night-of-show.</p>
+
+    <h3>Record types</h3>
+    <ul>
+      <li><span style="color:#dc2626;font-weight:600">&#x1F534; Incident</span> — something went wrong (fight, medical emergency, property damage). <strong>Restricted:</strong> only staff with the <code>view_incidents</code> or <code>manage_incidents</code> capability can see incident records.</li>
+      <li><span style="color:#2563eb;font-weight:600">&#x1F535; Change Order</span> — a last-minute change to the agreed scope (extra set, different equipment, additional service). If a dollar amount is attached, a ledger entry is auto-created in Closeout.</li>
+      <li><span style="color:#16a34a;font-weight:600">&#x1F7E2; Bar Note</span> — observations about bar performance: early or late close, slow service, high-volume periods, staffing notes.</li>
+      <li><span style="color:#ea580c;font-weight:600">&#x1F7E0; Damage</span> — property damage observed during or after the event. The amount field captures a repair estimate; a ledger cost entry is auto-created.</li>
+      <li><span style="color:#7c3aed;font-weight:600">&#x1F7E3; Overage</span> — costs that ran over the agreed amount. Auto-creates a ledger cost entry in Closeout.</li>
+      <li><strong>Other types</strong> — Checklist note, Deviation from plan, Safety note, General note.</li>
+    </ul>
+
+    <h3>Adding a record</h3>
+    <ol>
+      <li>Click <strong>+ Add Record</strong>.</li>
+      <li>Pick the record type from the dropdown.</li>
+      <li>Enter a summary line (required) and optional detail body.</li>
+      <li>Enter an optional financial impact amount if applicable.</li>
+      <li>For sensitive records, check <strong>Restrict to incident managers</strong> to limit visibility.</li>
+      <li>Save. The record is timestamped automatically.</li>
+    </ol>
+
+    <h3>Filter tabs</h3>
+    <p>Use the filter tabs to focus on one record type at a time: <strong>All</strong> | <strong>Change Orders</strong> | <strong>Bar Notes</strong> | <strong>Damage</strong> | <strong>Incidents</strong> | <strong>Other</strong>. Filtering is client-side — all records are loaded; the tabs just control what's shown.</p>
+
+    <div class="note"><strong>Note:</strong> Records become read-only after the event is settled. Keep entries factual and timestamped — they may be referenced in post-event disputes, insurance claims, or audit reviews.</div>
+    <div class="tip"><strong>Tip:</strong> Change orders and damage records that carry a dollar amount automatically create matching entries in the Closeout ledger, saving a manual step during financial reconciliation.</div>
+  `,
+
+  // ── Deposit Gate ─────────────────────────────────────────────────────────────
+
+  'deposit-gate': `
+    <h2>Deposit Gate &amp; Payments</h2>
+    <p>An event cannot advance to <strong>Booked</strong> status without two things in place: a fully executed contract and a deposit in an accepted state. This two-key gate prevents events from being marked booked before the financial commitment is secured.</p>
+
+    <h3>The two requirements</h3>
+    <ul>
+      <li><strong>Contract</strong> — must be in <em>signed</em> or <em>fully_executed</em> status. A contract that is only <em>sent</em> or <em>approved</em> does not satisfy the gate.</li>
+      <li><strong>Deposit</strong> — must be in <em>received</em>, <em>waived</em>, or <em>not_required</em> state. A deposit that is requested but not yet received will block the transition.</li>
+    </ul>
+
+    <h3>The Payments panel</h3>
+    <p>The Payments panel (inside the event workspace) tracks all deposits and balance payments for the event. Adding a payment requires:</p>
+    <ul>
+      <li><strong>Type</strong> — deposit, balance, refund, credit, or adjustment.</li>
+      <li><strong>Direction</strong> — inbound (received from the client) or outbound (paid to an artist or vendor).</li>
+      <li><strong>Amount</strong> — the payment amount.</li>
+      <li><strong>Due date</strong> — when the payment is due.</li>
+      <li><strong>Payment method</strong> — how the payment was or will be made.</li>
+    </ul>
+    <p>When a deposit payment is marked <strong>received</strong>, the event's <code>deposit_status</code> updates automatically and the gate check is re-evaluated.</p>
+
+    <h3>Waiving a deposit</h3>
+    <p>In some cases you may want to waive the deposit requirement — for example for a high-trust returning promoter. Waiving requires the <code>waive_deposit</code> capability (venue admin by default). A mandatory reason must be entered. All waivers are audited with the reason, the admin who waived it, and the timestamp.</p>
+    <div class="warn"><strong>Important:</strong> Waiving a deposit is a deliberate bypass of a financial control. Use it sparingly and always document the reason.</div>
+
+    <h3>Not required</h3>
+    <p>If an event has no deposit amount set, the deposit status defaults to <code>not_required</code> and the gate passes automatically. This ensures backward compatibility with events created before the deposit gate was introduced.</p>
+
+    <h3>Error messages</h3>
+    <p>When an event is blocked from advancing to Booked, you'll see a specific error message explaining why:</p>
+    <ul>
+      <li><em>"Deposit requested but not yet received"</em> — a deposit amount is set but no received payment exists.</li>
+      <li><em>"Deposit partially received"</em> — the received amount is less than the required deposit.</li>
+      <li><em>"Deposit waived"</em> — the deposit was waived; this is informational, not an error.</li>
+    </ul>
+    <div class="tip"><strong>Tip:</strong> Use the <a href="#help-contracts">Contracts</a> tab's e-signature workflow to get the contract to <em>fully_executed</em> status. Both gates (contract + deposit) must pass before Booked is available.</div>
+  `,
+
+  // ── Closeout &amp; Billing ───────────────────────────────────────────────────
+
+  closeout: `
+    <h2>Closeout Overview</h2>
+    <p>After a show ends, the Closeout panel (a tab in the event workspace) replaces the old flat Settlement form with a full financial ledger workflow. It gives you a structured, auditable way to reconcile every dollar that came in and went out.</p>
+
+    <h3>Layout</h3>
+    <p>The Closeout panel has a two-column layout:</p>
+    <ul>
+      <li><strong>Left panel</strong> — the financial ledger with all line items (revenue, costs, payments).</li>
+      <li><strong>Right panel</strong> — the P&amp;L summary (Gross Revenue, Total Costs, Venue Net, Margin %) and the closeout checklist.</li>
+    </ul>
+
+    <h3>Event types</h3>
+    <p>Public events and private venue rentals have different revenue categories suited to their billing structure:</p>
+    <ul>
+      <li><strong>Public events</strong> — Tickets, Ticket Fees, Bar Sales, Merch Share, Sponsorship, and more.</li>
+      <li><strong>Private events (rentals)</strong> — Rental Fee, Hosted Bar, Equipment Rental, Overtime Charge, and other rental-specific categories.</li>
+    </ul>
+
+    <h3>Why the ledger workflow</h3>
+    <p>The closeout workflow prevents an event from being marked <em>Settled</em> until all financial loose ends are tied off. A 7-point checklist gates the Finalize button, ensuring nothing is missed. See <a href="#help-closeout-finalize">Finalizing closeout</a> for the checklist details.</p>
+
+    <div class="tip"><strong>Tip:</strong> Vendor actual amounts (from the <a href="#help-vendors">Vendors panel</a>) and execution records with financial impact (from the <a href="#help-execution">Execution tab</a>) automatically generate ledger entries, reducing manual data entry during closeout.</div>
+  `,
+
+  'closeout-ledger': `
+    <h2>The Financial Ledger</h2>
+    <p>The ledger is the core of the Closeout panel. It records every financial transaction for the event in a structured, auditable format.</p>
+
+    <div class="warn"><strong>Important:</strong> The ledger is <strong>append-only</strong>. You add entries; you do not edit amounts. To correct a mistake, void the incorrect entry and add a corrected one. This preserves the complete financial history.</div>
+
+    <h3>Entry types and categories</h3>
+    <p><strong>Revenue categories:</strong></p>
+    <ul>
+      <li>Tickets, Ticket Fees, Bar Sales, Rental Fee, Hosted Bar, Merch Share, Sponsorship, Equipment Rental, Overtime Charge, Other Revenue</li>
+    </ul>
+    <p><strong>Cost categories:</strong></p>
+    <ul>
+      <li>Artist Guarantee, Promoter Settlement, Labor, Sound/Production, Security, Cleaning, Rentals, Catering, Vendor Cost, Processing Fees, Taxes, Refunds, Other Cost</li>
+    </ul>
+    <p><strong>Payment categories:</strong></p>
+    <ul>
+      <li>Deposit Received, Balance Payment, Refund Issued, Credit Applied, Adjustment</li>
+    </ul>
+
+    <h3>Adding a ledger entry</h3>
+    <ol>
+      <li>Pick the <strong>line type</strong>: Revenue, Cost, or Payment.</li>
+      <li>Pick the <strong>category</strong> from the dropdown (filtered by type).</li>
+      <li>Enter the <strong>amount</strong> and a <strong>description</strong>.</li>
+      <li>Click <strong>Save</strong>. The entry is added immediately.</li>
+    </ol>
+
+    <h3>Voiding an entry</h3>
+    <p>Click the <strong>Void</strong> button next to any entry. You'll be prompted to enter a reason for the void. Voided entries remain visible in the ledger with strikethrough text — there is no delete. The complete record is preserved for audit.</p>
+
+    <h3>The P&amp;L Summary</h3>
+    <p>The right panel shows a live P&amp;L summary: <strong>Gross Revenue</strong>, <strong>Total Costs</strong>, <strong>Venue Net</strong>, and <strong>Margin %</strong>. These figures are always calculated server-side — the app never trusts a submitted total.</p>
+    <p>Click <strong>Refresh</strong> to recalculate after adding entries. The summary updates to reflect all non-voided entries.</p>
+
+    <div class="note"><strong>Note:</strong> The P&amp;L is a running total, not a snapshot. It reflects the current state of all active (non-voided) ledger entries at any given time.</div>
+  `,
+
+  'closeout-finalize': `
+    <h2>Finalizing Closeout</h2>
+    <p>Before an event can be marked <strong>Settled</strong>, all items on the 7-point Closeout Checklist must be checked off. This gate ensures no financial or operational loose ends are left open.</p>
+
+    <h3>The 7-point checklist</h3>
+    <ol>
+      <li><strong>Contract Signed</strong> — a fully executed contract is on file.</li>
+      <li><strong>Deposit Received</strong> — the deposit was received, waived, or marked not required.</li>
+      <li><strong>Vendors Confirmed</strong> — all vendors are confirmed for the event.</li>
+      <li><strong>Staffing Confirmed</strong> — all staff shifts are confirmed.</li>
+      <li><strong>Bar Closed</strong> — bar has been officially closed and the count reconciled.</li>
+      <li><strong>Cash Reconciled</strong> — cash float and door take are balanced.</li>
+      <li><strong>All Invoices Collected</strong> — all vendor invoices are received and entered in the ledger.</li>
+    </ol>
+    <p>Each checkbox immediately PATCHes the server when clicked — there's no separate save button for the checklist.</p>
+
+    <h3>Finalizing</h3>
+    <p>Once all 7 boxes are checked, the <strong>Finalize</strong> button becomes active. Click it to:</p>
+    <ul>
+      <li>Set the event status to <strong>settled</strong>.</li>
+      <li>Lock the ledger — no new entries can be added and existing entries cannot be voided.</li>
+    </ul>
+
+    <h3>Reopening a settled event</h3>
+    <p>If something was missed after finalization, click <strong>Reopen</strong> and enter a reason. The ledger unlocks and the event reverts to an active state.</p>
+    <div class="warn"><strong>Important:</strong> Reopening requires the <code>finalize_closeout</code> capability (venue admin by default). The reason and timestamp of every reopen are stored permanently — reopening is fully audited.</div>
+
+    <div class="tip"><strong>Tip:</strong> Work through the ledger entries and checklist in parallel as the night wraps up. The sooner costs and revenues are entered, the more accurate your P&amp;L will be when you hit Finalize.</div>
   `,
 
   // ── Panic Promote — user guide ──────────────────────────────────────────────
