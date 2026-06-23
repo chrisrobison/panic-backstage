@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS `client_profiles` (
   `notes`               TEXT          DEFAULT NULL,
   `consent_marketing`   TINYINT(1)    NOT NULL DEFAULT 0,
   `consent_date`        DATE          DEFAULT NULL,
-  `contact_id`          INT(11)       DEFAULT NULL,
+  `contact_id`          BIGINT(20)    DEFAULT NULL,
   `created_by_id`       INT(11)       DEFAULT NULL,
   `created_at`          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
