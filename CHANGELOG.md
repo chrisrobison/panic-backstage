@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** `ops-manual` — Add lead pipeline, deposit gate, vendors, execution, closeout, and venue policy chapters
 - **Documentation** `help` — Add in-app help for leads, vendors, closeout, execution, and deposit gate
 - **Added** `ui` — Closeout and billing ledger panel for event workspace
 - **Added** `ui` — Execution records panel for event workspace

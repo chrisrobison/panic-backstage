@@ -883,8 +883,16 @@
     <div class="nav-section">Introduction</div>
     <a href="#cover" class="chapter">How to use this manual</a>
 
-    <div class="nav-section">Part I — Booking</div>
-    <a href="#booking" class="chapter">Chapter 1: Booking a Show</a>
+    <div class="nav-section">Part I — Lead Pipeline</div>
+    <a href="#leads-part" class="chapter">Lead Pipeline</a>
+    <a href="#lead-inbox" class="section">The Leads Inbox</a>
+    <a href="#lead-create" class="section">Creating a lead</a>
+    <a href="#lead-pipeline" class="section">Moving through the pipeline</a>
+    <a href="#lead-evaluator" class="section">The Deal Evaluator</a>
+    <a href="#lead-convert" class="section">Converting to an event</a>
+
+    <div class="nav-section">Part II — Booking</div>
+    <a href="#booking" class="chapter">Chapter 2: Booking a Show</a>
     <a href="#inquiry" class="section">How inquiries arrive</a>
     <a href="#create-event" class="section">Creating the event</a>
     <a href="#pipeline" class="section">The status pipeline</a>
@@ -903,26 +911,36 @@
     <a href="#notifications" class="section">Automatic notifications</a>
     <a href="#private-events" class="section">Private event rentals</a>
     <a href="#sheet-sync" class="section">Google Sheet sync</a>
+    <a href="#deposit-gate" class="section">The deposit gate</a>
 
-    <div class="nav-section">Part II — Night Of</div>
-    <a href="#run-of-night" class="chapter">Chapter 2: Run of Night</a>
+    <div class="nav-section">Part III — Night Of</div>
+    <a href="#run-of-night" class="chapter">Chapter 3: Run of Night</a>
     <a href="#ron-advance" class="section">Advance the show</a>
     <a href="#run-sheet" class="section">The Run Sheet</a>
     <a href="#staffing-night" class="section">Confirming staff</a>
     <a href="#door" class="section">Door &amp; Guest List</a>
     <a href="#scanner" class="section">QR ticket scanner</a>
     <a href="#during" class="section">During the show</a>
+    <a href="#vendors" class="section">Vendors &amp; COI tracking</a>
+    <a href="#execution" class="section">Live execution records</a>
 
-    <div class="nav-section">Part III — Post Event</div>
-    <a href="#post-event" class="chapter">Chapter 3: Post-Event</a>
+    <div class="nav-section">Part IV — Post Event</div>
+    <a href="#post-event" class="chapter">Chapter 4: Post-Event</a>
     <a href="#auto-archive" class="section">Auto-archive</a>
     <a href="#settlement" class="section">Settlement</a>
     <a href="#settling" class="section">Filing settlement</a>
     <a href="#settled" class="section">Marking Settled</a>
     <a href="#activity-log" class="section">The Activity Log</a>
 
-    <div class="nav-section">Part IV — Promote</div>
-    <a href="#promote" class="chapter">Chapter 4: Panic Promote</a>
+    <div class="nav-section">Part V — Closeout</div>
+    <a href="#closeout-part" class="chapter">Closeout &amp; Billing</a>
+    <a href="#closeout-overview" class="section">Closeout overview</a>
+    <a href="#closeout-ledger" class="section">The financial ledger</a>
+    <a href="#closeout-checklist" class="section">The closeout checklist</a>
+    <a href="#closeout-finalize" class="section">Finalize &amp; reopen</a>
+
+    <div class="nav-section">Part VI — Promote</div>
+    <a href="#promote" class="chapter">Chapter 6: Panic Promote</a>
     <a href="#promote-overview" class="section">How Promote is organized</a>
     <a href="#promote-posts" class="section">Posts &amp; channel variants</a>
     <a href="#promote-broadcast" class="section">Broadcasting</a>
@@ -930,8 +948,8 @@
     <a href="#promote-workflow" class="section">Step-by-step workflow</a>
     <a href="#promote-setup" class="section">Connecting platforms</a>
 
-    <div class="nav-section">Part V — Ticketing</div>
-    <a href="#ticketing" class="chapter">Chapter 5: In-House Ticketing</a>
+    <div class="nav-section">Part VII — Ticketing</div>
+    <a href="#ticketing" class="chapter">Chapter 7: In-House Ticketing</a>
     <a href="#ticketing-modes" class="section">External vs. in-house</a>
     <a href="#ticket-types" class="section">Setting up ticket types</a>
     <a href="#ticketing-dashboard" class="section">Live sales dashboard</a>
@@ -941,12 +959,13 @@
     <a href="#ticketing-scanner" class="section">Scanner links</a>
     <a href="#ticketing-payments" class="section">Payment provider setup</a>
 
-    <div class="nav-section">Part VI — Admin</div>
-    <a href="#admin" class="chapter">Chapter 6: Admin &amp; Users</a>
+    <div class="nav-section">Part VIII — Admin</div>
+    <a href="#admin" class="chapter">Chapter 8: Admin &amp; Users</a>
     <a href="#admin-overview" class="section">The Admin section</a>
     <a href="#admin-users" class="section">Login accounts</a>
     <a href="#admin-staff" class="section">Staff roster</a>
     <a href="#admin-templates" class="section">Event templates</a>
+    <a href="#venue-policy" class="section">Venue policy</a>
 
     <div class="nav-section">Quick Reference</div>
     <a href="#roles" class="chapter">Roles &amp; Who Does What</a>
@@ -1013,17 +1032,290 @@
 </div>
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
-<!-- PART I: BOOKING                                                             -->
+<!-- PART I: LEAD PIPELINE                                                       -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<div class="part-break" id="leads-part">
+  <div class="part-num">Part I</div>
+  <h2>Lead Pipeline</h2>
+  <p>From the first inquiry to an approved deal — before an event even exists in the system.</p>
+</div>
+
+<div id="leads" class="chapter-page">
+  <div class="chapter-hero">
+    <span class="chapter-num">Chapter 1</span>
+    <h1>Lead Pipeline</h1>
+    <p class="lead">Most bookings don't start as events — they start as leads. The Lead Pipeline is where you evaluate inquiries, run the numbers, and decide what to book before anything hits the calendar.</p>
+  </div>
+
+  <div class="book-content">
+
+    <!-- THE LEADS INBOX ───────────────────────────────────────────────────── -->
+    <h2 id="lead-inbox">The Leads Inbox</h2>
+
+    <p>Before an event is created, most bookings start as a <strong>lead</strong> — an inquiry or opportunity that needs evaluation. The Leads Inbox (sidebar nav → Leads) shows all leads in a pipeline view.</p>
+
+    <p>The inbox table shows the following columns:</p>
+
+    <table>
+      <tr><th>Column</th><th>What it shows</th></tr>
+      <tr><td><strong>Title</strong></td><td>The lead name or inquiry description</td></tr>
+      <tr><td><strong>Source</strong></td><td>Where the inquiry came from</td></tr>
+      <tr><td><strong>Contact</strong></td><td>The inquiring party's name</td></tr>
+      <tr><td><strong>Date</strong></td><td>Expected or requested event date</td></tr>
+      <tr><td><strong>Status</strong></td><td>Current pipeline stage</td></tr>
+      <tr><td><strong>Margin %</strong></td><td>Projected deal margin from the Deal Evaluator (if calculated)</td></tr>
+      <tr><td><strong>Actions</strong></td><td>Quick links to open, convert, or decline</td></tr>
+    </table>
+
+    <p>Status filter tabs across the top let you narrow the view: <strong>All | New | Triage | Evaluating | Needs Review | Approved</strong>.</p>
+
+    <div class="callout note">
+      <span class="callout-title">Needs Review badge</span>
+      <p>A <strong>Needs Review</strong> badge appears on the sidebar Leads link when leads are stalled and need manager attention. The dashboard card <strong>Leads Needing Review</strong> shows the count for venue admins so nothing slips through.</p>
+    </div>
+
+    <h3>Lead sources</h3>
+    <p>Each lead has a source that tracks where the inquiry originated. Available sources: <strong>Website, Promoter, Peerspace, Eventective, Giggster, Phone, Email, Manual</strong>. This data is preserved for reporting — over time you can see which channels generate the most bookable leads.</p>
+
+    <!-- CREATING A LEAD ───────────────────────────────────────────────────── -->
+    <h2 id="lead-create">Creating a lead</h2>
+
+    <p>Click <span class="ui-label button">+ New Lead</span> to open the create form. Required fields:</p>
+
+    <div class="field-ref">
+      <div class="field-ref-title">New Lead — Required Fields</div>
+      <div class="field-row">
+        <div class="field-name">Title</div>
+        <div class="field-desc">A descriptive name for the inquiry. e.g. "The Midnight — July booking inquiry" or "Corporate holiday party".</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Event Type</div>
+        <div class="field-desc">Concert / Private Event / Festival / Comedy Show / Other — affects which evaluation fields appear.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Venue</div>
+        <div class="field-desc">Which room or configuration is being requested: Upstairs, Downstairs, or Both.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Contact Name</div>
+        <div class="field-desc">The person or organization making the inquiry.</div>
+      </div>
+    </div>
+
+    <p>Optional fields: contact email, source, expected event date, description/notes. The lead starts in <code>new</code> status and appears at the top of the New tab immediately after saving.</p>
+
+    <!-- PIPELINE ─────────────────────────────────────────────────────────── -->
+    <h2 id="lead-pipeline">Moving through the pipeline</h2>
+
+    <p>Each lead has a status that tracks where it is in the evaluation process. Status buttons on the lead detail panel advance (or close) the lead:</p>
+
+    <div style="margin: 32px 0; font-family: var(--font-ui);">
+      <div style="display:flex; flex-direction:column; gap:0;">
+
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:2px;">
+          <div style="width:32px; text-align:center;"><div style="width:14px; height:14px; border-radius:50%; background:#6b7280; margin:0 auto;"></div></div>
+          <div style="flex:1; background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:14px 18px;">
+            <span style="display:inline-block; background:#6b7280; color:#fff; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; padding:2px 8px; border-radius:4px; margin-bottom:6px;">New</span>
+            <div style="font-weight:700; font-size:0.95rem; margin-bottom:2px;">Inquiry received, unreviewed</div>
+            <div style="font-size:0.82rem; color:#6b7280;">The lead just came in. No action taken yet.</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:2px;"><div style="width:32px; text-align:center;"><div style="width:2px; height:20px; background:#e5e7eb; margin:0 auto;"></div></div><div style="font-size:0.75rem; color:#9ca3af; font-style:italic; padding-left:4px;">Acknowledged and gathering info ↓</div></div>
+
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:2px;">
+          <div style="width:32px; text-align:center;"><div style="width:14px; height:14px; border-radius:50%; background:#d97706; margin:0 auto;"></div></div>
+          <div style="flex:1; background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:14px 18px;">
+            <span style="display:inline-block; background:#d97706; color:#fff; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; padding:2px 8px; border-radius:4px; margin-bottom:6px;">Triage</span>
+            <div style="font-weight:700; font-size:0.95rem; margin-bottom:2px;">Acknowledged; gathering details</div>
+            <div style="font-size:0.82rem; color:#6b7280;">You've made contact and are collecting the information needed to evaluate the deal.</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:2px;"><div style="width:32px; text-align:center;"><div style="width:2px; height:20px; background:#e5e7eb; margin:0 auto;"></div></div><div style="font-size:0.75rem; color:#9ca3af; font-style:italic; padding-left:4px;">Actively running numbers ↓</div></div>
+
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:2px;">
+          <div style="width:32px; text-align:center;"><div style="width:14px; height:14px; border-radius:50%; background:#2563eb; margin:0 auto;"></div></div>
+          <div style="flex:1; background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:14px 18px;">
+            <span style="display:inline-block; background:#2563eb; color:#fff; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; padding:2px 8px; border-radius:4px; margin-bottom:6px;">Evaluating</span>
+            <div style="font-weight:700; font-size:0.95rem; margin-bottom:2px;">Deal Evaluator is open; numbers being run</div>
+            <div style="font-size:0.82rem; color:#6b7280;">You're actively using the Deal Evaluator to assess margin, break-even, and risk. A lead can be converted to an event from this status if the deal is ready.</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:2px;"><div style="width:32px; text-align:center;"><div style="width:2px; height:20px; background:#e5e7eb; margin:0 auto;"></div></div><div style="font-size:0.75rem; color:#9ca3af; font-style:italic; padding-left:4px;">Waiting for management sign-off ↓</div></div>
+
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:2px;">
+          <div style="width:32px; text-align:center;"><div style="width:14px; height:14px; border-radius:50%; background:#f59e0b; margin:0 auto;"></div></div>
+          <div style="flex:1; background:#fff; border:1px solid #fbd0a8; border-left:4px solid #f59e0b; border-radius:8px; padding:14px 18px;">
+            <span style="display:inline-block; background:#f59e0b; color:#fff; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; padding:2px 8px; border-radius:4px; margin-bottom:6px;">Needs Review</span>
+            <div style="font-weight:700; font-size:0.95rem; margin-bottom:2px;">Awaiting manager sign-off</div>
+            <div style="font-size:0.82rem; color:#6b7280;">Numbers are done. A manager needs to review and approve before booking proceeds. This status triggers the dashboard badge.</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:2px;"><div style="width:32px; text-align:center;"><div style="width:2px; height:20px; background:#e5e7eb; margin:0 auto;"></div></div><div style="font-size:0.75rem; color:#9ca3af; font-style:italic; padding-left:4px;">Greenlit — ready to book ↓</div></div>
+
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:2px;">
+          <div style="width:32px; text-align:center;"><div style="width:14px; height:14px; border-radius:50%; background:#059669; margin:0 auto;"></div></div>
+          <div style="flex:1; background:#fff; border:1px solid #fbd0a8; border-left:4px solid #e8650a; border-radius:8px; padding:14px 18px;">
+            <span style="display:inline-block; background:#059669; color:#fff; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; padding:2px 8px; border-radius:4px; margin-bottom:6px;">Approved</span>
+            <div style="font-weight:700; font-size:0.95rem; margin-bottom:2px;">Deal greenlit — ready to convert to event</div>
+            <div style="font-size:0.82rem; color:#6b7280;">Management has approved. Click Convert to Event to create the booking.</div>
+          </div>
+        </div>
+
+      </div>
+
+      <p style="font-size:0.8rem; color:#9ca3af; font-style:italic; margin-top:12px; font-family:var(--font-ui);">Terminal statuses: <strong>Declined</strong> (not a fit — preserved for reporting) · <strong>Canceled</strong> (went cold without a formal decline)</p>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">Declining vs. canceling</span>
+      <p>Use <strong>Declined</strong> when you've actively decided not to book the inquiry — you had the information and said no. Use <strong>Canceled</strong> when the inquiry simply went cold — the contact stopped responding or withdrew without a formal decision. Both are preserved in the system for reporting purposes; neither is deleted.</p>
+    </div>
+
+    <!-- DEAL EVALUATOR ───────────────────────────────────────────────────── -->
+    <h2 id="lead-evaluator">The Deal Evaluator</h2>
+
+    <p>On the lead detail panel, the right column is the <strong>Deal Evaluator</strong> — a financial projection tool that tells you whether a show is worth booking before you commit to it.</p>
+
+    <h3>Projection fields</h3>
+
+    <div class="field-ref">
+      <div class="field-ref-title">Deal Evaluator Inputs</div>
+      <div class="field-row">
+        <div class="field-name">Room capacity</div>
+        <div class="field-desc">The hard legal limit for the room. Used to flag if attendance assumptions exceed the room.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Expected attendance</div>
+        <div class="field-desc">Your projected headcount. The key variable — small changes here move the numbers significantly.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Ticket price</div>
+        <div class="field-desc">Advance ticket price. Used to calculate gross ticket revenue and break-even.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Ticket fee per ticket</div>
+        <div class="field-desc">Service/processing fee charged on top of the ticket price (if any). Added to ticket revenue.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Rental fee</div>
+        <div class="field-desc">For private events — the flat venue rental amount.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Artist guarantee</div>
+        <div class="field-desc">The artist's minimum guaranteed payment, regardless of ticket sales.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Projected bar spend</div>
+        <div class="field-desc">Your estimate of bar revenue for the night based on expected attendance and historical averages.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Bar minimum</div>
+        <div class="field-desc">The minimum bar commitment (if any). The higher of bar spend and bar minimum is used in the calculation.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Labor forecast</div>
+        <div class="field-desc">Estimated total labor cost for the night (security, bar staff, door, etc.).</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Production costs</div>
+        <div class="field-desc">Sound, lighting, backline, staging.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Facility costs</div>
+        <div class="field-desc">Cleaning, utilities, equipment wear.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Other costs</div>
+        <div class="field-desc">Anything else that isn't covered by the above categories.</div>
+      </div>
+    </div>
+
+    <p>Click <span class="ui-label button">Calculate</span> — all math is done <strong>server-side</strong>. Never trust a browser total for booking decisions.</p>
+
+    <h3>Results</h3>
+
+    <div class="settlement-calc">
+      <div class="settlement-row add">
+        <div class="label">Gross Revenue</div>
+        <div class="amount">(attendance × ticket price) + (attendance × fee) + rental + max(bar spend, bar minimum)</div>
+      </div>
+      <div class="settlement-row deduct">
+        <div class="label">Estimated Cost</div>
+        <div class="amount">guarantee + labor + production + facility + other</div>
+      </div>
+      <div class="settlement-row total">
+        <div class="label">Venue Net</div>
+        <div class="amount">Gross Revenue − Estimated Cost</div>
+      </div>
+      <div class="settlement-row">
+        <div class="label">Margin %</div>
+        <div class="amount">(Venue Net / Gross Revenue) × 100</div>
+      </div>
+      <div class="settlement-row">
+        <div class="label">Break-even tickets</div>
+        <div class="amount">⌈Estimated Cost / Ticket Price⌉ — must sell this many to cover fixed costs</div>
+      </div>
+      <div class="settlement-row">
+        <div class="label">Minimum guarantee tickets</div>
+        <div class="amount">⌈Guarantee / Ticket Price⌉ — tickets needed just to cover the artist</div>
+      </div>
+    </div>
+
+    <h3>Risk flags</h3>
+
+    <p>After calculating, the evaluator shows color-coded risk badges on the results panel:</p>
+
+    <table>
+      <tr><th>Flag</th><th>Severity</th><th>What it means</th></tr>
+      <tr><td>Negative margin</td><td style="color:#dc2626; font-weight:700;">Red</td><td>Costs exceed revenue at projected attendance — this show loses money as modeled</td></tr>
+      <tr><td>Venue net negative with guarantee</td><td style="color:#dc2626; font-weight:700;">Red</td><td>The venue is upside-down — the guarantee alone exceeds the projected net</td></tr>
+      <tr><td>Low margin under 15%</td><td style="color:#d97706; font-weight:700;">Yellow</td><td>Positive but thin — any shortfall in attendance or bar will push it negative</td></tr>
+      <tr><td>Attendance below break-even</td><td style="color:#d97706; font-weight:700;">Yellow</td><td>The projected headcount doesn't cover fixed costs — you're counting on selling more than expected</td></tr>
+      <tr><td>Bar spend below minimum</td><td style="color:#d97706; font-weight:700;">Yellow</td><td>The bar minimum kicks in — use the minimum figure, not the projection, in your net calculation</td></tr>
+      <tr><td>Projected attendance exceeds capacity</td><td style="color:#ea580c; font-weight:700;">Orange</td><td>The attendance assumption exceeds the room's legal limit — not a valid scenario</td></tr>
+    </table>
+
+    <div class="callout warn">
+      <span class="callout-title">Model your scenarios</span>
+      <p>Run the evaluator at multiple attendance levels: your best case, your realistic case, and your floor case (70% of expected). A deal that only works at full capacity is riskier than one that works at 70%. The evaluator saves your last calculation — you can adjust inputs and recalculate as many times as you need.</p>
+    </div>
+
+    <!-- CONVERTING A LEAD ────────────────────────────────────────────────── -->
+    <h2 id="lead-convert">Converting a lead to an event</h2>
+
+    <p>When a lead is in <code>approved</code> status (or <code>evaluating</code> if the deal is ready to go), click <span class="ui-label button">Convert to Event</span>.</p>
+
+    <p>Backstage creates the event in a single transaction:</p>
+    <ul>
+      <li>A new event record is created using the lead's details (title, event type, venue, expected date)</li>
+      <li>The lead is linked to the event with a permanent reference</li>
+      <li>Audit notes are written on both the lead and the new event</li>
+      <li>You're taken directly to the new event workspace to continue setup</li>
+    </ul>
+
+    <p>After conversion, the lead is marked <strong>converted</strong> and becomes read-only. Its evaluation data — all projections, risk flags, and the calculation results — is preserved permanently on the lead record for audit and historical comparison against the actual settled numbers.</p>
+
+    <div class="callout note">
+      <span class="callout-title">The lead lives on</span>
+      <p>Converting a lead does not delete it. A venue admin can always navigate back to the original lead from the event workspace to see what the deal looked like at evaluation time — useful for post-show retrospectives comparing projected vs. actual margin.</p>
+    </div>
+
+  </div><!-- /book-content -->
+</div><!-- /leads chapter -->
+
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- PART II: BOOKING                                                            -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <div class="part-break" id="booking-part">
-  <div class="part-num">Part I</div>
+  <div class="part-num">Part II</div>
   <h2>Booking</h2>
   <p>From the first inquiry to the contract signed and date locked in the system.</p>
 </div>
 
 <div id="booking" class="chapter-page">
   <div class="chapter-hero">
-    <span class="chapter-num">Chapter 1</span>
+    <span class="chapter-num">Chapter 2</span>
     <h1>Booking a Show</h1>
     <p class="lead">The booking process is a pipeline. Every event enters at the bottom (Hold) and works its way up. The system enforces what you need at each step — no contract, no Booked status.</p>
   </div>
@@ -1651,6 +1943,73 @@
       <p>The spreadsheet is the source of truth for referral source, promoter name, title, date, and room assignment — the system won't overwrite those when it syncs. Backstage is the authority for everything else.</p>
     </div>
 
+    <!-- DEPOSIT GATE ───────────────────────────────────────────────────────── -->
+    <h2 id="deposit-gate">The deposit gate</h2>
+
+    <p>An event <strong>cannot</strong> move to <code>booked</code> status without two gates cleared:</p>
+
+    <ol>
+      <li><strong>Fully executed contract</strong> — the contract must be in <code>signed</code> or <code>fully_executed</code> status. A sent, partially signed, or draft contract is not enough.</li>
+      <li><strong>Deposit received (or waived)</strong> — the deposit status must be <code>received</code>, <code>waived</code>, or <code>not_required</code>.</li>
+    </ol>
+
+    <p>The <span class="ui-label tab">Payments</span> tab in the event workspace tracks all money movements: deposits, balance payments, refunds, credits, and adjustments.</p>
+
+    <h3>Adding a payment record</h3>
+
+    <p>Click <span class="ui-label button">+ Add Payment</span> to record a payment. Each payment record includes:</p>
+
+    <div class="field-ref">
+      <div class="field-ref-title">Payment Record Fields</div>
+      <div class="field-row">
+        <div class="field-name">Payment type</div>
+        <div class="field-desc">Deposit, Balance Payment, Refund, Credit, or Adjustment.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Direction</div>
+        <div class="field-desc">Inbound (money coming to the venue) or Outbound (money going out).</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Amount</div>
+        <div class="field-desc">Dollar amount of the payment.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Due date</div>
+        <div class="field-desc">When the payment is expected. Overdue deposits appear on the dashboard.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Payment method</div>
+        <div class="field-desc">Check, wire transfer, ACH, cash, credit card, etc.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Notes</div>
+        <div class="field-desc">Any relevant details — check number, confirmation code, who delivered it, etc.</div>
+      </div>
+    </div>
+
+    <p>When a deposit payment is marked received, the <code>deposit_status</code> updates automatically to <code>received</code> and the gate opens — the event can now be advanced to Booked (assuming the contract is also executed).</p>
+
+    <h3>Waiving a deposit</h3>
+
+    <p>Some events don't require a deposit — longtime promoters, house-produced shows, or venue-discretion bookings. To waive the deposit requirement:</p>
+
+    <ul>
+      <li>Requires the <code>waive_deposit</code> capability (venue admin by default)</li>
+      <li>A mandatory reason must be entered — it cannot be left blank</li>
+      <li>The waiver is permanently audited: who, when, and why</li>
+      <li>Once waived, the deposit gate is cleared and the event can proceed to Booked</li>
+    </ul>
+
+    <div class="callout note">
+      <span class="callout-title">Legacy events</span>
+      <p>Events created before the deposit gate was introduced default to <code>not_required</code> and are unaffected by the gate. They can be advanced to Booked without a deposit record. This ensures no historical events are retroactively blocked.</p>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">Deposits Overdue dashboard card</span>
+      <p>The dashboard card <strong>Deposits Overdue</strong> highlights deposit payments that are past their due date. Check this weekly — an overdue deposit often means a follow-up call is needed before the event can be fully locked.</p>
+    </div>
+
   </div><!-- /book-content -->
 </div><!-- /chapter 1 -->
 
@@ -1659,14 +2018,14 @@
 <!-- PART II: RUN OF NIGHT                                                       -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <div class="part-break" id="ron-part">
-  <div class="part-num">Part II</div>
+  <div class="part-num">Part III</div>
   <h2>Run of Night</h2>
   <p>The day of the show. From load-in to last call.</p>
 </div>
 
 <div id="run-of-night" class="chapter-page">
   <div class="chapter-hero">
-    <span class="chapter-num">Chapter 2</span>
+    <span class="chapter-num">Chapter 3</span>
     <h1>Run of Night</h1>
     <p class="lead">The best-run shows aren't spontaneous — they're planned in detail and then executed smoothly. Backstage gives you the tools. Here's how to use them.</p>
   </div>
@@ -1874,6 +2233,97 @@
       <p>Just below the event summary on every event page, there's a <strong>Next Recommended Action</strong> card that tells you the single most important thing to do next for this event. Click <span class="ui-label button secondary">Refresh</span> to update it as things change throughout the night.</p>
     </div>
 
+    <!-- VENDORS ──────────────────────────────────────────────────────────────── -->
+    <h2 id="vendors">Vendors &amp; COI tracking</h2>
+
+    <p>The <span class="ui-label tab">Vendors</span> tab in the event workspace tracks every external vendor associated with the event: caterers, photographers, security firms, AV/lighting companies, DJs, florists, transportation providers, and anyone else you're bringing in.</p>
+
+    <h3>Adding a vendor</h3>
+
+    <p>Click <span class="ui-label button">+ Add Vendor</span> to create a vendor entry. Required: vendor name and service category. Optional: contact info, quote amount. The entry is saved to the event immediately.</p>
+
+    <p>To edit an existing vendor row, click <span class="ui-label button secondary">Edit</span> and update amounts (quote → approved → actual) and COI details inline.</p>
+
+    <h3>COI (Certificate of Insurance) tracking</h3>
+
+    <p>The venue requires a COI from vendors who bring equipment or staff on-site. The COI status on each vendor row reflects where the certificate stands:</p>
+
+    <table>
+      <tr><th>Status</th><th>Meaning</th><th>Gate cleared?</th></tr>
+      <tr><td><code>not_required</code></td><td>No COI needed — software vendors, remote services, any vendor without on-site presence</td><td>Yes</td></tr>
+      <tr><td><code>pending</code></td><td>COI requested but not yet received from the vendor</td><td>No</td></tr>
+      <tr><td><code>received</code></td><td>COI is on file — vendor is cleared</td><td>Yes</td></tr>
+      <tr><td><code>expired</code></td><td>COI passed its expiry date — vendor must renew before working the event</td><td>No</td></tr>
+    </table>
+
+    <div class="callout warn">
+      <span class="callout-title">Expired COIs block vendor clearance</span>
+      <p>A vendor with an expired COI should not be permitted on-site with equipment or staff until they provide a current certificate. Update the COI status to <code>received</code> and note the new expiry date once the renewal is in hand.</p>
+    </div>
+
+    <h3>Payment tracking</h3>
+
+    <p>Each vendor has a payment status that tracks whether they've been paid:</p>
+
+    <table>
+      <tr><th>Status</th><th>Meaning</th></tr>
+      <tr><td><strong>Unpaid</strong></td><td>No payment issued yet</td></tr>
+      <tr><td><strong>Invoiced</strong></td><td>Invoice received; payment pending</td></tr>
+      <tr><td><strong>Paid</strong></td><td>Payment issued</td></tr>
+      <tr><td><strong>Refunded</strong></td><td>Payment was returned</td></tr>
+    </table>
+
+    <h3>Confirmation and totals</h3>
+
+    <p>When a vendor confirms day-of attendance, mark them <strong>Confirmed</strong> on their row. This feeds into the closeout checklist — the Vendors Confirmed item won't clear until all on-site vendors are confirmed.</p>
+
+    <p>The totals row at the bottom of the vendor list shows aggregate <strong>Quote</strong>, <strong>Approved</strong>, and <strong>Actual</strong> cost summaries — useful for tracking how actual spend compares to what was estimated at booking time.</p>
+
+    <div class="callout note">
+      <span class="callout-title">COI policy is set in Admin</span>
+      <p>The venue-wide COI requirement is configured in Admin → Venue Policy. If COI is set to required globally, all on-site vendors should have <code>received</code> status before the event date. See <a href="#venue-policy">Venue Policy</a> in the Admin chapter for details.</p>
+    </div>
+
+    <!-- EXECUTION RECORDS ────────────────────────────────────────────────────── -->
+    <h2 id="execution">Live execution records</h2>
+
+    <p>During the event, the <span class="ui-label tab">Execution</span> tab captures a timestamped log of everything that happens. Think of it as the real-time incident and change log for the night — permanent, structured, and available to the right people.</p>
+
+    <h3>Record types</h3>
+
+    <table>
+      <tr><th>Type</th><th>Color</th><th>When to use</th><th>Financial impact?</th></tr>
+      <tr><td><strong>Incident</strong></td><td style="color:#dc2626;">Red</td><td>Fights, medical events, property damage. <strong>Restricted visibility</strong> — only staff with <code>view_incidents</code> or <code>manage_incidents</code> capability can see these records.</td><td>No</td></tr>
+      <tr><td><strong>Change Order</strong></td><td style="color:#2563eb;">Blue</td><td>Scope changes from the agreed plan. If a dollar amount is entered, a cost ledger entry is automatically created.</td><td>Yes — auto-creates ledger entry</td></tr>
+      <tr><td><strong>Bar Note</strong></td><td style="color:#16a34a;">Green</td><td>Bar performance observations: early/late close, pace notes, pour complaints, running low on product.</td><td>No</td></tr>
+      <tr><td><strong>Damage</strong></td><td style="color:#ea580c;">Orange</td><td>Property damage with estimated repair cost.</td><td>Yes — auto-creates a cost entry</td></tr>
+      <tr><td><strong>Overage</strong></td><td style="color:#7c3aed;">Purple</td><td>Costs that ran over plan.</td><td>Yes — auto-creates a cost entry</td></tr>
+      <tr><td><strong>Checklist</strong></td><td>—</td><td>Run-of-show checkpoint notes.</td><td>No</td></tr>
+      <tr><td><strong>Deviation</strong></td><td>—</td><td>Departures from the agreed plan that don't rise to the level of an incident or change order.</td><td>No</td></tr>
+      <tr><td><strong>Safety Note</strong></td><td>—</td><td>Venue safety observations that should be on record.</td><td>No</td></tr>
+      <tr><td><strong>General</strong></td><td>—</td><td>Anything that doesn't fit the above categories.</td><td>No</td></tr>
+    </table>
+
+    <h3>Adding a record</h3>
+
+    <p>Click <span class="ui-label button">+ Add Record</span>. Each record requires a type and a summary (required). Optional: a body (longer narrative — collapses to 2 lines in the list, click to expand), and a financial impact amount.</p>
+
+    <div class="callout note">
+      <span class="callout-title">Restricted flag on incidents</span>
+      <p>Incident-type records can be marked <strong>Restricted</strong> at creation time. Only staff with the <code>view_incidents</code> or <code>manage_incidents</code> capability will see restricted records. Other staff members see that a record exists but not its contents. Use this for sensitive matters — medical events, altercations — where visibility needs to be controlled.</p>
+    </div>
+
+    <h3>How execution records feed into closeout</h3>
+
+    <p>Execution records with financial impact don't just live in the Execution tab — they flow into the event's financial ledger automatically:</p>
+    <ul>
+      <li><strong>Change orders</strong> with a dollar amount appear in the Closeout ledger as cost entries</li>
+      <li><strong>Damage records</strong> auto-create a cost entry in the ledger with the repair estimate</li>
+      <li><strong>Overages</strong> create a cost entry matching the amount entered</li>
+    </ul>
+
+    <p>This means the night-of team can document what happened in real time, and the closeout team picks up accurate numbers without manual re-entry.</p>
+
   </div><!-- /book-content -->
 </div><!-- /chapter 2 -->
 
@@ -1882,14 +2332,14 @@
 <!-- PART III: POST-EVENT                                                        -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <div class="part-break" id="post-part">
-  <div class="part-num">Part III</div>
+  <div class="part-num">Part IV</div>
   <h2>Post-Event</h2>
   <p>After the last guest leaves: settlement, archiving, and closing the books.</p>
 </div>
 
 <div id="post-event" class="chapter-page">
   <div class="chapter-hero">
-    <span class="chapter-num">Chapter 3</span>
+    <span class="chapter-num">Chapter 4</span>
     <h1>Post-Event</h1>
     <p class="lead">The show is over. Now you count the money, pay the bands, and close the books. Here's how the system handles the end of an event's life.</p>
   </div>
@@ -2093,17 +2543,179 @@
 </div><!-- /chapter 3 -->
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
-<!-- PART IV: PANIC PROMOTE                                                      -->
+<!-- PART V: CLOSEOUT & BILLING                                                  -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<div class="part-break" id="closeout-part">
+  <div class="part-num">Part V</div>
+  <h2>Closeout &amp; Billing</h2>
+  <p>After the last guest leaves: the financial ledger, the checklist, and closing the books for real.</p>
+</div>
+
+<div id="closeout" class="chapter-page">
+  <div class="chapter-hero">
+    <span class="chapter-num">Chapter 5</span>
+    <h1>Closeout &amp; Billing</h1>
+    <p class="lead">The Closeout replaces the old Settlement form with a full financial ledger workflow — append-only line items, a seven-point checklist, and a finalize button that locks the books when everything checks out.</p>
+  </div>
+
+  <div class="book-content">
+
+    <!-- CLOSEOUT OVERVIEW ────────────────────────────────────────────────────── -->
+    <h2 id="closeout-overview">Closeout overview</h2>
+
+    <p>After the event ends and it's been archived, the <span class="ui-label tab">Closeout</span> tab in the event workspace becomes the primary workspace. It replaces the old Settlement form with a structured financial ledger workflow.</p>
+
+    <p>The Closeout panel has two columns:</p>
+    <ul>
+      <li><strong>Left column</strong> — the financial ledger: every revenue and cost line item for the event</li>
+      <li><strong>Right column</strong> — the P&amp;L summary and the 7-point closeout checklist</li>
+    </ul>
+
+    <p>The event cannot be marked <strong>Settled</strong> until the seven-point checklist is complete and the ledger is finalized.</p>
+
+    <div class="callout note">
+      <span class="callout-title">Events Awaiting Closeout</span>
+      <p>The dashboard card <strong>Events Awaiting Closeout</strong> shows all completed (archived) events that don't yet have a finalized closeout. Check this regularly — events should be closed out within a few days of the show, not weeks later when memories have faded.</p>
+    </div>
+
+    <!-- THE LEDGER ───────────────────────────────────────────────────────────── -->
+    <h2 id="closeout-ledger">The financial ledger</h2>
+
+    <p>The closeout ledger is the authoritative financial record of the event. Every financial fact is a ledger entry — there are no free-text totals or settlement form fields to overwrite.</p>
+
+    <div class="callout warn">
+      <span class="callout-title">Append-only: no edits, no deletes</span>
+      <p>The ledger is <strong>append-only</strong>. Once a line item is saved, it cannot be changed. To correct a mistake: void the incorrect entry (it stays visible with strikethrough so the correction is traceable) and add a new corrected entry. This ensures a complete audit trail — every number that was ever entered is visible.</p>
+    </div>
+
+    <h3>Line item types</h3>
+
+    <table>
+      <tr><th>Type</th><th>What it represents</th><th>Affects P&amp;L?</th></tr>
+      <tr><td><strong>Revenue</strong></td><td>Money coming in to the venue</td><td>Yes — adds to Gross Revenue</td></tr>
+      <tr><td><strong>Cost</strong></td><td>Money going out</td><td>Yes — adds to Total Costs</td></tr>
+      <tr><td><strong>Payment</strong></td><td>Money movement tracked separately from P&amp;L (deposits, balance payments, refunds)</td><td>No — tracked under Payments Received</td></tr>
+    </table>
+
+    <h3>Revenue categories</h3>
+    <p>Tickets · Ticket Fees · Bar Sales · Rental Fee · Hosted Bar · Merch Share · Sponsorship · Equipment Rental · Overtime Charge · Other Revenue</p>
+
+    <h3>Cost categories</h3>
+    <p>Artist Guarantee · Promoter Settlement · Labor · Sound/Production · Security · Cleaning · Rentals · Catering · Vendor Cost · Processing Fees · Taxes · Refunds · Other Cost</p>
+
+    <h3>Payment categories</h3>
+    <p>Deposit Received · Balance Payment · Refund Issued · Credit Applied · Adjustment</p>
+
+    <h3>P&amp;L Summary</h3>
+
+    <p>The right panel shows the running totals, always calculated server-side:</p>
+
+    <div class="settlement-calc">
+      <div class="settlement-row add">
+        <div class="label">Gross Revenue</div>
+        <div class="amount">Sum of all Revenue line items</div>
+      </div>
+      <div class="settlement-row deduct">
+        <div class="label">Total Costs</div>
+        <div class="amount">Sum of all Cost line items</div>
+      </div>
+      <div class="settlement-row total">
+        <div class="label">Venue Net</div>
+        <div class="amount">Gross Revenue − Total Costs</div>
+      </div>
+      <div class="settlement-row">
+        <div class="label">Margin %</div>
+        <div class="amount">(Venue Net / Gross Revenue) × 100</div>
+      </div>
+      <div class="settlement-row">
+        <div class="label">Payments Received</div>
+        <div class="amount">Sum of inbound Payment line items</div>
+      </div>
+    </div>
+
+    <p>Venue Net is displayed in <strong style="color:#16a34a;">green</strong> when positive and <strong style="color:#dc2626;">red</strong> when negative — so the financial health of the event is unmissable.</p>
+
+    <div class="callout tip">
+      <span class="callout-title">Execution records auto-populate the ledger</span>
+      <p>Change orders, damage records, and overages entered in the Execution tab during the show automatically create corresponding ledger entries. Review these on the morning after — they may need a void-and-correct if the initial amounts were estimates.</p>
+    </div>
+
+    <!-- THE CHECKLIST ────────────────────────────────────────────────────────── -->
+    <h2 id="closeout-checklist">The closeout checklist</h2>
+
+    <p>Before the ledger can be finalized, seven items must be checked off. Each checkbox updates the server immediately when clicked — no save button needed.</p>
+
+    <div class="checklist">
+      <div class="checklist-title">7-Point Closeout Checklist</div>
+      <ul>
+        <li>Contract Signed — a fully executed contract is on file for this event</li>
+        <li>Deposit Received — the deposit was received (or waived)</li>
+        <li>Vendors Confirmed — all on-site vendors have confirmed day-of attendance</li>
+        <li>Staffing Confirmed — all scheduled shifts are in Confirmed or Completed status</li>
+        <li>Bar Closed — bar has been closed out and receipts collected</li>
+        <li>Cash Reconciled — any cash sales or payments have been counted and reconciled</li>
+        <li>All Invoices Collected — outstanding invoices from vendors have been received</li>
+      </ul>
+    </div>
+
+    <p>The <span class="ui-label button">Finalize</span> button remains <strong>disabled</strong> until all seven items are checked. This is enforced server-side — checking boxes in the UI does not unlock finalization if the server-side state disagrees.</p>
+
+    <div class="callout note">
+      <span class="callout-title">Checking items requires manage_ledger</span>
+      <p>Checking off closeout checklist items requires the <code>manage_ledger</code> capability. Venue admins have this by default. If a staff member is helping with closeout and cannot check items, their account needs this capability added.</p>
+    </div>
+
+    <!-- FINALIZE & REOPEN ────────────────────────────────────────────────────── -->
+    <h2 id="closeout-finalize">Finalize &amp; reopen</h2>
+
+    <h3>Finalizing the closeout</h3>
+
+    <p>Once all seven checklist items are checked, click <span class="ui-label button">Finalize</span>. Finalizing:</p>
+    <ul>
+      <li>Locks the ledger — no new entries can be added and no existing entries can be voided</li>
+      <li>Sets the event status to <code>settled</code></li>
+      <li>Records the finalizer's name, timestamp, and the final P&amp;L snapshot</li>
+      <li>Removes the event from the "Events Awaiting Closeout" dashboard card</li>
+    </ul>
+
+    <p>Finalizing requires the <code>finalize_closeout</code> capability (venue admin by default).</p>
+
+    <div class="callout danger">
+      <span class="callout-title">Finalization locks the books</span>
+      <p>Once finalized, the ledger is read-only. Reopening is possible but audited and requires a mandatory reason. Don't finalize until the numbers are right — verify the P&amp;L summary against your night-of records before clicking Finalize.</p>
+    </div>
+
+    <h3>Reopening a finalized closeout</h3>
+
+    <p>If something was missed after finalization — a vendor invoice arrived late, a damage charge needs to be added — click <span class="ui-label button secondary">Reopen</span>. Reopening requires:</p>
+    <ul>
+      <li>The <code>finalize_closeout</code> capability (venue admin)</li>
+      <li>A mandatory reason — it cannot be left blank</li>
+    </ul>
+
+    <p>The reason and timestamp are permanently recorded in the audit trail. After reopening, the ledger is editable again and the event falls back onto the "Events Awaiting Closeout" dashboard. When corrections are complete, finalize again.</p>
+
+    <div class="callout note">
+      <span class="callout-title">Reopen is audited forever</span>
+      <p>Every reopen — who did it, when, and why — is permanently stored. This prevents "just fix the numbers quietly" situations and gives your accounting team a clear record of any post-finalization adjustments.</p>
+    </div>
+
+  </div><!-- /book-content -->
+</div><!-- /closeout chapter -->
+
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- PART VI: PANIC PROMOTE                                                      -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <div class="part-break" id="promote-part">
-  <div class="part-num">Part IV</div>
+  <div class="part-num">Part VI</div>
   <h2>Panic Promote</h2>
   <p>Turn a confirmed booking into a coordinated promotion across 20 channels — social, listings, email, and press — all from one screen.</p>
 </div>
 
 <div id="promote" class="chapter-page">
   <div class="chapter-hero">
-    <span class="chapter-num">Chapter 4</span>
+    <span class="chapter-num">Chapter 6</span>
     <h1>Panic Promote</h1>
     <p class="lead">Promotion isn't just posting to Instagram. It's a coordinated campaign across social media, event listing sites, email, and press — all timed and tracked. Panic Promote makes sure nothing falls through the cracks.</p>
   </div>
@@ -2345,14 +2957,14 @@
 <!-- PART V: TICKETING                                                           -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <div class="part-break" id="ticketing-part">
-  <div class="part-num">Part V</div>
+  <div class="part-num">Part VII</div>
   <h2>In-House Ticketing</h2>
   <p>Sell tickets directly through Backstage, scan QR codes at the door, issue comps, and track every transaction — no third-party platform required.</p>
 </div>
 
 <div id="ticketing" class="chapter-page">
   <div class="chapter-hero">
-    <span class="chapter-num">Chapter 5</span>
+    <span class="chapter-num">Chapter 7</span>
     <h1>In-House Ticketing</h1>
     <p class="lead">The venue owns the ticket, the token, and the audit trail. Buyers pay through Stripe or Square's hosted page — card data never touches Backstage. Everything else — inventory, QR codes, door scanning, comps, and refunds — lives here.</p>
   </div>
@@ -2594,14 +3206,14 @@
 <!-- PART VI: ADMIN & USER MANAGEMENT                                            -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <div class="part-break" id="admin-part">
-  <div class="part-num">Part VI</div>
+  <div class="part-num">Part VIII</div>
   <h2>Admin &amp; User Management</h2>
   <p>Managing who has access to Backstage, what they can do, and how to keep the system organized behind the scenes.</p>
 </div>
 
 <div id="admin" class="chapter-page">
   <div class="chapter-hero">
-    <span class="chapter-num">Chapter 6</span>
+    <span class="chapter-num">Chapter 8</span>
     <h1>Admin &amp; User Management</h1>
     <p class="lead">Backstage's Admin section is for venue managers and owners. It's where you set up login accounts, manage the staff roster, build event templates, maintain the contract library, and configure payments.</p>
   </div>
@@ -2776,6 +3388,69 @@
     <div class="callout tip">
       <span class="callout-title">💡 Use templates liberally</span>
       <p>Create a template for every common show format: three-band local show, DJ night, comedy, open mic, etc. The first time you build a template for each format, you save yourself and every future booker from rebuilding the same checklist and run sheet from scratch every time.</p>
+    </div>
+
+    <!-- VENUE POLICY ─────────────────────────────────────────────────────────── -->
+    <h2 id="venue-policy">Venue policy configuration</h2>
+
+    <p>Venue Policy (Admin → Venue Policy) is the authoritative record of house rules, room configurations, and default booking terms. It's the first place to check when staff have questions about what the venue's default position is on any booking detail.</p>
+
+    <h3>Rooms</h3>
+
+    <p>Each room has a name, capacity, and age rule:</p>
+
+    <table>
+      <tr><th>Room</th><th>Capacity</th><th>Default age rule</th></tr>
+      <tr><td>Upstairs Mabuhay Gardens</td><td>450</td><td>All ages</td></tr>
+      <tr><td>Downstairs Mabuhay Gardens</td><td>350</td><td>21+</td></tr>
+    </table>
+
+    <h3>Policy fields</h3>
+
+    <div class="field-ref">
+      <div class="field-ref-title">Venue Policy Fields</div>
+      <div class="field-row">
+        <div class="field-name">Age rule</div>
+        <div class="field-desc">Default age policy for new events. Options: All Ages / 18+ / 21+ / Venue Discretion. Overridable per event.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Alcohol mode</div>
+        <div class="field-desc">None / Cash Bar / Hosted Bar / Bar Minimum / Venue Discretion. Sets the default bar arrangement for new bookings.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Deposit policy</div>
+        <div class="field-desc">Whether deposits are required, and how they're calculated: a percentage of the rental fee, or a flat dollar amount. Also sets how many days before the event the deposit is due.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Staffing rates</div>
+        <div class="field-desc">Default hourly rates for each staff role: Security, Bartender, Door Staff, Sound Tech, Manager. These pre-fill shift cost estimates when staff are added to events.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">COI required</div>
+        <div class="field-desc">Whether vendors must have a Certificate of Insurance on file before working on-site. Yes/No. This feeds into the vendor COI tracking in the event workspace.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Contract required</div>
+        <div class="field-desc">Whether all events must have a signed contract before advancing to Booked status. Yes/No.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">is_verified</div>
+        <div class="field-desc">Mark a policy as verified once all fields have been confirmed correct. Unverified values are labeled in the UI with a warning indicator.</div>
+      </div>
+    </div>
+
+    <h3>Policy versioning</h3>
+
+    <p>Venue Policy is <strong>versioned</strong>. When you create a new policy record, the old one is deactivated and stamped with an effective date. Old policy data is never deleted — you can always see what the rules were at any point in the past.</p>
+
+    <div class="callout note">
+      <span class="callout-title">Events snapshot the policy at booking time</span>
+      <p>When an event is booked, it takes a snapshot of the current venue policy and stores it on the event record. A later change to the venue policy — a new deposit percentage, a changed age rule — does <strong>not</strong> retroactively affect already-booked events. Each event always reflects the rules that were in effect when it was locked in.</p>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">Keep the policy verified</span>
+      <p>After any changes to rates, room capacities, or house rules, update the Venue Policy and mark it as <code>is_verified</code>. Unverified policy values show a warning label in the booking workflow — this is intentional, to prompt staff to confirm the numbers rather than assume they're current.</p>
     </div>
 
   </div><!-- /book-content -->
