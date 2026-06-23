@@ -280,6 +280,7 @@ class EventWorkspace extends PanicElement {
         </details>` : ''}
         ${(!isPrivate && can(data, 'publish_event')) ? `<button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>` : ''}
         ${can(data, 'manage_contracts') ? `<button class="secondary" data-portal-toggle title="Generate a read-only portal link for a promoter or client"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i> Share Portal Link</button>` : ''}
+        ${can(data, 'manage_ledger') ? `<button class="secondary" data-pos-set title="Route Square POS bar sales to this event"><i class="fa-solid fa-cash-register" aria-hidden="true"></i> Set as POS Event</button>` : ''}
       </div>
     </section>
     <pb-portal-panel id="portalPanel"></pb-portal-panel>
@@ -339,6 +340,7 @@ class EventWorkspace extends PanicElement {
       portalPanel.eventId = event.id;
       $('[data-portal-toggle]', this)?.addEventListener('click', () => portalPanel.toggle());
     }
+    $('[data-pos-set]', this)?.addEventListener('click', () => this.setPosEvent(event.id));
     $$('[data-print]', this).forEach((button) => button.addEventListener('click', () => {
       button.closest('details.print-menu')?.removeAttribute('open');
       openPrintWindow(button.dataset.print, this.data);
@@ -363,6 +365,35 @@ class EventWorkspace extends PanicElement {
     if (publishButton) publishButton.textContent = body.public_visibility ? 'Hide Public Page' : 'Publish Public Page';
     broadcastEventData(this.data);
     publish('toast.show', { message: body.public_visibility ? 'Public page is live.' : 'Public page hidden.' });
+  }
+
+  /**
+   * Pin the Square POS terminal to this event so all incoming POS sales
+   * are posted here — no date-guessing. Staff click this once when doors open.
+   * Finds the first active pos_location_map row for this event's venue.
+   */
+  async setPosEvent(eventId) {
+    const btn = $('[data-pos-set]', this);
+    if (btn) { btn.disabled = true; btn.textContent = 'Setting…'; }
+    try {
+      // Find the location map for this venue
+      const mapData = await api('/pos-location-map');
+      const venueId = this.data.event?.venue_id;
+      const mapping = (mapData.mappings || []).find(m => Number(m.venue_id) === Number(venueId) && m.is_active);
+      if (!mapping) {
+        publish('toast.show', { message: 'No POS location mapping found for this venue. Set one up in Admin → Payments.', type: 'warn' });
+        return;
+      }
+      await api(`/pos-location-map/${mapping.id}/set-active`, {
+        method: 'POST',
+        body: JSON.stringify({ event_id: eventId }),
+      });
+      publish('toast.show', { message: `✓ POS sales will now post to this event.` });
+      if (btn) { btn.textContent = '✓ POS Active'; btn.classList.add('success'); }
+    } catch (e) {
+      publish('toast.show', { message: 'Failed to set POS event: ' + (e.message || e), type: 'error' });
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-cash-register"></i> Set as POS Event'; }
+    }
   }
 }
 

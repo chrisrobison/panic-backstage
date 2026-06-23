@@ -6,10 +6,12 @@ namespace Panic;
 /**
  * CRUD for the Square POS location → venue mapping table.
  *
- *   GET    /api/pos-location-map          list all mappings (+ venue names)
- *   POST   /api/pos-location-map          create a mapping
- *   PATCH  /api/pos-location-map/{id}     update a mapping
- *   DELETE /api/pos-location-map/{id}     delete a mapping
+ *   GET    /api/pos-location-map              list all mappings (+ venue names)
+ *   POST   /api/pos-location-map              create a mapping
+ *   PATCH  /api/pos-location-map/{id}         update a mapping
+ *   DELETE /api/pos-location-map/{id}         delete a mapping
+ *   POST   /api/pos-location-map/{id}/set-active?event_id=  set active event override
+ *   POST   /api/pos-location-map/{id}/clear-active           clear the override
  *
  * Gated to venue_admin (manage_users global capability).
  */
@@ -25,6 +27,13 @@ final class PosLocationMap extends BaseEndpoint
         }
 
         $mappingId = (int) ($this->params['mappingId'] ?? 0) ?: null;
+        $sub       = $this->params['sub'] ?? null;
+
+        // Sub-actions: set-active / clear-active
+        if ($mappingId && $request->method() === 'POST') {
+            if ($sub === 'set-active')   return $this->setActive($request, $mappingId);
+            if ($sub === 'clear-active') return $this->clearActive($mappingId);
+        }
 
         return match ($request->method()) {
             'GET'    => $this->index(),
@@ -140,5 +149,53 @@ final class PosLocationMap extends BaseEndpoint
         $this->db->run('DELETE FROM pos_location_map WHERE id = ?', [$id]);
 
         return $this->ok(['ok' => true]);
+    }
+
+    /**
+     * Set the active event override for this POS location.
+     * All incoming POS payments will be posted to this event until cleared.
+     * Called from the event workspace "Set as POS Event" button.
+     */
+    private function setActive(Request $request, int $mappingId): Response
+    {
+        $b       = $request->body();
+        $eventId = (int) ($b['event_id'] ?? $request->query('event_id') ?? 0);
+        if ($eventId <= 0) {
+            return Response::json(['error' => 'event_id is required'], 422);
+        }
+
+        // Verify the event exists
+        $event = $this->db->one('SELECT id, title FROM events WHERE id = ?', [$eventId]);
+        if (!$event) {
+            return $this->notFound('Event not found');
+        }
+
+        $this->db->run(
+            'UPDATE pos_location_map SET active_event_id = ?, active_event_set_at = NOW() WHERE id = ?',
+            [$eventId, $mappingId]
+        );
+
+        log_activity($this->db, $eventId, $this->userId(), 'pos_active_event_set', [
+            'mapping_id' => $mappingId,
+        ]);
+
+        return $this->ok([
+            'active_event_id'    => $eventId,
+            'active_event_title' => $event['title'],
+            'set_at'             => date('c'),
+        ]);
+    }
+
+    /**
+     * Clear the active event override — revert to date-based matching.
+     */
+    private function clearActive(int $mappingId): Response
+    {
+        $this->db->run(
+            'UPDATE pos_location_map SET active_event_id = NULL, active_event_set_at = NULL WHERE id = ?',
+            [$mappingId]
+        );
+
+        return $this->ok(['cleared' => true]);
     }
 }

@@ -176,8 +176,13 @@ final class Kernel
         //   POST   /api/pos-location-map
         //   PATCH  /api/pos-location-map/{id}
         //   DELETE /api/pos-location-map/{id}
+        //   POST   /api/pos-location-map/{id}/set-active
+        //   POST   /api/pos-location-map/{id}/clear-active
         if ($segments[0] === 'pos-location-map') {
-            return [PosLocationMap::class, ['mappingId' => $this->intOrNull($segments[1] ?? null)]];
+            return [PosLocationMap::class, [
+                'mappingId' => $this->intOrNull($segments[1] ?? null),
+                'sub'       => $segments[2] ?? null,
+            ]];
         }
 
         // Door scanner redeem (scanner-token auth, NOT JWT):

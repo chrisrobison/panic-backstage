@@ -104,8 +104,9 @@ final class PosWebhook extends BaseEndpoint
             return;
         }
 
-        $venueId  = (int) $mapping['venue_id'];
-        $category = (string) $mapping['default_category'];
+        $venueId         = (int) $mapping['venue_id'];
+        $category        = (string) $mapping['default_category'];
+        $activeEventId   = isset($mapping['active_event_id']) ? (int) $mapping['active_event_id'] : null;
 
         // ── Idempotency: skip if this payment is already in the ledger ────────
         $existing = $this->db->one(
@@ -119,12 +120,13 @@ final class PosWebhook extends BaseEndpoint
             return;
         }
 
-        // ── Match an active event at this venue today ─────────────────────────
-        $matchedEvent = $this->matchEvent($venueId);
+        // ── Resolve event: explicit override wins, date-match is last resort ────
+        $matchedEvent = $this->matchEvent($venueId, $activeEventId);
         if ($matchedEvent === null) {
             error_log(
                 "PosWebhook: no active event for venue_id={$venueId} on " . date('Y-m-d')
                 . " (payment_id={$paymentId})"
+                . ($activeEventId ? ", active_event_id={$activeEventId} not found or wrong status" : '')
             );
             return;
         }
@@ -156,12 +158,31 @@ final class PosWebhook extends BaseEndpoint
     // ── Event matching ────────────────────────────────────────────────────────
 
     /**
-     * Find an event at the given venue whose show/event date is today and whose
-     * status indicates it is in progress. Returns the most recently-starting one
-     * when multiple events exist on the same day (e.g. early-show / late-show).
+     * Resolve which event POS payments should be posted to.
+     *
+     * Priority:
+     *  1. active_event_id set on the pos_location_map row — explicit staff override,
+     *     set via the "Set as POS Event" button in the event workspace. This is the
+     *     reliable path: staff click once when doors open, all sales go to that event.
+     *  2. Date-match fallback — finds an event at the venue today by status. Used only
+     *     when no override is set (e.g. first-time setup or override was cleared).
+     *     Unreliable when multiple events run on the same day.
      */
-    private function matchEvent(int $venueId): ?array
+    private function matchEvent(int $venueId, ?int $activeEventId): ?array
     {
+        // ── 1. Explicit override ──────────────────────────────────────────────
+        if ($activeEventId !== null && $activeEventId > 0) {
+            return $this->db->one(
+                "SELECT id, title FROM events
+                  WHERE id = ?
+                    AND venue_id = ?
+                    AND status IN ('booked', 'advanced', 'published', 'completed')
+                  LIMIT 1",
+                [$activeEventId, $venueId]
+            );
+        }
+
+        // ── 2. Date-match fallback ────────────────────────────────────────────
         return $this->db->one(
             "SELECT id, title FROM events
               WHERE venue_id = ?
