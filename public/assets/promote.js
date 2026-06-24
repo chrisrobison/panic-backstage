@@ -36,7 +36,7 @@ const CHANNELS = [
   'eventbrite', 'luma', 'dice', 'resident_advisor',
   'funcheap', 'foopee', 'press',
   'sf_chronicle', 'sf_station', 'dothebay',
-  'songkick', 'jambase',
+  'songkick', 'jambase', 'bandsintown',
 ];
 
 const CHANNEL_LABELS = {
@@ -60,6 +60,7 @@ const CHANNEL_LABELS = {
   dothebay:        'DoTheBay',
   songkick:        'SongKick',
   jambase:         'JamBase',
+  bandsintown:     'Bandsintown',
 };
 
 const DEST_GROUP_LABELS = {
@@ -67,6 +68,26 @@ const DEST_GROUP_LABELS = {
   event_platform: 'Event Platforms',
   editorial_submission: 'Editorial Submissions',
   email: 'Email Recipients',
+};
+
+// Default submission form URL / email per destination. Used as a fallback in the
+// action info modal when a venue hasn't configured a platform-specific link in its
+// promote_credentials config. A venue's own config.* values always take precedence.
+const DEST_SUBMISSION_INFO = {
+  // Event platforms
+  eventbrite:       { url: 'https://www.eventbrite.com/organizations/events', label: 'Create on Eventbrite' },
+  luma:             { url: 'https://lu.ma/create', label: 'Create on Luma' },
+  dice:             { url: 'https://partner.dice.fm/', email: 'partners@dice.fm', label: 'DICE Partner Portal' },
+  resident_advisor: { url: 'https://ra.co/promoters', label: 'RA Promoter Portal' },
+  songkick:         { url: 'https://tourbox.songkick.com', label: 'SongKick Tourbox' },
+  jambase:          { url: 'https://www.jambase.com/submit', label: 'JamBase Submission' },
+  bandsintown:      { url: 'https://manager.bandsintown.com', email: 'support@bandsintown.com', label: 'Bandsintown for Artists' },
+  // Editorial submissions
+  funcheap:         { url: 'https://funcheap.com/submit-event', label: 'Funcheap Submission Form' },
+  foopee:           { url: 'http://www.foopee.com/punk/the-list/', label: 'Foopee — The List' },
+  sf_chronicle:     { url: 'https://datebook.sfchronicle.com', label: 'SF Chronicle Datebook' },
+  sf_station:       { url: 'https://www.sfstation.com/submit-event', label: 'SF Station Submission Form' },
+  dothebay:         { url: 'https://dothebay.com/submit', label: 'DoTheBay Submission Form' },
 };
 
 const POST_STATUSES = ['draft', 'approved', 'scheduled', 'sent', 'archived'];
@@ -1123,11 +1144,13 @@ class PromoteActionModal extends PanicElement {
   // ── Render loaded content ─────────────────────────────────────────────────
 
   renderContent(info) {
-    const { dest_label, dest_group, variant, config, can_email, can_form } = info;
+    const { dest_key, dest_label, dest_group, variant, config, can_email, can_form } = info;
+
+    const fallback = DEST_SUBMISSION_INFO[dest_key] || {};
 
     const subject  = (variant?.title || '').trim();
     const body     = (variant?.body  || '').trim();
-    const toEmail  = (config?.contact_email || '').trim();
+    const toEmail  = (config?.contact_email || fallback.email || '').trim();
 
     // Parse warnings/instructions stored in the variant
     let warnings = [];
@@ -1150,6 +1173,21 @@ class PromoteActionModal extends PanicElement {
       .filter(([key]) => config?.[key])
       .map(([key, label]) => ({ label, url: (config[key] || '').trim() }))
       .filter(({ url }) => url);
+
+    // Fall back to the platform's default submission form when the venue hasn't
+    // configured its own link, so every platform always surfaces a way to submit.
+    if (!submitLinks.length && fallback.url) {
+      submitLinks.push({ label: fallback.label || 'Submission Form', url: fallback.url });
+    }
+
+    // Surface the platform's default submission email as a mailto link when the
+    // venue hasn't set its own contact_email (which is handled by the can_email flow).
+    if (fallback.email && !config?.contact_email) {
+      const mailto = (subject && body)
+        ? `mailto:${encodeURIComponent(fallback.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+        : `mailto:${encodeURIComponent(fallback.email)}`;
+      submitLinks.push({ label: `Email ${fallback.email}`, url: mailto });
+    }
 
     const groupLabel = {
       direct_post:          'Direct Post',
