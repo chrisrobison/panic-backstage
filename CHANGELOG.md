@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `leads` — Replace split-pane detail with tabbed modal dialog
 - **Documentation** `ops-manual` — Add comprehensive print/book CSS
 - **Fixed** `nav` — Replace nonexistent fa-funnel with fa-filter for Leads icon
 - **Fixed** `leads` — Fix can() misuse — capabilities is already the flat object, not a wrapper

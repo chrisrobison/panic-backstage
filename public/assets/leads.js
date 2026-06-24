@@ -1,9 +1,9 @@
 import { esc, titleCase, publish, api, formData, badge, option, select, can, emptyState, money, PanicElement, $, $$ } from './core.js';
 
 // ── Leads Inbox ───────────────────────────────────────────────────────────────
-// Three components:
+// Components:
 //   pb-leads-page   — tabbed list view with inline create form
-//   pb-lead-detail  — detail / edit panel with evaluator + notes
+//   pb-lead-modal   — tabbed modal dialog: Details / Status Flow / Deal Evaluator
 //   pb-lead-form    — inline create form rendered inside pb-leads-page
 
 
@@ -48,7 +48,6 @@ function leadBadge(status) {
 class LeadsPage extends PanicElement {
   async connect() {
     this.tab = 'all';
-    this.selectedId = null;
     this.showForm = false;
     this.leads = [];
     this.capabilities = {};
@@ -88,53 +87,31 @@ class LeadsPage extends PanicElement {
     const tableRows = leads.map((lead) => {
       const eventDate = lead.desired_date ? new Date(`${lead.desired_date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
       const margin = lead.margin_pct != null ? `${Number(lead.margin_pct).toFixed(1)}%` : '—';
-      return `<tr${this.selectedId === lead.id ? ' class="selected"' : ''}>
-        <td><a href="#leads" data-review="${esc(lead.id)}">${esc(lead.event_name || lead.contact_name || 'Untitled')}</a></td>
+      return `<tr class="leads-table-row" data-lead-id="${esc(lead.id)}" tabindex="0" role="button" aria-label="Open lead: ${esc(lead.event_name || lead.contact_name || 'Untitled')}">
+        <td><span class="lead-title-link">${esc(lead.event_name || lead.contact_name || 'Untitled')}</span></td>
         <td>${esc(titleCase(lead.source || ''))}</td>
         <td>${esc(lead.contact_name || '—')}</td>
         <td>${esc(eventDate)}</td>
         <td>${leadBadge(lead.status)}</td>
         <td>${esc(margin)}</td>
-        <td class="row-actions">
-          <button class="small" data-review="${esc(lead.id)}">Review</button>
-          ${canManage ? `<button class="small danger" data-delete="${esc(lead.id)}">Delete</button>` : ''}
-        </td>
       </tr>`;
-    }).join('') || `<tr><td colspan="7">${emptyState('No leads in this category.')}</td></tr>`;
+    }).join('') || `<tr><td colspan="6">${emptyState('No leads in this category.')}</td></tr>`;
 
-    const listPanel = `
-      <article class="panel leads-list-panel">
-        <div class="section-head padded">
-          <h2>Leads</h2>
-          ${canManage ? '<button class="primary" data-action="new-lead">+ New Lead</button>' : ''}
-        </div>
-        ${this.showForm ? '<div class="leads-form-slot padded"><pb-lead-form></pb-lead-form></div>' : ''}
-        <table class="data-table">
-          <thead><tr><th>Title</th><th>Source</th><th>Contact</th><th>Event Date</th><th>Status</th><th>Margin %</th><th></th></tr></thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-      </article>`;
-
-    if (this.selectedId) {
-      this.innerHTML = `
-        <div class="leads-split-layout">
-          <div class="leads-split-list">
-            ${tabBar}
-            ${listPanel}
+    this.innerHTML = `
+      <div class="leads-full-layout">
+        ${tabBar}
+        <article class="panel leads-list-panel">
+          <div class="section-head padded">
+            <h2>Leads</h2>
+            ${canManage ? '<button class="primary" data-action="new-lead">+ New Lead</button>' : ''}
           </div>
-          <div class="leads-split-detail">
-            <pb-lead-detail></pb-lead-detail>
-          </div>
-        </div>`;
-      const detail = $('pb-lead-detail', this);
-      if (detail) detail.leadId = this.selectedId;
-    } else {
-      this.innerHTML = `
-        <div class="leads-full-layout">
-          ${tabBar}
-          ${listPanel}
-        </div>`;
-    }
+          ${this.showForm ? '<div class="leads-form-slot padded"><pb-lead-form></pb-lead-form></div>' : ''}
+          <table class="data-table">
+            <thead><tr><th>Title</th><th>Source</th><th>Contact</th><th>Event Date</th><th>Status</th><th>Margin %</th></tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+        </article>
+      </div>`;
 
     this.bind();
   }
@@ -143,32 +120,14 @@ class LeadsPage extends PanicElement {
     $$('[data-leads-tab]', this).forEach((btn) => {
       btn.addEventListener('click', () => {
         this.tab = btn.dataset.leadsTab;
-        this.selectedId = null;
         this.render();
       });
     });
 
-    $$('[data-review]', this).forEach((el) => {
-      el.addEventListener('click', (event) => {
-        event.preventDefault();
-        this.selectedId = Number(el.dataset.review);
-        this.render();
-      });
-    });
-
-    $$('[data-delete]', this).forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        if (!confirm('Delete this lead?')) return;
-        try {
-          await api(`/leads/${btn.dataset.delete}`, { method: 'DELETE' });
-          this.leads = this.leads.filter((l) => String(l.id) !== String(btn.dataset.delete));
-          if (this.selectedId === Number(btn.dataset.delete)) this.selectedId = null;
-          this.render();
-          publish('toast.show', { tone: 'success', message: 'Lead deleted.' });
-        } catch (error) {
-          publish('toast.show', { tone: 'error', message: error.message });
-        }
-      });
+    $$('.leads-table-row[data-lead-id]', this).forEach((row) => {
+      const open = () => this._openModal(Number(row.dataset.leadId));
+      row.addEventListener('click', open);
+      row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
     });
 
     const newBtn = $('[data-action="new-lead"]', this);
@@ -182,74 +141,241 @@ class LeadsPage extends PanicElement {
             form.onCreated = (lead) => {
               this.leads = [lead, ...this.leads];
               this.showForm = false;
-              this.selectedId = lead.id;
               this.render();
+              this._openModal(lead.id);
             };
           }
         }
       });
     }
   }
+
+  _openModal(leadId) {
+    // Remove any existing modal
+    document.querySelector('pb-lead-modal')?.remove();
+
+    const modal = document.createElement('pb-lead-modal');
+    document.body.appendChild(modal);
+    modal._capabilities = this.capabilities;
+
+    modal.onUpdated = (updatedLead) => {
+      const idx = this.leads.findIndex((l) => l.id === updatedLead.id);
+      if (idx !== -1) this.leads[idx] = updatedLead;
+      else this.leads = [updatedLead, ...this.leads];
+      this.render();
+    };
+
+    modal.onDeleted = (deletedId) => {
+      this.leads = this.leads.filter((l) => l.id !== deletedId);
+      this.render();
+    };
+
+    // Setting leadId last triggers the load
+    modal.leadId = leadId;
+  }
 }
 
 
-// ── pb-lead-detail ────────────────────────────────────────────────────────────
-class LeadDetail extends PanicElement {
+// ── pb-lead-modal ─────────────────────────────────────────────────────────────
+// Tabbed modal dialog: Details | Status Flow | Deal Evaluator
+class LeadModal extends PanicElement {
   set leadId(value) {
     this._leadId = Number(value);
+    this._tab = 'details';
     if (this.isConnected) this._load();
   }
 
   get leadId() { return this._leadId; }
 
   async connect() {
+    document.body.classList.add('lead-modal-open');
+    // Close on Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this._close();
+    }, { signal: this.abort.signal });
+
     if (this._leadId) this._load();
+    else this._render();
+  }
+
+  disconnectedCallback() {
+    document.body.classList.remove('lead-modal-open');
+    super.disconnectedCallback();
   }
 
   async _load() {
-    this.setLoading('Loading lead');
+    this._render(); // show skeleton/loading inside modal
     try {
       const data = await api(`/leads/${this._leadId}`);
-      this.lead = data.lead || data;
+      this.lead       = data.lead || data;
       this.evaluation = data.evaluation || null;
-      this.notes = data.notes || [];
-      this.render();
+      this.notes      = data.notes || [];
+      this._render();
     } catch (error) {
-      this.showError(error);
+      this.innerHTML = `<div class="lead-modal-backdrop"><div class="lead-modal-card"><div class="lead-modal-header"><h2>Error</h2><button class="lead-modal-close" data-action="close">×</button></div><div class="lead-modal-body" style="padding:20px"><p class="error-text">${esc(error.message)}</p></div></div></div>`;
+      $('[data-action="close"]', this)?.addEventListener('click', () => this._close());
     }
   }
 
-  render() {
-    const lead = this.lead || {};
-    const ev = this.evaluation || {};
+  _render() {
+    const lead  = this.lead  || {};
+    const ev    = this.evaluation || {};
+    const canManage = Boolean(this._capabilities?.['manage_leads']);
+
+    const displayDate = lead.desired_date
+      ? new Date(`${lead.desired_date.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+      : null;
+
+    const title = lead.event_name || lead.contact_name || (this._leadId ? 'Loading…' : 'Lead');
+
+    // Tab content
+    let body = '';
+    if (!this.lead) {
+      body = `<div style="padding:32px;text-align:center"><span class="spinner"></span></div>`;
+    } else {
+      switch (this._tab) {
+        case 'details':   body = this._tabDetails();   break;
+        case 'status':    body = this._tabStatus();    break;
+        case 'evaluator': body = this._tabEvaluator(); break;
+      }
+    }
+
+    // Footer: context-aware save label
+    const saveLabel = this._tab === 'evaluator' ? 'Calculate & Save' : 'Save Changes';
+    const saveHidden = (this._tab === 'status') ? ' style="visibility:hidden"' : '';
+
+    this.innerHTML = `
+      <div class="lead-modal-backdrop" data-backdrop>
+        <div class="lead-modal-card" role="dialog" aria-modal="true" aria-label="Lead: ${esc(title)}">
+
+          <div class="lead-modal-header">
+            <div class="lead-modal-title-block">
+              <h2 class="lead-modal-title">${esc(title)}</h2>
+              ${displayDate ? `<span class="lead-modal-date">${esc(displayDate)}</span>` : ''}
+            </div>
+            ${lead.status ? leadBadge(lead.status) : ''}
+            <button class="lead-modal-close" data-action="close" aria-label="Close">×</button>
+          </div>
+
+          <nav class="lead-modal-tabs">
+            <button class="${this._tab === 'details'   ? 'active' : ''}" data-modal-tab="details">Details</button>
+            <button class="${this._tab === 'status'    ? 'active' : ''}" data-modal-tab="status">Status Flow</button>
+            <button class="${this._tab === 'evaluator' ? 'active' : ''}" data-modal-tab="evaluator">Deal Evaluator</button>
+          </nav>
+
+          <div class="lead-modal-body">
+            ${body}
+          </div>
+
+          <div class="lead-modal-footer">
+            ${canManage ? `<button class="small danger" data-action="delete">Delete Lead</button>` : ''}
+            <span style="flex:1"></span>
+            <button class="primary" data-action="save"${saveHidden}>${esc(saveLabel)}</button>
+          </div>
+
+        </div>
+      </div>`;
+
+    this._bind();
+  }
+
+  // ── Tab: Details ────────────────────────────────────────────────────────────
+  _tabDetails() {
+    const lead  = this.lead  || {};
     const notes = this.notes || [];
-
     const eventDate = lead.desired_date ? lead.desired_date.slice(0, 10) : '';
-    const displayDate = eventDate ? new Date(`${eventDate}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
-    // Status flow buttons
-    const statusBtns = LEAD_STATUSES.map((s) => `<button type="button" class="small${lead.status === s ? ' primary' : ''}" data-set-status="${esc(s)}">${esc(titleCase(s))}</button>`).join(' ');
+    const notesList = notes.length
+      ? notes.slice().reverse().map((n) => `
+          <div class="lead-note">
+            <span class="muted note-meta">${esc(n.author_name || 'Unknown')} &middot; ${esc(n.created_at ? new Date(n.created_at).toLocaleDateString() : '')}</span>
+            <p>${esc(n.body)}</p>
+          </div>`).join('')
+      : `<p class="muted" style="font-size:13px">No notes yet.</p>`;
 
-    // Convert button
     const showConvert = ['approved', 'evaluating'].includes(lead.status);
-    const convertBtn = showConvert ? `<button type="button" class="primary" data-action="convert">Convert to Event</button>` : '';
+
+    return `
+      <div class="lead-modal-section">
+        <div class="form-grid-2">
+          <label class="field-label">Event Name
+            <input name="event_name" value="${esc(lead.event_name || '')}">
+          </label>
+          <label class="field-label">Event Type
+            <select name="event_type">
+              ${EVENT_TYPES.map((t) => `<option value="${esc(t)}" ${lead.event_type === t ? 'selected' : ''}>${esc(titleCase(t))}</option>`).join('')}
+            </select>
+          </label>
+          <label class="field-label">Desired Date
+            <input type="date" name="desired_date" value="${esc(eventDate)}">
+          </label>
+          <label class="field-label">Source
+            <select name="source">
+              ${LEAD_SOURCES.map((s) => `<option value="${esc(s)}" ${lead.source === s ? 'selected' : ''}>${esc(titleCase(s))}</option>`).join('')}
+            </select>
+          </label>
+          <label class="field-label">Contact Name
+            <input name="contact_name" value="${esc(lead.contact_name || '')}">
+          </label>
+          <label class="field-label">Contact Email
+            <input type="email" name="contact_email" value="${esc(lead.contact_email || '')}">
+          </label>
+        </div>
+        <label class="field-label" style="display:flex;flex-direction:column;margin-bottom:16px">Notes
+          <textarea name="notes" rows="3">${esc(lead.notes || '')}</textarea>
+        </label>
+
+        ${showConvert ? `<div style="margin-bottom:16px"><button type="button" class="small primary" data-action="convert">Convert to Event ↗</button></div>` : ''}
+
+        <details class="lead-notes-details">
+          <summary class="section-label" style="cursor:pointer;margin-bottom:10px">Activity Notes (${notes.length})</summary>
+          <div class="lead-notes-list" style="margin-bottom:12px">${notesList}</div>
+          <label class="field-label" style="display:flex;flex-direction:column">Add Note
+            <textarea name="new_note" rows="2" placeholder="Add a note…"></textarea>
+          </label>
+          <div style="margin-top:6px"><button class="small" data-action="add-note">Add Note</button></div>
+        </details>
+      </div>`;
+  }
+
+  // ── Tab: Status Flow ────────────────────────────────────────────────────────
+  _tabStatus() {
+    const lead = this.lead || {};
+    return `
+      <div class="lead-modal-section">
+        <p style="margin:0 0 16px;font-size:13px;color:var(--muted)">Click a status to move this lead through the pipeline. Changes apply immediately.</p>
+        <div class="lead-status-flow">
+          ${LEAD_STATUSES.map((s) => `
+            <button type="button" class="status-flow-btn${lead.status === s ? ' active' : ''}" data-set-status="${esc(s)}">
+              ${esc(titleCase(s))}
+            </button>`).join('')}
+        </div>
+        <p style="margin:18px 0 0;font-size:13px">Current: ${leadBadge(lead.status)}</p>
+      </div>`;
+  }
+
+  // ── Tab: Deal Evaluator ─────────────────────────────────────────────────────
+  _tabEvaluator() {
+    const lead = this.lead  || {};
+    const ev   = this.evaluation || {};
 
     // Risk flags
     let riskHtml = '';
     if (ev.flags) {
-      const flags = ev.flags;
-      if (flags.negative_margin || flags.venue_net_negative_with_guarantee) {
+      const f = ev.flags;
+      if (f.negative_margin || f.venue_net_negative_with_guarantee) {
         riskHtml = `<div class="eval-risk"><span class="badge status-declined">High Risk — Negative margin or venue net</span></div>`;
-      } else if (flags.projected_attendance_exceeds_capacity) {
+      } else if (f.projected_attendance_exceeds_capacity) {
         riskHtml = `<div class="eval-risk"><span class="badge status-triage">Attendance exceeds capacity</span></div>`;
-      } else if (flags.low_margin_under_15_pct || flags.attendance_below_break_even || flags.bar_spend_below_minimum) {
+      } else if (f.low_margin_under_15_pct || f.attendance_below_break_even || f.bar_spend_below_minimum) {
         riskHtml = `<div class="eval-risk"><span class="badge status-needs_review">Low margin / attendance / bar risk</span></div>`;
       }
     }
 
-    // Evaluation results
-    const evalResults = ev.gross_revenue != null ? `
-      <div class="eval-results">
+    // Results grid
+    const resultsHtml = ev.gross_revenue != null ? `
+      <div class="eval-results" style="margin-top:20px">
+        <h4 class="section-label" style="margin:0 0 10px">Results</h4>
         <div class="eval-result-grid">
           <div class="eval-result-item"><span class="muted">Gross Revenue</span><strong>${esc(money(ev.gross_revenue))}</strong></div>
           <div class="eval-result-item"><span class="muted">Estimated Cost</span><strong>${esc(money(ev.estimated_cost))}</strong></div>
@@ -261,166 +387,146 @@ class LeadDetail extends PanicElement {
         ${riskHtml}
       </div>` : '';
 
-    // Notes list
-    const notesList = notes.length
-      ? notes.slice().reverse().map((n) => `<div class="lead-note">
-          <span class="muted note-meta">${esc(n.author_name || 'Unknown')} &middot; ${esc(n.created_at ? new Date(n.created_at).toLocaleDateString() : '')}</span>
-          <p>${esc(n.body)}</p>
-        </div>`).join('')
-      : `<p class="muted">No notes yet.</p>`;
-
-    this.innerHTML = `
-      <article class="panel lead-detail-panel">
-        <div class="section-head padded">
-          <h2>${esc(lead.event_name || lead.contact_name || 'Lead Detail')}</h2>
-          ${displayDate !== '—' ? `<p class="muted" style="margin:0 0 0 auto;padding-right:0.5rem">${esc(displayDate)}</p>` : ''}
-          <div class="row-actions">${convertBtn}</div>
+    return `
+      <div class="lead-modal-section">
+        <p style="margin:0 0 14px;font-size:13px;color:var(--muted)">Enter figures and click Calculate & Save to evaluate the deal.</p>
+        <div class="eval-fields-compact">
+          ${EVAL_FIELDS.map((f) => `
+            <label class="eval-field-item">
+              <span>${esc(f.label)}</span>
+              <input type="number" step="any" name="${esc(f.key)}" value="${esc(String(ev[f.key] ?? lead[f.key] ?? ''))}">
+            </label>`).join('')}
         </div>
-
-        <section class="padded lead-info-section">
-          <h3 class="section-label">Details</h3>
-          <div class="form-row"><label>Event Name <input name="event_name" value="${esc(lead.event_name || '')}"></label></div>
-          <div class="form-row"><label>Event Type
-            <select name="event_type">
-              ${EVENT_TYPES.map((t) => `<option value="${esc(t)}" ${lead.event_type === t ? 'selected' : ''}>${esc(titleCase(t))}</option>`).join('')}
-            </select>
-          </label></div>
-          <div class="form-row"><label>Desired Date <input type="date" name="desired_date" value="${esc(eventDate)}"></label></div>
-          <div class="form-row"><label>Source
-            <select name="source">
-              ${LEAD_SOURCES.map((s) => `<option value="${esc(s)}" ${lead.source === s ? 'selected' : ''}>${esc(titleCase(s))}</option>`).join('')}
-            </select>
-          </label></div>
-          <div class="form-row"><label>Contact Name <input name="contact_name" value="${esc(lead.contact_name || '')}"></label></div>
-          <div class="form-row"><label>Contact Email <input type="email" name="contact_email" value="${esc(lead.contact_email || '')}"></label></div>
-          <div class="form-row"><label>Notes <textarea name="notes" rows="3">${esc(lead.notes || '')}</textarea></label></div>
-          <div class="form-row"><button class="primary" data-action="save">Save Changes</button></div>
-        </section>
-
-        <section class="padded lead-status-section">
-          <h3 class="section-label">Status Flow</h3>
-          <div class="lead-status-btns">${statusBtns}</div>
-          <p class="muted">Current: ${leadBadge(lead.status)}</p>
-        </section>
-
-        <section class="padded lead-eval-section">
-          <h3 class="section-label">Deal Evaluator</h3>
-          <div class="eval-fields-grid">
-            ${EVAL_FIELDS.map((f) => `
-              <div class="form-row">
-                <label>${esc(f.label)} <input type="number" step="any" name="${esc(f.key)}" value="${esc(String(ev[f.key] ?? lead[f.key] ?? ''))}"></label>
-              </div>`).join('')}
-          </div>
-          <div class="form-row"><button class="primary" data-action="calculate">Calculate</button></div>
-          ${evalResults}
-        </section>
-
-        <section class="padded lead-notes-section">
-          <h3 class="section-label">Notes</h3>
-          <div class="lead-notes-list">${notesList}</div>
-          <div class="form-row"><textarea name="new_note" rows="3" placeholder="Add a note..."></textarea></div>
-          <div class="form-row"><button class="small" data-action="add-note">Add Note</button></div>
-        </section>
-      </article>`;
-
-    this.bindDetail();
+        ${resultsHtml}
+      </div>`;
   }
 
-  bindDetail() {
-    const lead = this.lead || {};
+  // ── Event binding ───────────────────────────────────────────────────────────
+  _bind() {
+    // Backdrop click closes (click on card does not)
+    $('[data-backdrop]', this)?.addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) this._close();
+    });
 
-    // Save button
-    const saveBtn = $('[data-action="save"]', this);
-    if (saveBtn) {
-      saveBtn.addEventListener('click', async () => {
-        const section = saveBtn.closest('.lead-info-section');
-        const payload = {
-          event_name:    $('[name="event_name"]', section)?.value,
-          event_type:    $('[name="event_type"]', section)?.value,
-          desired_date:  $('[name="desired_date"]', section)?.value || null,
-          source:        $('[name="source"]', section)?.value,
-          contact_name:  $('[name="contact_name"]', section)?.value,
-          contact_email: $('[name="contact_email"]', section)?.value,
-          notes:         $('[name="notes"]', section)?.value,
-        };
-        try {
-          const data = await api(`/leads/${this._leadId}`, { method: 'PATCH', body: JSON.stringify(payload) });
-          this.lead = data.lead || data;
-          publish('toast.show', { tone: 'success', message: 'Lead saved.' });
-          this.render();
-        } catch (error) {
-          publish('toast.show', { tone: 'error', message: error.message });
-        }
+    // Close button
+    $('[data-action="close"]', this)?.addEventListener('click', () => this._close());
+
+    // Tab switching
+    $$('[data-modal-tab]', this).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._tab = btn.dataset.modalTab;
+        this._render();
       });
-    }
+    });
 
-    // Status flow buttons
+    // Save / Calculate
+    $('[data-action="save"]', this)?.addEventListener('click', () => {
+      if (this._tab === 'evaluator') this._calculate();
+      else this._saveDetails();
+    });
+
+    // Delete
+    $('[data-action="delete"]', this)?.addEventListener('click', () => this._delete());
+
+    // Status flow
     $$('[data-set-status]', this).forEach((btn) => {
       btn.addEventListener('click', async () => {
         try {
           const data = await api(`/leads/${this._leadId}`, { method: 'PATCH', body: JSON.stringify({ status: btn.dataset.setStatus }) });
           this.lead = data.lead || data;
-          publish('toast.show', { tone: 'success', message: `Status set to ${titleCase(btn.dataset.setStatus)}.` });
-          this.render();
+          publish('toast.show', { tone: 'success', message: `Status: ${titleCase(btn.dataset.setStatus)}` });
+          if (typeof this.onUpdated === 'function') this.onUpdated(this.lead);
+          this._render();
         } catch (error) {
           publish('toast.show', { tone: 'error', message: error.message });
         }
       });
     });
 
-    // Convert to Event
-    const convertBtn = $('[data-action="convert"]', this);
-    if (convertBtn) {
-      convertBtn.addEventListener('click', async () => {
-        try {
-          const data = await api(`/leads/${this._leadId}/convert`, { method: 'POST' });
-          publish('toast.show', { tone: 'success', message: 'Converted to event.' });
-          if (data.event_id) location.hash = `#event-${data.event_id}`;
-        } catch (error) {
-          publish('toast.show', { tone: 'error', message: error.message });
-        }
-      });
-    }
+    // Convert
+    $('[data-action="convert"]', this)?.addEventListener('click', async () => {
+      try {
+        const data = await api(`/leads/${this._leadId}/convert`, { method: 'POST' });
+        publish('toast.show', { tone: 'success', message: 'Converted to event.' });
+        this._close();
+        if (data.event_id) location.hash = `#event-${data.event_id}`;
+      } catch (error) {
+        publish('toast.show', { tone: 'error', message: error.message });
+      }
+    });
 
-    // Calculate evaluator
-    const calcBtn = $('[data-action="calculate"]', this);
-    if (calcBtn) {
-      calcBtn.addEventListener('click', async () => {
-        const section = calcBtn.closest('.lead-eval-section');
-        const payload = {};
-        EVAL_FIELDS.forEach((f) => {
-          const val = $(`[name="${f.key}"]`, section)?.value;
-          if (val !== '' && val != null) payload[f.key] = Number(val);
-        });
-        try {
-          const data = await api(`/leads/${this._leadId}/evaluation`, { method: 'POST', body: JSON.stringify(payload) });
-          this.evaluation = data.evaluation || data;
-          publish('toast.show', { tone: 'success', message: 'Evaluation updated.' });
-          this.render();
-        } catch (error) {
-          publish('toast.show', { tone: 'error', message: error.message });
-        }
-      });
-    }
+    // Add note
+    $('[data-action="add-note"]', this)?.addEventListener('click', async () => {
+      const textarea = $('[name="new_note"]', this);
+      const body = textarea?.value?.trim();
+      if (!body) return;
+      try {
+        const data = await api(`/leads/${this._leadId}/notes`, { method: 'POST', body: JSON.stringify({ body }) });
+        this.notes = data.notes || [...(this.notes || []), data.note].filter(Boolean);
+        textarea.value = '';
+        publish('toast.show', { tone: 'success', message: 'Note added.' });
+        this._render();
+      } catch (error) {
+        publish('toast.show', { tone: 'error', message: error.message });
+      }
+    });
+  }
 
-    // Add Note
-    const noteBtn = $('[data-action="add-note"]', this);
-    if (noteBtn) {
-      noteBtn.addEventListener('click', async () => {
-        const textarea = $('[name="new_note"]', this);
-        const body = textarea?.value?.trim();
-        if (!body) return;
-        try {
-          const data = await api(`/leads/${this._leadId}/notes`, { method: 'POST', body: JSON.stringify({ body }) });
-          this.notes = data.notes || [...this.notes, data.note].filter(Boolean);
-          textarea.value = '';
-          publish('toast.show', { tone: 'success', message: 'Note added.' });
-          this.render();
-        } catch (error) {
-          publish('toast.show', { tone: 'error', message: error.message });
-        }
-      });
+  // ── Actions ─────────────────────────────────────────────────────────────────
+  async _saveDetails() {
+    const payload = {
+      event_name:    $('[name="event_name"]',    this)?.value,
+      event_type:    $('[name="event_type"]',    this)?.value,
+      desired_date:  $('[name="desired_date"]',  this)?.value || null,
+      source:        $('[name="source"]',        this)?.value,
+      contact_name:  $('[name="contact_name"]',  this)?.value,
+      contact_email: $('[name="contact_email"]', this)?.value,
+      notes:         $('[name="notes"]',         this)?.value,
+    };
+    // Drop undefined keys (fields not in DOM on this tab)
+    Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+
+    try {
+      const data = await api(`/leads/${this._leadId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      this.lead = data.lead || data;
+      publish('toast.show', { tone: 'success', message: 'Lead saved.' });
+      if (typeof this.onUpdated === 'function') this.onUpdated(this.lead);
+      this._render();
+    } catch (error) {
+      publish('toast.show', { tone: 'error', message: error.message });
     }
+  }
+
+  async _calculate() {
+    const payload = {};
+    EVAL_FIELDS.forEach((f) => {
+      const val = $(`[name="${f.key}"]`, this)?.value;
+      if (val !== '' && val != null) payload[f.key] = Number(val);
+    });
+    try {
+      const data = await api(`/leads/${this._leadId}/evaluation`, { method: 'POST', body: JSON.stringify(payload) });
+      this.evaluation = data.evaluation || data;
+      publish('toast.show', { tone: 'success', message: 'Evaluation saved.' });
+      this._render();
+    } catch (error) {
+      publish('toast.show', { tone: 'error', message: error.message });
+    }
+  }
+
+  async _delete() {
+    if (!confirm('Permanently delete this lead?')) return;
+    try {
+      await api(`/leads/${this._leadId}`, { method: 'DELETE' });
+      publish('toast.show', { tone: 'success', message: 'Lead deleted.' });
+      if (typeof this.onDeleted === 'function') this.onDeleted(this._leadId);
+      this._close();
+    } catch (error) {
+      publish('toast.show', { tone: 'error', message: error.message });
+    }
+  }
+
+  _close() {
+    this.remove();
   }
 }
 
@@ -481,5 +587,5 @@ class LeadForm extends PanicElement {
 
 
 customElements.define('pb-leads-page',  LeadsPage);
-customElements.define('pb-lead-detail', LeadDetail);
+customElements.define('pb-lead-modal',  LeadModal);
 customElements.define('pb-lead-form',   LeadForm);
