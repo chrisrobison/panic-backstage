@@ -32,6 +32,7 @@ final class CopyGenerator
         'dothebay',
         'songkick',
         'jambase',
+        'bandsintown',
     ];
 
     /** Generate variants for all channels. */
@@ -452,6 +453,25 @@ final class CopyGenerator
                 'warnings' => [
                     'JamBase listings require a registered artist or venue account.',
                     'Submit at jambase.com/submit or through the artist manager portal.',
+                ],
+            ],
+
+            'bandsintown' => [
+                'channel'  => 'bandsintown',
+                'title'    => $eventTitle,
+                'body'     => $this->trimTo(
+                    "$eventTitle\n" .
+                    "$dateFormatted · $venue · San Francisco, CA\n" .
+                    "$doorsText$showText\n" .
+                    ($ageText ? "$ageRestr\n" : '') .
+                    "\n" .
+                    $shortDesc .
+                    $ticketLine,
+                    500
+                ),
+                'warnings' => [
+                    'Bandsintown events are artist-managed — the artist must claim their page and add the event via Bandsintown for Artists.',
+                    'Submit through manager.bandsintown.com or email support@bandsintown.com.',
                 ],
             ],
 

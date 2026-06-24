@@ -214,7 +214,7 @@ try {
         'eventbrite', 'luma',
         'funcheap', 'foopee', 'press',
         'sf_chronicle', 'sf_station', 'dothebay',
-        'songkick', 'jambase',
+        'songkick', 'jambase', 'bandsintown',
     ];
     $missing = array_diff($expectedChannels, $channels);
     if ($missing) {
