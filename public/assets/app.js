@@ -82,7 +82,7 @@ class AppShell extends PanicElement {
       <a class="brand" href="#dashboard" aria-label="Panic Backstage home"><span class="brand-mark" aria-hidden="true"></span><span>Panic Backstage</span></a>
       <nav class="side-nav" aria-label="Main navigation">
         <a data-nav="dashboard" href="#dashboard" title="Dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
-        <a data-nav="leads" href="#leads" title="Leads Inbox" data-nav-leads><i class="fa-solid fa-funnel" aria-hidden="true"></i>Leads</a>
+        <a data-nav="leads" href="#leads" title="Leads Inbox" data-nav-leads><i class="fa-solid fa-filter" aria-hidden="true"></i>Leads</a>
         <a data-nav="contacts" href="#contacts" title="Contacts" data-nav-contacts><i class="fa-solid fa-address-book" aria-hidden="true"></i>Contacts</a>
         <a data-nav="promote" href="#promote" title="Promote"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i>Promote</a>
         <div class="nav-group" data-group="messages">
