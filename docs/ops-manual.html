@@ -855,8 +855,241 @@
 
   /* ── Print ────────────────────────────────────────────────────────────────── */
   @media print {
-    .sidebar { display: none; }
-    .content { margin-left: 0; }
+
+    /* Preserve all background colors, gradients, and color values */
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    /* ── Page setup: letter, book-quality margins ── */
+    @page {
+      size: letter portrait;
+      margin: 0.75in 0.9in 0.85in 0.9in;
+      @bottom-center {
+        content: "Venue Operations Manual  ·  " counter(page);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 8pt;
+        color: #6b7280;
+      }
+    }
+
+    /* Cover page: full-bleed, no margin, no page number */
+    @page :first {
+      margin: 0;
+      @bottom-center { content: none; }
+    }
+
+    html { scroll-behavior: auto !important; }
+
+    body {
+      display: block;
+      background: white;
+      font-size: 10pt;
+      line-height: 1.65;
+    }
+
+    /* ── Hide sidebar, footer, interactive chrome ── */
+    .sidebar { display: none !important; }
+    .content { margin-left: 0 !important; }
+    footer   { display: none !important; }
+
+    /* ── Cover page — full first page ── */
+    .cover {
+      page-break-after: always;
+      break-after: page;
+      min-height: 0;
+      padding: 80px 60px;
+    }
+
+    .cover h1  { font-size: 26pt; }
+    .cover .sub { font-size: 12pt; }
+
+    /* ── Part-break divider pages — own page before AND after ── */
+    .part-break {
+      page-break-before: always;
+      break-before: page;
+      page-break-after: always;
+      break-after: page;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px 60px;
+    }
+
+    .part-break h2 {
+      font-size: 22pt;
+      margin: 0;
+      padding: 0;
+      color: white;
+    }
+
+    .part-break p {
+      font-size: 12pt;
+      color: rgba(255,255,255,0.8);
+      margin-top: 12pt;
+      max-width: 100%;
+    }
+
+    /* ── Chapter pages — each starts on its own page ── */
+    .chapter-page {
+      page-break-before: always;
+      break-before: page;
+      min-height: 0;
+      background: white;
+    }
+
+    /* Chapter hero: don't orphan it from the first paragraph below */
+    .chapter-hero {
+      padding: 36pt 0 24pt;
+      border-bottom-width: 3px;
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+
+    .chapter-hero h1 {
+      font-size: 22pt;
+      margin-bottom: 12pt;
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+
+    .chapter-hero .lead {
+      font-size: 11pt;
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+
+    /* Book content container */
+    .book-content {
+      max-width: 100%;
+      padding: 24pt 0 40pt;
+      margin: 0;
+    }
+
+    /* ── Headings: never let a heading be the last thing on a page ── */
+    h2, h3, h4 {
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+
+    h2 {
+      font-size: 14pt;
+      margin-top: 28pt;
+      padding-top: 0;
+    }
+
+    h3 {
+      font-size: 11pt;
+      margin-top: 18pt;
+    }
+
+    h4 {
+      font-size: 9pt;
+      margin-top: 14pt;
+    }
+
+    p { margin-bottom: 0.8em; }
+
+    /* ── Tables: never split across pages ── */
+    table {
+      page-break-inside: avoid;
+      break-inside: avoid;
+      font-size: 9pt;
+      margin: 14pt 0;
+    }
+
+    /* Repeat header row if a table ever spans pages */
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
+    tr    { page-break-inside: avoid; break-inside: avoid; }
+
+    /* ── Callout boxes ── */
+    .callout {
+      page-break-inside: avoid;
+      break-inside: avoid;
+      margin: 14pt 0;
+    }
+
+    /* ── Checklists ── */
+    .checklist {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* ── Field-reference blocks ── */
+    .field-ref {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .field-row {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* ── Settlement calculator ── */
+    .settlement-calc {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* ── Summary box ── */
+    .summary-box {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* ── Form mockup ── */
+    .form-mockup {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* ── Two-column layout ── */
+    .two-col {
+      grid-template-columns: 1fr 1fr;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* ── Timeline entries ── */
+    .timeline-item {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* ── Pipeline steps ── */
+    .pipeline-step {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* ── List items: keep each item whole ── */
+    li {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* ── HR: don't leave it stranded at the bottom of a page ── */
+    hr {
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+
+    /* ── Remove hover effects (meaningless in print) ── */
+    tr:hover td { background: inherit !important; }
+
+    /* ── Links: plain text, no underlines ── */
+    a {
+      color: var(--ink);
+      text-decoration: none;
+    }
+
+    /* ── Code: slightly smaller so inline code doesn't break layout ── */
+    code { font-size: 0.82em; }
+
   }
 
   /* ── Responsive ───────────────────────────────────────────────────────────── */
