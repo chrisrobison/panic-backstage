@@ -86,10 +86,10 @@ class LeadsPage extends PanicElement {
     </nav>`;
 
     const tableRows = leads.map((lead) => {
-      const eventDate = lead.event_date ? new Date(`${lead.event_date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+      const eventDate = lead.desired_date ? new Date(`${lead.desired_date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
       const margin = lead.margin_pct != null ? `${Number(lead.margin_pct).toFixed(1)}%` : '—';
       return `<tr${this.selectedId === lead.id ? ' class="selected"' : ''}>
-        <td><a href="#leads" data-review="${esc(lead.id)}">${esc(lead.title)}</a></td>
+        <td><a href="#leads" data-review="${esc(lead.id)}">${esc(lead.event_name || lead.contact_name || 'Untitled')}</a></td>
         <td>${esc(titleCase(lead.source || ''))}</td>
         <td>${esc(lead.contact_name || '—')}</td>
         <td>${esc(eventDate)}</td>
@@ -213,11 +213,6 @@ class LeadDetail extends PanicElement {
       this.lead = data.lead || data;
       this.evaluation = data.evaluation || null;
       this.notes = data.notes || [];
-      this.venues = [];
-      try {
-        const vd = await api('/venues');
-        this.venues = vd.venues || [];
-      } catch { /* non-critical */ }
       this.render();
     } catch (error) {
       this.showError(error);
@@ -228,9 +223,8 @@ class LeadDetail extends PanicElement {
     const lead = this.lead || {};
     const ev = this.evaluation || {};
     const notes = this.notes || [];
-    const venues = this.venues || [];
 
-    const eventDate = lead.event_date ? lead.event_date.slice(0, 10) : '';
+    const eventDate = lead.desired_date ? lead.desired_date.slice(0, 10) : '';
     const displayDate = eventDate ? new Date(`${eventDate}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 
     // Status flow buttons
@@ -239,9 +233,6 @@ class LeadDetail extends PanicElement {
     // Convert button
     const showConvert = ['approved', 'evaluating'].includes(lead.status);
     const convertBtn = showConvert ? `<button type="button" class="primary" data-action="convert">Convert to Event</button>` : '';
-
-    // Venue options
-    const venueOptions = venues.map((v) => `<option value="${esc(v.id)}" ${String(v.id) === String(lead.venue_id || '') ? 'selected' : ''}>${esc(v.name)}</option>`).join('');
 
     // Risk flags
     let riskHtml = '';
@@ -281,22 +272,20 @@ class LeadDetail extends PanicElement {
     this.innerHTML = `
       <article class="panel lead-detail-panel">
         <div class="section-head padded">
-          <h2>${esc(lead.title || 'Lead Detail')}</h2>
+          <h2>${esc(lead.event_name || lead.contact_name || 'Lead Detail')}</h2>
+          ${displayDate !== '—' ? `<p class="muted" style="margin:0 0 0 auto;padding-right:0.5rem">${esc(displayDate)}</p>` : ''}
           <div class="row-actions">${convertBtn}</div>
         </div>
 
         <section class="padded lead-info-section">
           <h3 class="section-label">Details</h3>
-          <div class="form-row"><label>Title <input name="title" value="${esc(lead.title || '')}"></label></div>
+          <div class="form-row"><label>Event Name <input name="event_name" value="${esc(lead.event_name || '')}"></label></div>
           <div class="form-row"><label>Event Type
             <select name="event_type">
               ${EVENT_TYPES.map((t) => `<option value="${esc(t)}" ${lead.event_type === t ? 'selected' : ''}>${esc(titleCase(t))}</option>`).join('')}
             </select>
           </label></div>
-          <div class="form-row"><label>Venue
-            <select name="venue_id"><option value="">— None —</option>${venueOptions}</select>
-          </label></div>
-          <div class="form-row"><label>Event Date <input type="date" name="event_date" value="${esc(eventDate)}"></label></div>
+          <div class="form-row"><label>Desired Date <input type="date" name="desired_date" value="${esc(eventDate)}"></label></div>
           <div class="form-row"><label>Source
             <select name="source">
               ${LEAD_SOURCES.map((s) => `<option value="${esc(s)}" ${lead.source === s ? 'selected' : ''}>${esc(titleCase(s))}</option>`).join('')}
@@ -304,7 +293,7 @@ class LeadDetail extends PanicElement {
           </label></div>
           <div class="form-row"><label>Contact Name <input name="contact_name" value="${esc(lead.contact_name || '')}"></label></div>
           <div class="form-row"><label>Contact Email <input type="email" name="contact_email" value="${esc(lead.contact_email || '')}"></label></div>
-          <div class="form-row"><label>Description <textarea name="description" rows="3">${esc(lead.description || '')}</textarea></label></div>
+          <div class="form-row"><label>Notes <textarea name="notes" rows="3">${esc(lead.notes || '')}</textarea></label></div>
           <div class="form-row"><button class="primary" data-action="save">Save Changes</button></div>
         </section>
 
@@ -346,14 +335,13 @@ class LeadDetail extends PanicElement {
       saveBtn.addEventListener('click', async () => {
         const section = saveBtn.closest('.lead-info-section');
         const payload = {
-          title:         $('[name="title"]', section)?.value,
+          event_name:    $('[name="event_name"]', section)?.value,
           event_type:    $('[name="event_type"]', section)?.value,
-          venue_id:      $('[name="venue_id"]', section)?.value || null,
-          event_date:    $('[name="event_date"]', section)?.value || null,
+          desired_date:  $('[name="desired_date"]', section)?.value || null,
           source:        $('[name="source"]', section)?.value,
           contact_name:  $('[name="contact_name"]', section)?.value,
           contact_email: $('[name="contact_email"]', section)?.value,
-          description:   $('[name="description"]', section)?.value,
+          notes:         $('[name="notes"]', section)?.value,
         };
         try {
           const data = await api(`/leads/${this._leadId}`, { method: 'PATCH', body: JSON.stringify(payload) });
@@ -440,27 +428,18 @@ class LeadDetail extends PanicElement {
 // ── pb-lead-form ──────────────────────────────────────────────────────────────
 class LeadForm extends PanicElement {
   async connect() {
-    this.venues = [];
-    try {
-      const data = await api('/venues');
-      this.venues = data.venues || [];
-    } catch { /* non-critical */ }
     this.render();
   }
 
   render() {
-    const venueOptions = this.venues.map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join('');
     this.innerHTML = `
       <form class="lead-create-form grid-form" data-form="create-lead">
         <h3>New Lead</h3>
-        <div class="form-row"><label>Title* <input name="title" required placeholder="e.g. The Midnight – Saturday Show"></label></div>
+        <div class="form-row"><label>Event Name* <input name="event_name" required placeholder="e.g. The Midnight – Saturday Show"></label></div>
         <div class="form-row"><label>Event Type
           <select name="event_type">
             ${EVENT_TYPES.map((t) => `<option value="${esc(t)}">${esc(titleCase(t))}</option>`).join('')}
           </select>
-        </label></div>
-        <div class="form-row"><label>Venue
-          <select name="venue_id"><option value="">— None —</option>${venueOptions}</select>
         </label></div>
         <div class="form-row"><label>Contact Name <input name="contact_name" placeholder="Promoter or artist name"></label></div>
         <div class="form-row"><label>Contact Email <input type="email" name="contact_email" placeholder="contact@example.com"></label></div>
@@ -469,8 +448,8 @@ class LeadForm extends PanicElement {
             ${LEAD_SOURCES.map((s) => `<option value="${esc(s)}">${esc(titleCase(s))}</option>`).join('')}
           </select>
         </label></div>
-        <div class="form-row"><label>Event Date <input type="date" name="event_date"></label></div>
-        <div class="form-row"><label>Description <textarea name="description" rows="3" placeholder="Brief overview of the inquiry"></textarea></label></div>
+        <div class="form-row"><label>Desired Date <input type="date" name="desired_date"></label></div>
+        <div class="form-row"><label>Notes <textarea name="notes" rows="3" placeholder="Brief overview of the inquiry"></textarea></label></div>
         <div class="form-row row-actions">
           <button type="submit" class="primary">Create Lead</button>
           <button type="button" data-action="cancel">Cancel</button>
@@ -487,8 +466,7 @@ class LeadForm extends PanicElement {
     event.preventDefault();
     const form = event.target;
     const payload = formData(form);
-    if (!payload.venue_id) delete payload.venue_id;
-    if (!payload.event_date) delete payload.event_date;
+    if (!payload.desired_date) delete payload.desired_date;
     try {
       const data = await api('/leads', { method: 'POST', body: JSON.stringify(payload) });
       const lead = data.lead || data;

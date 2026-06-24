@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `leads` — Wire up New Lead button and align field names with DB schema
 - **Fixed** `promote` — Generate Bandsintown variant + add per-platform submission links
 - **Fixed** — Guard eventId in closeout and execution connect() to prevent load before workspace wires the property
 - **Fixed** `pos` — Explicit active_event_id override — staff pin POS to a specific event instead of date-guessing

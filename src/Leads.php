@@ -113,10 +113,11 @@ final class Leads extends BaseEndpoint
         $leads = $this->db->all($sql, $params);
 
         return $this->ok([
-            'leads'    => $leads,
-            'statuses' => self::STATUSES,
-            'sources'  => self::SOURCES,
-            'users'    => $this->db->all('SELECT id, name FROM users ORDER BY name'),
+            'leads'        => $leads,
+            'statuses'     => self::STATUSES,
+            'sources'      => self::SOURCES,
+            'users'        => $this->db->all('SELECT id, name FROM users ORDER BY name'),
+            'capabilities' => $this->globalCapabilities(),
         ]);
     }
 
@@ -212,7 +213,14 @@ final class Leads extends BaseEndpoint
 
         $this->addAuditNote($id, "Lead created (source: $source)");
 
-        return $this->ok(['id' => $id]);
+        $lead = $this->db->one(
+            "SELECT l.*, u.name point_person_name FROM leads l
+             LEFT JOIN users u ON u.id = l.point_person_id
+             WHERE l.id = ?",
+            [$id]
+        );
+
+        return $this->ok(['lead' => $lead]);
     }
 
     // ── Update ────────────────────────────────────────────────────────────────
