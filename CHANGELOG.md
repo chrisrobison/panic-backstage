@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `leads` — Fix can() misuse — capabilities is already the flat object, not a wrapper
 - **Fixed** `leads` — Wire up New Lead button and align field names with DB schema
 - **Fixed** `promote` — Generate Bandsintown variant + add per-platform submission links
 - **Fixed** — Guard eventId in closeout and execution connect() to prevent load before workspace wires the property

@@ -70,13 +70,13 @@ class LeadsPage extends PanicElement {
   }
 
   render() {
-    if (!can(this.capabilities, 'view_leads') && Object.keys(this.capabilities).length > 0) {
+    if (Object.keys(this.capabilities).length > 0 && !this.capabilities['view_leads']) {
       this.innerHTML = `<div class="panel padded">${emptyState('Access denied — you need view_leads capability.')}</div>`;
       return;
     }
 
     const leads = this.filteredLeads();
-    const canManage = can(this.capabilities, 'manage_leads');
+    const canManage = Boolean(this.capabilities['manage_leads']);
 
     const tabBar = `<nav class="workspace-tabs tabs leads-tabs">
       ${LEAD_TABS.map((t) => {
