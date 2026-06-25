@@ -43,6 +43,21 @@ final class Dashboard extends BaseEndpoint
             'overdueFollowups' => $this->isVenueAdmin()
                 ? $this->count("SELECT COUNT(*) c FROM client_notes WHERE type IN ('task','followup') AND is_done=0 AND due_date < CURDATE()")
                 : 0,
+            // Utilization: distinct days with at least one booked show (not empty/hold) in the next 14 days
+            'utilizedDays' => $this->count(
+                "SELECT COUNT(DISTINCT CASE WHEN e.status NOT IN ('empty','hold') THEN e.date END) c
+                 FROM events e
+                 WHERE e.date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 13 DAY)
+                   AND $scopeSql",
+                $scopeParams
+            ),
+            'utilizationPct' => $this->count(
+                "SELECT ROUND(COUNT(DISTINCT CASE WHEN e.status NOT IN ('empty','hold') THEN e.date END) * 100.0 / 14) c
+                 FROM events e
+                 WHERE e.date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 13 DAY)
+                   AND $scopeSql",
+                $scopeParams
+            ),
         ];
         return $this->ok([
             'cards'      => $cards,

@@ -168,6 +168,9 @@ class DashboardView extends PanicElement {
     const today = events[0] || allEvents[0] || {};
     const attention = events.filter((event) => event.primary_blocker || Number(event.open_items) || (!Number(event.approved_flyers) && ['confirmed', 'needs_assets', 'ready_to_announce'].includes(event.status))).slice(0, 4);
     const oldest = dashboard.highlights?.oldest_unsettled;
+    const utilPct = dashboard.cards.utilizationPct ?? 0;
+    const utilDays = dashboard.cards.utilizedDays ?? 0;
+    const utilTone = utilPct >= 75 ? 'green' : utilPct >= 40 ? 'amber' : 'red';
     this.innerHTML = `
       ${this.onboardingCard(dashboard.onboarding)}
       ${capabilities.manage_templates ? '<div class="page-head"><a class="button" href="#templates">Create From Template</a></div>' : ''}
@@ -177,6 +180,7 @@ class DashboardView extends PanicElement {
         ${this.metric('', 'Empty / Hold', dashboard.cards.empty, dashboard.highlights?.next_empty_date ? shortDate(eventDate({ date: dashboard.highlights.next_empty_date })) : 'No holds soon', '')}
         ${this.metric('', 'Needs Flyer', dashboard.cards.needsAssets, `${dashboard.cards.ready || 0} ready to announce`, 'amber')}
         ${this.metric('$', 'Unsettled', dashboard.cards.unsettled, oldest ? oldest.title : 'All settled', 'red')}
+        ${this.metric('%', 'Utilized', `${utilPct}%`, `${utilDays} of 14 days booked`, utilTone)}
       </section>
       <section class="dashboard-grid">
         <article class="panel"><div class="section-head padded"><h2>Next 14 Days</h2><a class="button secondary small" href="#calendar">Calendar</a></div>${table(events)}</article>
