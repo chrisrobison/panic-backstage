@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `leads` — Fix modal not opening on row click
 - **Added** `leads` — Replace split-pane detail with tabbed modal dialog
 - **Documentation** `ops-manual` — Add comprehensive print/book CSS
 - **Fixed** `nav` — Replace nonexistent fa-funnel with fa-filter for Leads icon

@@ -124,11 +124,21 @@ class LeadsPage extends PanicElement {
       });
     });
 
-    $$('.leads-table-row[data-lead-id]', this).forEach((row) => {
-      const open = () => this._openModal(Number(row.dataset.leadId));
-      row.addEventListener('click', open);
-      row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
-    });
+    // Use event delegation on <tbody> so clicks on any child (<td>, <span>,
+    // <badge>, etc.) reliably bubble up and are caught in one place.
+    const tbody = $('tbody', this);
+    if (tbody) {
+      tbody.addEventListener('click', (e) => {
+        const row = e.target.closest('[data-lead-id]');
+        if (row) this._openModal(Number(row.dataset.leadId));
+      });
+      tbody.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          const row = e.target.closest('[data-lead-id]');
+          if (row) { e.preventDefault(); this._openModal(Number(row.dataset.leadId)); }
+        }
+      });
+    }
 
     const newBtn = $('[data-action="new-lead"]', this);
     if (newBtn) {

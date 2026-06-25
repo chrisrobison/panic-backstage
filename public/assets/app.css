@@ -4543,8 +4543,15 @@ pb-admin-wizard-defaults { display: block; }
 /* ── Lead modal backdrop + card ─────────────────────────────────────────── */
 body.lead-modal-open { overflow: hidden; }
 
+/* pb-lead-modal is a block host; its fixed-position backdrop child
+   positions itself against the viewport.  display:contents breaks
+   position:fixed in several browsers, so we never use it here.
+   The host is zero-size so it doesn't disturb body layout. */
 pb-lead-modal {
-  display: contents;
+  display: block;
+  width: 0;
+  height: 0;
+  overflow: visible;
 }
 
 .lead-modal-backdrop {
