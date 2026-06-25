@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `leads` — Add BandBrief tab, band/attendance fields, and status notes
 - **Added** `dashboard` — Add percent utilized metric for next 14 days
 - **Fixed** `leads` — Fix modal not opening on row click
 - **Added** `leads` — Replace split-pane detail with tabbed modal dialog

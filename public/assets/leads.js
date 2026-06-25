@@ -44,6 +44,9 @@ function leadBadge(status) {
 }
 
 
+const BANDBRIEF_API = '/bandbrief/public/api.php';
+
+
 // ── pb-leads-page ─────────────────────────────────────────────────────────────
 class LeadsPage extends PanicElement {
   async connect() {
@@ -192,6 +195,10 @@ class LeadModal extends PanicElement {
   set leadId(value) {
     this._leadId = Number(value);
     this._tab = 'details';
+    this._bbReport  = null;
+    this._bbLoading = false;
+    this._bbError   = null;
+    this._bbQuery   = null;
     if (this.isConnected) this._load();
   }
 
@@ -247,12 +254,13 @@ class LeadModal extends PanicElement {
         case 'details':   body = this._tabDetails();   break;
         case 'status':    body = this._tabStatus();    break;
         case 'evaluator': body = this._tabEvaluator(); break;
+        case 'bandbrief': body = this._tabBandBrief(); break;
       }
     }
 
     // Footer: context-aware save label
     const saveLabel = this._tab === 'evaluator' ? 'Calculate & Save' : 'Save Changes';
-    const saveHidden = (this._tab === 'status') ? ' style="visibility:hidden"' : '';
+    const saveHidden = (this._tab === 'status' || this._tab === 'bandbrief') ? ' style="visibility:hidden"' : '';
 
     this.innerHTML = `
       <div class="lead-modal-backdrop" data-backdrop>
@@ -271,6 +279,7 @@ class LeadModal extends PanicElement {
             <button class="${this._tab === 'details'   ? 'active' : ''}" data-modal-tab="details">Details</button>
             <button class="${this._tab === 'status'    ? 'active' : ''}" data-modal-tab="status">Status Flow</button>
             <button class="${this._tab === 'evaluator' ? 'active' : ''}" data-modal-tab="evaluator">Deal Evaluator</button>
+            <button class="${this._tab === 'bandbrief' ? 'active' : ''}" data-modal-tab="bandbrief">BandBrief</button>
           </nav>
 
           <div class="lead-modal-body">
@@ -330,6 +339,12 @@ class LeadModal extends PanicElement {
           <label class="field-label">Contact Email
             <input type="email" name="contact_email" value="${esc(lead.contact_email || '')}">
           </label>
+          <label class="field-label">Band(s)
+            <input name="band_name" value="${esc(lead.band_name || '')}" placeholder="e.g. The Midnight, Local Artist">
+          </label>
+          <label class="field-label">Projected Attendance
+            <input type="number" name="projected_attendance" value="${esc(lead.projected_attendance != null ? String(lead.projected_attendance) : '')}" min="0" placeholder="e.g. 200">
+          </label>
         </div>
         <label class="field-label" style="display:flex;flex-direction:column;margin-bottom:16px">Notes
           <textarea name="notes" rows="3">${esc(lead.notes || '')}</textarea>
@@ -361,6 +376,10 @@ class LeadModal extends PanicElement {
             </button>`).join('')}
         </div>
         <p style="margin:18px 0 0;font-size:13px">Current: ${leadBadge(lead.status)}</p>
+        <label class="field-label" style="display:flex;flex-direction:column;margin-top:18px">
+          <span style="margin-bottom:4px">Reason / Note <span class="muted" style="font-weight:400;font-size:12px">(optional — logged with the status change)</span></span>
+          <textarea name="status_note" rows="2" placeholder="e.g. Approved after review with management…"></textarea>
+        </label>
       </div>`;
   }
 
@@ -441,9 +460,15 @@ class LeadModal extends PanicElement {
     // Status flow
     $$('[data-set-status]', this).forEach((btn) => {
       btn.addEventListener('click', async () => {
+        const statusNote = ($('[name="status_note"]', this)?.value || '').trim();
+        const body = { status: btn.dataset.setStatus };
+        if (statusNote) body.status_note = statusNote;
         try {
-          const data = await api(`/leads/${this._leadId}`, { method: 'PATCH', body: JSON.stringify({ status: btn.dataset.setStatus }) });
-          this.lead = data.lead || data;
+          await api(`/leads/${this._leadId}`, { method: 'PATCH', body: JSON.stringify(body) });
+          // Re-fetch so lead state, notes, and any server-side audit entries are fresh
+          const refreshed = await api(`/leads/${this._leadId}`);
+          this.lead  = refreshed.lead  || this.lead;
+          this.notes = refreshed.notes || this.notes;
           publish('toast.show', { tone: 'success', message: `Status: ${titleCase(btn.dataset.setStatus)}` });
           if (typeof this.onUpdated === 'function') this.onUpdated(this.lead);
           this._render();
@@ -465,6 +490,34 @@ class LeadModal extends PanicElement {
       }
     });
 
+    // BandBrief search
+    $('[data-bb-form]', this)?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const force = e.submitter?.name === 'bb_force';
+      const query = ($('[name="bb_query"]', this)?.value || '').trim();
+      if (!query) return;
+      this._bbQuery   = query;
+      this._bbLoading = true;
+      this._bbReport  = null;
+      this._bbError   = null;
+      this._render();
+      try {
+        const resp = await fetch(`${BANDBRIEF_API}/reports/create`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ name: query, force }),
+        });
+        const json = await resp.json();
+        if (!resp.ok || json.ok === false) throw new Error(json?.error?.message || `HTTP ${resp.status}`);
+        this._bbReport  = json.data || json;
+        this._bbLoading = false;
+      } catch (err) {
+        this._bbError   = err.message || 'Failed to generate brief.';
+        this._bbLoading = false;
+      }
+      this._render();
+    });
+
     // Add note
     $('[data-action="add-note"]', this)?.addEventListener('click', async () => {
       const textarea = $('[name="new_note"]', this);
@@ -482,23 +535,152 @@ class LeadModal extends PanicElement {
     });
   }
 
+  // ── Tab: BandBrief ──────────────────────────────────────────────────────────
+  _tabBandBrief() {
+    const lead     = this.lead || {};
+    const prefill  = esc(this._bbQuery || lead.band_name || '');
+
+    const searchForm = `
+      <form data-bb-form style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:flex-end;margin-bottom:18px">
+        <label class="field-label" style="margin:0">Artist / Band
+          <input name="bb_query" value="${prefill}" placeholder="e.g. The Midnight" required>
+        </label>
+        <button type="submit" class="primary small" style="align-self:flex-end">Generate Brief</button>
+        <button type="submit" name="bb_force" value="1" class="small" style="align-self:flex-end" title="Force a fresh data pull">Refresh</button>
+      </form>`;
+
+    if (this._bbLoading) {
+      return `
+        <div class="lead-modal-section">
+          ${searchForm}
+          <div style="padding:28px 0;text-align:center;color:var(--muted);font-size:13px">
+            <span class="spinner"></span>
+            <br>Generating brief for <strong>${esc(this._bbQuery || '')}</strong>…
+            <br><small style="display:block;margin-top:6px">Aggregating Spotify · Last.fm · MusicBrainz · Wikipedia · Bandcamp · Reddit…</small>
+          </div>
+        </div>`;
+    }
+
+    if (this._bbError) {
+      return `
+        <div class="lead-modal-section">
+          ${searchForm}
+          <p class="error-text" style="margin-top:12px">${esc(this._bbError)}</p>
+        </div>`;
+    }
+
+    if (this._bbReport) {
+      return `
+        <div class="lead-modal-section">
+          ${searchForm}
+          ${this._renderBbReport(this._bbReport)}
+        </div>`;
+    }
+
+    // Idle / initial state
+    return `
+      <div class="lead-modal-section">
+        <p style="margin:0 0 14px;font-size:13px;color:var(--muted)">Generate a booking intelligence brief for this artist — aggregates Spotify, Last.fm, MusicBrainz, Wikipedia, Bandcamp, and Reddit signal data.</p>
+        ${searchForm}
+      </div>`;
+  }
+
+  _renderBbReport(envelope) {
+    const report = (envelope && envelope.report) ? envelope.report : envelope;
+    if (!report || typeof report !== 'object') {
+      return `<p class="muted">No report data available.</p>`;
+    }
+
+    const summary   = (report.summary && typeof report.summary === 'object') ? report.summary : {};
+    const name      = String(summary.canonical_name || report.normalized_profile?.canonical_name || '');
+    const overview  = String(summary.overview || '');
+    const bookingTake = String(summary.booking_take || report.booking_take || '');
+    const aiAnalysis  = String(summary.ai_analysis  || report.ai_analysis  || '').trim();
+    const aiProvider  = String(report.ai_provider || '').trim();
+    const bandScore   = Number(report.bandbrief_score || 0);
+    const conf        = report.score_confidence || {};
+    const identityPct = Math.round(Number(conf.identity_confidence || summary.identity_confidence || 0) * 100);
+    const overallPct  = Math.round(Number(conf.overall || 0) * 100);
+    const missingData = Array.isArray(report.missing_data) ? report.missing_data : [];
+
+    const sourceStatus = (typeof report.source_status === 'object' && report.source_status) ? report.source_status : {};
+    const sourceBadges = Object.entries(sourceStatus).map(([src, row]) => {
+      const st  = String(row?.status || 'unknown');
+      const cls = st === 'ok' ? 'status-confirmed' : st === 'partial' ? 'status-triage' : 'status-declined';
+      const icon = st === 'ok' ? '✓' : st === 'partial' ? '~' : '✗';
+      return `<span class="badge ${esc(cls)}" style="font-size:11px">${esc(src)} ${icon}</span>`;
+    }).join('');
+
+    const breakdown = Array.isArray(report.score_breakdown) ? report.score_breakdown : [];
+    const scoreRows = breakdown.slice(0, 6).map((row) => {
+      const cat     = esc(String(row.category || ''));
+      const val     = Math.max(0, Math.min(100, Number(row.score || 0)));
+      const explain = String(row.explanation || '').trim();
+      return `<div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>${cat}</span><strong>${val}</strong></div>
+        <div style="background:#f0ede5;border-radius:999px;overflow:hidden;height:7px"><div style="width:${val}%;height:100%;background:linear-gradient(90deg,#0f6e8b,#2b93af)"></div></div>
+        ${explain ? `<p style="margin:2px 0 0;font-size:11px;color:var(--muted)">${esc(explain)}</p>` : ''}
+      </div>`;
+    }).join('');
+
+    return `
+      <div class="bb-report">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">
+          ${name ? `<strong style="font-size:15px">${esc(name)}</strong>` : ''}
+          ${bandScore ? `<span class="badge" style="background:#d6edf4;border:1px solid #0f6e8b55;font-weight:700">Score: ${bandScore}</span>` : ''}
+          ${overallPct  ? `<span class="badge">Overall ${overallPct}%</span>`  : ''}
+          ${identityPct ? `<span class="badge">Identity ${identityPct}%</span>` : ''}
+          ${missingData.length ? `<span class="badge status-triage">${missingData.length} partial source(s)</span>` : ''}
+        </div>
+
+        ${sourceBadges ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px">${sourceBadges}</div>` : ''}
+
+        ${overview ? `<p style="margin:0 0 10px;font-size:13px;line-height:1.55">${esc(overview)}</p>` : ''}
+
+        ${bookingTake ? `
+          <div style="background:#f0f7fa;border-left:3px solid #0f6e8b55;padding:8px 12px;margin-bottom:12px;border-radius:0 6px 6px 0">
+            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Booking Take</span>
+            <p style="margin:4px 0 0;font-size:13px;line-height:1.5">${esc(bookingTake)}</p>
+          </div>` : ''}
+
+        ${aiAnalysis ? `
+          <details style="margin-bottom:12px">
+            <summary style="font-size:13px;font-weight:600;cursor:pointer;user-select:none">
+              AI Analyst Summary ${aiProvider ? `<span class="badge" style="font-size:10px;margin-left:4px">${esc(aiProvider)}</span>` : ''}
+            </summary>
+            <div style="margin-top:8px;font-size:13px;line-height:1.6;color:#444">
+              ${aiAnalysis.split(/\n\n+/).filter(Boolean).map((p) => `<p style="margin:0 0 8px">${esc(p.trim())}</p>`).join('')}
+            </div>
+          </details>` : ''}
+
+        ${scoreRows ? `
+          <details>
+            <summary style="font-size:13px;font-weight:600;cursor:pointer;user-select:none;margin-bottom:6px">Score Breakdown</summary>
+            <div style="margin-top:8px">${scoreRows}</div>
+          </details>` : ''}
+      </div>`;
+  }
+
   // ── Actions ─────────────────────────────────────────────────────────────────
   async _saveDetails() {
+    const rawAttendance = $('[name="projected_attendance"]', this)?.value;
     const payload = {
-      event_name:    $('[name="event_name"]',    this)?.value,
-      event_type:    $('[name="event_type"]',    this)?.value,
-      desired_date:  $('[name="desired_date"]',  this)?.value || null,
-      source:        $('[name="source"]',        this)?.value,
-      contact_name:  $('[name="contact_name"]',  this)?.value,
-      contact_email: $('[name="contact_email"]', this)?.value,
-      notes:         $('[name="notes"]',         this)?.value,
+      event_name:             $('[name="event_name"]',             this)?.value,
+      event_type:             $('[name="event_type"]',             this)?.value,
+      desired_date:           $('[name="desired_date"]',           this)?.value || null,
+      source:                 $('[name="source"]',                 this)?.value,
+      contact_name:           $('[name="contact_name"]',           this)?.value,
+      contact_email:          $('[name="contact_email"]',          this)?.value,
+      band_name:              $('[name="band_name"]',              this)?.value || null,
+      projected_attendance:   rawAttendance !== '' && rawAttendance != null ? Number(rawAttendance) : null,
+      notes:                  $('[name="notes"]',                  this)?.value,
     };
     // Drop undefined keys (fields not in DOM on this tab)
     Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
 
     try {
       const data = await api(`/leads/${this._leadId}`, { method: 'PATCH', body: JSON.stringify(payload) });
-      this.lead = data.lead || data;
+      this.lead = data.lead || this.lead;
       publish('toast.show', { tone: 'success', message: 'Lead saved.' });
       if (typeof this.onUpdated === 'function') this.onUpdated(this.lead);
       this._render();

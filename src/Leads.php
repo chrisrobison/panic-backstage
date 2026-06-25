@@ -185,10 +185,10 @@ final class Leads extends BaseEndpoint
 
         $id = $this->db->insert(
             'INSERT INTO leads (status, source, contact_name, contact_email, contact_org, contact_phone,
-             event_name, event_type, desired_date, desired_date_alt, rooms_requested,
+             event_name, event_type, band_name, desired_date, desired_date_alt, rooms_requested,
              projected_attendance, is_private, alcohol_plan, notes, point_person_id,
              risk_level, created_by_id)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             [
                 $status,
                 $source,
@@ -198,6 +198,7 @@ final class Leads extends BaseEndpoint
                 $b['contact_phone']   ?? null,
                 $b['event_name']      ?? null,
                 $b['event_type']      ?? null,
+                $b['band_name']       ?? null,
                 date_or_null($b['desired_date'] ?? null),
                 date_or_null($b['desired_date_alt'] ?? null),
                 $b['rooms_requested'] ?? null,
@@ -249,7 +250,7 @@ final class Leads extends BaseEndpoint
 
         $fields = [
             'status', 'source', 'contact_name', 'contact_email', 'contact_org', 'contact_phone',
-            'event_name', 'event_type', 'desired_date', 'desired_date_alt', 'rooms_requested',
+            'event_name', 'event_type', 'band_name', 'desired_date', 'desired_date_alt', 'rooms_requested',
             'projected_attendance', 'is_private', 'alcohol_plan', 'notes',
             'point_person_id', 'risk_level', 'decline_reason', 'decision_notes',
         ];
@@ -288,9 +289,25 @@ final class Leads extends BaseEndpoint
 
         if ($newStatus !== $lead['status']) {
             $this->addAuditNote($id, "Status changed: {$lead['status']} → $newStatus");
+            // Optional user-supplied note explaining the status change
+            $statusNote = trim((string) ($b['status_note'] ?? ''));
+            if ($statusNote !== '') {
+                $this->db->run(
+                    "INSERT INTO lead_notes (lead_id, user_id, type, body) VALUES (?,?,?,?)",
+                    [$id, $this->userId(), 'status_change', $statusNote]
+                );
+            }
         }
 
-        return $this->ok(['ok' => true]);
+        $updated = $this->db->one(
+            "SELECT l.*, u.name point_person_name, d.name decision_by_name
+             FROM leads l
+             LEFT JOIN users u ON u.id = l.point_person_id
+             LEFT JOIN users d ON d.id = l.decision_by_id
+             WHERE l.id = ?",
+            [$id]
+        );
+        return $this->ok(['lead' => $updated]);
     }
 
     // ── Delete ────────────────────────────────────────────────────────────────
