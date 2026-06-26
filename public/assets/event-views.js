@@ -2,7 +2,12 @@
 // Dashboard, Calendar, Pipeline, Events list, Template picker, and the two
 // public/unauthenticated pages (public event page + invite acceptance). Also
 // owns the quick-create event modal (shared by the calendar and the topbar).
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, mdToHtml, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, setAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, mdToHtml, $, $$ } from './core.js';
+
+// Default dashboard metric cards, in display order, shown when a user has not
+// customized their selection. Keys must match the DASHBOARD_METRIC_KEYS list in
+// src/AuthEndpoint.php and the catalog in DashboardView._metricCatalog().
+const DEFAULT_DASHBOARD_METRICS = ['newLeads', 'nextShow', 'openItems', 'empty', 'needsFlyer', 'unsettled', 'utilized'];
 
 // Statuses valid for private events (no public-promo stages).
 const PRIVATE_EVENT_STATUSES = ['empty', 'proposed', 'confirmed', 'booked', 'completed', 'settled', 'canceled'];
@@ -171,20 +176,17 @@ class DashboardView extends PanicElement {
     const utilPct = dashboard.cards.utilizationPct ?? 0;
     const utilDays = dashboard.cards.utilizedDays ?? 0;
     const utilTone = utilPct >= 75 ? 'green' : utilPct >= 40 ? 'amber' : 'red';
+
+    // Build the full catalog of metric cards once, then render only those the
+    // user has chosen to show (defaulting to DEFAULT_DASHBOARD_METRICS). The
+    // gear menu lets the user toggle each one and persists the choice.
+    this._catalog = this._metricCatalog({ dashboard, today, capabilities, oldest, utilPct, utilDays, utilTone });
+    this._selected = this._selectedMetrics();
+
     this.innerHTML = `
       ${this.onboardingCard(dashboard.onboarding)}
       ${capabilities.manage_templates ? '<div class="page-head"><a class="button" href="#templates">Create From Template</a></div>' : ''}
-      <section class="metric-grid">
-        ${(capabilities.view_leads || capabilities.manage_leads)
-          ? this.metricLink('#leads', '<i class="fa-solid fa-inbox" aria-hidden="true"></i>', 'New Leads', dashboard.cards.newLeads ?? 0, `${dashboard.cards.leadsNeedingReview ?? 0} in pipeline`, (dashboard.cards.newLeads ?? 0) > 0 ? 'amber' : '')
-          : ''}
-        <article class="metric-card"><span class="icon-bubble"><i class="fa-solid fa-microphone" aria-hidden="true"></i></span><h3>Next Show<br>${esc(today.title || 'No event')}</h3><p>Doors ${esc(timeLabel(today.doors_time))}<br>Starts ${esc(timeLabel(today.show_time))}</p>${badge(today.status || 'empty')}</article>
-        ${this.metric('!', 'Open Items', dashboard.cards.blockers, `${dashboard.cards.urgentItems || 0} due soon`, 'red')}
-        ${this.metric('', 'Empty / Hold', dashboard.cards.empty, dashboard.highlights?.next_empty_date ? shortDate(eventDate({ date: dashboard.highlights.next_empty_date })) : 'No holds soon', '')}
-        ${this.metric('', 'Needs Flyer', dashboard.cards.needsAssets, `${dashboard.cards.ready || 0} ready to announce`, 'amber')}
-        ${this.metric('$', 'Unsettled', dashboard.cards.unsettled, oldest ? oldest.title : 'All settled', 'red')}
-        ${this.metric('%', 'Utilized', `${utilPct}%`, `${utilDays} of 14 days booked`, utilTone)}
-      </section>
+      ${this._metricSectionHtml()}
       <section class="dashboard-grid">
         <article class="panel"><div class="section-head padded"><h2>Next 14 Days</h2><a class="button secondary small" href="#calendar">Calendar</a></div>${table(events)}</article>
         <article class="panel"><div class="section-head padded"><h2>Needs Attention</h2><a class="button secondary small" href="#events">All Events</a></div>
@@ -197,6 +199,115 @@ class DashboardView extends PanicElement {
     if (dismissBtn) {
       dismissBtn.addEventListener('click', () => this._dismissOnboarding());
     }
+
+    this._wireMetricMenu();
+  }
+
+  // ── Customizable top metrics ───────────────────────────────────────────────
+
+  // The full set of metric cards, in display order. Each entry carries the
+  // pre-rendered card markup plus an `available` flag (capability gate). Keys
+  // must stay in sync with DASHBOARD_METRIC_KEYS in src/AuthEndpoint.php.
+  _metricCatalog({ dashboard, today, capabilities, oldest, utilPct, utilDays, utilTone }) {
+    const c = dashboard.cards || {};
+    const hasLeads = !!(capabilities.view_leads || capabilities.manage_leads);
+    const isAdmin = !!capabilities.manage_users;
+    return [
+      { key: 'newLeads', label: 'New Leads', available: hasLeads,
+        html: this.metricLink('#leads', '<i class="fa-solid fa-inbox" aria-hidden="true"></i>', 'New Leads', c.newLeads ?? 0, `${c.leadsNeedingReview ?? 0} in pipeline`, (c.newLeads ?? 0) > 0 ? 'amber' : '') },
+      { key: 'nextShow', label: 'Next Show', available: true,
+        html: `<article class="metric-card"><span class="icon-bubble"><i class="fa-solid fa-microphone" aria-hidden="true"></i></span><h3>Next Show<br>${esc(today.title || 'No event')}</h3><p>Doors ${esc(timeLabel(today.doors_time))}<br>Starts ${esc(timeLabel(today.show_time))}</p>${badge(today.status || 'empty')}</article>` },
+      { key: 'openItems', label: 'Open Items', available: true,
+        html: this.metric('!', 'Open Items', c.blockers, `${c.urgentItems || 0} due soon`, 'red') },
+      { key: 'empty', label: 'Empty / Hold', available: true,
+        html: this.metric('', 'Empty / Hold', c.empty, dashboard.highlights?.next_empty_date ? shortDate(eventDate({ date: dashboard.highlights.next_empty_date })) : 'No holds soon', '') },
+      { key: 'needsFlyer', label: 'Needs Flyer', available: true,
+        html: this.metric('', 'Needs Flyer', c.needsAssets, `${c.ready || 0} ready to announce`, 'amber') },
+      { key: 'unsettled', label: 'Unsettled', available: true,
+        html: this.metric('$', 'Unsettled', c.unsettled, oldest ? oldest.title : 'All settled', 'red') },
+      { key: 'utilized', label: 'Utilized', available: true,
+        html: this.metric('%', 'Utilized', `${utilPct}%`, `${utilDays} of 14 days booked`, utilTone) },
+      { key: 'readyToAnnounce', label: 'Ready to Announce', available: true,
+        html: this.metric('', 'Ready to Announce', c.ready ?? 0, 'Awaiting publish', (c.ready ?? 0) > 0 ? 'green' : '') },
+      { key: 'published', label: 'Published', available: true,
+        html: this.metric('', 'Published', c.published ?? 0, 'Live & upcoming', '') },
+      { key: 'contractsAwaitingSignature', label: 'Contracts to Sign', available: true,
+        html: this.metric('', 'Contracts to Sign', c.contractsAwaitingSignature ?? 0, 'Awaiting signature', (c.contractsAwaitingSignature ?? 0) > 0 ? 'amber' : '') },
+      { key: 'depositsOverdue', label: 'Deposits Overdue', available: true,
+        html: this.metric('$', 'Deposits Overdue', c.depositsOverdue ?? 0, 'Past due date', (c.depositsOverdue ?? 0) > 0 ? 'red' : '') },
+      { key: 'eventsAwaitingCloseout', label: 'Awaiting Closeout', available: true,
+        html: this.metric('', 'Awaiting Closeout', c.eventsAwaitingCloseout ?? 0, 'Completed, not finalized', (c.eventsAwaitingCloseout ?? 0) > 0 ? 'amber' : '') },
+      { key: 'overdueFollowups', label: 'Overdue Follow-ups', available: isAdmin,
+        html: this.metric('!', 'Overdue Follow-ups', c.overdueFollowups ?? 0, 'Tasks past due', (c.overdueFollowups ?? 0) > 0 ? 'red' : '') },
+    ];
+  }
+
+  // The user's chosen metric keys as a Set. A stored array (even empty) wins;
+  // only a missing preference (null) falls back to the default set.
+  _selectedMetrics() {
+    const pref = getAppUser()?.dashboard_metrics;
+    return new Set(Array.isArray(pref) ? pref : DEFAULT_DASHBOARD_METRICS);
+  }
+
+  // Toolbar (gear button + checkbox menu) above the metric grid.
+  _metricSectionHtml() {
+    const menuItems = this._catalog.filter((d) => d.available).map((d) => `
+      <li><label class="metric-menu-item"><input type="checkbox" data-metric-key="${esc(d.key)}" ${this._selected.has(d.key) ? 'checked' : ''}> <span>${esc(d.label)}</span></label></li>`).join('');
+    return `<section class="metric-section">
+      <div class="metric-toolbar">
+        <button class="icon-btn metric-customize" data-metric-toggle type="button" aria-haspopup="true" aria-expanded="false" title="Customize metrics" aria-label="Customize dashboard metrics"><i class="fa-solid fa-sliders" aria-hidden="true"></i></button>
+        <div class="metric-menu" data-metric-menu hidden role="menu" aria-label="Choose dashboard metrics">
+          <p class="metric-menu-head">Show metrics</p>
+          <ul class="metric-menu-list">${menuItems}</ul>
+        </div>
+      </div>
+      <div class="metric-grid" data-metric-grid>${this._metricGridHtml()}</div>
+    </section>`;
+  }
+
+  // The visible cards: available AND selected, in catalog order.
+  _metricGridHtml() {
+    const cards = this._catalog.filter((d) => d.available && this._selected.has(d.key)).map((d) => d.html).join('');
+    return cards || emptyState('No metrics selected. Use the slider button above to choose some.');
+  }
+
+  _wireMetricMenu() {
+    const toggle = $('[data-metric-toggle]', this);
+    const menu = $('[data-metric-menu]', this);
+    if (!toggle || !menu) return;
+    const setOpen = (open) => {
+      menu.hidden = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+    };
+    toggle.addEventListener('click', (event) => { event.stopPropagation(); setOpen(menu.hidden); });
+    // Dismiss on outside click or Escape.
+    document.addEventListener('click', (event) => {
+      if (!menu.hidden && !menu.contains(event.target) && !toggle.contains(event.target)) setOpen(false);
+    }, { signal: this.abort.signal });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !menu.hidden) setOpen(false);
+    }, { signal: this.abort.signal });
+    $$('[data-metric-key]', menu).forEach((checkbox) => {
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) this._selected.add(checkbox.dataset.metricKey);
+        else this._selected.delete(checkbox.dataset.metricKey);
+        const grid = $('[data-metric-grid]', this);
+        if (grid) grid.innerHTML = this._metricGridHtml();
+        this._saveMetrics();
+      });
+    });
+  }
+
+  // Persist the selection to the user's preferences. Optimistic: the cached
+  // app user is updated immediately so a re-mount reflects the choice even if
+  // the request is still in flight or fails.
+  async _saveMetrics() {
+    const metrics = this._catalog.filter((d) => d.available && this._selected.has(d.key)).map((d) => d.key);
+    const user = getAppUser();
+    if (user) { user.dashboard_metrics = metrics; setAppUser(user); }
+    try {
+      await api('/auth/preferences', { method: 'POST', body: JSON.stringify({ dashboard_metrics: metrics }) });
+    } catch { /* best-effort — UI already reflects the change */ }
   }
 
   onboardingCard(onboarding) {

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `dashboard` — Customizable top metrics via gear menu
 - **Added** `gdpr` — Enforce cookie consent on non-essential preference storage
 - **Added** `gdpr` — Data export/erasure endpoints, privacy policy, consent banner, self-hosted Font Awesome
 - **Added** `dashboard` — Add clickable New Leads card linking to the Leads inbox

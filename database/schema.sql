@@ -1054,6 +1054,7 @@ CREATE TABLE `users` (
   `default_landing` varchar(32) DEFAULT NULL,
   `nav_collapsed` tinyint(1) NOT NULL DEFAULT 0,
   `events_sort` varchar(8) DEFAULT NULL,
+  `dashboard_metrics` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (`dashboard_metrics` is null or json_valid(`dashboard_metrics`)),
   `alt_emails` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`alt_emails`)),
   `privacy_policy_accepted_at` datetime DEFAULT NULL,
   `privacy_policy_version` varchar(32) DEFAULT NULL,

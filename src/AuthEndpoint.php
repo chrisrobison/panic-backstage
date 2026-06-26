@@ -793,6 +793,17 @@ final class AuthEndpoint extends BaseEndpoint
     /** Route keys allowed as a default landing page. */
     private const LANDING_ROUTES = ['dashboard', 'calendar', 'pipeline', 'events', 'templates'];
 
+    /**
+     * Metric-card keys a user may choose to show on the dashboard. Must stay in
+     * sync with the DASHBOARD_METRICS catalog in public/assets/event-views.js.
+     * Validated here so the stored JSON can never contain unknown keys.
+     */
+    private const DASHBOARD_METRIC_KEYS = [
+        'newLeads', 'nextShow', 'openItems', 'empty', 'needsFlyer', 'unsettled',
+        'utilized', 'readyToAnnounce', 'published', 'contractsAwaitingSignature',
+        'depositsOverdue', 'eventsAwaitingCloseout', 'overdueFollowups',
+    ];
+
     private function updatePreferences(Request $request): Response
     {
         $currentUser = $this->auth->user();
@@ -835,6 +846,26 @@ final class AuthEndpoint extends BaseEndpoint
             }
             $updates[] = 'events_sort = ?';
             $params[]  = ($sort !== '' ? $sort : null);
+        }
+
+        if (array_key_exists('dashboard_metrics', $body)) {
+            $metrics = $body['dashboard_metrics'];
+            if ($metrics === null) {
+                // Explicit null resets to the default metric set.
+                $updates[] = 'dashboard_metrics = ?';
+                $params[]  = null;
+            } else {
+                if (!is_array($metrics)) {
+                    return Response::json(['error' => 'dashboard_metrics must be an array'], 422);
+                }
+                // Keep only known keys, de-duplicated while preserving order.
+                $clean = array_values(array_unique(array_filter(
+                    $metrics,
+                    fn ($k) => is_string($k) && in_array($k, self::DASHBOARD_METRIC_KEYS, true)
+                )));
+                $updates[] = 'dashboard_metrics = ?';
+                $params[]  = json_encode($clean);
+            }
         }
 
         // Email notification preferences — boolean opt-in flags, one per category.
