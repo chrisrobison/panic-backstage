@@ -9,6 +9,17 @@ RewriteEngine On
   <FilesMatch "\.html$">
     Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
+  # The frontend is an ES-module graph: index.html versions the entry points
+  # (app.js?v=N, app.css?v=N), but those files import submodules with bare
+  # specifiers (import './event-views.js') that carry no ?v=. Without an explicit
+  # policy the browser caches them heuristically and a changed submodule can be
+  # served stale even after the entry-point version is bumped. "no-cache" keeps
+  # them cached but forces revalidation (cheap 304s when unchanged) before use,
+  # so any edited module is always picked up. The ?v= bumps remain as a belt-and-
+  # suspenders signal for upstream proxies/CDNs.
+  <FilesMatch "\.(js|css)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
 </IfModule>
 
 # ── Security: block direct web access to the per-tenant client data tree ──────
