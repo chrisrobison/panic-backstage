@@ -458,7 +458,10 @@ final class LeadEmailParser
                 'contact_org'          => ['type' => ['string', 'null']],
                 'contact_phone'        => ['type' => ['string', 'null']],
                 'event_name'           => ['type' => ['string', 'null']],
-                'event_type'           => ['type' => ['string', 'null'], 'enum' => [...self::EVENT_TYPES, null]],
+                // No enum here: the validator rejects enum+nullable type. The
+                // system prompt lists the allowed values and normalizeEventType()
+                // maps whatever comes back onto the Leads UI set.
+                'event_type'           => ['type' => ['string', 'null']],
                 'band_name'            => ['type' => ['string', 'null']],
                 'desired_date'         => ['type' => ['string', 'null']],
                 'desired_date_alt'     => ['type' => ['string', 'null']],
