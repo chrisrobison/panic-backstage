@@ -18,15 +18,42 @@
   var KEY = "pb.cookieConsent";
   var POLICY_HREF = "./privacy.html#cookies";
 
+  // Non-essential UI-preference keys this app may store. Used to purge remembered
+  // preferences if the user declines (or later withdraws) preference consent.
+  // "pb_sections_" is a prefix: per-event, per-user section-visibility prefs.
+  var PREF_KEYS = ["pb.navGroups", "pb.navCollapsed", "pb-msg-detail-h"];
+  var PREF_PREFIXES = ["pb_sections_"];
+
   function read() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+
+  function purgePrefs() {
+    try {
+      PREF_KEYS.forEach(function (k) { localStorage.removeItem(k); });
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k = localStorage.key(i);
+        if (!k) continue;
+        for (var j = 0; j < PREF_PREFIXES.length; j++) {
+          if (k.indexOf(PREF_PREFIXES[j]) === 0) { localStorage.removeItem(k); break; }
+        }
+      }
+    } catch (e) {}
+  }
+
   function write(v) {
     try { localStorage.setItem(KEY, v); } catch (e) {}
+    if (v !== "all") purgePrefs();
     document.dispatchEvent(new CustomEvent("pb:consent", { detail: { value: v } }));
   }
 
   window.PBConsent = {
     get: read,
-    allowsPreferences: function () { return read() === "all"; }
+    allowsPreferences: function () { return read() === "all"; },
+    // Persist a non-essential UI preference only if the user accepted
+    // preference storage. Returns true if it was written.
+    savePref: function (key, value) {
+      if (read() !== "all") return false;
+      try { localStorage.setItem(key, value); return true; } catch (e) { return false; }
+    }
   };
 
   function injectStyles() {

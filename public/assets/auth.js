@@ -861,7 +861,7 @@ class Preferences extends PanicElement {
       else this.prefs[field] = el.value;
       setAppUser(merged);
       if (field === 'nav_collapsed') {
-        try { localStorage.setItem('pb.navCollapsed', el.checked ? '1' : '0'); } catch { /* storage blocked */ }
+        window.PBConsent?.savePref('pb.navCollapsed', el.checked ? '1' : '0');
         const shell = document.querySelector('pb-app-shell');
         shell?.classList.toggle('nav-collapsed', el.checked);
         shell?.querySelector('[data-nav-toggle]')?.setAttribute('aria-expanded', String(!el.checked));

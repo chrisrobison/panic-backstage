@@ -177,8 +177,8 @@ class EventWorkspace extends PanicElement {
   }
 
   _savePrefs(userId, eventId, prefs) {
-    try { localStorage.setItem(this._prefsKey(userId, eventId), JSON.stringify(prefs)); }
-    catch (_) { /* ignore quota / private-mode errors */ }
+    // Non-essential preference: only persist if the user accepted preference cookies.
+    window.PBConsent?.savePref(this._prefsKey(userId, eventId), JSON.stringify(prefs));
   }
 
   _bindSectionToggles(userId, eventId, prefs) {

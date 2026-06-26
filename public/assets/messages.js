@@ -403,7 +403,7 @@ class MessagesPage extends PanicElement {
         bar.removeEventListener('pointerup', onUp);
         this.classList.remove('resizing');
         const h = this.style.getPropertyValue('--detail-h');
-        if (h) try { localStorage.setItem('pb-msg-detail-h', h); } catch { /* storage unavailable */ }
+        if (h) window.PBConsent?.savePref('pb-msg-detail-h', h);
       };
 
       bar.addEventListener('pointermove', onMove);

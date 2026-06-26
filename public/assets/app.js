@@ -194,7 +194,7 @@ class AppShell extends PanicElement {
     const KEY = 'pb.navGroups';
     let state = {};
     try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { state = {}; }
-    const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage blocked */ } };
+    const persist = () => { window.PBConsent?.savePref(KEY, JSON.stringify(state)); };
 
     $$('[data-group-toggle]', this).forEach((btn) => {
       const key = btn.dataset.groupToggle;
@@ -240,7 +240,7 @@ class AppShell extends PanicElement {
     toggle.addEventListener('click', () => {
       const collapsed = !this.classList.contains('nav-collapsed');
       apply(collapsed);
-      try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch { /* storage blocked */ }
+      window.PBConsent?.savePref(KEY, collapsed ? '1' : '0');
     });
   }
 
