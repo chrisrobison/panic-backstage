@@ -418,6 +418,10 @@ pb-page-header { display: none; }
 .metric-card.green strong, .metric-card.green h3 { color: var(--green); }
 .metric-card.red strong, .metric-card.red h3 { color: var(--danger); }
 .metric-card.amber strong, .metric-card.amber h3 { color: var(--amber); }
+/* Navigable metric card (e.g. New Leads → Leads inbox) */
+a.metric-link { text-decoration: none; color: inherit; cursor: pointer; transition: transform .12s ease, box-shadow .12s ease; }
+a.metric-link:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline-offset: 2px; }
 .icon-bubble {
   width: 58px;
   height: 58px;

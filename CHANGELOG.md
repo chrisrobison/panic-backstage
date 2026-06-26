@@ -10,6 +10,10 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `dashboard` — Add clickable New Leads card linking to the Leads inbox
+- **Fixed** `leads
+validator rejects enum + nullable type` — Drop enum from event_type LLM schema (validator rejects enum + nullable type)
+- **Added** `leads` — Import booking emails into the leads pipeline
 - **Added** `leads` — Add BandBrief tab, band/attendance fields, and status notes
 - **Added** `dashboard` — Add percent utilized metric for next 14 days
 - **Fixed** `leads` — Fix modal not opening on row click
