@@ -175,6 +175,9 @@ class DashboardView extends PanicElement {
       ${this.onboardingCard(dashboard.onboarding)}
       ${capabilities.manage_templates ? '<div class="page-head"><a class="button" href="#templates">Create From Template</a></div>' : ''}
       <section class="metric-grid">
+        ${(capabilities.view_leads || capabilities.manage_leads)
+          ? this.metricLink('#leads', '<i class="fa-solid fa-inbox" aria-hidden="true"></i>', 'New Leads', dashboard.cards.newLeads ?? 0, `${dashboard.cards.leadsNeedingReview ?? 0} in pipeline`, (dashboard.cards.newLeads ?? 0) > 0 ? 'amber' : '')
+          : ''}
         <article class="metric-card"><span class="icon-bubble"><i class="fa-solid fa-microphone" aria-hidden="true"></i></span><h3>Next Show<br>${esc(today.title || 'No event')}</h3><p>Doors ${esc(timeLabel(today.doors_time))}<br>Starts ${esc(timeLabel(today.show_time))}</p>${badge(today.status || 'empty')}</article>
         ${this.metric('!', 'Open Items', dashboard.cards.blockers, `${dashboard.cards.urgentItems || 0} due soon`, 'red')}
         ${this.metric('', 'Empty / Hold', dashboard.cards.empty, dashboard.highlights?.next_empty_date ? shortDate(eventDate({ date: dashboard.highlights.next_empty_date })) : 'No holds soon', '')}
@@ -242,6 +245,12 @@ class DashboardView extends PanicElement {
 
   metric(symbol, label, value, note, tone) {
     return `<article class="metric-card ${esc(tone)}"><span class="icon-bubble ${esc(tone)}">${symbol ? esc(symbol) : '<i class="fa-solid fa-calendar-days" aria-hidden="true"></i>'}</span><h3>${esc(label)}</h3><strong>${esc(value)}</strong><p>${esc(note)}</p></article>`;
+  }
+
+  // Same shape as metric() but renders as a navigable link. `icon` is trusted
+  // markup (an <i> tag), not user data — callers pass a fixed icon string.
+  metricLink(href, icon, label, value, note, tone) {
+    return `<a class="metric-card metric-link ${esc(tone)}" href="${esc(href)}"><span class="icon-bubble ${esc(tone)}">${icon}</span><h3>${esc(label)}</h3><strong>${esc(value)}</strong><p>${esc(note)}</p></a>`;
   }
 }
 

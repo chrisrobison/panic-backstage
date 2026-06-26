@@ -34,7 +34,10 @@ final class Dashboard extends BaseEndpoint
             'published' => $this->count("SELECT COUNT(*) c FROM events e WHERE e.status = 'published' AND e.date >= CURDATE() AND $scopeSql", $scopeParams),
             'unsettled' => $this->count("SELECT COUNT(*) c FROM events e LEFT JOIN event_settlements s ON s.event_id = e.id WHERE e.status = 'completed' AND s.id IS NULL AND $scopeSql AND $settlementSql", array_merge($scopeParams, $settlementParams)),
             // New operational counts
-            'leadsNeedingReview' => $this->isVenueAdmin()
+            'newLeads' => $this->hasGlobalCapability('view_leads')
+                ? $this->count("SELECT COUNT(*) c FROM leads WHERE status = 'new'")
+                : 0,
+            'leadsNeedingReview' => $this->hasGlobalCapability('view_leads')
                 ? $this->count("SELECT COUNT(*) c FROM leads WHERE status IN ('new','triage','evaluating','needs_review')")
                 : 0,
             'contractsAwaitingSignature' => $this->count("SELECT COUNT(*) c FROM contracts c2 JOIN events e ON e.id = c2.event_id WHERE c2.status IN ('sent','partially_signed') AND $scopeSql", $scopeParams),
