@@ -70,6 +70,13 @@ final class Kernel
             return [Me::class, []];
         }
 
+        // GDPR data-subject actions on the signed-in user's own account:
+        //   GET  /api/account/export, POST /api/account/delete,
+        //   POST /api/account/accept-privacy
+        if ($segments[0] === 'account') {
+            return [AccountData::class, ['action' => $segments[1] ?? '']];
+        }
+
         // Event templates
         if ($segments[0] === 'templates') {
             return [Templates::class, ['templateId' => $this->intOrNull($segments[1] ?? null)]];

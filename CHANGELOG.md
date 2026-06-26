@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `gdpr` — Data export/erasure endpoints, privacy policy, consent banner, self-hosted Font Awesome
 - **Added** `dashboard` — Add clickable New Leads card linking to the Leads inbox
 - **Fixed** `leads
 validator rejects enum + nullable type` — Drop enum from event_type LLM schema (validator rejects enum + nullable type)

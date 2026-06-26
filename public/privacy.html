@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy &amp; Cookie Policy | Panic Backstage</title>
+  <meta name="description" content="How Panic Backstage handles personal data in the venue management application, and how to exercise your rights under the GDPR.">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/favicon/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon/favicon-32x32.png">
+  <link rel="icon" href="./assets/favicon/favicon.ico" sizes="any">
+  <link rel="stylesheet" href="./assets/vendor/fontawesome/all.min.css">
+  <style>
+    :root { --ink:#14171c; --muted:#6b7280; --line:#e6e1d8; --paper:#faf8f4; --red:#c4291f; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink);
+      font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif; line-height:1.65; }
+    .legal { max-width:820px; margin:0 auto; padding:48px 24px 80px; }
+    .legal .top { display:flex; align-items:center; gap:10px; margin-bottom:30px; font-weight:700; }
+    h1 { font-size:clamp(28px,5vw,40px); line-height:1.05; margin:0 0 6px; letter-spacing:-.02em; }
+    .updated { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;
+      letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:0 0 32px; }
+    h2 { font-size:21px; margin:36px 0 10px; letter-spacing:-.01em; }
+    h3 { font-size:16px; margin:22px 0 6px; }
+    p, li { font-size:15.5px; }
+    ul { padding-left:22px; }
+    li { margin-bottom:6px; }
+    a { color:var(--red); }
+    table { border-collapse:collapse; width:100%; margin:14px 0; font-size:14.5px; }
+    th, td { border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top; }
+    th { background:#fff; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;
+      letter-spacing:.05em; text-transform:uppercase; }
+    .callout { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin:18px 0; }
+    .back { text-decoration:none; color:var(--muted); font-size:14px; }
+  </style>
+</head>
+<body>
+  <main class="legal">
+    <p><a class="back" href="./index.html">&larr; Back to the app</a></p>
+    <h1>Privacy &amp; Cookie Policy</h1>
+    <p class="updated">Last updated 25 June 2026</p>
+
+    <p>This policy explains how Panic Backstage handles personal data in the venue management
+    application — the workspace where venues run bookings from inquiry to settlement. It is written to
+    meet our obligations under the EU General Data Protection Regulation (GDPR) and the UK GDPR.</p>
+
+    <h2 id="roles">1. Controllers, processors, and your account</h2>
+    <p>There are two kinds of personal data in Panic Backstage, with different responsibilities:</p>
+    <ul>
+      <li><strong>Your staff account.</strong> Panic Backstage is the <em>controller</em> for the
+      personal data of the people who log in to run the workspace (name, email, phone, sign-in
+      credentials, and interface preferences). This policy governs that data.</li>
+      <li><strong>The venue’s own records.</strong> When a venue uses the app to manage its audience,
+      leads, guests, and ticket buyers, the <em>venue</em> is the controller of that data and Panic
+      Backstage acts as its <em>processor</em>, handling it only on the venue’s instructions under our
+      data processing terms. If you are a customer of a venue and want to exercise your rights over that
+      data, contact the venue; we will assist them in responding.</li>
+    </ul>
+    <div class="callout">
+      <p style="margin:0"><strong>Tom Watson</strong><br>
+      Data protection contact, Panic Backstage<br>
+      Email: <a href="mailto:tom@themab.org">tom@themab.org</a></p>
+    </div>
+
+    <h2 id="data">2. What we collect about your account, and why</h2>
+    <table>
+      <thead><tr><th>Data</th><th>Purpose</th><th>Lawful basis (Art. 6)</th></tr></thead>
+      <tbody>
+        <tr><td>Name, email (and any verified alternate emails), phone</td>
+            <td>To identify you, run your account, and contact you about the service</td>
+            <td>Performance of a contract (b)</td></tr>
+        <tr><td>Credentials — password hash, passkeys, and short-lived magic-link, refresh and email-verification tokens</td>
+            <td>To sign you in securely and keep your session valid</td>
+            <td>Performance of a contract (b); legitimate interests in security (f)</td></tr>
+        <tr><td>Interface preferences and notification settings</td>
+            <td>To remember how you like the app set up and which emails you receive</td>
+            <td>Performance of a contract (b); consent (a) for non-essential storage</td></tr>
+        <tr><td>Activity and message records you generate in the workspace</td>
+            <td>To provide collaboration history and an audit trail</td>
+            <td>Performance of a contract (b); legitimate interests (f)</td></tr>
+        <tr><td>Privacy-policy acceptance and version</td>
+            <td>To demonstrate compliance</td>
+            <td>Legal obligation / accountability (c)</td></tr>
+      </tbody>
+    </table>
+    <p>We do not run advertising or analytics trackers, and we do not sell personal data.</p>
+
+    <h2 id="cookies">3. Cookies and local storage</h2>
+    <p>Panic Backstage authenticates with a token rather than a traditional session cookie, and loads no
+    third-party trackers. Fonts and icons are served from our own servers, so using the app does not
+    disclose your activity to any font or icon CDN.</p>
+    <ul>
+      <li><strong>Strictly necessary — no consent required:</strong> the sign-in token kept in your
+      browser’s local storage to keep you logged in, a CSRF token that protects requests, and a small
+      record of your cookie choice (<code>pb.cookieConsent</code>).</li>
+      <li><strong>Preferences — consent required:</strong> interface settings remembered on your device
+      (for example, whether the navigation rail is collapsed). These are stored only if you choose
+      “Accept all” in the cookie banner, and never if you choose “Essential only”.</li>
+    </ul>
+    <p>You can withdraw consent at any time by choosing “Essential only” or clearing this site’s data in
+    your browser.</p>
+
+    <h2 id="processors">4. Service providers we share data with</h2>
+    <p>We share personal data only with providers that help us deliver the service, under written terms
+    and only as needed. Depending on the features a venue uses, these may include:</p>
+    <ul>
+      <li><strong>Payments &amp; ticketing:</strong> Stripe, Square, Eventbrite, Luma.</li>
+      <li><strong>Email &amp; messaging:</strong> SendGrid, Mailchimp.</li>
+      <li><strong>Promotion channels (when used):</strong> Facebook/Instagram, TikTok.</li>
+      <li><strong>Accounting:</strong> QuickBooks Online, Xero.</li>
+      <li><strong>Contracts &amp; e-signature:</strong> Dropbox Sign.</li>
+      <li><strong>AI lead parsing:</strong> Anthropic (used to structure forwarded booking emails).</li>
+      <li><strong>Hosting and infrastructure</strong> providers that operate our servers.</li>
+    </ul>
+    <p>Some providers are located outside the European Economic Area or the UK. Where personal data is
+    transferred internationally, it is protected by appropriate safeguards such as the European
+    Commission’s Standard Contractual Clauses.</p>
+
+    <h2 id="retention">5. How long we keep it</h2>
+    <ul>
+      <li>Account data is kept while your account is active.</li>
+      <li>On an erasure request, your personal data is anonymised or deleted within <strong>30 days</strong>;
+      residual copies in encrypted backups are purged on the normal rotation, within <strong>90 days</strong>.</li>
+      <li>Financial and ticketing records (orders, payments, settlements) are retained for up to
+      <strong>7 years</strong> to meet tax and accounting obligations, stripped of identifying buyer
+      details where the person has been erased.</li>
+      <li>Sign-in, refresh, magic-link, and email-verification tokens expire automatically per their
+      short time-to-live.</li>
+    </ul>
+
+    <h2 id="rights">6. Your rights</h2>
+    <p>Under the GDPR you have the right to access, rectify, erase, restrict, object to processing, and
+    port your data, to withdraw consent where we rely on it, and to lodge a complaint with a supervisory
+    authority.</p>
+    <h3>Self-service tools</h3>
+    <p>While signed in you can exercise the two most common rights directly:</p>
+    <ul>
+      <li><strong>Download your data</strong> (access &amp; portability): request
+      <code>GET /api/account/export</code> while signed in to download a JSON copy of your account data.</li>
+      <li><strong>Erase your account</strong> (right to be forgotten): send
+      <code>POST /api/account/delete</code> with <code>{"confirm": true, "email": "your email"}</code>.
+      This anonymises your account and removes your credentials; financial records required by law are
+      retained without your identifying details.</li>
+    </ul>
+    <p>You can also exercise any right — or ask us to act for a venue whose data you are a subject of — by
+    emailing <a href="mailto:tom@themab.org">tom@themab.org</a>. We respond within one month.</p>
+
+    <h2 id="security">7. How we protect your data</h2>
+    <p>Passwords are stored only as hashes and passkeys use public-key credentials, so we never hold a
+    usable copy of your secret. Stored third-party credentials are encrypted, requests are protected
+    against cross-site request forgery, and access to personal data is limited to what each role needs.</p>
+
+    <h2 id="changes">8. Changes to this policy</h2>
+    <p>If we change how we handle personal data we will update this page and the “last updated” date
+    above, and where appropriate ask you to review the updated policy in the app.</p>
+
+    <h2 id="contact">9. Contact</h2>
+    <p>Questions about this policy or your personal data? Email
+    <a href="mailto:tom@themab.org">tom@themab.org</a>.</p>
+  </main>
+
+  <script src="./assets/consent.js?v=1"></script>
+</body>
+</html>
