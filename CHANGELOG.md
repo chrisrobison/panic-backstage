@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `migrations` — Drop CHECK constraint incompatible with MariaDB 10.7
 - **Added** `dashboard` — Customizable top metrics via gear menu
 - **Added** `gdpr` — Enforce cookie consent on non-essential preference storage
 - **Added** `gdpr` — Data export/erasure endpoints, privacy policy, consent banner, self-hosted Font Awesome
