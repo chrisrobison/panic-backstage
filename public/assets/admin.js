@@ -14,6 +14,7 @@ const ADMIN_TABS = [
   { key: 'contracts', title: 'Contracts', icon: 'fa-file-signature' },
   { key: 'payments',  title: 'Payments',  icon: 'fa-credit-card' },
   { key: 'wizard',    title: 'Wizard',    icon: 'fa-wand-magic-sparkles' },
+  { key: 'venue',     title: 'Venue',     icon: 'fa-building' },
 ];
 
 
@@ -37,7 +38,7 @@ class AdminPage extends PanicElement {
       this.render();
     }));
     const outlet = $('.admin-outlet', this);
-    const tag = { users: 'pb-admin-users', duplicates: 'pb-user-duplicates', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts', payments: 'pb-payment-settings', wizard: 'pb-admin-wizard-defaults' }[this.tab];
+    const tag = { users: 'pb-admin-users', duplicates: 'pb-user-duplicates', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts', payments: 'pb-payment-settings', wizard: 'pb-admin-wizard-defaults', venue: 'pb-admin-venue' }[this.tab];
     outlet.replaceChildren(document.createElement(tag));
   }
 }
@@ -736,8 +737,100 @@ class AdminWizardDefaults extends PanicElement {
   }
 }
 
+// ── Venue Details Editor ──────────────────────────────────────────────────────
+// Admin UI for viewing and editing the venue's own profile: name, address,
+// city, state, and timezone. These fields appear on contracts and emails so
+// it's important to fill them in early — the onboarding checklist links here.
+
+const TIMEZONES = [
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Phoenix',
+  'America/Los_Angeles',
+  'America/Anchorage',
+  'Pacific/Honolulu',
+  'America/Puerto_Rico',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Australia/Sydney',
+  'Pacific/Auckland',
+];
+
+class AdminVenue extends PanicElement {
+  async connect() {
+    this.saving = false;
+    this.setLoading('Loading venue details…');
+    try {
+      const data = await api('/venues');
+      // Use the first venue (single-venue installs); multi-venue would show a picker.
+      this.venue = (data.venues || [])[0] || null;
+      this.render();
+    } catch (err) {
+      this.showError(err);
+    }
+  }
+
+  render() {
+    const v = this.venue || {};
+    const tzOptions = TIMEZONES.map((tz) =>
+      `<option value="${esc(tz)}" ${(v.timezone || 'America/Los_Angeles') === tz ? 'selected' : ''}>${esc(tz)}</option>`
+    ).join('');
+
+    this.innerHTML = `
+      <article class="panel">
+        <div class="section-head padded">
+          <h2>Venue Details</h2>
+          <span class="muted">Appears on contracts, emails and public event pages.</span>
+        </div>
+        ${this.venue ? `
+        <form class="grid-form padded" data-form="venue">
+          <label>Venue name <input name="name" required value="${esc(v.name || '')}" placeholder="The Fillmore"></label>
+          <label>Address <input name="address" value="${esc(v.address || '')}" placeholder="1805 Geary Blvd"></label>
+          <label>City <input name="city" value="${esc(v.city || '')}" placeholder="San Francisco"></label>
+          <label>State / Region <input name="state" value="${esc(v.state || '')}" placeholder="CA"></label>
+          <label>Timezone
+            <select name="timezone">${tzOptions}</select>
+          </label>
+          <label>Phone <input name="phone" value="${esc(v.phone || '')}" placeholder="(415) 555-0100"></label>
+          <label>Website <input type="url" name="website_url" value="${esc(v.website_url || '')}" placeholder="https://thefillmore.com"></label>
+          <div class="form-actions">
+            <button class="btn-primary" ${this.saving ? 'disabled' : ''}>${this.saving ? 'Saving…' : 'Save venue details'}</button>
+          </div>
+        </form>
+        ` : '<p class="padded muted">No venue found. Please contact support.</p>'}
+      </article>
+    `;
+
+    $('[data-form="venue"]', this)?.addEventListener('submit', (event) => this.save(event));
+  }
+
+  async save(event) {
+    event.preventDefault();
+    if (this.saving) return;
+    this.saving = true;
+    this.render();
+
+    const body = formData(event.target);
+    try {
+      const res = await api(`/venues/${this.venue.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      this.venue = res.venue || this.venue;
+      publish('toast.show', { message: 'Venue details saved.', tone: 'success' });
+      // Notify the rest of the app in case the venue name changed.
+      publish('venue.updated', { venue: this.venue });
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Save failed.', tone: 'error' });
+    } finally {
+      this.saving = false;
+      this.render();
+    }
+  }
+}
+
 customElements.define('pb-admin-page', AdminPage);
 customElements.define('pb-admin-users', AdminUsers);
 customElements.define('pb-admin-staff', AdminStaff);
 customElements.define('pb-admin-templates', AdminTemplates);
 customElements.define('pb-admin-wizard-defaults', AdminWizardDefaults);
+customElements.define('pb-admin-venue', AdminVenue);

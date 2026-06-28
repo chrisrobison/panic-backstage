@@ -348,8 +348,9 @@ final class Kernel
         }
 
         // Venues + resources listing (lightweight; used by the calendar zone map and sidebar)
+        // PATCH /api/venues/{id} — update venue details (venue_admin only)
         if ($segments[0] === 'venues') {
-            return [Venues::class, []];
+            return [Venues::class, ['venueId' => $this->intOrNull($segments[1] ?? null)]];
         }
 
         // Events + sub-resources
