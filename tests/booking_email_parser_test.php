@@ -43,6 +43,18 @@ ok($meta['message_id'] === '0qtb4ORGD119Gz03Ti2Bm9zpLqzX9DjCF0yP8Kp0E@go-workers
 ok(str_contains($lead['notes'], 'Bastardane'),          'full vision preserved in notes');
 ok($meta['received_at'] === '2026-05-03 12:24:09',      'Date header parsed');
 
+// ── Jotform with a headline title + US-format date ──────────────────────────
+echo "\n=== Jotform headline + US date ===\n\n";
+
+$r    = $parser->parse((string) file_get_contents("$fixtures/jotform-headline-usdate.eml"));
+$lead = $r['lead'];
+
+ok($lead['event_name'] === 'lunch at the mab',          'event_name from "NEW Booking ALERT" headline, not the vibe');
+ok($lead['event_type'] === 'other',                     '"Other" vibe maps to other');
+ok($lead['desired_date'] === '2026-06-25',              'US MM-DD-YYYY date coerced to ISO');
+ok($lead['contact_name'] === 'Allen Walker',            'contact_name from "Who\'s Calling"');
+ok($lead['contact_email'] === 'allen@soxal.co',         'contact_email from label, not noreply@jotform');
+
 // ── Freeform prose (heuristic fallback, no LLM) ─────────────────────────────
 echo "\n=== Freeform prose email (heuristic) ===\n\n";
 
@@ -70,6 +82,20 @@ ok(str_contains($mime['html'], 'Dilano'),               'text/html part extracte
 ok(($mime['headers']['from'] ?? '') !== '',             'headers parsed');
 
 ok($parser->htmlToText('<p>One</p><br>Two') === "One\nTwo" || str_contains($parser->htmlToText('<p>One</p><br>Two'), 'Two'), 'htmlToText strips tags & breaks lines');
+
+// ── Date coercion ───────────────────────────────────────────────────────────
+echo "\n=== Date coercion ===\n\n";
+
+$coerce = (new ReflectionMethod(LeadEmailParser::class, 'coerceDate'));
+$coerce->setAccessible(true);
+$d = fn($v) => $coerce->invoke($parser, $v);
+
+ok($d('06-25-2026') === '2026-06-25',                   'MM-DD-YYYY dashed → ISO');
+ok($d('6/5/2026')   === '2026-06-05',                   'M/D/YYYY slashed, single digits → ISO');
+ok($d('2026-06-25') === '2026-06-25',                   'already-ISO passes through');
+ok($d('25-06-2026') === '2026-06-25',                   'day-first fallback when first field > 12');
+ok($d('13/13/2026') === null,                           'impossible date rejected');
+ok($d('next summer') === null,                          'vague text stays null');
 
 echo "\n" . str_repeat('─', 48) . "\n";
 echo "  $passed passed, $failed failed\n\n";

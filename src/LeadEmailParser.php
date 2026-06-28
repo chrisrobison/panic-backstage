@@ -38,6 +38,8 @@ final class LeadEmailParser
         'whos calling'   => 'who',
         'the vibe'       => 'vibe',
         'event type'     => 'vibe',
+        'new booking alert' => 'headline',
+        'booking alert'  => 'headline',
         'the date'       => 'date',
         'date'           => 'date',
         'expected crowd' => 'crowd',
@@ -427,7 +429,16 @@ final class LeadEmailParser
         }
         if (isset($labels['vibe'])) {
             $out['event_type'] = $this->normalizeEventType($labels['vibe']);
-            $out['event_name'] = trim($labels['vibe']) ?: null;
+        }
+        // Event title: the "NEW Booking ALERT: <title>" headline is the name the
+        // requester actually gave their event, so it wins. Many submissions
+        // leave it blank, in which case fall back to the vibe/category label
+        // (e.g. "Public Show / Performance") rather than the noisy subject line.
+        $headline = isset($labels['headline']) ? trim($labels['headline']) : '';
+        if ($headline !== '') {
+            $out['event_name'] = $headline;
+        } elseif (isset($labels['vibe']) && trim($labels['vibe']) !== '') {
+            $out['event_name'] = trim($labels['vibe']);
         }
         if (isset($labels['date'])) {
             $out['desired_date'] = $this->coerceDate($labels['date']);
@@ -639,6 +650,17 @@ final class LeadEmailParser
         $v = trim($v);
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
             return $v;
+        }
+        // US-style numeric dates the intake forms emit — MM-DD-YYYY or
+        // MM/DD/YYYY (single-digit month/day allowed). strtotime mishandles the
+        // dashed variant, so parse it explicitly. If the first field can't be a
+        // month (>12) but the second can, treat it as day-first instead.
+        if (preg_match('#^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$#', $v, $m)) {
+            [$first, $second, $year] = [(int) $m[1], (int) $m[2], (int) $m[3]];
+            [$month, $day] = ($first > 12 && $second <= 12) ? [$second, $first] : [$first, $second];
+            return checkdate($month, $day, $year)
+                ? sprintf('%04d-%02d-%02d', $year, $month, $day)
+                : null;
         }
         $ts = strtotime($v);
         // Reject vague strings strtotime would happily (mis)interpret.
