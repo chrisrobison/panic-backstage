@@ -203,6 +203,17 @@ final class Events extends BaseEndpoint
             return $denied;
         }
         $body = $request->body();
+
+        // Pre-populate booker fields from the logged-in user unless the caller
+        // already supplied them (non-empty values always win).
+        $currentUser = $this->auth->user();
+        if (empty($body['booker_name']))  $body['booker_name']  = $currentUser['name']  ?? null;
+        if (empty($body['booker_email'])) $body['booker_email'] = $currentUser['email'] ?? null;
+        if (empty($body['booker_phone'])) {
+            $userRow = $this->db->one('SELECT phone FROM users WHERE id = ?', [$this->userId()]);
+            $body['booker_phone'] = $userRow['phone'] ?? null;
+        }
+
         foreach (['title', 'date', 'venue_id', 'event_type'] as $required) {
             if (empty($body[$required])) {
                 return Response::json(['error' => "$required is required"], 422);
