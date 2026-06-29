@@ -264,11 +264,16 @@ final class Ledger extends BaseEndpoint
         $venueNet  = $grossRevenue - $totalCosts;
         $marginPct = $grossRevenue > 0 ? round(($venueNet / $grossRevenue) * 100, 2) : 0;
 
-        // Also pull ticketing data if available
+        // Also pull ticketing data if available. Mirrors the ticketing
+        // dashboard's definition of a sale: real (non-comp) orders in a
+        // paid/fulfilled state. amount is stored in cents, so convert to
+        // dollars to match the ledger's DECIMAL totals above.
         $ticketing = $this->db->one(
-            "SELECT COUNT(*) tickets_sold,
-                    COALESCE(SUM(amount_total), 0) gross_ticket_sales
-             FROM ticket_orders WHERE event_id = ? AND status = 'completed'",
+            "SELECT COALESCE(SUM(oi.quantity), 0) tickets_sold,
+                    COALESCE(SUM(oi.quantity * oi.unit_price_cents), 0) gross_ticket_cents
+             FROM ticket_order_items oi
+             JOIN ticket_orders o ON o.id = oi.order_id
+             WHERE o.event_id = ? AND o.is_comp = 0 AND o.status IN ('paid', 'fulfilled')",
             [$eventId]
         );
 
@@ -280,7 +285,7 @@ final class Ledger extends BaseEndpoint
             'total_payments'   => $totalPayments,
             'by_category'      => $byCategory,
             'tickets_sold'     => (int) ($ticketing['tickets_sold'] ?? 0),
-            'gross_ticket_sales' => (float) ($ticketing['gross_ticket_sales'] ?? 0),
+            'gross_ticket_sales' => ((int) ($ticketing['gross_ticket_cents'] ?? 0)) / 100,
         ];
     }
 

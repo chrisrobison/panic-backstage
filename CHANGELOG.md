@@ -10,8 +10,10 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
-- **Added** `admin
-capacity, zone, archive` — Manage venue rooms (capacity, zone, archive)
+- **Fixed** `ledger` — Correct ticket sales query in P&L summary
+- **Chore** `nav` — Hide Duplicates and add Venue under Admin nav
+- **Chore** `workspace` — Hide "Set as POS Event" button for now
+- **Added** `admin` — Manage venue rooms (capacity, zone, archive)
 - **Added** `admin` — Venue details tab with edit form and PATCH API
 - **Fixed** `migrations` — Drop CHECK constraint incompatible with MariaDB 10.7
 - **Added** `dashboard` — Customizable top metrics via gear menu
