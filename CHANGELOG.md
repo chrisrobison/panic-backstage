@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** — Style external Tickets link as gold CTA on public event page
 - **Changed** — Tighten public event ticket widget: number-input quantity and clear CTA button
 - **Fixed** `ledger` — Correct ticket sales query in P&L summary
 - **Chore** `nav` — Hide Duplicates and add Venue under Admin nav
