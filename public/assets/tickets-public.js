@@ -52,13 +52,9 @@ class TicketPurchase extends PanicElement {
     const rows = this.types.map((type) => {
       const soldOut = type.sold_out || type.available <= 0;
       const max = Math.min(type.available, 20);
-      const options = [];
-      for (let i = 0; i <= max; i++) options.push(i);
       const select = soldOut
         ? '<span class="tkp-soldout">Sold out</span>'
-        : `<select data-type="${esc(type.id)}" aria-label="Quantity for ${esc(type.name)}">${
-            options.map((n) => `<option value="${n}">${n}</option>`).join('')
-          }</select>`;
+        : `<input type="number" class="tkp-qty-input" data-type="${esc(type.id)}" min="0" max="${max}" step="1" value="0" inputmode="numeric" aria-label="Quantity for ${esc(type.name)}">`;
       return `
         <li class="tkp-row${soldOut ? ' tkp-row-out' : ''}">
           <div class="tkp-info">
@@ -102,8 +98,9 @@ class TicketPurchase extends PanicElement {
   selectedItems() {
     const items = [];
     let totalCents = 0;
-    this.querySelectorAll('select[data-type]').forEach((sel) => {
-      const qty = Number(sel.value || 0);
+    this.querySelectorAll('input[data-type]').forEach((sel) => {
+      const max = Number(sel.max) || 20;
+      const qty = Math.max(0, Math.min(Math.floor(Number(sel.value) || 0), max));
       if (qty <= 0) return;
       const id = Number(sel.getAttribute('data-type'));
       const type = (this.types || []).find((t) => Number(t.id) === id);
