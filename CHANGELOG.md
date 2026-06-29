@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `ledger` — Correct ticket sales query in P&L summary
 - **Added** `admin` — Venue details tab with edit form and PATCH API
 - **Fixed** `migrations` — Drop CHECK constraint incompatible with MariaDB 10.7
 - **Added** `dashboard` — Customizable top metrics via gear menu
