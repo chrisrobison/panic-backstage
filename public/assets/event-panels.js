@@ -618,7 +618,7 @@ class AssetManager extends HTMLElement {
     const assets = data.assets || [];
     const canManage = can(data, 'manage_assets');
     const canUpload = can(data, 'upload_assets');
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets ${helpLink('assets', 'Assets &amp; Flyers')}</h2><div class="section-head-actions">${addToggle('Upload asset', canUpload)}</div></div>${canUpload ? `<form id="asset-form" class="row-form" data-add-form hidden><label>Title<input name="title" placeholder="Asset title"></label><label>Type${select('asset_type', ['flyer','poster','band_photo','logo','social_square','social_story','press_photo','other'], 'flyer')}</label><label>File<input type="file" name="asset" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.pdf" required></label><label>Notes<input name="notes" placeholder="Notes"></label><button>Upload asset</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : ''}<div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img class="asset-image" src="${esc(assetUrl(asset.file_path))}" alt="${esc(asset.title)}" tabindex="0" role="button" aria-label="View ${esc(asset.title)} full size">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(titleCase(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div class="inline-actions"><a class="button small secondary" href="${esc(assetUrl(asset.file_path))}" download>Download</a>${canManage ? `<button class="small" data-approve="${esc(asset.id)}">Approve</button><button class="small secondary" data-reject="${esc(asset.id)}">Reject</button><button class="small danger" data-delete="${esc(asset.id)}">Delete</button>` : ''}</div></article>`).join('') || emptyState('No assets uploaded yet.')}</div></section>`;
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets ${helpLink('assets', 'Assets &amp; Flyers')}</h2><div class="section-head-actions">${canUpload ? '<button class="secondary small" data-generate-flyer>✨ Generate flyer</button>' : ''}${addToggle('Upload asset', canUpload)}</div></div>${canUpload ? `<form id="asset-form" class="row-form" data-add-form hidden><label>Title<input name="title" placeholder="Asset title"></label><label>Type${select('asset_type', ['flyer','poster','band_photo','logo','social_square','social_story','press_photo','other'], 'flyer')}</label><label>File<input type="file" name="asset" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.pdf" required></label><label>Notes<input name="notes" placeholder="Notes"></label><button>Upload asset</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : ''}<div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img class="asset-image" src="${esc(assetUrl(asset.file_path))}" alt="${esc(asset.title)}" tabindex="0" role="button" aria-label="View ${esc(asset.title)} full size">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(titleCase(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div class="inline-actions"><a class="button small secondary" href="${esc(assetUrl(asset.file_path))}" download>Download</a>${canManage ? `<button class="small" data-approve="${esc(asset.id)}">Approve</button><button class="small secondary" data-reject="${esc(asset.id)}">Reject</button><button class="small danger" data-delete="${esc(asset.id)}">Delete</button>` : ''}</div></article>`).join('') || emptyState('No assets uploaded yet.')}</div></section>`;
     this.bind();
   }
 
@@ -660,6 +660,22 @@ class AssetManager extends HTMLElement {
         publish('toast.show', { message: err.message || 'Delete failed.', tone: 'error' });
       }
     }));
+    $('[data-generate-flyer]', this)?.addEventListener('click', async (event) => {
+      const btn = event.currentTarget;
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Generating…';
+      try {
+        await api(`/events/${this.eventData.event.id}/assets/generate-flyer`, { method: 'POST' });
+        publish('toast.show', { message: 'Flyer generated! Review it in the assets list below.' });
+        await refreshSection(this);
+      } catch (err) {
+        publish('toast.show', { message: err.message || 'Flyer generation failed.', tone: 'error' });
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    });
   }
 }
 

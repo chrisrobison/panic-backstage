@@ -403,6 +403,10 @@ final class Kernel
             if ($child === 'execution') {
                 return [Events\Execution::class, ['eventId' => $eventId, 'recordId' => $childId]];
             }
+            // AI flyer generation: POST /events/{id}/assets/generate-flyer
+            if ($child === 'assets' && ($segments[3] ?? '') === 'generate-flyer') {
+                return [Events\GenerateFlyer::class, ['eventId' => $eventId]];
+            }
             return match ($child) {
                 'tasks'      => [Events\Tasks::class,    ['eventId' => $eventId, 'taskId'     => $childId]],
                 'blockers',
