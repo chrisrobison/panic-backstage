@@ -280,7 +280,11 @@ class EventWorkspace extends PanicElement {
         </details>` : ''}
         ${(!isPrivate && can(data, 'publish_event')) ? `<button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>` : ''}
         ${can(data, 'manage_contracts') ? `<button class="secondary" data-portal-toggle title="Generate a read-only portal link for a promoter or client"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i> Share Portal Link</button>` : ''}
-        ${can(data, 'manage_ledger') ? `<button class="secondary" data-pos-set title="Route Square POS bar sales to this event"><i class="fa-solid fa-cash-register" aria-hidden="true"></i> Set as POS Event</button>` : ''}
+        <!-- "Set as POS Event" hidden for now: Square is used for online ticketing only,
+             not an in-venue POS terminal, so there is no pos_location_map to route to.
+             Restore the button below (handler + setPosEvent are still wired) once a POS
+             register is in use:
+             ${'' /* can(data, 'manage_ledger') ? `<button class="secondary" data-pos-set title="Route Square POS bar sales to this event"><i class="fa-solid fa-cash-register" aria-hidden="true"></i> Set as POS Event</button>` : '' */} -->
       </div>
     </section>
     <pb-portal-panel id="portalPanel"></pb-portal-panel>
