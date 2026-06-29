@@ -114,11 +114,13 @@ class AppShell extends PanicElement {
           <button class="nav-parent" type="button" data-group-toggle="admin" aria-expanded="false" title="Admin"><i class="fa-solid fa-user-shield" aria-hidden="true"></i><span class="nav-parent-label">Admin</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
           <div class="nav-children">
             <a data-nav="admin-users" href="#admin-users" title="Users"><i class="fa-solid fa-user-gear" aria-hidden="true"></i>Users</a>
-            <a data-nav="admin-duplicates" href="#admin-duplicates" title="Duplicates"><i class="fa-solid fa-clone" aria-hidden="true"></i>Duplicates</a>
+            <!-- Duplicates hidden for now; restore this link to bring it back (capability gating in applyCapabilities still references it):
+            <a data-nav="admin-duplicates" href="#admin-duplicates" title="Duplicates"><i class="fa-solid fa-clone" aria-hidden="true"></i>Duplicates</a> -->
             <a data-nav="admin-staff" href="#admin-staff" title="Staff"><i class="fa-solid fa-people-group" aria-hidden="true"></i>Staff</a>
             <a data-nav="admin-templates" href="#admin-templates" title="Admin templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
             <a data-nav="admin-contracts" href="#admin-contracts" title="Contracts"><i class="fa-solid fa-file-signature" aria-hidden="true"></i>Contracts</a>
             <a data-nav="admin-payments" href="#admin-payments" title="Payments"><i class="fa-solid fa-credit-card" aria-hidden="true"></i>Payments</a>
+            <a data-nav="admin-venue" href="#admin-venue" title="Venue"><i class="fa-solid fa-building" aria-hidden="true"></i>Venue</a>
             <a data-nav="outbox" href="#outbox" title="All sent email"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i>All Email</a>
           </div>
         </div>
