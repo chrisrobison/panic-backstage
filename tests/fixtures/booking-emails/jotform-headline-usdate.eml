@@ -1,0 +1,96 @@
+Delivered-To: events@themab.org
+Received: by 2002:a05:7108:7ca6:b0:574:5e31:20f2 with SMTP id bt38csp2793483gdb; Mon, 22 Jun 2026 20:10:09 -0700 (PDT)
+X-Forwarded-Encrypted: i=2; AHgh+RqVAlES4o6ArLxu/Xdi+cbNRrEYanPN6MbC3ID1h22UNpBTtLIss3qpLqTPMvNqbdZkyr5JL+E=@themab.org
+X-Received: by 2002:a05:7300:6d07:b0:30c:39b3:20cc with SMTP id 5a478bee46e88-30c39b33778mr6295332eec.35.1782184208913; Mon, 22 Jun 2026 20:10:08 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1782184208; cv=none; d=google.com; s=arc-20260327; b=SWNoK8EqkO2+HMTYJJD1rbzHxeOrkn817LRSDM1HUBYe8pRItm30FZ4NAIkuw4Ai0l Uj+k0Uu6TmQxOSlsVdL6rHKhI6NGoODU79l4JqcL6YxH/9tV6qSacT49Ff9OYXxU+j5z x5qb7UQm2KtVV8J62RnsFTP/oeXwtjpCevsrNH7XhzQFqyTB12QV9/qG+7BU0DrUzGWS w68jorbt6337KIx/eFjs0+m+bdJqjPjdp3KePW16L/lMmk5ZLDitYMJ33JZV7dMEA2ZN LcEFmwITI/cPt8gjO8LqeT+3+Q/fmC7+28jZh7UBxv3Km0hyYPLWQW47bQ8loZowYHGi InAw==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327; h=content-transfer-encoding:mime-version:jotsmtp:feedback-id :message-id:subject:reply-to:from:to:date:dkim-signature; bh=zrnVD6JRMSiiBC65wM0LUBc6P7PFwut5d8qddBSUDb4=; fh=Te4/QWj7Fb4u5fheWHB2wTGjUR7DY6CNP0pqikgm7mo=; b=VxEsMeARHOh1rSL62Mhmjh6esjzBkrRB1N4kg5VGpAaRQlwbdI4vhOF4gmJpz1E6If 5zV2mvYs3rs/kxEcQJyDe1LivCUMf8dNHLDjp0VjLsL2oprNOZz+F/cJhNLc6O11uNYc WptnekHGqGz3ufksAr0rFTvznREJVaGDCn1GLJaU2i4N5hAPvF0NoYWtEi964Bxxq/Bh Q6xQWzHcHLiDJk/t+sZ2LjajkOe1lv2Uzy7b8Wv62eFGVbFbcCgYVHiJ6BNbU4Kx2L9X gat60VlBW39Y1jCEkLTkDsCoemEVQqQTLE7z0kylWEFQv5X/uXeeae9elEEpSM8iNLFY ZZkA==; dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com; dkim=pass header.i=@jotform.com header.s=mailv2 header.b=nYkaPVj7; spf=pass (google.com: domain of returns@jotform.com designates 152.232.87.28 as permitted sender) smtp.mailfrom=returns@jotform.com; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=jotform.com
+Return-Path: <returns@jotform.com>
+Received: from mx6-26.formresponse.com (mx6-26.formresponse.com. [152.232.87.28]) by mx.google.com with ESMTPS id 5a478bee46e88-30c1bf9af36si42220834eec.58.2026.06.22.20.10.08 for <events@themab.org> (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256); Mon, 22 Jun 2026 20:10:08 -0700 (PDT)
+Received-SPF: pass (google.com: domain of returns@jotform.com designates 152.232.87.28 as permitted sender) client-ip=152.232.87.28;
+Authentication-Results: mx.google.com; dkim=pass header.i=@jotform.com header.s=mailv2 header.b=nYkaPVj7; spf=pass (google.com: domain of returns@jotform.com designates 152.232.87.28 as permitted sender) smtp.mailfrom=returns@jotform.com; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=jotform.com
+Received: from go-workers-7fql (mx6.formresponse.com [152.232.87.2]) by mx6-26.formresponse.com (Postfix) with ESMTPSA id 37FCD400EA089; Mon, 22 Jun 2026 23:10:08 -0400 (EDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=jotform.com; s=mailv2; t=1782184208; h=from:reply-to:subject:date:message-id:to:mime-version:content-type: content-transfer-encoding; bh=zrnVD6JRMSiiBC65wM0LUBc6P7PFwut5d8qddBSUDb4=; b=nYkaPVj7G9hB7IyrPTst4NzGTn0+OzLqnSZMb1BenBtYosY2YGsqkHIruPM76J1ukk8+hv Hb0o6qwr3sTT7gZC55uI6AcKYpN/m9J64NgQV9DKs01A12IUQ6/ATIHC7yAiyh9IQrHlE6 1zrwoUey/EFRurd4Sop47Wk+tm6uK1p00WuDCEkiQMvNJBlopcd3pELCalCnsssQyZS5y0 loJUeCyMbqmOh5+bmVdJqwBHD0cmliohGbX1s9hFwIkSMLH7bFsYYo8J1JB9DnBSY6XLUh juzUXIZia9x/7pZTrM9lOqup38hi1H92nTrtWn5gNc3rviHpV1DIa9ld3r5bfg==
+Date: Mon, 22 Jun 2026 23:10:07 -0400
+To: andresra@gmail.com, events@themab.org, bookings@themab.org
+From: Allen Walker <noreply@jotform.com>
+Reply-To: allen@soxal.co
+Subject: Re: TheMab.org Booking Request - Allen Walker
+Message-ID: <z947UHoX4XLxJ9QWRo15cphqRY1DsdKel3eOLalrpmE@go-workers-7fql>
+X-Priority: 3
+X-Mailer: Jotform Email Services
+X-Related-FormID: 260147117001037
+Feedback-ID: 260147117001037:notification:jotform
+JotSMTP: true
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1=_z947UHoX4XLxJ9QWRo15cphqRY1DsdKel3eOLalrpmE"
+Content-Transfer-Encoding: 8bit
+
+--b1=_z947UHoX4XLxJ9QWRo15cphqRY1DsdKel3eOLalrpmE
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+NEW Booking ALERT: lunch at the mab
+
+
+
+
+
+
+
+
+
+Who’s Calling:
+Allen Walker (allen@soxal.co)
+The Vibe:
+Other
+The Date:
+06-25-2026
+Expected Crowd:
+1 heads
+The Vision:
+lets meet up soon, and chalk talk (i dm'd you on insta too, @allenstylee )
+
+--b1=_z947UHoX4XLxJ9QWRo15cphqRY1DsdKel3eOLalrpmE
+Content-Type: text/html; charset=us-ascii
+
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta charset="utf-8"></head><body>
+<div class="body" style="width: 100%; margin: 0 auto !important; padding: 0 !important; mso-line-height-rule: exactly; background-color: #d9cdbf;">
+<table class="email-container body-bg" style="width: 720px; text-align: center;" border="0" width="720" cellspacing="0" cellpadding="0" align="center" bgcolor="#D9CDBF"><tbody><tr><td height="36"></td>
+</tr><tr><td class="mobile-padding-fix" style="padding: 0 40px;" align="center">
+<table style="width: 100%;" border="0" width="100%" cellspacing="0" cellpadding="0" bgcolor="#D9CDBF"><tbody><tr><td style="line-height: 0; font-size: 0; border-radius: 4px 4px 0 0;" bgcolor="#262626" height="12"></td>
+</tr><tr><td>
+<table style="width: 100%;" border="0" width="100%" cellspacing="0" cellpadding="0" bgcolor="#FFFFFF"><tbody><tr><td colspan="3" height="24"></td>
+</tr><tr><td width="36"></td>
+<td align="left" valign="middle">
+<h1 style="margin: 0; font-size: 24px; font-weight: 900; letter-spacing: -1px; color: #262626; font-family: Helvetica, sans-serif; text-transform: uppercase;">NEW Booking ALERT: lunch at the mab</h1>
+</td>
+<td width="36"></td>
+</tr><tr><td width="36"></td>
+<td style="border-bottom: 2px solid #262626; line-height: 0; font-size: 0;" height="24"></td>
+<td width="36"></td>
+</tr></tbody></table></td>
+</tr></tbody></table><table style="width: 100%; border-radius: 0 0 4px 4px;" border="0" width="100%" cellspacing="0" cellpadding="0" bgcolor="#FFFFFF"><tbody><tr><td colspan="3" height="30"></td>
+</tr><tr><td width="36"></td>
+<td align="center">
+<table style="font-size: 15px; font-family: Helvetica, sans-serif;" border="0" width="100%" cellspacing="0" cellpadding="8"><tbody><tr><td style="color: #8c827b; font-weight: bold; text-transform: uppercase; width: 35%;">Who&rsquo;s Calling:</td>
+<td style="color: #262626; font-weight: 900;">Allen Walker (allen@soxal.co)</td>
+</tr><tr><td style="color: #8c827b; font-weight: bold; text-transform: uppercase;">The Vibe:</td>
+<td style="color: #262626;">Other</td>
+</tr><tr><td style="color: #8c827b; font-weight: bold; text-transform: uppercase;">The Date:</td>
+<td style="color: #262626; font-weight: 900;">06-25-2026</td>
+</tr><tr><td style="color: #8c827b; font-weight: bold; text-transform: uppercase;">Expected Crowd:</td>
+<td style="color: #262626;">1 heads</td>
+</tr><tr><td style="color: #8c827b; font-weight: bold; text-transform: uppercase; vertical-align: top;">The Vision:</td>
+<td style="color: #262626; line-height: 1.4;">lets meet up soon, and chalk talk (i dm&#039;d you on insta too, @allenstylee )</td>
+</tr></tbody></table></td>
+<td width="36"></td>
+</tr><tr><td colspan="3" height="40"></td>
+</tr></tbody></table></td>
+</tr><tr><td height="30"></td>
+</tr></tbody></table></div>
+</body></html>
+
+
+--b1=_z947UHoX4XLxJ9QWRo15cphqRY1DsdKel3eOLalrpmE--
