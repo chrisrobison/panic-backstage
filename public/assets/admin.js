@@ -1,4 +1,4 @@
-import { esc, titleCase, publish, api, formData, badge, option, select, can, table, PanicElement, addToggle, $, $$ } from './core.js';
+import { esc, titleCase, publish, api, formData, badge, option, select, can, table, PanicElement, addToggle, roomTone, $, $$ } from './core.js';
 
 
 // ── Admin page ───────────────────────────────────────────────────────────────
@@ -766,6 +766,10 @@ class AdminVenue extends PanicElement {
       const data = await api('/venues');
       // Use the first venue (single-venue installs); multi-venue would show a picker.
       this.venue = (data.venues || [])[0] || null;
+      // Management view needs archived rooms too, so load them separately.
+      this.rooms = this.venue
+        ? (await api(`/venues/${this.venue.id}/resources`)).resources || []
+        : [];
       this.render();
     } catch (err) {
       this.showError(err);
@@ -801,9 +805,122 @@ class AdminVenue extends PanicElement {
         </form>
         ` : '<p class="padded muted">No venue found. Please contact support.</p>'}
       </article>
+      ${this.venue ? this.roomsPanel() : ''}
     `;
 
     $('[data-form="venue"]', this)?.addEventListener('submit', (event) => this.save(event));
+    $('[data-add-room]', this)?.addEventListener('click', () => this.openRoomModal(null));
+    $$('[data-edit-room]', this).forEach((b) => b.addEventListener('click', () =>
+      this.openRoomModal((this.rooms || []).find((r) => Number(r.id) === Number(b.dataset.editRoom)))));
+    $$('[data-archive-room]', this).forEach((b) => b.addEventListener('click', () =>
+      this.archiveRoom(Number(b.dataset.archiveRoom), b.dataset.name)));
+    $$('[data-restore-room]', this).forEach((b) => b.addEventListener('click', () =>
+      this.restoreRoom(Number(b.dataset.restoreRoom))));
+  }
+
+  roomsPanel() {
+    const rooms = this.rooms || [];
+    const active = rooms.filter((r) => Number(r.active));
+    return `
+      <article class="panel">
+        <div class="section-head padded">
+          <h2>Rooms</h2>
+          <div class="section-head-actions">
+            <span class="muted">${active.length} active${rooms.length !== active.length ? ` &middot; ${rooms.length - active.length} archived` : ''}</span>
+            ${addToggle('Add room', true).replace('data-add', 'data-add-room')}
+          </div>
+        </div>
+        <table class="data-table admin-table">
+          <thead><tr><th>Name</th><th>Capacity</th><th>Zone</th><th>Order</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${rooms.map((r) => `<tr class="${Number(r.active) ? '' : 'muted-row'}">
+              <td><strong>${esc(r.name)}</strong>${r.description ? `<br><small class="muted">${esc(r.description)}</small>` : ''}</td>
+              <td>${r.capacity != null && r.capacity !== '' ? esc(r.capacity) : '<span class="muted">—</span>'}</td>
+              <td><span class="badge ${esc(roomTone(r.zone))}">${esc(titleCase(r.zone || 'primary'))}</span></td>
+              <td>${esc(r.sort_order)}</td>
+              <td>${Number(r.active) ? '<span class="badge status-confirmed">Active</span>' : '<span class="badge status-canceled">Archived</span>'}</td>
+              <td class="row-actions">
+                <button class="small secondary" data-edit-room="${esc(r.id)}">Edit</button>
+                ${Number(r.active)
+                  ? `<button class="small danger" data-archive-room="${esc(r.id)}" data-name="${esc(r.name)}">Archive</button>`
+                  : `<button class="small secondary" data-restore-room="${esc(r.id)}">Restore</button>`}
+              </td>
+            </tr>`).join('') || '<tr><td colspan="6"><div class="empty-state">No rooms yet — use the + above to add a bookable space.</div></td></tr>'}
+          </tbody>
+        </table>
+      </article>
+    `;
+  }
+
+  // Add (room === null) and edit share one modal; submit POSTs or PATCHes then reloads.
+  openRoomModal(room = null) {
+    const isEdit = Boolean(room && room.id);
+    const r = room || {};
+    const zones = ['primary', 'up', 'down', 'both'];
+    const zoneOpts = zones.map((z) =>
+      `<option value="${esc(z)}" ${(r.zone || 'primary') === z ? 'selected' : ''}>${esc(titleCase(z))}</option>`
+    ).join('');
+    const active = isEdit ? Number(r.active) : 1;
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-backdrop';
+    dialog.innerHTML = `<div class="modal-card">
+      <div class="section-head padded"><h2>${isEdit ? 'Edit room' : 'Add room'}</h2><button class="small secondary" data-close>Close</button></div>
+      <form class="grid-form padded" data-form="room">
+        <label>Name <input name="name" required value="${esc(r.name || '')}" placeholder="Main Hall, Green Room, Patio…"></label>
+        <label>Capacity <input type="number" min="0" name="capacity" value="${esc(r.capacity != null ? r.capacity : '')}" placeholder="Max occupancy"></label>
+        <label>Zone <select name="zone">${zoneOpts}</select></label>
+        <label>Sort order <input type="number" name="sort_order" value="${esc(r.sort_order != null ? r.sort_order : '')}" placeholder="0"></label>
+        <label class="wide">Description <input name="description" value="${esc(r.description || '')}" placeholder="Notes shown alongside this room"></label>
+        <label class="check-label"><input type="checkbox" name="active" value="1" ${active ? 'checked' : ''}> Active</label>
+        <button>${isEdit ? 'Save' : 'Add room'}</button>
+      </form>
+    </div>`;
+    document.body.appendChild(dialog);
+    const close = () => { dialog.remove(); document.removeEventListener('keydown', onEsc); };
+    function onEsc(event) { if (event.key === 'Escape') close(); }
+    document.addEventListener('keydown', onEsc);
+    $('[data-close]', dialog).addEventListener('click', close);
+    dialog.addEventListener('click', (event) => { if (event.target === dialog) close(); });
+    $('input[name="name"]', dialog)?.focus();
+    $('[data-form="room"]', dialog).addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const body = formData(event.target);
+      body.active = event.target.active.checked ? 1 : 0;
+      try {
+        if (isEdit) {
+          await api(`/venues/${this.venue.id}/resources/${r.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+          publish('toast.show', { message: 'Room updated.' });
+        } else {
+          await api(`/venues/${this.venue.id}/resources`, { method: 'POST', body: JSON.stringify(body) });
+          publish('toast.show', { message: `${body.name} added.` });
+        }
+        close();
+        await this.connect();
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
+  }
+
+  async archiveRoom(id, name) {
+    if (!confirm(`Archive ${name}? It drops off the calendar but past events keep their room.`)) return;
+    try {
+      await api(`/venues/${this.venue.id}/resources/${id}`, { method: 'DELETE' });
+      publish('toast.show', { message: `${name} archived.` });
+      await this.connect();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
+  }
+
+  async restoreRoom(id) {
+    try {
+      await api(`/venues/${this.venue.id}/resources/${id}`, { method: 'PATCH', body: JSON.stringify({ active: 1 }) });
+      publish('toast.show', { message: 'Room restored.' });
+      await this.connect();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
   }
 
   async save(event) {

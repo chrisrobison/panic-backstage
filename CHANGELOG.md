@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `admin
+capacity, zone, archive` — Manage venue rooms (capacity, zone, archive)
 - **Added** `admin` — Venue details tab with edit form and PATCH API
 - **Fixed** `migrations` — Drop CHECK constraint incompatible with MariaDB 10.7
 - **Added** `dashboard` — Customizable top metrics via gear menu
