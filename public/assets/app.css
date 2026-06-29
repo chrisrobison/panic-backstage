@@ -1590,6 +1590,36 @@ pb-event-summary, pb-event-readiness, pb-event-next-action { display: contents; 
 .event-description ol.md-list { margin: 0 0 14px 22px; padding: 0; line-height: 1.7; }
 .event-description a { color: #c9b27e; text-decoration: underline; }
 
+/* Public ticket purchase widget (pb-ticket-purchase) */
+.tkp { margin: 24px 0; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.14); }
+.tkp-title { font-size: 22px; margin-bottom: 14px; }
+.tkp-list { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 12px; }
+.tkp-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 16px; }
+.tkp-row-out { opacity: 0.55; }
+.tkp-info { display: grid; gap: 2px; min-width: 0; }
+.tkp-name { font-weight: 700; }
+.tkp-desc { font-size: 14px; color: #cbd5e1; }
+.tkp-price { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tkp-qty { justify-self: end; }
+.tkp-qty-input { width: 4em; text-align: center; padding: 8px 6px; }
+.tkp-soldout { font-size: 14px; color: #cbd5e1; }
+.tkp-buyer { display: grid; gap: 12px; margin-bottom: 14px; }
+.tkp-buyer label { color: #fff; }
+.tkp-error { color: #fca5a5; margin: 0 0 12px; }
+.tkp-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.tkp-total { font-size: 18px; }
+.tkp [data-buy] {
+  background: #c9b27e;
+  color: #101318;
+  border-color: #c9b27e;
+  padding: 12px 30px;
+  font-size: 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.tkp [data-buy]:hover:not(:disabled) { background: #d8c290; border-color: #d8c290; }
+.tkp [data-buy]:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+
 /* Font Awesome icon sizing — nav, sidebar, topbar */
 .side-nav a i,
 .venue-switch i {
