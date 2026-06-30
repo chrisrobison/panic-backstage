@@ -664,7 +664,7 @@ class AssetManager extends HTMLElement {
       const btn = event.currentTarget;
       const originalText = btn.textContent;
       btn.disabled = true;
-      btn.textContent = 'Generating…';
+      btn.innerHTML = '<span class="btn-spinner"></span>Generating…';
       try {
         await api(`/events/${this.eventData.event.id}/assets/generate-flyer`, { method: 'POST' });
         publish('toast.show', { message: 'Flyer generated! Review it in the assets list below.' });
