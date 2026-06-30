@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** — Prompt-preview modal before AI flyer generation
 - **Fixed** — Check rename() return value so a failed move surfaces as an error
 - **Fixed** — Search generated_images/ specifically; add generation metadata columns
 - **Fixed** — Search CODEX_HOME/generated_images/ for the PNG, not the working dir

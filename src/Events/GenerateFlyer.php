@@ -10,10 +10,11 @@ use Panic\Tenant\TenantContext;
 use function Panic\log_activity;
 
 /**
- * POST /api/events/{id}/assets/generate-flyer
+ * GET  /api/events/{id}/assets/generate-flyer  → preview the auto-built prompt
+ * POST /api/events/{id}/assets/generate-flyer  → generate (uses body.prompt if supplied)
  *
  * Builds a prompt from the event title, lineup, and description, then
- * delegates to `codex exec` to produce a flyer.png, which is registered
+ * delegates to `codex exec` to produce a flyer PNG, which is registered
  * as an event asset (approval_status = needs_review).
  *
  * Requires the `upload_assets` capability.
@@ -28,19 +29,39 @@ final class GenerateFlyer extends BaseEndpoint
 
     public function handle(Request $request): Response
     {
-        if ($request->method() !== 'POST') {
-            return Response::methodNotAllowed();
-        }
         $eventId = $this->requireEventId();
         if ($denied = $this->requireEventCapability($eventId, 'upload_assets')) {
             return $denied;
         }
-        return $this->generate($eventId);
+        return match ($request->method()) {
+            'GET'  => $this->preview($eventId),
+            'POST' => $this->generate($eventId, $request),
+            default => Response::methodNotAllowed(),
+        };
+    }
+
+    /** Return the auto-built prompt so the UI can show it for editing. */
+    private function preview(int $eventId): Response
+    {
+        $event = $this->db->one(
+            'SELECT title, description_public FROM events WHERE id = ?',
+            [$eventId]
+        );
+        if (!$event) {
+            return $this->notFound();
+        }
+        $lineup = $this->db->all(
+            "SELECT display_name FROM event_lineup
+              WHERE event_id = ? AND status != 'canceled'
+              ORDER BY billing_order, set_time",
+            [$eventId]
+        );
+        return $this->ok(['prompt' => $this->buildPrompt($event, $lineup)]);
     }
 
     // -------------------------------------------------------------------------
 
-    private function generate(int $eventId): Response
+    private function generate(int $eventId, Request $request): Response
     {
         $event = $this->db->one(
             'SELECT title, description_public FROM events WHERE id = ?',
@@ -50,14 +71,20 @@ final class GenerateFlyer extends BaseEndpoint
             return $this->notFound();
         }
 
-        $lineup = $this->db->all(
-            "SELECT display_name FROM event_lineup
-              WHERE event_id = ? AND status != 'canceled'
-              ORDER BY billing_order, set_time",
-            [$eventId]
-        );
-
-        $prompt = $this->buildPrompt($event, $lineup);
+        // Use the caller-supplied prompt (from the modal textarea) if provided,
+        // otherwise auto-build one from the event data.
+        $customPrompt = trim((string) ($request->body('prompt') ?? ''));
+        if ($customPrompt !== '') {
+            $prompt = $customPrompt;
+        } else {
+            $lineup = $this->db->all(
+                "SELECT display_name FROM event_lineup
+                  WHERE event_id = ? AND status != 'canceled'
+                  ORDER BY billing_order, set_time",
+                [$eventId]
+            );
+            $prompt = $this->buildPrompt($event, $lineup);
+        }
 
         // Permanent storage: mirror the pattern used in Assets.php
         $filename = time() . '-' . bin2hex(random_bytes(4)) . '-ai-flyer.png';

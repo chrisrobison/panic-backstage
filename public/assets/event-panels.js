@@ -662,19 +662,75 @@ class AssetManager extends HTMLElement {
     }));
     $('[data-generate-flyer]', this)?.addEventListener('click', async (event) => {
       const btn = event.currentTarget;
-      const originalText = btn.textContent;
+      const eventId = this.eventData.event.id;
+      const section = this;
+
+      // Step 1: fetch the auto-built prompt so the user can review/edit it.
+      const originalHtml = btn.innerHTML;
       btn.disabled = true;
-      btn.innerHTML = '<span class="btn-spinner"></span>Generating…';
+      btn.innerHTML = '<span class="btn-spinner"></span>Preparing…';
+      let promptText = '';
       try {
-        await api(`/events/${this.eventData.event.id}/assets/generate-flyer`, { method: 'POST' });
-        publish('toast.show', { message: 'Flyer generated! Review it in the assets list below.' });
-        await refreshSection(this);
+        const preview = await api(`/events/${eventId}/assets/generate-flyer`, { method: 'GET' });
+        promptText = preview.prompt || '';
       } catch (err) {
-        publish('toast.show', { message: err.message || 'Flyer generation failed.', tone: 'error' });
-      } finally {
+        publish('toast.show', { message: err.message || 'Could not load prompt.', tone: 'error' });
         btn.disabled = false;
-        btn.textContent = originalText;
+        btn.innerHTML = originalHtml;
+        return;
       }
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+
+      // Step 2: show the prompt in a modal so the user can fine-tune it.
+      const dialog = document.createElement('div');
+      dialog.className = 'modal-backdrop';
+      dialog.innerHTML = `
+        <div class="modal-card wide">
+          <div class="section-head padded">
+            <h2>✨ Generate AI Flyer</h2>
+            <button type="button" class="small secondary" data-close>Cancel</button>
+          </div>
+          <form data-flyer-form style="padding:18px 22px 22px;display:flex;flex-direction:column;gap:14px">
+            <p class="muted" style="margin:0">Review and edit the prompt below, then click <strong>Generate</strong>.</p>
+            <label style="display:flex;flex-direction:column;gap:6px">
+              Prompt
+              <textarea name="prompt" rows="7" style="resize:vertical">${esc(promptText)}</textarea>
+            </label>
+            <div style="display:flex;gap:8px">
+              <button data-submit-btn>✨ Generate flyer</button>
+              <button type="button" class="secondary" data-close>Cancel</button>
+            </div>
+          </form>
+        </div>`;
+      document.body.appendChild(dialog);
+
+      const close = () => dialog.remove();
+      $$('[data-close]', dialog).forEach((b) => b.addEventListener('click', close));
+      dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
+
+      // Step 3: on submit, POST with the (possibly edited) prompt.
+      $('[data-flyer-form]', dialog).addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const submitBtn = $('[data-submit-btn]', dialog);
+        const originalBtnHtml = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="btn-spinner"></span>Generating…';
+        try {
+          const prompt = new FormData(e.target).get('prompt');
+          await api(`/events/${eventId}/assets/generate-flyer`, {
+            method: 'POST',
+            body: JSON.stringify({ prompt }),
+          });
+          close();
+          publish('toast.show', { message: 'Flyer generated! Review it in the assets list below.' });
+          await refreshSection(section);
+        } catch (err) {
+          publish('toast.show', { message: err.message || 'Flyer generation failed.', tone: 'error' });
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalBtnHtml;
+        }
+      });
     });
   }
 }
