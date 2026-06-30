@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** — Add end_date to events for multi-day bookings
 - **Added** — Prompt-preview modal before AI flyer generation
 - **Fixed** — Check rename() return value so a failed move surfaces as an error
 - **Fixed** — Search generated_images/ specifically; add generation metadata columns

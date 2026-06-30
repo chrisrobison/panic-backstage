@@ -575,6 +575,7 @@ CREATE TABLE `events` (
   `booker_email` varchar(255) DEFAULT NULL,
   `booker_phone` varchar(50) DEFAULT NULL,
   `date` date NOT NULL,
+  `end_date` date DEFAULT NULL,
   `doors_time` time DEFAULT NULL,
   `show_time` time DEFAULT NULL,
   `end_time` time DEFAULT NULL,
