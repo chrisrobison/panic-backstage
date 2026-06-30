@@ -146,102 +146,26 @@ final class GenerateFlyer extends BaseEndpoint
         return $prompt;
     }
 
-    /**
-     * Invoke `codex exec` non-interactively, streaming its output while
-     * enforcing a hard timeout. Throws RuntimeException on any failure.
-     */
+    /** Invoke `codex exec` and wait for it to finish. Throws on non-zero exit. */
     private function runCodex(string $prompt, string $workingDir): void
     {
         set_time_limit(self::TIMEOUT + 30);
 
-        $cmd = [
-            self::CODEX_BIN, 'exec',
-            '--skip-git-repo-check',
-            '--ephemeral',
-            '-C', $workingDir,
-            '-s', 'workspace-write',   // allow writes inside the working dir only
-            $prompt,
-        ];
+        $bin = self::CODEX_BIN;
+        $cmd = 'HOME=/home/cdr CODEX_HOME=/home/cdr/.codex'
+             . ' PATH=' . escapeshellarg(dirname($bin) . ':/usr/local/bin:/usr/bin:/bin')
+             . ' ' . escapeshellarg($bin)
+             . ' exec --skip-git-repo-check --ephemeral'
+             . ' -C ' . escapeshellarg($workingDir)
+             . ' -s workspace-write'
+             . ' ' . escapeshellarg($prompt)
+             . ' 2>&1';
 
-        // Explicitly supply the cdr user's environment so codex can find its
-        // stored OAuth credentials (auth.json) and write its runtime files,
-        // regardless of which OS user PHP-FPM is currently running as.
-        $env = [
-            'HOME'       => '/home/cdr',
-            'CODEX_HOME' => '/home/cdr/.codex',
-            'PATH'       => dirname(self::CODEX_BIN) . ':/usr/local/bin:/usr/bin:/bin',
-            'TMPDIR'     => sys_get_temp_dir(),
-            'LANG'       => 'en_US.UTF-8',
-        ];
+        exec($cmd, $lines, $exitCode);
 
-        $descriptors = [
-            0 => ['pipe', 'r'],   // stdin
-            1 => ['pipe', 'w'],   // stdout
-            2 => ['pipe', 'w'],   // stderr
-        ];
-
-        $proc = proc_open($cmd, $descriptors, $pipes, $workingDir, $env);
-        if (!is_resource($proc)) {
-            throw new \RuntimeException(
-                'Failed to start codex — ensure it is installed at ' . self::CODEX_BIN
-            );
-        }
-
-        fclose($pipes[0]);
-        stream_set_blocking($pipes[1], false);
-        stream_set_blocking($pipes[2], false);
-
-        $stdout = '';
-        $stderr = '';
-        $start  = time();
-
-        while (true) {
-            $read    = [$pipes[1], $pipes[2]];
-            $write   = $except = null;
-            $changed = @stream_select($read, $write, $except, 1);
-
-            if ($changed === false) {
-                break;
-            }
-            if ($changed > 0) {
-                if (in_array($pipes[1], $read, true)) {
-                    $chunk = fread($pipes[1], 8192);
-                    if ($chunk !== false) {
-                        $stdout .= $chunk;
-                    }
-                }
-                if (in_array($pipes[2], $read, true)) {
-                    $chunk = fread($pipes[2], 8192);
-                    if ($chunk !== false) {
-                        $stderr .= $chunk;
-                    }
-                }
-            }
-
-            $status = proc_get_status($proc);
-            if (!$status['running']) {
-                break;
-            }
-
-            if ((time() - $start) >= self::TIMEOUT) {
-                proc_terminate($proc);
-                fclose($pipes[1]);
-                fclose($pipes[2]);
-                proc_close($proc);
-                throw new \RuntimeException('Codex timed out after ' . self::TIMEOUT . ' seconds');
-            }
-        }
-
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-        $exit = proc_close($proc);
-
-        if ($exit !== 0) {
-            $detail = trim($stderr) ?: trim($stdout);
-            throw new \RuntimeException(
-                'Codex exited with code ' . $exit
-                . ($detail ? ': ' . mb_substr($detail, 0, 500) : '')
-            );
+        if ($exitCode !== 0) {
+            $detail = implode("\n", array_slice($lines, 0, 20));
+            throw new \RuntimeException('Codex failed: ' . mb_substr($detail, 0, 500));
         }
     }
 }
