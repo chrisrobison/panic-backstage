@@ -159,9 +159,19 @@ final class GenerateFlyer extends BaseEndpoint
             '--skip-git-repo-check',
             '--ephemeral',
             '-C', $workingDir,
-            '-c', 'sandbox_permissions=["disk-full-write-access","disk-full-read-access","network"]',
-            '-c', 'shell_environment_policy.inherit=all',
+            '-s', 'workspace-write',   // allow writes inside the working dir only
             $prompt,
+        ];
+
+        // Explicitly supply the cdr user's environment so codex can find its
+        // stored OAuth credentials (auth.json) and write its runtime files,
+        // regardless of which OS user PHP-FPM is currently running as.
+        $env = [
+            'HOME'       => '/home/cdr',
+            'CODEX_HOME' => '/home/cdr/.codex',
+            'PATH'       => dirname(self::CODEX_BIN) . ':/usr/local/bin:/usr/bin:/bin',
+            'TMPDIR'     => sys_get_temp_dir(),
+            'LANG'       => 'en_US.UTF-8',
         ];
 
         $descriptors = [
@@ -170,7 +180,7 @@ final class GenerateFlyer extends BaseEndpoint
             2 => ['pipe', 'w'],   // stderr
         ];
 
-        $proc = proc_open($cmd, $descriptors, $pipes);
+        $proc = proc_open($cmd, $descriptors, $pipes, $workingDir, $env);
         if (!is_resource($proc)) {
             throw new \RuntimeException(
                 'Failed to start codex — ensure it is installed at ' . self::CODEX_BIN

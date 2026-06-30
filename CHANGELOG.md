@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** — Correct codex exec sandbox flag and supply explicit env for OAuth
 - **Added** — AI flyer generation via Codex from the Assets panel
 - **Added** — Pre-populate booker fields from the creating user on event creation
 - **Changed** — Style external Tickets link as gold CTA on public event page
