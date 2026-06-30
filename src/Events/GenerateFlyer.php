@@ -94,7 +94,9 @@ final class GenerateFlyer extends BaseEndpoint
                 return Response::json(['error' => 'Codex completed but did not produce a PNG image'], 500);
             }
 
-            rename($outFile, $assetDir . '/' . $filename);
+            if (!rename($outFile, $assetDir . '/' . $filename)) {
+                throw new \RuntimeException('Could not move generated image to asset directory');
+            }
         } catch (\RuntimeException $e) {
             return Response::json(['error' => $e->getMessage()], 500);
         } finally {
