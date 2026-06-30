@@ -171,7 +171,7 @@ final class GenerateFlyer extends BaseEndpoint
         }
         $prompt .= '. The flyer should have bold, high-contrast punk rock poster aesthetics'
                  . ' with striking typography, gritty textures, and vivid colors.'
-                 . ' Save the final image as "flyer.png" in the current working directory.';
+                 . ' Generate exactly one image.';
 
         return $prompt;
     }

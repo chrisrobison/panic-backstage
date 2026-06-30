@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** — Remove redundant 'save as flyer.png' from prompt to stop double image generation
 - **Fixed** — Search recursively for codex-generated PNG instead of assuming flyer.png
 - **Fixed** — Create codex temp dirs as 0755 so PHP can read generated image
 - **Fixed** — Give codex a writable per-request CODEX_HOME in /tmp
