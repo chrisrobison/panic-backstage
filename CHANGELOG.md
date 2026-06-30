@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** — Create codex temp dirs as 0755 so PHP can read generated image
 - **Fixed** — Give codex a writable per-request CODEX_HOME in /tmp
 - **Fixed** — Simplify codex invocation to exec() and open .codex permissions
 - **Fixed** — Correct codex exec sandbox flag and supply explicit env for OAuth

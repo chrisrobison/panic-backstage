@@ -75,7 +75,7 @@ final class GenerateFlyer extends BaseEndpoint
 
         // Run codex in an isolated temp directory
         $tmpDir = sys_get_temp_dir() . '/pb-flyer-' . $eventId . '-' . bin2hex(random_bytes(4));
-        mkdir($tmpDir, 0700, true);
+        mkdir($tmpDir, 0755, true);
 
         try {
             $this->runCodex($prompt, $tmpDir);
@@ -156,7 +156,7 @@ final class GenerateFlyer extends BaseEndpoint
         // writable by www-data, so we copy auth + config into a temp dir that
         // the current process owns and clean it up when we're done.
         $codexHome = sys_get_temp_dir() . '/codex-home-' . bin2hex(random_bytes(4));
-        mkdir($codexHome, 0700, true);
+        mkdir($codexHome, 0755, true);
         copy('/home/cdr/.codex/auth.json',   $codexHome . '/auth.json');
         copy('/home/cdr/.codex/config.toml', $codexHome . '/config.toml');
 
