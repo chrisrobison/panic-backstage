@@ -151,21 +151,39 @@ final class GenerateFlyer extends BaseEndpoint
     {
         set_time_limit(self::TIMEOUT + 30);
 
-        $bin = self::CODEX_BIN;
-        $cmd = 'HOME=/home/cdr CODEX_HOME=/home/cdr/.codex'
-             . ' PATH=' . escapeshellarg(dirname($bin) . ':/usr/local/bin:/usr/bin:/bin')
-             . ' ' . escapeshellarg($bin)
-             . ' exec --skip-git-repo-check --ephemeral'
-             . ' -C ' . escapeshellarg($workingDir)
-             . ' -s workspace-write'
-             . ' ' . escapeshellarg($prompt)
-             . ' 2>&1';
+        // Codex's in-process app-server needs a writable CODEX_HOME to create
+        // its runtime files (sockets, logs). ~/.codex is owned by cdr and not
+        // writable by www-data, so we copy auth + config into a temp dir that
+        // the current process owns and clean it up when we're done.
+        $codexHome = sys_get_temp_dir() . '/codex-home-' . bin2hex(random_bytes(4));
+        mkdir($codexHome, 0700, true);
+        copy('/home/cdr/.codex/auth.json',   $codexHome . '/auth.json');
+        copy('/home/cdr/.codex/config.toml', $codexHome . '/config.toml');
 
-        exec($cmd, $lines, $exitCode);
+        try {
+            $bin = self::CODEX_BIN;
+            $cmd = 'HOME=' . escapeshellarg($codexHome)
+                 . ' CODEX_HOME=' . escapeshellarg($codexHome)
+                 . ' PATH=' . escapeshellarg(dirname($bin) . ':/usr/local/bin:/usr/bin:/bin')
+                 . ' ' . escapeshellarg($bin)
+                 . ' exec --skip-git-repo-check --ephemeral'
+                 . ' -C ' . escapeshellarg($workingDir)
+                 . ' -s workspace-write'
+                 . ' ' . escapeshellarg($prompt)
+                 . ' 2>&1';
 
-        if ($exitCode !== 0) {
-            $detail = implode("\n", array_slice($lines, 0, 20));
-            throw new \RuntimeException('Codex failed: ' . mb_substr($detail, 0, 500));
+            exec($cmd, $lines, $exitCode);
+
+            if ($exitCode !== 0) {
+                $detail = implode("\n", array_slice($lines, 0, 20));
+                throw new \RuntimeException('Codex failed: ' . mb_substr($detail, 0, 500));
+            }
+        } finally {
+            // Remove the temp codex home (auth copy etc.)
+            foreach (glob($codexHome . '/{,.}*', GLOB_BRACE) ?: [] as $f) {
+                is_file($f) && unlink($f);
+            }
+            is_dir($codexHome) && rmdir($codexHome);
         }
     }
 }
