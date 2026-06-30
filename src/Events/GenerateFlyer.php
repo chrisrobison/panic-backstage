@@ -73,16 +73,21 @@ final class GenerateFlyer extends BaseEndpoint
             mkdir($assetDir, 0775, true);
         }
 
-        // Run codex in an isolated temp directory
+        // Codex writes generated images to $CODEX_HOME/generated_images/<uuid>/
+        // (not to the -C working dir), so we create codexHome here and search
+        // it after the run rather than searching the working dir.
+        $codexHome = sys_get_temp_dir() . '/codex-home-' . bin2hex(random_bytes(4));
+        mkdir($codexHome, 0755, true);
+        copy('/home/cdr/.codex/auth.json',   $codexHome . '/auth.json');
+        copy('/home/cdr/.codex/config.toml', $codexHome . '/config.toml');
+
         $tmpDir = sys_get_temp_dir() . '/pb-flyer-' . $eventId . '-' . bin2hex(random_bytes(4));
         mkdir($tmpDir, 0755, true);
 
         try {
-            $this->runCodex($prompt, $tmpDir);
+            $this->runCodex($prompt, $tmpDir, $codexHome);
 
-            // Codex may save images in a generated_images/<uuid>/ subfolder
-            // rather than at the root of the working dir, so search recursively.
-            $outFile = $this->findFirstPng($tmpDir);
+            $outFile = $this->findFirstPng($codexHome);
             if ($outFile === null) {
                 return Response::json(['error' => 'Codex completed but did not produce a PNG image'], 500);
             }
@@ -91,8 +96,8 @@ final class GenerateFlyer extends BaseEndpoint
         } catch (\RuntimeException $e) {
             return Response::json(['error' => $e->getMessage()], 500);
         } finally {
-            // Best-effort cleanup of temp dir
             $this->rrmdir($tmpDir);
+            $this->rrmdir($codexHome);
         }
 
         $assetId = $this->db->insert(
@@ -177,43 +182,26 @@ final class GenerateFlyer extends BaseEndpoint
     }
 
     /** Invoke `codex exec` and wait for it to finish. Throws on non-zero exit. */
-    private function runCodex(string $prompt, string $workingDir): void
+    private function runCodex(string $prompt, string $workingDir, string $codexHome): void
     {
         set_time_limit(self::TIMEOUT + 30);
 
-        // Codex's in-process app-server needs a writable CODEX_HOME to create
-        // its runtime files (sockets, logs). ~/.codex is owned by cdr and not
-        // writable by www-data, so we copy auth + config into a temp dir that
-        // the current process owns and clean it up when we're done.
-        $codexHome = sys_get_temp_dir() . '/codex-home-' . bin2hex(random_bytes(4));
-        mkdir($codexHome, 0755, true);
-        copy('/home/cdr/.codex/auth.json',   $codexHome . '/auth.json');
-        copy('/home/cdr/.codex/config.toml', $codexHome . '/config.toml');
+        $bin = self::CODEX_BIN;
+        $cmd = 'HOME=' . escapeshellarg($codexHome)
+             . ' CODEX_HOME=' . escapeshellarg($codexHome)
+             . ' PATH=' . escapeshellarg(dirname($bin) . ':/usr/local/bin:/usr/bin:/bin')
+             . ' ' . escapeshellarg($bin)
+             . ' exec --skip-git-repo-check --ephemeral'
+             . ' -C ' . escapeshellarg($workingDir)
+             . ' -s workspace-write'
+             . ' ' . escapeshellarg($prompt)
+             . ' 2>&1';
 
-        try {
-            $bin = self::CODEX_BIN;
-            $cmd = 'HOME=' . escapeshellarg($codexHome)
-                 . ' CODEX_HOME=' . escapeshellarg($codexHome)
-                 . ' PATH=' . escapeshellarg(dirname($bin) . ':/usr/local/bin:/usr/bin:/bin')
-                 . ' ' . escapeshellarg($bin)
-                 . ' exec --skip-git-repo-check --ephemeral'
-                 . ' -C ' . escapeshellarg($workingDir)
-                 . ' -s workspace-write'
-                 . ' ' . escapeshellarg($prompt)
-                 . ' 2>&1';
+        exec($cmd, $lines, $exitCode);
 
-            exec($cmd, $lines, $exitCode);
-
-            if ($exitCode !== 0) {
-                $detail = implode("\n", array_slice($lines, 0, 20));
-                throw new \RuntimeException('Codex failed: ' . mb_substr($detail, 0, 500));
-            }
-        } finally {
-            // Remove the temp codex home (auth copy etc.)
-            foreach (glob($codexHome . '/{,.}*', GLOB_BRACE) ?: [] as $f) {
-                is_file($f) && unlink($f);
-            }
-            is_dir($codexHome) && rmdir($codexHome);
+        if ($exitCode !== 0) {
+            $detail = implode("\n", array_slice($lines, 0, 20));
+            throw new \RuntimeException('Codex failed: ' . mb_substr($detail, 0, 500));
         }
     }
 }
