@@ -80,9 +80,11 @@ final class GenerateFlyer extends BaseEndpoint
         try {
             $this->runCodex($prompt, $tmpDir);
 
-            $outFile = $tmpDir . '/flyer.png';
-            if (!file_exists($outFile)) {
-                return Response::json(['error' => 'Codex completed but did not produce a flyer.png'], 500);
+            // Codex may save images in a generated_images/<uuid>/ subfolder
+            // rather than at the root of the working dir, so search recursively.
+            $outFile = $this->findFirstPng($tmpDir);
+            if ($outFile === null) {
+                return Response::json(['error' => 'Codex completed but did not produce a PNG image'], 500);
             }
 
             rename($outFile, $assetDir . '/' . $filename);
@@ -90,10 +92,7 @@ final class GenerateFlyer extends BaseEndpoint
             return Response::json(['error' => $e->getMessage()], 500);
         } finally {
             // Best-effort cleanup of temp dir
-            foreach (glob($tmpDir . '/*') ?: [] as $f) {
-                is_file($f) && unlink($f);
-            }
-            is_dir($tmpDir) && rmdir($tmpDir);
+            $this->rrmdir($tmpDir);
         }
 
         $assetId = $this->db->insert(
@@ -117,6 +116,37 @@ final class GenerateFlyer extends BaseEndpoint
         log_activity($this->db, $eventId, $this->userId(), 'AI flyer generated', ['asset_id' => $assetId]);
 
         return $this->ok(['id' => $assetId, 'file_path' => $filePath]);
+    }
+
+    /** Recursively delete a directory and all its contents. */
+    private function rrmdir(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+        $it = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($it as $f) {
+            $f->isDir() ? rmdir($f->getPathname()) : unlink($f->getPathname());
+        }
+        rmdir($dir);
+    }
+
+    /**
+     * Recursively find the first PNG file under $dir.
+     * Codex sometimes saves images in generated_images/<uuid>/ subfolders.
+     */
+    private function findFirstPng(string $dir): ?string
+    {
+        $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS));
+        foreach ($it as $file) {
+            if ($file->isFile() && strtolower($file->getExtension()) === 'png') {
+                return $file->getPathname();
+            }
+        }
+        return null;
     }
 
     /**
