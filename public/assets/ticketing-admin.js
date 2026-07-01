@@ -220,7 +220,7 @@ class TicketingAdmin extends PanicElement {
         <td data-label="Revenue">${moneyCents(t.revenue_cents)}</td>
         <td data-label="Sales window">${salesWindow(t.sales_start, t.sales_end)}</td>
         <td data-label="Status"><span class="badge">${esc(titleCase(t.status))}</span></td>
-        ${editable ? `<td class="row-actions"><button type="button" class="link" data-edit-tier="${esc(t.id)}">Edit</button><button type="button" class="link danger" data-del-tier="${esc(t.id)}">Delete</button></td>` : ''}
+        ${editable ? `<td class="row-actions"><button type="button" class="link" data-edit-tier="${esc(t.id)}" aria-label="Edit" title="Edit"><i class="fa-solid fa-pencil" aria-hidden="true"></i></button></td>` : ''}
       </tr>`).join('')}</tbody>
     </table>`;
   }
@@ -262,11 +262,12 @@ class TicketingAdmin extends PanicElement {
         <label>Sales start <input name="sales_start" type="datetime-local" value="${esc((t.sales_start || '').replace(' ', 'T').slice(0, 16))}"></label>
         <label>Sales end <input name="sales_end" type="datetime-local" value="${esc((t.sales_end || '').replace(' ', 'T').slice(0, 16))}"></label>
         <label class="wide">Description <input name="description" value="${esc(t.description || '')}" placeholder="What’s included (optional)"></label>
-        <div class="wide form-actions"><button type="submit">${isEdit ? 'Save ticket type' : 'Add ticket type'}</button><button type="button" class="secondary" data-close>Cancel</button></div>
+        <div class="wide form-actions"><button type="submit">${isEdit ? 'Save ticket type' : 'Add ticket type'}</button><button type="button" class="secondary" data-close>Cancel</button>${isEdit ? `<button type="button" class="link danger delete-tier" data-del-tier="${esc(t.id)}">Delete ticket type</button>` : ''}</div>
         <p class="error-text wide" data-error></p>
       </form>`);
     $('input[name="name"]', dialog).focus();
     $('[data-form="tier"]', dialog).addEventListener('submit', (e) => this.saveTier(e, close));
+    $('[data-del-tier]', dialog)?.addEventListener('click', () => this.deleteTier(Number(t.id), close));
   }
 
   // Issue comp tickets in a modal. Kept open after success so the issued codes
@@ -337,9 +338,9 @@ class TicketingAdmin extends PanicElement {
     // Ticket type: Add opens the editor modal (Edit opens it prefilled below).
     $('[data-add-tier]', this)?.addEventListener('click', () => this.openTierModal(null));
 
-    // Ticket type edit / delete (row actions, only if editable)
+    // Ticket type edit (row action, only if editable). Delete now lives inside
+    // the edit modal, so it is wired up in openTierModal().
     $$('[data-edit-tier]', this).forEach((btn) => btn.addEventListener('click', () => this.editTier(Number(btn.dataset.editTier))));
-    $$('[data-del-tier]', this).forEach((btn) => btn.addEventListener('click', () => this.deleteTier(Number(btn.dataset.delTier))));
 
     // Comp: opens the issue-comps modal.
     $('[data-add-comp]', this)?.addEventListener('click', () => this.openCompModal());
@@ -474,10 +475,11 @@ class TicketingAdmin extends PanicElement {
     }
   }
 
-  async deleteTier(id) {
+  async deleteTier(id, close) {
     if (!confirm('Delete this ticket type? Types with issued tickets cannot be deleted.')) return;
     try {
       await api(`/events/${this.eventId}/ticketing/types/${id}`, { method: 'DELETE' });
+      if (typeof close === 'function') close();
       publish('toast.show', { message: 'Ticket type deleted.' });
       await this.load();
     } catch (error) {
