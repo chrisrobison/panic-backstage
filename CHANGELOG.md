@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** — Show each ticket tier's sales window in the tiers table
 - **Added** — Default Door tier on-sale date to the day of the event
 - **Added** — Seed Advance + Door default tiers with a wider sales window
 - **Added** — Move comp-ticket and scanner-link forms into modals too

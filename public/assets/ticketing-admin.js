@@ -16,6 +16,26 @@ import { esc, titleCase, publish, api, formData, can, money, helpLink, PanicElem
 
 const moneyCents = (cents) => money(Number(cents || 0) / 100);
 
+// Format a stored datetime string ("2026-06-30 21:00:00") as a short, local
+// "Jun 30, 9:00 PM" label. Returns '' for empty values.
+const shortDateTime = (value) => {
+  if (!value) return '';
+  const d = new Date(String(value).replace(' ', 'T'));
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleString(undefined, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+};
+
+// Render a tier's sales window as "start → end". An open-ended bound shows as
+// "—"; a tier with neither bound (e.g. Comps) shows a single em dash.
+const salesWindow = (start, end) => {
+  const s = shortDateTime(start);
+  const e = shortDateTime(end);
+  if (!s && !e) return '<span class="muted">—</span>';
+  return `${esc(s || '—')} <span class="muted">→</span> ${esc(e || '—')}`;
+};
+
 const TYPE_STATUSES = ['draft', 'on_sale', 'paused', 'sold_out', 'closed'];
 
 // QR rendered by our own /assets/qr.svg generator (src/QrCode.php) — never send
@@ -190,7 +210,7 @@ class TicketingAdmin extends PanicElement {
     }
     const editable = this.editable;
     return `<table class="data-table">
-      <thead><tr><th>Type</th><th>Price</th><th>Sold</th><th>Comp</th><th>Avail</th><th>Revenue</th><th>Status</th>${editable ? '<th></th>' : ''}</tr></thead>
+      <thead><tr><th>Type</th><th>Price</th><th>Sold</th><th>Comp</th><th>Avail</th><th>Revenue</th><th>Sales window</th><th>Status</th>${editable ? '<th></th>' : ''}</tr></thead>
       <tbody>${tiers.map((t) => `<tr data-tier="${esc(t.id)}">
         <td data-label="Type"><strong>${esc(t.name)}</strong>${t.description ? `<br><span class="muted">${esc(t.description)}</span>` : ''}</td>
         <td data-label="Price">${moneyCents(t.price_cents)}</td>
@@ -198,6 +218,7 @@ class TicketingAdmin extends PanicElement {
         <td data-label="Comp">${esc(t.quantity_comped)}</td>
         <td data-label="Avail">${esc(t.available)}</td>
         <td data-label="Revenue">${moneyCents(t.revenue_cents)}</td>
+        <td data-label="Sales window">${salesWindow(t.sales_start, t.sales_end)}</td>
         <td data-label="Status"><span class="badge">${esc(titleCase(t.status))}</span></td>
         ${editable ? `<td class="row-actions"><button type="button" class="link" data-edit-tier="${esc(t.id)}">Edit</button><button type="button" class="link danger" data-del-tier="${esc(t.id)}">Delete</button></td>` : ''}
       </tr>`).join('')}</tbody>
