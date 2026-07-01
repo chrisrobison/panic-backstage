@@ -414,7 +414,7 @@ class TicketingAdmin extends PanicElement {
     const res = await api(`/events/${this.eventId}/ticketing`, { method: 'PATCH', body: JSON.stringify(body) });
     publish('toast.show', {
       message: res?.seeded_default_type
-        ? 'In-house ticketing on — seeded General Admission + 20 comps and a “Door” scanner link.'
+        ? 'In-house ticketing on — seeded Advance & Door tiers, a comp allocation, and a “Door” scanner link.'
         : 'Ticketing settings saved.',
     });
     await this.load();

@@ -749,10 +749,12 @@ final class Ticketing extends BaseEndpoint
 
     /**
      * Seed the default ticket types for an event the first time it switches to
-     * in-house ticketing: a paid "General Admission" tier (priced from the
-     * event's ticket_price, sized to capacity minus the comp reserve, on sale
-     * from today through the end of the event day) plus a held-back "Comps"
-     * allocation of {@see DEFAULT_COMP_RESERVE} free, off-sale tickets. No-op —
+     * in-house ticketing: two paid tiers — "Advance" and "Door" (both priced
+     * from the event's ticket_price, splitting capacity minus the comp reserve
+     * evenly) — plus a held-back "Comps" allocation of {@see DEFAULT_COMP_RESERVE}
+     * free, off-sale tickets. The paid tiers open for sale yesterday and stay
+     * open through the day after the event, so they are unambiguously live the
+     * moment ticketing is enabled and leave a buffer for late sales. No-op —
      * returns false — if any ticket type already exists, so it never duplicates
      * on re-save.
      */
@@ -771,38 +773,46 @@ final class Ticketing extends BaseEndpoint
         $priceCents = (int) round(((float) ($event['ticket_price'] ?? 0)) * 100);
         $capacity   = (int) ($event['capacity'] ?? 0);
 
-        // Split the room into paid GA + house comps: Comps = 20 (capped at a
-        // tiny capacity), GA = the rest. With no capacity set, fall back to a
-        // 100-seat GA so there is still something to sell.
-        $compQty = $capacity > 0 ? min(self::DEFAULT_COMP_RESERVE, $capacity) : self::DEFAULT_COMP_RESERVE;
-        $gaQty   = $capacity > 0 ? max(0, $capacity - $compQty) : 100;
+        // Split the room into two paid tiers (Advance + Door) plus a held-back
+        // house-comp reserve: Comps = 20 (capped at a tiny capacity), the rest
+        // split evenly between Advance and Door. With no capacity set, fall back
+        // to 100 sellable seats (50/50) so there is still something to sell.
+        $compQty    = $capacity > 0 ? min(self::DEFAULT_COMP_RESERVE, $capacity) : self::DEFAULT_COMP_RESERVE;
+        $sellable   = $capacity > 0 ? max(0, $capacity - $compQty) : 100;
+        $advanceQty = intdiv($sellable, 2) + ($sellable % 2); // odd seat goes to Advance
+        $doorQty    = intdiv($sellable, 2);
 
-        // Sales open today and close at the end of the event day.
-        $salesStart = date('Y-m-d') . ' 00:00:00';
-        $salesEnd   = !empty($event['date']) ? $event['date'] . ' 23:59:59' : null;
+        // Sales open yesterday (so the tier is unambiguously live the moment the
+        // operator flips ticketing on, regardless of timezone) and stay open
+        // until the day after the event, leaving a buffer for at-the-door sales.
+        $salesStart = date('Y-m-d', strtotime('yesterday')) . ' 00:00:00';
+        $salesEnd   = !empty($event['date'])
+            ? date('Y-m-d', strtotime($event['date'] . ' +1 day')) . ' 23:59:59'
+            : null;
 
-        $gaId = $this->db->insert(
-            'INSERT INTO ticket_types
-                (event_id, name, description, price_cents, currency, quantity_total,
-                 sales_start, sales_end, status, sort_order)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [$eventId, 'General Admission', null, $priceCents, 'USD', $gaQty, $salesStart, $salesEnd, 'on_sale', 0]
-        );
+        $insertType = fn(string $name, ?string $desc, int $cents, int $qty, ?string $start, ?string $end, string $status, int $sort): int =>
+            $this->db->insert(
+                'INSERT INTO ticket_types
+                    (event_id, name, description, price_cents, currency, quantity_total,
+                     sales_start, sales_end, status, sort_order)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [$eventId, $name, $desc, $cents, 'USD', $qty, $start, $end, $status, $sort]
+            );
+
+        $advanceId = $insertType('Advance', 'Advance online sales', $priceCents, $advanceQty, $salesStart, $salesEnd, 'on_sale', 0);
+        $doorId    = $insertType('Door', 'At-the-door sales', $priceCents, $doorQty, $salesStart, $salesEnd, 'on_sale', 1);
         // Comps: free and kept in 'draft' so they never appear on the public
         // sale page, but are still issuable from the comp flow.
-        $compId = $this->db->insert(
-            'INSERT INTO ticket_types
-                (event_id, name, description, price_cents, currency, quantity_total,
-                 sales_start, sales_end, status, sort_order)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [$eventId, 'Comps', 'House complimentary allocation', 0, 'USD', $compQty, null, null, 'draft', 1]
-        );
+        $compId    = $insertType('Comps', 'House complimentary allocation', 0, $compQty, null, null, 'draft', 2);
+
         log_activity($this->db, $eventId, $this->userId(), 'default ticket types seeded', [
-            'general_admission_id' => $gaId,
-            'ga_quantity'          => $gaQty,
-            'comp_id'              => $compId,
-            'comp_quantity'        => $compQty,
-            'price_cents'          => $priceCents,
+            'advance_id'    => $advanceId,
+            'advance_qty'   => $advanceQty,
+            'door_id'       => $doorId,
+            'door_qty'      => $doorQty,
+            'comp_id'       => $compId,
+            'comp_quantity' => $compQty,
+            'price_cents'   => $priceCents,
         ]);
         return true;
     }
