@@ -789,6 +789,11 @@ final class Ticketing extends BaseEndpoint
         $salesEnd   = !empty($event['date'])
             ? date('Y-m-d', strtotime($event['date'] . ' +1 day')) . ' 23:59:59'
             : null;
+        // Door sales default to opening the day of the event (fall back to the
+        // shared start if the event has no date yet).
+        $doorSalesStart = !empty($event['date'])
+            ? date('Y-m-d', strtotime($event['date'])) . ' 00:00:00'
+            : $salesStart;
 
         $insertType = fn(string $name, ?string $desc, int $cents, int $qty, ?string $start, ?string $end, string $status, int $sort): int =>
             $this->db->insert(
@@ -800,7 +805,7 @@ final class Ticketing extends BaseEndpoint
             );
 
         $advanceId = $insertType('Advance', 'Advance online sales', $priceCents, $advanceQty, $salesStart, $salesEnd, 'on_sale', 0);
-        $doorId    = $insertType('Door', 'At-the-door sales', $priceCents, $doorQty, $salesStart, $salesEnd, 'on_sale', 1);
+        $doorId    = $insertType('Door', 'At-the-door sales', $priceCents, $doorQty, $doorSalesStart, $salesEnd, 'on_sale', 1);
         // Comps: free and kept in 'draft' so they never appear on the public
         // sale page, but are still issuable from the comp flow.
         $compId    = $insertType('Comps', 'House complimentary allocation', 0, $compQty, null, null, 'draft', 2);
