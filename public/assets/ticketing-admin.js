@@ -24,13 +24,6 @@ const TYPE_STATUSES = ['draft', 'on_sale', 'paused', 'sold_out', 'closed'];
 const qrSrc = (text, size = 160) =>
   `assets/qr.svg?size=${size}&text=${encodeURIComponent(text)}`;
 
-// A "+" reveal button that toggles a specific form (by selector) within the
-// component. Mirrors the shared addToggle styling but targets one of several
-// independent forms in this panel (ticket types, scanner links).
-const revealBtn = (label, target) =>
-  `<button type="button" class="add-toggle" data-add-target="${esc(target)}" aria-label="${esc(label)}" title="${esc(label)}"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>`;
-
-
 class TicketingAdmin extends PanicElement {
   set data(data) {
     this.eventData = data;
@@ -211,6 +204,27 @@ class TicketingAdmin extends PanicElement {
     </table>`;
   }
 
+  // Shared modal shell: appends a titled backdrop+card, wires close-on-button
+  // ([data-close]), backdrop-click, and Escape, and returns { dialog, close }.
+  // The close handler is delegated so [data-close] buttons injected into the
+  // body later (e.g. after a result renders) still work.
+  openModal(title, bodyHtml) {
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-backdrop';
+    dialog.innerHTML = `<div class="modal-card">
+      <div class="section-head padded"><h2>${esc(title)}</h2><button class="small secondary" data-close type="button">Close</button></div>
+      ${bodyHtml}
+    </div>`;
+    document.body.appendChild(dialog);
+    const onEsc = (event) => { if (event.key === 'Escape') close(); };
+    const close = () => { document.removeEventListener('keydown', onEsc); dialog.remove(); };
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog || event.target.closest('[data-close]')) close();
+    });
+    document.addEventListener('keydown', onEsc);
+    return { dialog, close };
+  }
+
   // Open the ticket-type editor in a modal dialog (shared by Add + Edit). Using
   // a modal — rather than an inline reveal — keeps the form in a single, obvious
   // place instead of shifting the tiers table around underneath it.
@@ -218,10 +232,7 @@ class TicketingAdmin extends PanicElement {
     const t = tier || {};
     const isEdit = Boolean(t.id);
     const dollars = t.price_cents != null ? (t.price_cents / 100).toFixed(2) : '';
-    const dialog = document.createElement('div');
-    dialog.className = 'modal-backdrop';
-    dialog.innerHTML = `<div class="modal-card">
-      <div class="section-head padded"><h2>${isEdit ? 'Edit ticket type' : 'Add ticket type'}</h2><button class="small secondary" data-close type="button">Close</button></div>
+    const { dialog, close } = this.openModal(isEdit ? 'Edit ticket type' : 'Add ticket type', `
       <form class="grid-form padded" data-form="tier" data-tier-id="${esc(t.id || '')}">
         <label>Name <input name="name" required value="${esc(t.name || '')}" placeholder="General Admission"></label>
         <label>Price (USD) <input name="price_dollars" type="number" step="0.01" min="0" value="${esc(dollars)}" placeholder="0.00"></label>
@@ -232,32 +243,50 @@ class TicketingAdmin extends PanicElement {
         <label class="wide">Description <input name="description" value="${esc(t.description || '')}" placeholder="What’s included (optional)"></label>
         <div class="wide form-actions"><button type="submit">${isEdit ? 'Save ticket type' : 'Add ticket type'}</button><button type="button" class="secondary" data-close>Cancel</button></div>
         <p class="error-text wide" data-error></p>
-      </form>
-    </div>`;
-    document.body.appendChild(dialog);
-    const onEsc = (event) => { if (event.key === 'Escape') close(); };
-    const close = () => { document.removeEventListener('keydown', onEsc); dialog.remove(); };
-    $$('[data-close]', dialog).forEach((btn) => btn.addEventListener('click', close));
-    dialog.addEventListener('click', (event) => { if (event.target === dialog) close(); });
-    document.addEventListener('keydown', onEsc);
+      </form>`);
     $('input[name="name"]', dialog).focus();
-
     $('[data-form="tier"]', dialog).addEventListener('submit', (e) => this.saveTier(e, close));
+  }
+
+  // Issue comp tickets in a modal. Kept open after success so the issued codes
+  // + QR links stay visible; the panel behind refreshes via load().
+  openCompModal() {
+    const tiers = this.dash.tiers || [];
+    if (!tiers.length) return;
+    const { dialog } = this.openModal('Issue comp tickets', `
+      <form class="grid-form padded" data-form="comp">
+        <label>Ticket type <select name="ticket_type_id" required>${tiers.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
+        <label>Quantity <input name="quantity" type="number" min="1" value="1" required></label>
+        <label>Holder name <input name="holder_name" placeholder="Optional"></label>
+        <label>Holder email <input name="holder_email" type="email" placeholder="Emails QR if set"></label>
+        <div class="wide form-actions"><button type="submit">Issue comps</button><button type="button" class="secondary" data-close>Cancel</button></div>
+        <div class="comp-result padded" hidden></div>
+        <p class="error-text wide" data-error></p>
+      </form>`);
+    $('select[name="ticket_type_id"]', dialog).focus();
+    $('[data-form="comp"]', dialog).addEventListener('submit', (e) => this.issueComps(e));
+  }
+
+  // Create a door-scanner link in a modal. The shareable URL + secret are shown
+  // once, inside the modal, so the operator can copy it before closing.
+  openScannerModal() {
+    const { dialog } = this.openModal('New scanner link', `
+      <form class="grid-form padded" data-form="scanner">
+        <label class="wide">Label <input name="label" placeholder="Front door"></label>
+        <label>PIN (optional) <input name="pin" inputmode="numeric" placeholder="e.g. 4821"></label>
+        <div class="wide form-actions"><button type="submit">Create link</button><button type="button" class="secondary" data-close>Cancel</button></div>
+        <div class="scanner-new padded" hidden></div>
+        <p class="error-text wide" data-error></p>
+      </form>`);
+    $('input[name="label"]', dialog).focus();
+    $('[data-form="scanner"]', dialog).addEventListener('submit', (e) => this.createScannerLink(e));
   }
 
   compSectionHtml() {
     const tiers = this.dash.tiers || [];
     if (!this.editable) return '';
-    return `<div class="section-head padded sub-head"><h3>Comp tickets</h3>${tiers.length ? revealBtn('Issue comp tickets', 'form[data-form="comp"]') : ''}</div>
-      ${tiers.length ? `<form class="grid-form padded" data-form="comp" hidden>
-        <label>Ticket type <select name="ticket_type_id" required>${tiers.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
-        <label>Quantity <input name="quantity" type="number" min="1" value="1" required></label>
-        <label>Holder name <input name="holder_name" placeholder="Optional"></label>
-        <label>Holder email <input name="holder_email" type="email" placeholder="Emails QR if set"></label>
-        <div class="form-actions"><button>Issue comps</button><button type="button" class="secondary" data-cancel-comp>Cancel</button></div>
-      </form>
-      <div class="comp-result padded" hidden></div>`
-        : '<p class="ticket-note padded">Add a ticket type first to issue comps.</p>'}`;
+    return `<div class="section-head padded sub-head"><h3>Comp tickets</h3>${tiers.length ? `<button type="button" class="add-toggle" data-add-comp aria-label="Issue comp tickets" title="Issue comp tickets"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>` : ''}</div>
+      ${tiers.length ? '' : '<p class="ticket-note padded">Add a ticket type first to issue comps.</p>'}`;
   }
 
   scannerSectionHtml() {
@@ -265,27 +294,11 @@ class TicketingAdmin extends PanicElement {
     const editable = this.editable;
     const body = this.scannerListInner();
     const canManage = editable && links !== null;
-    return `<div class="section-head padded sub-head"><h3>Door scanner links</h3>${canManage ? revealBtn('New scanner link', 'form[data-form="scanner"]') : ''}</div>
-      ${canManage ? `<form class="row-form padded" data-form="scanner" hidden>
-        <label class="wide">Label <input name="label" placeholder="Front door"></label>
-        <label>PIN (optional) <input name="pin" inputmode="numeric" placeholder="e.g. 4821"></label>
-        <button class="small">Create link</button>
-      </form>` : ''}
-      <div class="scanner-links padded">${body}</div>
-      <div class="scanner-new padded" hidden></div>`;
+    return `<div class="section-head padded sub-head"><h3>Door scanner links</h3>${canManage ? `<button type="button" class="add-toggle" data-add-scanner aria-label="New scanner link" title="New scanner link"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>` : ''}</div>
+      <div class="scanner-links padded">${body}</div>`;
   }
 
   bind() {
-    // "+" reveal buttons, each targeting a specific form by selector.
-    $$('[data-add-target]', this).forEach((btn) => btn.addEventListener('click', () => {
-      const form = $(btn.dataset.addTarget, this);
-      if (!form) return;
-      const show = form.hasAttribute('hidden');
-      form.toggleAttribute('hidden', !show);
-      btn.classList.toggle('active', show);
-      if (show) $$('input, select, textarea', form).find((el) => !el.disabled && el.type !== 'hidden')?.focus();
-    }));
-
     // Mode picker: reactively reveal the external-URL fields and flag unsaved
     // changes; persist on submit.
     const modeForm = $('form[data-form="mode"]', this);
@@ -307,9 +320,8 @@ class TicketingAdmin extends PanicElement {
     $$('[data-edit-tier]', this).forEach((btn) => btn.addEventListener('click', () => this.editTier(Number(btn.dataset.editTier))));
     $$('[data-del-tier]', this).forEach((btn) => btn.addEventListener('click', () => this.deleteTier(Number(btn.dataset.delTier))));
 
-    // Comp
-    $('form[data-form="comp"]', this)?.addEventListener('submit', (e) => this.issueComps(e));
-    $('[data-cancel-comp]', this)?.addEventListener('click', () => this.collapseForm('form[data-form="comp"]'));
+    // Comp: opens the issue-comps modal.
+    $('[data-add-comp]', this)?.addEventListener('click', () => this.openCompModal());
 
     // Issued-ticket row actions
     $$('[data-resend-ticket]', this).forEach((btn) => btn.addEventListener('click', () => this.resendTicket(btn)));
@@ -318,8 +330,8 @@ class TicketingAdmin extends PanicElement {
     // Refund all
     $('[data-refund-all]', this)?.addEventListener('click', () => this.refundAll());
 
-    // Scanner links
-    $('form[data-form="scanner"]', this)?.addEventListener('submit', (e) => this.createScannerLink(e));
+    // Scanner links: opens the new-scanner-link modal.
+    $('[data-add-scanner]', this)?.addEventListener('click', () => this.openScannerModal());
     this.bindScanner();
   }
 
@@ -329,16 +341,6 @@ class TicketingAdmin extends PanicElement {
     $$('[data-revoke-link]', this).forEach((btn) => btn.addEventListener('click', () => this.revokeLink(Number(btn.dataset.revokeLink))));
     $$('[data-show-link]', this).forEach((btn) => btn.addEventListener('click', () => this.toggleScannerReveal(Number(btn.dataset.showLink))));
     $$('[data-gen-link]', this).forEach((btn) => btn.addEventListener('click', () => this.regenerateScannerLink(Number(btn.dataset.genLink))));
-  }
-
-  // Hide a reveal form again and reset its matching "+" toggle. Matches the
-  // toggle in JS (not a CSS attribute selector) because the selector value
-  // itself contains quotes.
-  collapseForm(selector) {
-    $(selector, this)?.setAttribute('hidden', '');
-    $$('[data-add-target]', this).forEach((btn) => {
-      if (btn.dataset.addTarget === selector) btn.classList.remove('active');
-    });
   }
 
   // ── Issued tickets (paid + comp) ───────────────────────────────────────────
@@ -464,17 +466,27 @@ class TicketingAdmin extends PanicElement {
 
   async issueComps(e) {
     e.preventDefault();
+    const submit = $('button[type="submit"]', e.target);
+    if (submit) submit.disabled = true;
     const values = formData(e.target);
-    const res = await api(`/events/${this.eventId}/ticketing/comp`, { method: 'POST', body: JSON.stringify(values) });
-    const out = $('.comp-result', this);
-    if (out) {
-      out.hidden = false;
-      out.innerHTML = `<p>Issued <strong>${esc(res.issued)}</strong> comp ticket(s)${res.emailed ? `, emailed ${esc(res.emailed)}.` : '.'}</p>
-        <div class="comp-codes">${(res.tickets || []).map((t) => `<span class="ticket-code">${esc(t.code)}</span>${t.url ? ` <a class="comp-view" href="${esc(t.url)}" target="_blank" rel="noopener">QR</a>` : ''}`).join('')}</div>`;
+    try {
+      const res = await api(`/events/${this.eventId}/ticketing/comp`, { method: 'POST', body: JSON.stringify(values) });
+      const out = $('.comp-result', e.target);
+      if (out) {
+        out.hidden = false;
+        out.innerHTML = `<p>Issued <strong>${esc(res.issued)}</strong> comp ticket(s)${res.emailed ? `, emailed ${esc(res.emailed)}.` : '.'}</p>
+          <div class="comp-codes">${(res.tickets || []).map((t) => `<span class="ticket-code">${esc(t.code)}</span>${t.url ? ` <a class="comp-view" href="${esc(t.url)}" target="_blank" rel="noopener">QR</a>` : ''}`).join('')}</div>`;
+      }
+      publish('toast.show', { message: `Issued ${res.issued} comp ticket(s).` });
+      // New tickets exist now — refresh the panel behind the modal so the
+      // issued-tickets list updates. Re-enable so more comps can be issued.
+      await this.load();
+    } catch (error) {
+      const err = $('[data-error]', e.target);
+      if (err) err.textContent = error.message || 'Failed to issue comps.';
+    } finally {
+      if (submit) submit.disabled = false;
     }
-    publish('toast.show', { message: `Issued ${res.issued} comp ticket(s).` });
-    // New tickets exist now — refresh the whole panel so the issued-tickets list updates.
-    await this.load();
   }
 
   async refundAll() {
@@ -491,11 +503,14 @@ class TicketingAdmin extends PanicElement {
 
   async createScannerLink(e) {
     e.preventDefault();
+    const submit = $('button[type="submit"]', e.target);
+    if (submit) submit.disabled = true;
     try {
       const res = await api(`/events/${this.eventId}/scanner-links`, { method: 'POST', body: JSON.stringify(formData(e.target)) });
-      // The shareable URL + secret are returned once on creation.
+      // The shareable URL + secret are returned once on creation — show them in
+      // the modal so the operator can copy before closing.
       const url = res?.url || res?.scanner_url || res?.link;
-      const out = $('.scanner-new', this);
+      const out = $('.scanner-new', e.target);
       if (url && out) {
         out.hidden = false;
         out.innerHTML = `<p class="subtle">Share this link with door staff (shown once):</p>
@@ -504,12 +519,15 @@ class TicketingAdmin extends PanicElement {
       }
       publish('toast.show', { message: 'Scanner link created.' });
       this.links = await this.loadScannerLinks();
-      // Refresh the links list region in place.
+      // Refresh the links list region behind the modal in place.
       const region = $('.scanner-links', this);
       if (region) region.innerHTML = this.scannerListInner();
       this.bindScanner();
     } catch (error) {
-      publish('toast.show', { tone: 'error', message: error.message });
+      const err = $('[data-error]', e.target);
+      if (err) err.textContent = error.message || 'Failed to create scanner link.';
+    } finally {
+      if (submit) submit.disabled = false;
     }
   }
 

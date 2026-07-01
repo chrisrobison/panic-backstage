@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** — Move comp-ticket and scanner-link forms into modals too
 - **Added** — Edit ticket tiers in a modal dialog instead of inline
 - **Added** — Add end_date to events for multi-day bookings
 - **Added** — Prompt-preview modal before AI flyer generation
