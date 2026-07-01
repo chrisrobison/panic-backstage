@@ -132,7 +132,7 @@ final class Mailer
         return is_file($globalFile) ? $globalFile : null;
     }
 
-    public function sendTemplate(string $to, string $subject, string $template, array $vars, array $inline = []): void
+    public function sendTemplate(string $to, string $subject, string $template, array $vars, array $inline = [], array $attachments = []): void
     {
         $htmlPath = $this->resolveTemplate($template, 'html');
         $textPath = $this->resolveTemplate($template, 'txt');
@@ -147,7 +147,7 @@ final class Mailer
             $text = str_replace('{{' . $key . '}}', $value, $text);
         }
 
-        $this->send($to, $subject, $text, $html, $template, $inline);
+        $this->send($to, $subject, $text, $html, $template, $inline, $attachments);
     }
 
     /**
@@ -166,14 +166,18 @@ final class Mailer
      * @param string|null          $template  Template name (if sent via sendTemplate).
      *                                        Stored in the outbox record for traceability.
      * @param array<string,string> $inline    Content-ID => raw image bytes map.
+     * @param list<array{filename:string,mime?:string,bytes:string}> $attachments
+     *                                        Downloadable file attachments (e.g. a PDF).
+     *                                        Each: filename, optional mime (defaults to
+     *                                        application/octet-stream), and raw bytes.
      */
-    public function send(string $to, string $subject, string $textBody, ?string $htmlBody = null, ?string $template = null, array $inline = []): void
+    public function send(string $to, string $subject, string $textBody, ?string $htmlBody = null, ?string $template = null, array $inline = [], array $attachments = []): void
     {
         // Strip header injection attempts from anything that ends up in headers.
         $to      = $this->sanitizeHeaderValue($to);
         $subject = $this->sanitizeHeaderValue($subject);
 
-        $message = $this->buildMessage($to, $subject, $textBody, $htmlBody, $inline);
+        $message = $this->buildMessage($to, $subject, $textBody, $htmlBody, $inline, $attachments);
 
         $this->writeToFile($to, $message);
         $this->pipeToSendmail($to, $message);
@@ -203,6 +207,8 @@ final class Mailer
      *     files as named attachments the recipient can download and scan.
      *
      * @param array<string,string> $inline  Content-ID (bare) => raw PNG bytes.
+     * @param list<array{filename:string,mime?:string,bytes:string}> $attachments
+     *        File attachments wrapped in an outer multipart/mixed envelope.
      */
     private function buildMessage(
         string  $to,
@@ -210,6 +216,7 @@ final class Mailer
         string  $textBody,
         ?string $htmlBody,
         array   $inline = [],
+        array   $attachments = [],
     ): string {
         $domain = substr(strrchr($this->fromAddress, '@') ?: '@localhost', 1);
         $msgId  = sprintf('<%s.%s@%s>', date('YmdHis'), bin2hex(random_bytes(8)), $domain);
@@ -226,6 +233,56 @@ final class Mailer
             'X-Mailer: Backstage',
         ];
 
+        // Build the message *content* (MIME part headers + body). When file
+        // attachments are present the content becomes the first part of an outer
+        // multipart/mixed envelope; otherwise its headers are the top-level headers.
+        [$partHeaders, $body] = $this->buildContent($textBody, $htmlBody, $inline);
+
+        if ($attachments !== []) {
+            $mixBoundary = '=_Att_' . bin2hex(random_bytes(12));
+
+            $mixBody = "--{$mixBoundary}\r\n"
+                     . implode("\r\n", $partHeaders) . "\r\n"
+                     . "\r\n"
+                     . $body . "\r\n";
+
+            foreach ($attachments as $att) {
+                $filename = $this->sanitizeFilename((string) ($att['filename'] ?? 'attachment'));
+                $mime     = $this->sanitizeHeaderValue((string) ($att['mime'] ?? 'application/octet-stream'));
+                $bytes    = (string) ($att['bytes'] ?? '');
+                $mixBody .= "\r\n--{$mixBoundary}\r\n"
+                          . "Content-Type: {$mime}; name=\"{$filename}\"\r\n"
+                          . "Content-Transfer-Encoding: base64\r\n"
+                          . "Content-Disposition: attachment; filename=\"{$filename}\"\r\n"
+                          . "\r\n"
+                          . chunk_split(base64_encode($bytes), 76, "\r\n");
+            }
+            $mixBody .= "\r\n--{$mixBoundary}--";
+
+            $headers = array_merge($baseHeaders, [
+                "Content-Type: multipart/mixed; boundary=\"{$mixBoundary}\"",
+            ]);
+
+            return implode("\r\n", $headers) . "\r\n\r\n" . $mixBody;
+        }
+
+        $headers = array_merge($baseHeaders, $partHeaders);
+        return implode("\r\n", $headers) . "\r\n\r\n" . $body;
+    }
+
+    /**
+     * Build the message content as a MIME entity, returning [partHeaders, body].
+     *
+     * `partHeaders` is the list of MIME headers describing the content
+     * (Content-Type, plus the transfer encoding for the plain-text case). The
+     * caller either merges them into the top-level headers (no attachments) or
+     * emits them as the headers of the first part of a multipart/mixed envelope.
+     *
+     * @param array<string,string> $inline  Content-ID (bare) => raw PNG bytes.
+     * @return array{0: string[], 1: string}
+     */
+    private function buildContent(string $textBody, ?string $htmlBody, array $inline): array
+    {
         if ($htmlBody !== null) {
             // Normalize line endings to CRLF for both parts.
             $textBody = (string) preg_replace("/\r\n|\r|\n/", "\r\n", $textBody);
@@ -303,29 +360,37 @@ final class Mailer
                 }
                 $mixBody .= "\r\n--{$mixBoundary}--";
 
-                $headers = array_merge($baseHeaders, [
-                    "Content-Type: multipart/mixed; boundary=\"{$mixBoundary}\"",
-                ]);
-                $body = $mixBody;
-            } else {
-                $headers = array_merge($baseHeaders, [
-                    "Content-Type: multipart/alternative; boundary=\"{$altBoundary}\"",
-                ]);
-                $body = $altBody;
+                return [
+                    ["Content-Type: multipart/mixed; boundary=\"{$mixBoundary}\""],
+                    $mixBody,
+                ];
             }
-        } else {
-            // Plain-text only — normalize CRLF.
-            $textBody = (string) preg_replace("/\r\n|\r|\n/", "\r\n", $textBody);
 
-            $headers = array_merge($baseHeaders, [
-                'Content-Type: text/plain; charset=UTF-8',
-                'Content-Transfer-Encoding: 8bit',
-            ]);
-
-            $body = $textBody;
+            return [
+                ["Content-Type: multipart/alternative; boundary=\"{$altBoundary}\""],
+                $altBody,
+            ];
         }
 
-        return implode("\r\n", $headers) . "\r\n\r\n" . $body;
+        // Plain-text only — normalize CRLF.
+        $textBody = (string) preg_replace("/\r\n|\r|\n/", "\r\n", $textBody);
+
+        return [
+            ['Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: 8bit'],
+            $textBody,
+        ];
+    }
+
+    /**
+     * Sanitise an attachment filename for use inside a quoted MIME header:
+     * strips quotes/backslashes/CRLF and collapses anything unusual to '_'.
+     */
+    private function sanitizeFilename(string $name): string
+    {
+        $name = str_replace(['"', '\\', "\r", "\n"], '', $name);
+        $name = (string) preg_replace('/[^\w .()\-]+/u', '_', $name);
+        $name = trim($name);
+        return $name !== '' ? $name : 'attachment';
     }
 
     // ─── Delivery ──────────────────────────────────────────────────────────────

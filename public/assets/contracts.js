@@ -10,11 +10,22 @@ const CONTRACT_DEAL_COLUMNS = ['rental_fee', 'deposit_amount', 'balance_due_date
 
 
 function contractStatusTone(status) {
-  return { draft: 'gray', needs_review: 'amber', approved: 'green', sent: 'blue', signed: 'green', canceled: 'red', superseded: 'gray' }[status] || 'gray';
+  return {
+    draft: 'gray', needs_review: 'amber', approved: 'green', sent: 'blue', signed: 'green', canceled: 'red', superseded: 'gray',
+    // Digital-signature workflow (contracts + individual signers)
+    ready_to_send: 'blue', pending: 'gray', viewed: 'blue', partially_signed: 'amber',
+    signed_by_client: 'green', countersigned: 'green', fully_executed: 'green',
+    voided: 'red', declined: 'red', expired: 'gray', error: 'red',
+  }[status] || 'gray';
+}
+
+// Short human label for a signer/contract status token.
+function contractStatusLabel(status) {
+  return { signed_by_client: 'Signed by client', partially_signed: 'Partially signed', fully_executed: 'Fully executed', ready_to_send: 'Ready to send' }[status] || titleCase(status || '');
 }
 
 function contractStatusBadge(status) {
-  return `<span class="badge status-${esc(contractStatusTone(status))}">${esc(titleCase(status))}</span>`;
+  return `<span class="badge status-${esc(contractStatusTone(status))}">${esc(contractStatusLabel(status))}</span>`;
 }
 
 function riskBadge(level) {
@@ -123,26 +134,32 @@ ${CONTRACT_DOC_CSS}
  * (wkhtmltopdf on the server) and trigger a browser download.
  * Falls back to the print window if the endpoint fails.
  */
+/** Safe PDF filename stem from a contract title. */
+function pdfFilename(title, suffix = '') {
+  const stem = (title || 'contract').replace(/[^\w\s-]/g, '').trim() || 'contract';
+  return `${stem}${suffix}.pdf`;
+}
+
+/** Fetch an authed endpoint that returns a PDF and hand the browser a download. */
+async function downloadAuthedPdf(path, filename) {
+  const resp = await fetch(apiUrl(path), { headers: { Authorization: `Bearer ${getToken()}` } });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || `Server error ${resp.status}`);
+  }
+  const blob = await resp.blob();
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 async function downloadContractPdf(contractId, title) {
   publish('toast.show', { message: 'Generating PDF…' });
   try {
-    const resp = await fetch(apiUrl(`contracts/${contractId}/pdf`), {
-      headers: { Authorization: `Bearer ${getToken()}` },
-    });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error || `Server error ${resp.status}`);
-    }
-    const blob = await resp.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), {
-      href:     url,
-      download: `${(title || 'contract').replace(/[^\w\s-]/g, '').trim() || 'contract'}.pdf`,
-    });
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    await downloadAuthedPdf(`contracts/${contractId}/pdf`, pdfFilename(title));
     publish('toast.show', { message: 'PDF downloaded.' });
   } catch (err) {
     publish('toast.show', { message: `PDF failed: ${err.message} — use Print instead.`, tone: 'error' });
@@ -240,6 +257,7 @@ class ContractEditor extends PanicElement {
       <div class="event-actions">
         <button class="secondary" data-act="pdf">⬇ Download PDF</button>
         <button class="secondary" data-act="print">🖨 Print / Save PDF</button>
+        ${this.manage ? '<button class="secondary" data-act="email-pdf">✉ Email PDF</button>' : ''}
         ${this.manage ? '<button data-act="render">Generate version</button>' : ''}
       </div>
     </section>
@@ -253,6 +271,7 @@ class ContractEditor extends PanicElement {
       </div>
       <div class="contract-col-right">
         ${this.statusHtml()}
+        ${this.manage ? this.signingHtml() : ''}
         ${this.warningsHtml()}
         ${this.modulesHtml()}
         ${this.versionsHtml()}
@@ -318,6 +337,45 @@ class ContractEditor extends PanicElement {
     </section>`;
   }
 
+  signingHtml() {
+    const contract = this.data.contract;
+    const status = contract.status;
+    const signers = this.data.signers || [];
+    const terminal = ['fully_executed', 'voided', 'canceled'].includes(status);
+    const pending = signers.filter((s) => ['pending', 'sent', 'viewed'].includes(s.status));
+    const countersignable = ['sent', 'viewed', 'partially_signed', 'signed_by_client', 'countersigned'].includes(status);
+    const hasFinalPdf = Boolean(contract.final_pdf_path);
+    const sentish = ['sent', 'viewed', 'partially_signed', 'signed_by_client', 'countersigned'].includes(status);
+
+    const signerRow = (s) => {
+      const when = s.signed_at ? ` · signed ${esc(String(s.signed_at).slice(0, 10))}`
+        : s.viewed_at ? ` · viewed ${esc(String(s.viewed_at).slice(0, 10))}`
+        : s.declined_at ? ` · declined ${esc(String(s.declined_at).slice(0, 10))}` : '';
+      return `<li class="contract-signer">
+        <div class="contract-signer-main"><strong>${esc(s.name || s.email || '—')}</strong> <span class="muted small">${esc(titleCase(s.role || ''))}</span></div>
+        <div class="muted small">${esc(s.email || '')}${when}</div>
+        <div>${contractStatusBadge(s.status)}</div>
+      </li>`;
+    };
+
+    const actions = [];
+    if (!terminal) actions.push(`<button class="small primary" data-act="sign-send">${signers.length ? 'Re-send for signature' : '✍ Send for signature'}</button>`);
+    if (pending.length) actions.push('<button class="small secondary" data-act="sign-resend">Resend link</button>');
+    if (countersignable) actions.push('<button class="small secondary" data-act="sign-countersign">Countersign</button>');
+    if (hasFinalPdf) actions.push('<button class="small secondary" data-act="sign-download">⬇ Signed PDF</button>');
+    if (!terminal && (signers.length || sentish)) actions.push('<button class="small danger" data-act="sign-void">Void</button>');
+
+    return `<section class="panel padded" data-panel="signing">
+      <div class="section-head"><h3 class="contract-h3">Signature</h3>${signers.length ? `<span class="muted small">${signers.length} signer${signers.length === 1 ? '' : 's'}</span>` : ''}</div>
+      ${signers.length
+        ? `<ul class="contract-signers">${signers.map(signerRow).join('')}</ul>`
+        : '<p class="muted small">Not yet sent for signature. Send it to collect a legally-tracked electronic signature.</p>'}
+      <div class="inline-actions">${actions.join('') || '<span class="muted small">No signature actions available in this state.</span>'}</div>
+      <button class="linklike small" data-act="sign-audit">View audit log</button>
+      <div data-audit-log hidden></div>
+    </section>`;
+  }
+
   warningsHtml() {
     const missing = this.data.missing || [];
     const risks = this.data.risk_flags || [];
@@ -378,6 +436,13 @@ class ContractEditor extends PanicElement {
     $('[data-act="print"]', this)?.addEventListener('click', () => {
       printContractWindow(this.data.preview_html, this.data.contract.title || 'Contract');
     });
+    $('[data-act="email-pdf"]', this)?.addEventListener('click', () => this.emailPdfModal());
+    $('[data-act="sign-send"]', this)?.addEventListener('click', () => this.sendModal());
+    $('[data-act="sign-resend"]', this)?.addEventListener('click', () => this.resendLinks());
+    $('[data-act="sign-countersign"]', this)?.addEventListener('click', () => this.countersignModal());
+    $('[data-act="sign-download"]', this)?.addEventListener('click', () => this.downloadSignedPdf());
+    $('[data-act="sign-void"]', this)?.addEventListener('click', () => this.voidContract());
+    $('[data-act="sign-audit"]', this)?.addEventListener('click', () => this.toggleAudit());
     $('[data-act="render"]', this)?.addEventListener('click', () => this.action(() => api(`/contracts/${id}/render`, { method: 'POST' }), 'Version generated.'));
     $('[data-act="reevaluate"]', this)?.addEventListener('click', () => this.action(() => api(`/contracts/${id}/reevaluate`, { method: 'POST' }), 'Smart selection refreshed.'));
     const dealForm = $('[data-form="deal"]', this);
@@ -512,6 +577,140 @@ class ContractEditor extends PanicElement {
       await this.load();
     } catch (error) {
       publish('toast.show', { message: error.message, tone: 'error' });
+    }
+  }
+
+  // ── digital signature / email ─────────────────────────────────────────────
+
+  /** Small modal helper: append a modal-backdrop, wire close, return the dialog element. */
+  openModal(innerHtml) {
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-backdrop';
+    dialog.innerHTML = `<div class="modal-card">${innerHtml}</div>`;
+    document.body.appendChild(dialog);
+    const close = () => dialog.remove();
+    $('[data-close]', dialog)?.addEventListener('click', close);
+    dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
+    return { dialog, close };
+  }
+
+  emailPdfModal() {
+    const c = this.data.contract;
+    const { dialog, close } = this.openModal(`<div class="section-head padded"><h2>Email contract PDF</h2><button class="small secondary" data-close>Close</button></div>
+      <form class="grid-form padded" data-form="email-pdf">
+        <label class="wide">Recipient email <input type="email" name="email" required value="${esc(c.counterparty_email || '')}" placeholder="name@example.com"></label>
+        <label class="wide">Message <span class="muted small">(optional)</span><textarea name="message" rows="4" placeholder="Add a short note to include in the email…"></textarea></label>
+        <p class="muted small">The current contract PDF is generated and attached automatically.</p>
+        <button>Send PDF</button>
+      </form>`);
+    $('[data-form="email-pdf"]', dialog).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = formData(e.target);
+      const btn = $('button', e.target);
+      btn.disabled = true;
+      try {
+        await api(`/contracts/${this.contractId}/email-pdf`, { method: 'POST', body: JSON.stringify({ email: fd.email, message: fd.message }) });
+        close();
+        publish('toast.show', { message: `PDF emailed to ${fd.email}.` });
+      } catch (error) {
+        btn.disabled = false;
+        publish('toast.show', { message: error.message, tone: 'error' });
+      }
+    });
+  }
+
+  sendModal() {
+    const c = this.data.contract;
+    const already = (this.data.signers || []).length > 0;
+    const { dialog, close } = this.openModal(`<div class="section-head padded"><h2>Send for signature</h2><button class="small secondary" data-close>Close</button></div>
+      <form class="grid-form padded" data-form="sign-send">
+        ${already ? '<p class="muted small wide">This voids any outstanding signing links and sends a fresh request.</p>' : ''}
+        <label class="wide">Signer name <input name="name" value="${esc(c.counterparty_name || '')}" placeholder="Full name"></label>
+        <label class="wide">Signer email <input type="email" name="email" required value="${esc(c.counterparty_email || '')}" placeholder="name@example.com"></label>
+        <label class="wide">Company <span class="muted small">(optional)</span><input name="company" value="${esc(c.counterparty_org || '')}"></label>
+        <p class="muted small">The signer receives an email with a secure link to review and sign electronically.</p>
+        <button>Send signing request</button>
+      </form>`);
+    $('[data-form="sign-send"]', dialog).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = formData(e.target);
+      const btn = $('button', e.target);
+      btn.disabled = true;
+      try {
+        await api(`/contracts/${this.contractId}/send`, {
+          method: 'POST',
+          body: JSON.stringify({ signers: [{ role: 'renter', name: fd.name, email: fd.email, company: fd.company }] }),
+        });
+        close();
+        publish('toast.show', { message: 'Signing request sent.' });
+        await this.load();
+      } catch (error) {
+        btn.disabled = false;
+        publish('toast.show', { message: error.message, tone: 'error' });
+      }
+    });
+  }
+
+  resendLinks() {
+    this.action(() => api(`/contracts/${this.contractId}/resend`, { method: 'POST' }), 'Signing link resent.');
+  }
+
+  countersignModal() {
+    const { dialog, close } = this.openModal(`<div class="section-head padded"><h2>Countersign contract</h2><button class="small secondary" data-close>Close</button></div>
+      <form class="grid-form padded" data-form="countersign">
+        <label class="wide">Your name <input name="name" required placeholder="Signer name"></label>
+        <label class="wide">Title <span class="muted small">(optional)</span><input name="title" placeholder="e.g. Owner"></label>
+        <label class="wide">Signature <input name="signature_text" placeholder="Type your name as signature"></label>
+        <p class="muted small">Recording the venue's countersignature. When all parties have signed, the final signed PDF is generated automatically.</p>
+        <button>Countersign</button>
+      </form>`);
+    $('[data-form="countersign"]', dialog).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = formData(e.target);
+      const btn = $('button', e.target);
+      btn.disabled = true;
+      try {
+        await api(`/contracts/${this.contractId}/countersign`, { method: 'POST', body: JSON.stringify(fd) });
+        close();
+        publish('toast.show', { message: 'Contract countersigned.' });
+        await this.load();
+      } catch (error) {
+        btn.disabled = false;
+        publish('toast.show', { message: error.message, tone: 'error' });
+      }
+    });
+  }
+
+  async downloadSignedPdf() {
+    publish('toast.show', { message: 'Fetching signed PDF…' });
+    try {
+      await downloadAuthedPdf(`contracts/${this.contractId}/download`, pdfFilename(this.data.contract.title, '-signed'));
+      publish('toast.show', { message: 'Signed PDF downloaded.' });
+    } catch (error) {
+      publish('toast.show', { message: error.message, tone: 'error' });
+    }
+  }
+
+  voidContract() {
+    const reason = prompt('Void this contract? This invalidates all pending signing links. Optionally add a reason:');
+    if (reason === null) return; // cancelled
+    this.action(() => api(`/contracts/${this.contractId}/void`, { method: 'POST', body: JSON.stringify({ reason }) }), 'Contract voided.');
+  }
+
+  async toggleAudit() {
+    const box = $('[data-audit-log]', this);
+    if (!box) return;
+    if (!box.hidden) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    box.innerHTML = '<p class="muted small">Loading…</p>';
+    try {
+      const res = await api(`/contracts/${this.contractId}/audit`);
+      const rows = res.audit_log || [];
+      box.innerHTML = rows.length
+        ? `<ul class="contract-audit">${rows.map((r) => `<li><span class="muted small">${esc(String(r.created_at || '').slice(0, 16).replace('T', ' '))}</span> ${esc(titleCase(r.action || ''))}${r.signer_name ? ` · ${esc(r.signer_name)}` : ''}${r.ip_address ? ` <span class="muted small">(${esc(r.ip_address)})</span>` : ''}</li>`).join('')}</ul>`
+        : '<p class="muted small">No audit entries yet.</p>';
+    } catch (error) {
+      box.innerHTML = `<p class="error-text small">${esc(error.message)}</p>`;
     }
   }
 

@@ -1,0 +1,14 @@
+Your Contract
+
+Hello,
+
+Please find the following agreement attached to this email as a PDF:
+
+  {{contract_title}}
+
+{{message_text}}The contract PDF is attached to this message.
+
+If you have any questions about this agreement, simply reply to this email.
+
+--
+{{venue_name}}

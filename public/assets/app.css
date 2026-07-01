@@ -2470,6 +2470,15 @@ body.lightbox-open { overflow: hidden; }
 .contract-step.done { background: #d7eede; color: var(--green); }
 .contract-step.current { outline: 2px solid var(--blue); color: var(--ink); }
 
+/* Signature panel */
+.contract-signers { list-style: none; margin: 0 0 12px; padding: 0; }
+.contract-signer { padding: 8px 0; border-bottom: 1px solid var(--line, #eee); display: flex; flex-direction: column; gap: 2px; }
+.contract-signer:last-child { border-bottom: 0; }
+.contract-signer-main { display: flex; align-items: baseline; gap: 6px; }
+.contract-audit { list-style: none; margin: 10px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line, #eee); font-size: 12px; max-height: 220px; overflow-y: auto; }
+.contract-audit li { padding: 3px 0; }
+[data-panel="signing"] .inline-actions { margin-top: 6px; }
+
 /* Review / warnings */
 .contract-missing-list, .contract-risk-list { font-size: 13px; margin-top: 8px; }
 .contract-missing-list ul, .contract-risk-list ul { margin: 4px 0 0; padding-left: 18px; }

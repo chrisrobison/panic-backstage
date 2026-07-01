@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `contracts` — Email the contract PDF and drive e-signature from the editor
 - **Added** — Use pencil icon for tier edit and move delete into the edit modal
 - **Added** — Show each ticket tier's sales window in the tiers table
 - **Added** — Default Door tier on-sale date to the day of the event

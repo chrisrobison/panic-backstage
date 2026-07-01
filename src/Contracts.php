@@ -14,6 +14,7 @@ use function Panic\log_activity;
  *   PATCH  /api/contracts/{id}                     update deal terms / counterparty / variables
  *   DELETE /api/contracts/{id}
  *   POST   /api/contracts/{id}/render              render a new immutable version
+ *   POST   /api/contracts/{id}/email-pdf           email the current contract PDF as an attachment
  *   GET    /api/contracts/{id}/versions/{vid}      fetch a past version's HTML
  *   POST   /api/contracts/{id}/status              change workflow status
  *   POST   /api/contracts/{id}/apply-template      (re)build sections from a template
@@ -68,6 +69,7 @@ final class Contracts extends BaseEndpoint
                 'reevaluate'     => $this->requireManage($access) ?? $this->reevaluate($contract),
                 'sections'       => $this->requireManage($access) ?? $this->sections($request, $contract),
                 // ── Digital signature actions ──────────────────────────────────
+                'email-pdf'   => $method === 'POST' ? ($this->requireManage($access) ?? $this->emailPdf($request, $contract)) : Response::methodNotAllowed(),
                 'send'        => $this->requireManage($access) ?? $this->sendForSignature($request, $contract),
                 'resend'      => $this->requireManage($access) ?? $this->resendSigningLinks($contract),
                 'void'        => $this->requireManage($access) ?? $this->voidContract($request, $contract),
@@ -202,6 +204,13 @@ final class Contracts extends BaseEndpoint
             'summary'           => $preview['summary'],
             'missing'           => $missing,
             'risk_flags'        => $this->riskFlags($contract, $secForCalc),
+            'signers'           => $access['manage']
+                ? $this->db->all(
+                    'SELECT id, role, name, email, phone, company, title, status, viewed_at, signed_at, declined_at, created_at
+                       FROM contract_signers WHERE contract_id = ? ORDER BY id',
+                    [(int) $contract['id']]
+                )
+                : [],
             'versions'          => $this->db->all('SELECT v.id, v.version_number, v.created_at, u.name AS created_by_name FROM contract_versions v LEFT JOIN users u ON u.id = v.created_by_user_id WHERE v.contract_id = ? ORDER BY v.version_number DESC', [(int) $contract['id']]),
             'available_modules' => $this->db->all('SELECT id, module_key, name, category, risk_level, is_locked, required_fields_json FROM contract_modules WHERE is_active = 1 ORDER BY category, sort_order, name'),
             'templates'         => $this->activeTemplates(),
@@ -321,6 +330,28 @@ CSS;
      */
     private function pdfExport(array $contract): Response
     {
+        $pdf = $this->renderContractPdf($contract);
+        if ($pdf === null) {
+            return Response::json(['error' => 'PDF generation failed'], 500);
+        }
+
+        $safe = $this->pdfFilenameStem($contract);
+
+        return new Response($pdf, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$safe}.pdf\"",
+            'Content-Length'      => (string) strlen($pdf),
+            'Cache-Control'       => 'private, no-cache',
+        ]);
+    }
+
+    /**
+     * Render the current contract preview to PDF bytes via wkhtmltopdf.
+     * Returns the raw PDF string, or null if rendering failed. Shared by the
+     * download (pdfExport) and email-PDF flows.
+     */
+    private function renderContractPdf(array $contract): ?string
+    {
         [$event, $venue] = ContractService::eventVenueFor($this->db, $contract);
         $ctx      = ContractRenderer::context($contract, $event, $venue);
         $sections = $this->boolIncluded($this->loadSections((int) $contract['id']));
@@ -355,7 +386,8 @@ HTML;
         ], $pipes);
 
         if (!is_resource($proc)) {
-            return Response::json(['error' => 'PDF renderer unavailable'], 503);
+            error_log('wkhtmltopdf: proc_open failed (renderer unavailable)');
+            return null;
         }
 
         fwrite($pipes[0], $html);
@@ -369,18 +401,80 @@ HTML;
 
         if ($exit !== 0 || !$pdf) {
             error_log("wkhtmltopdf exit={$exit}: {$stderr}");
-            return Response::json(['error' => 'PDF generation failed'], 500);
+            return null;
         }
 
-        $safe = preg_replace('/[^\w\s-]/', '', (string) ($contract['title'] ?? 'contract'));
-        $safe = trim(preg_replace('/\s+/', '-', $safe)) ?: 'contract';
+        return $pdf;
+    }
 
-        return new Response($pdf, 200, [
-            'Content-Type'        => 'application/pdf',
-            'Content-Disposition' => "attachment; filename=\"{$safe}.pdf\"",
-            'Content-Length'      => (string) strlen($pdf),
-            'Cache-Control'       => 'private, no-cache',
-        ]);
+    /** Filesystem-safe stem for a contract PDF filename (no extension). */
+    private function pdfFilenameStem(array $contract): string
+    {
+        $safe = preg_replace('/[^\w\s-]/', '', (string) ($contract['title'] ?? 'contract'));
+        return trim(preg_replace('/\s+/', '-', (string) $safe)) ?: 'contract';
+    }
+
+    /**
+     * POST /api/contracts/{id}/email-pdf
+     *
+     * Body: { email: "...", message?: "..." }
+     *
+     * Renders the current contract to PDF and emails it as an attachment.
+     * The recipient defaults to the contract counterparty in the UI but is
+     * always taken from the request body here.
+     */
+    private function emailPdf(Request $request, array $contract): Response
+    {
+        $contractId = (int) $contract['id'];
+        $email      = trim((string) ($request->body('email') ?? ''));
+        $note       = trim((string) ($request->body('message') ?? ''));
+
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return Response::json(['error' => 'A valid recipient email address is required.'], 422);
+        }
+
+        $pdf = $this->renderContractPdf($contract);
+        if ($pdf === null) {
+            return Response::json(['error' => 'Could not generate the contract PDF.'], 500);
+        }
+
+        $title    = (string) ($contract['title'] ?? 'Agreement');
+        $filename = $this->pdfFilenameStem($contract) . '.pdf';
+        $mailer   = new Mailer($this->root, $this->db);
+
+        try {
+            $mailer->sendTemplate(
+                $email,
+                'Contract: ' . $title,
+                'contract-pdf',
+                [
+                    'contract_title' => $title,
+                    'message'        => $note !== '' ? '<p>' . nl2br(htmlspecialchars($note, ENT_QUOTES, 'UTF-8')) . '</p>' : '',
+                    'message_text'   => $note !== '' ? $note . "\n\n" : '',
+                    'venue_name'     => (string) (getenv('MAIL_FROM_NAME') ?: 'The Venue'),
+                ],
+                [],
+                [[
+                    'filename' => $filename,
+                    'mime'     => 'application/pdf',
+                    'bytes'    => $pdf,
+                ]]
+            );
+        } catch (\Throwable $e) {
+            error_log("Contracts::emailPdf mail failed to {$email}: " . $e->getMessage());
+            return Response::json(['error' => 'The contract PDF could not be emailed.'], 500);
+        }
+
+        ContractAuditLog::appendFromRequest(
+            $this->db, $contractId, 'pdf_emailed', null,
+            ['email' => $email, 'sent_by_user_id' => $this->userId()]
+        );
+
+        if (!empty($contract['event_id'])) {
+            log_activity($this->db, (int) $contract['event_id'], $this->userId(), 'contract PDF emailed', ['contract_id' => $contractId, 'to' => $email]);
+        }
+
+        return $this->ok(['ok' => true, 'email' => $email]);
     }
 
     private function version(array $contract, int $versionId): Response
