@@ -151,9 +151,8 @@ class TicketingAdmin extends PanicElement {
 
       <div class="section-head padded sub-head">
         <h3>Ticket types</h3>
-        ${editable ? revealBtn('Add ticket type', 'form[data-form="tier"]') : ''}
+        ${editable ? `<button type="button" class="add-toggle" data-add-tier aria-label="Add ticket type" title="Add ticket type"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>` : ''}
       </div>
-      ${editable ? this.tierFormHtml() : ''}
       <div class="ticketing-tiers padded">${this.tiersHtml()}</div>
 
       ${editable ? this.compSectionHtml() : ''}
@@ -212,19 +211,38 @@ class TicketingAdmin extends PanicElement {
     </table>`;
   }
 
-  tierFormHtml(tier = null) {
+  // Open the ticket-type editor in a modal dialog (shared by Add + Edit). Using
+  // a modal — rather than an inline reveal — keeps the form in a single, obvious
+  // place instead of shifting the tiers table around underneath it.
+  openTierModal(tier = null) {
     const t = tier || {};
+    const isEdit = Boolean(t.id);
     const dollars = t.price_cents != null ? (t.price_cents / 100).toFixed(2) : '';
-    return `<form class="grid-form padded" data-form="tier" data-tier-id="${esc(t.id || '')}" hidden>
-      <label>Name <input name="name" required value="${esc(t.name || '')}" placeholder="General Admission"></label>
-      <label>Price (USD) <input name="price_dollars" type="number" step="0.01" min="0" value="${esc(dollars)}" placeholder="0.00"></label>
-      <label>Quantity <input name="quantity_total" type="number" min="0" required value="${esc(t.quantity_total ?? '')}" placeholder="100"></label>
-      <label>Status <select name="status">${TYPE_STATUSES.map((s) => `<option value="${s}" ${s === (t.status || 'draft') ? 'selected' : ''}>${esc(titleCase(s))}</option>`).join('')}</select></label>
-      <label>Sales start <input name="sales_start" type="datetime-local" value="${esc((t.sales_start || '').replace(' ', 'T').slice(0, 16))}"></label>
-      <label>Sales end <input name="sales_end" type="datetime-local" value="${esc((t.sales_end || '').replace(' ', 'T').slice(0, 16))}"></label>
-      <label class="wide">Description <input name="description" value="${esc(t.description || '')}" placeholder="What’s included (optional)"></label>
-      <div class="form-actions"><button>${t.id ? 'Save ticket type' : 'Add ticket type'}</button><button type="button" class="secondary" data-cancel-tier>Cancel</button></div>
-    </form>`;
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-backdrop';
+    dialog.innerHTML = `<div class="modal-card">
+      <div class="section-head padded"><h2>${isEdit ? 'Edit ticket type' : 'Add ticket type'}</h2><button class="small secondary" data-close type="button">Close</button></div>
+      <form class="grid-form padded" data-form="tier" data-tier-id="${esc(t.id || '')}">
+        <label>Name <input name="name" required value="${esc(t.name || '')}" placeholder="General Admission"></label>
+        <label>Price (USD) <input name="price_dollars" type="number" step="0.01" min="0" value="${esc(dollars)}" placeholder="0.00"></label>
+        <label>Quantity <input name="quantity_total" type="number" min="0" required value="${esc(t.quantity_total ?? '')}" placeholder="100"></label>
+        <label>Status <select name="status">${TYPE_STATUSES.map((s) => `<option value="${s}" ${s === (t.status || 'draft') ? 'selected' : ''}>${esc(titleCase(s))}</option>`).join('')}</select></label>
+        <label>Sales start <input name="sales_start" type="datetime-local" value="${esc((t.sales_start || '').replace(' ', 'T').slice(0, 16))}"></label>
+        <label>Sales end <input name="sales_end" type="datetime-local" value="${esc((t.sales_end || '').replace(' ', 'T').slice(0, 16))}"></label>
+        <label class="wide">Description <input name="description" value="${esc(t.description || '')}" placeholder="What’s included (optional)"></label>
+        <div class="wide form-actions"><button type="submit">${isEdit ? 'Save ticket type' : 'Add ticket type'}</button><button type="button" class="secondary" data-close>Cancel</button></div>
+        <p class="error-text wide" data-error></p>
+      </form>
+    </div>`;
+    document.body.appendChild(dialog);
+    const onEsc = (event) => { if (event.key === 'Escape') close(); };
+    const close = () => { document.removeEventListener('keydown', onEsc); dialog.remove(); };
+    $$('[data-close]', dialog).forEach((btn) => btn.addEventListener('click', close));
+    dialog.addEventListener('click', (event) => { if (event.target === dialog) close(); });
+    document.addEventListener('keydown', onEsc);
+    $('input[name="name"]', dialog).focus();
+
+    $('[data-form="tier"]', dialog).addEventListener('submit', (e) => this.saveTier(e, close));
   }
 
   compSectionHtml() {
@@ -282,9 +300,8 @@ class TicketingAdmin extends PanicElement {
       modeForm.addEventListener('submit', (e) => this.saveMode(e));
     }
 
-    // Ticket type create / cancel
-    $('form[data-form="tier"]', this)?.addEventListener('submit', (e) => this.saveTier(e));
-    $('[data-cancel-tier]', this)?.addEventListener('click', () => this.collapseForm('form[data-form="tier"]'));
+    // Ticket type: Add opens the editor modal (Edit opens it prefilled below).
+    $('[data-add-tier]', this)?.addEventListener('click', () => this.openTierModal(null));
 
     // Ticket type edit / delete (row actions, only if editable)
     $$('[data-edit-tier]', this).forEach((btn) => btn.addEventListener('click', () => this.editTier(Number(btn.dataset.editTier))));
@@ -403,19 +420,13 @@ class TicketingAdmin extends PanicElement {
 
   editTier(id) {
     const tier = (this.dash.tiers || []).find((t) => Number(t.id) === id);
-    if (!tier) return;
-    const host = $('form[data-form="tier"]', this);
-    if (!host) return;
-    host.outerHTML = this.tierFormHtml(tier);
-    const form = $('form[data-form="tier"]', this);
-    form.removeAttribute('hidden');
-    form.addEventListener('submit', (e) => this.saveTier(e));
-    $('[data-cancel-tier]', form)?.addEventListener('click', () => this.load());
-    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (tier) this.openTierModal(tier);
   }
 
-  async saveTier(e) {
+  async saveTier(e, close) {
     e.preventDefault();
+    const submit = $('button[type="submit"]', e.target);
+    if (submit) submit.disabled = true;
     const values = formData(e.target);
     const body = {
       name: values.name,
@@ -428,9 +439,16 @@ class TicketingAdmin extends PanicElement {
     };
     const id = e.target.dataset.tierId;
     const path = id ? `/events/${this.eventId}/ticketing/types/${id}` : `/events/${this.eventId}/ticketing`;
-    await api(path, { method: id ? 'PATCH' : 'POST', body: JSON.stringify(body) });
-    publish('toast.show', { message: id ? 'Ticket type updated.' : 'Ticket type created.' });
-    await this.load();
+    try {
+      await api(path, { method: id ? 'PATCH' : 'POST', body: JSON.stringify(body) });
+      publish('toast.show', { message: id ? 'Ticket type updated.' : 'Ticket type created.' });
+      close?.();
+      await this.load();
+    } catch (error) {
+      const err = $('[data-error]', e.target);
+      if (err) err.textContent = error.message || 'Save failed.';
+      if (submit) submit.disabled = false;
+    }
   }
 
   async deleteTier(id) {
