@@ -345,6 +345,8 @@ class AppShell extends PanicElement {
     });
     const outlet = $('#app', this);
     if (route === 'new-event') return this.mount(outlet, 'pb-event-wizard');
+    const wizardEditMatch = route.match(/^new-event-(\d+)$/);
+    if (wizardEditMatch) return this.mount(outlet, 'pb-event-wizard', { sourceEventId: Number(wizardEditMatch[1]) });
     if (route === 'promote') return this.mount(outlet, 'pb-promote-campaign-list');
     if (route === 'promote-settings') return this.mount(outlet, 'pb-promote-settings');
     if (promoteRoute) {

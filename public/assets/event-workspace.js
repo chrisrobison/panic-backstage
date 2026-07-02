@@ -265,6 +265,7 @@ class EventWorkspace extends PanicElement {
       <div class="event-actions">
         ${isPrivate ? '' : `<a class="button promote-accent" href="#promote-event-${esc(String(event.id))}"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Promote</a>`}
         ${isPrivate ? '' : `<a class="button secondary" href="${esc(appUrl(data.links.public_page))}" target="_blank" rel="noreferrer">Public Page</a>`}
+        ${can(data, 'edit_event') ? `<a class="button secondary" href="#new-event-${esc(String(event.id))}" title="Re-run this event through the guided setup wizard, pre-filled with its current details"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Run Through Wizard</a>` : ''}
         ${sectionsDropdown}
         ${can(data, 'read_event') ? `<details class="print-menu">
           <summary class="button secondary">Print &#9662;</summary>

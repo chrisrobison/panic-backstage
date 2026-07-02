@@ -2,7 +2,10 @@
 // A JSON-driven, multi-step wizard that guides users through creating a fully
 // configured event with an automatically pre-populated contract draft.
 //
-// Route:   #new-event  (also opens from the topbar "+ New event" button)
+// Route:   #new-event          create mode (also opens from topbar "+ New event")
+//          #new-event-{id}     edit mode — re-runs an existing event through the
+//                               same guided flow, pre-filled with its current
+//                               event + contract values (see `sourceEventId`)
 // Element: <pb-event-wizard>
 //
 // Architecture
@@ -13,10 +16,21 @@
 //
 //  EventContractWizard   PanicElement that owns wizard state, renders steps
 //                        from the flow config, validates, and on finish:
-//                          1. POST /events                     → create event
-//                          2. POST /events/{id}/contracts      → create contract
-//                          3. PATCH /contracts/{id}            → fill deal terms
-//                          4. POST /contracts/{id}/reevaluate  → smart clauses
+//                          Create mode (no sourceEventId):
+//                            1. POST /events                     → create event
+//                            2. POST /events/{id}/contracts      → create contract
+//                            3. PATCH /contracts/{id}            → fill deal terms
+//                            4. POST /contracts/{id}/reevaluate  → smart clauses
+//                          Edit mode (sourceEventId set):
+//                            1. PATCH /events/{sourceEventId}                  → update event
+//                            2. PATCH /contracts/{id} (or create if none yet)  → update deal terms
+//                            3. POST /contracts/{id}/reevaluate                → smart clauses
+//
+// Edit mode note: `deal_type` (the wizard's talent_buy/promoter_deal/rental/…
+// picker) has no matching column on `contracts` — it only drives which fields
+// are shown. When pre-filling from an existing contract we infer the closest
+// deal_type from which deal-term columns are populated (see `_inferDealType`);
+// it's a best-effort guess, not a stored value.
 //
 // PAN integration
 // ───────────────
@@ -443,8 +457,10 @@ class EventContractWizard extends PanicElement {
     this.meta          = null;    // { venues, event_types, contract_templates }
     this._searchTimer  = null;    // debounce handle for contact typeahead
     this._submitting   = false;   // prevent double-submit
+    this._sourceEvent    = null;  // full event row, set when sourceEventId is passed (edit mode)
+    this._sourceContract = null;  // full contract row for the source event, if one exists
 
-    this.setLoading('Loading wizard…');
+    this.setLoading(this.sourceEventId ? 'Loading event into wizard…' : 'Loading wizard…');
 
     // Seed default values from flow config before first render
     WIZARD_FLOW.steps.forEach((step) => {
@@ -488,10 +504,97 @@ class EventContractWizard extends PanicElement {
         this.wizardData.date = isoDate(new Date());
       }
 
+      // Edit mode: overlay the source event's (and its contract's) real values
+      // on top of the defaults set above, so the wizard opens pre-filled.
+      if (this.sourceEventId) {
+        await this._loadSourceEvent();
+      }
+
       this.render();
     } catch (error) {
       this.showError(error);
     }
+  }
+
+  /** Edit mode: fetch the source event + its most recently updated contract (if any) and seed wizardData from them. */
+  async _loadSourceEvent() {
+    try {
+      const eventResp = await api(`/events/${this.sourceEventId}`);
+      this._sourceEvent = eventResp.event;
+
+      let contract = null;
+      try {
+        const listResp = await api(`/events/${this.sourceEventId}/contracts`);
+        const first = (listResp.contracts || [])[0]; // ordered by updated_at DESC
+        if (first) {
+          const fullResp = await api(`/contracts/${first.id}`);
+          contract = fullResp.contract;
+        }
+      } catch {
+        // Contracts are optional context for pre-fill — proceed without one.
+      }
+      this._sourceContract = contract;
+
+      this._prefillFromSource(this._sourceEvent, this._sourceContract);
+    } catch (error) {
+      publish('toast.show', {
+        message: `Could not load event #${this.sourceEventId} into the wizard: ${error.message || error}`,
+        tone: 'error',
+      });
+    }
+  }
+
+  /** Overlay wizardData with values read from an existing event (+ its contract, if any). */
+  _prefillFromSource(event, contract) {
+    if (!event) return;
+    const d = this.wizardData;
+
+    d.title              = event.title || '';
+    d.date                = event.date || d.date;
+    d.venue_id            = event.venue_id != null ? String(event.venue_id) : '';
+    d.event_type          = event.event_type || '';
+    if (event.doors_time) d.doors_time = String(event.doors_time).slice(0, 5);
+    if (event.show_time)  d.show_time  = String(event.show_time).slice(0, 5);
+    if (event.end_time)   d.end_time   = String(event.end_time).slice(0, 5);
+    d.age_restriction     = event.age_restriction || '';
+    d.capacity             = event.capacity != null ? String(event.capacity) : '';
+    d.public_description   = event.description_public || '';
+    d.public_visibility     = event.public_visibility != null ? String(Number(event.public_visibility)) : '';
+
+    if (!contract) return;
+
+    d.deal_type            = this._inferDealType(contract);
+    d.contract_template_id = contract.template_id != null ? String(contract.template_id) : '';
+    d.counterparty_name    = contract.counterparty_name || '';
+    d.counterparty_org     = contract.counterparty_org  || '';
+    d.counterparty_email   = contract.counterparty_email || '';
+
+    NUMERIC_DEAL_FIELDS.forEach((k) => {
+      if (contract[k] !== null && contract[k] !== undefined) d[k] = String(contract[k]);
+    });
+    STRING_DEAL_FIELDS.forEach((k) => {
+      if (contract[k] !== null && contract[k] !== undefined) d[k] = String(contract[k]);
+    });
+    BOOL_DEAL_FIELDS.forEach((k) => {
+      if (contract[k] !== null && contract[k] !== undefined) d[k] = String(Number(contract[k]));
+    });
+  }
+
+  /**
+   * `deal_type` (talent_buy / promoter_deal / rental / …) only exists in the
+   * wizard's UI — it has no column on `contracts`, so it can't be read back
+   * directly. Infer the closest match from which deal-term columns are
+   * populated. Best-effort only; the user can correct it on the Deal
+   * Structure step.
+   */
+  _inferDealType(contract) {
+    if (Number(contract.revenue_split_house) || Number(contract.revenue_split_producer)) return 'residency';
+    if (Number(contract.rental_fee)) return 'rental';
+    if (Number(contract.door_split_promoter)) return 'promoter_deal';
+    if (Number(contract.guarantee_amount) || Number(contract.door_split_artist)) return 'talent_buy';
+    if (contract.contract_type === 'private_event') return 'private_event';
+    if (contract.counterparty_name) return 'talent_buy';
+    return '';
   }
 
   // ── Flow helpers ─────────────────────────────────────────────────────────────
@@ -558,15 +661,17 @@ class EventContractWizard extends PanicElement {
   }
 
   _headerHtml(steps, pct) {
+    const editing = !!this.sourceEventId;
+    const exitHref = editing ? `#event-${esc(String(this.sourceEventId))}` : '#events';
     return `
       <header class="wizard-header">
         <div class="wizard-top-row">
           <div>
-            <span class="wizard-eyebrow">New Event</span>
+            <span class="wizard-eyebrow">${editing ? 'Editing Event' : 'New Event'}</span>
             <h1 class="wizard-main-title">${esc(this.currentStep.title)}</h1>
           </div>
           <div class="wizard-top-actions">
-            <a href="#events" class="button secondary small">Exit wizard</a>
+            <a href="${exitHref}" class="button secondary small">Exit wizard</a>
           </div>
         </div>
         <div class="wizard-progress-track"
@@ -623,7 +728,7 @@ class EventContractWizard extends PanicElement {
             ? '<button class="button primary" data-next aria-label="Go to next step">Continue →</button>'
             : `<button class="button primary" data-finish>
                  <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
-                 Create Event &amp; Draft Contract
+                 ${this.sourceEventId ? 'Save Changes' : 'Create Event &amp; Draft Contract'}
                </button>`}
           <span class="wizard-step-hint muted small" aria-live="off">
             Step ${this.stepIndex + 1} of ${steps.length}
@@ -856,13 +961,15 @@ class EventContractWizard extends PanicElement {
         </div>
         <div class="wizard-sidebar-note muted small">
           <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
-          Fill in the steps to build your event. A contract draft is created automatically on the last step.
+          ${this.sourceEventId
+            ? 'Fill in the steps to review this event. Its event and contract details are saved in place on the last step.'
+            : 'Fill in the steps to build your event. A contract draft is created automatically on the last step.'}
         </div>
-        <div class="wizard-sidebar-quick">
+        ${this.sourceEventId ? '' : `<div class="wizard-sidebar-quick">
           <button class="button secondary small wide" data-quick-create>
             <i class="fa-solid fa-bolt" aria-hidden="true"></i> Quick Create instead
           </button>
-        </div>
+        </div>`}
       </aside>`;
   }
 
@@ -1172,67 +1279,137 @@ class EventContractWizard extends PanicElement {
       return;
     }
 
+    const editing = !!this.sourceEventId;
     const btn = $('[data-finish]', this);
-    if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+    if (btn) { btn.disabled = true; btn.textContent = editing ? 'Saving…' : 'Creating…'; }
     this._submitting = true;
 
     try {
-      // 1 ── Create the event ────────────────────────────────────────────────
-      const eventPayload = this._buildEventPayload();
-      const createdEvent = await api('/events', {
-        method: 'POST',
-        body:   JSON.stringify(eventPayload),
-      });
+      const { event: savedEvent, contract: savedContract } = editing
+        ? await this._finishEdit()
+        : await this._finishCreate();
 
-      // 2 ── Create the contract draft ───────────────────────────────────────
-      const contractPayload = this._buildContractPayload(createdEvent);
-      const createdContract = await api(`/events/${createdEvent.id}/contracts`, {
+      // ── Notify and navigate ─────────────────────────────────────────────
+      publish('toast.show', {
+        message: editing
+          ? `"${savedEvent.title}" updated via the wizard.`
+          : `"${savedEvent.title}" created with contract draft.`,
+        tone: 'success',
+      });
+      publish('event.saved',      { id: savedEvent.id });
+      publish('wizard.completed', { event: savedEvent, contract: savedContract });
+
+      location.hash = `event-${savedEvent.id}`;
+
+    } catch (error) {
+      publish('toast.show', { message: error.message || `Could not ${editing ? 'save' : 'create'} event.`, tone: 'error' });
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> ${editing ? 'Save Changes' : 'Create Event &amp; Draft Contract'}`;
+      }
+      this._submitting = false;
+    }
+  }
+
+  /** Create mode: POST a brand-new event + contract draft. */
+  async _finishCreate() {
+    // 1 ── Create the event ────────────────────────────────────────────────
+    const eventPayload = this._buildEventPayload();
+    const createdEvent = await api('/events', {
+      method: 'POST',
+      body:   JSON.stringify(eventPayload),
+    });
+
+    // 2 ── Create the contract draft ───────────────────────────────────────
+    const contractPayload = this._buildContractPayload(createdEvent);
+    const createdContract = await api(`/events/${createdEvent.id}/contracts`, {
+      method: 'POST',
+      body:   JSON.stringify(contractPayload),
+    });
+
+    // 3 ── Patch deal terms onto the contract ──────────────────────────────
+    const dealTerms = this._buildDealTerms();
+    if (Object.keys(dealTerms).length) {
+      await api(`/contracts/${createdContract.id}`, {
+        method: 'PATCH',
+        body:   JSON.stringify(dealTerms),
+      });
+    }
+
+    // 4 ── Smart clause re-evaluation (non-fatal if it fails) ─────────────
+    await api(`/contracts/${createdContract.id}/reevaluate`, { method: 'POST' })
+      .catch((err) => console.warn('[wizard] reevaluate skipped:', err.message));
+
+    return { event: createdEvent, contract: createdContract };
+  }
+
+  /**
+   * Edit mode: PATCH the existing event in place rather than creating a new
+   * one. `_buildEventPayload()` only returns the columns the wizard collects,
+   * so it's layered on top of the full original row (fetched in
+   * `_loadSourceEvent`) — any event field the wizard doesn't ask about (e.g.
+   * internal notes, ticketing links) is carried over unchanged instead of
+   * being nulled out by the PATCH.
+   */
+  async _finishEdit() {
+    const eventId = this.sourceEventId;
+
+    // 1 ── Update the event ────────────────────────────────────────────────
+    const eventPayload = { ...(this._sourceEvent || {}), ...this._buildEventPayload() };
+    await api(`/events/${eventId}`, {
+      method: 'PATCH',
+      body:   JSON.stringify(eventPayload),
+    });
+    const savedEvent = { ...this._sourceEvent, ...eventPayload, id: eventId };
+
+    // 2 ── Update (or create) the contract ─────────────────────────────────
+    const dealTerms = this._buildDealTerms();
+    const counterparty = {};
+    if (this.wizardData.counterparty_name)  counterparty.counterparty_name  = this.wizardData.counterparty_name;
+    if (this.wizardData.counterparty_org)   counterparty.counterparty_org   = this.wizardData.counterparty_org;
+    if (this.wizardData.counterparty_email) counterparty.counterparty_email = this.wizardData.counterparty_email;
+
+    let savedContract = this._sourceContract;
+    if (this._sourceContract) {
+      const patch = { ...dealTerms, ...counterparty };
+      if (Object.keys(patch).length) {
+        await api(`/contracts/${this._sourceContract.id}`, {
+          method: 'PATCH',
+          body:   JSON.stringify(patch),
+        });
+      }
+      await api(`/contracts/${this._sourceContract.id}/reevaluate`, { method: 'POST' })
+        .catch((err) => console.warn('[wizard] reevaluate skipped:', err.message));
+      savedContract = { ...this._sourceContract, ...patch };
+    } else if (this.wizardData.deal_type) {
+      // No existing contract on this event yet — create one, same as create mode.
+      const contractPayload = this._buildContractPayload(savedEvent);
+      const createdContract = await api(`/events/${eventId}/contracts`, {
         method: 'POST',
         body:   JSON.stringify(contractPayload),
       });
-
-      // 3 ── Patch deal terms onto the contract ──────────────────────────────
-      const dealTerms = this._buildDealTerms();
       if (Object.keys(dealTerms).length) {
         await api(`/contracts/${createdContract.id}`, {
           method: 'PATCH',
           body:   JSON.stringify(dealTerms),
         });
       }
-
-      // 4 ── Smart clause re-evaluation (non-fatal if it fails) ─────────────
       await api(`/contracts/${createdContract.id}/reevaluate`, { method: 'POST' })
         .catch((err) => console.warn('[wizard] reevaluate skipped:', err.message));
-
-      // 5 ── Notify and navigate ─────────────────────────────────────────────
-      publish('toast.show', {
-        message: `"${createdEvent.title}" created with contract draft.`,
-        tone:    'success',
-      });
-      publish('event.saved',       { id: createdEvent.id });
-      publish('wizard.completed',  { event: createdEvent, contract: createdContract });
-
-      location.hash = `event-${createdEvent.id}`;
-
-    } catch (error) {
-      publish('toast.show', { message: error.message || 'Could not create event.', tone: 'error' });
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Create Event &amp; Draft Contract';
-      }
-      this._submitting = false;
+      savedContract = createdContract;
     }
+
+    return { event: savedEvent, contract: savedContract };
   }
 
   // ── Payload builders ──────────────────────────────────────────────────────────
 
   _buildEventPayload() {
     const d = this.wizardData;
-    const payload = {
-      title:               d.title,
-      date:                d.date,
-      status:              'proposed',
-    };
+    const payload = { title: d.title, date: d.date };
+    // Only new events default to "proposed" — editing an existing event must
+    // never silently reset a further-along status (confirmed, booked, etc.).
+    if (!this.sourceEventId) payload.status = 'proposed';
     if (d.venue_id)           payload.venue_id           = Number(d.venue_id);
     if (d.event_type)         payload.event_type         = d.event_type;
     if (d.doors_time)         payload.doors_time         = d.doors_time;
@@ -1241,18 +1418,20 @@ class EventContractWizard extends PanicElement {
     if (d.capacity)           payload.capacity           = Number(d.capacity);
     if (d.age_restriction)    payload.age_restriction    = d.age_restriction;
     if (d.public_description) payload.public_description = d.public_description;
-    // Default to hidden; user sets visibility via the Promote tab after creation
+    // Default to hidden for brand-new events; user sets visibility via the
+    // Promote tab after creation. In edit mode this is pre-filled from the
+    // event's current value, so an untouched toggle carries it forward as-is.
     payload.public_visibility = (d.public_visibility !== '' && d.public_visibility !== undefined)
       ? Number(d.public_visibility)
       : 0;
     return payload;
   }
 
-  _buildContractPayload(createdEvent) {
+  _buildContractPayload(event) {
     const d        = this.wizardData;
     const dealType = DEAL_TYPES.find((dt) => dt.value === d.deal_type);
     const payload  = {
-      title:         `${createdEvent.title} — ${dealType?.label || 'Contract'}`,
+      title:         `${event.title} — ${dealType?.label || 'Contract'}`,
       contract_type: d.deal_type || 'talent_buy',
     };
     if (d.counterparty_name)  payload.counterparty_name  = d.counterparty_name;
