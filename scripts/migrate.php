@@ -12,10 +12,12 @@
  *       Apply database/migrations/super/ to the super-admin registry DB.
  *
  *   php scripts/migrate.php tenant <database> [--dry-run]
- *       Apply database/migrations/tenant/ to a specific tenant database.
+ *       Apply database/migrations/ (the same folder single-tenant uses) to a
+ *       specific tenant database. Tenant DBs share schema.sql/migrations with
+ *       the single-tenant DB since identical app code runs against both.
  *
  *   php scripts/migrate.php tenants [--dry-run]
- *       Apply database/migrations/tenant/ to every tenant found in the super registry.
+ *       Apply database/migrations/ to every tenant found in the super registry.
  *
  *   php scripts/migrate.php status super
  *   php scripts/migrate.php status tenant <database>
@@ -101,7 +103,7 @@ function runSuper(string $root, bool $dryRun): void
 function runTenant(string $root, string $dbName, bool $dryRun): void
 {
     $pdo = Panic\Database\Connection::provisioner($dbName);
-    $dir = $root . '/database/migrations/tenant';
+    $dir = $root . '/database/migrations';
     echo "── Tenant DB: {$dbName}\n";
     applyMigrations($pdo, $dir, $dryRun);
 }
@@ -150,7 +152,7 @@ function runStatus(string $root, string $scope, ?string $dbArg): void
 
         case 'tenant':
             if (!$dbArg) { fwrite(STDERR, "Usage: migrate.php status tenant <database>\n"); exit(1); }
-            printStatus($root . '/database/migrations/tenant',
+            printStatus($root . '/database/migrations',
                         Panic\Database\Connection::tenant($dbArg), $dbArg);
             break;
 
@@ -159,7 +161,7 @@ function runStatus(string $root, string $scope, ?string $dbArg): void
                 ->query('SELECT slug, database_name FROM tenants ORDER BY slug')
                 ->fetchAll(PDO::FETCH_ASSOC);
             foreach ($tenants as $t) {
-                printStatus($root . '/database/migrations/tenant',
+                printStatus($root . '/database/migrations',
                             Panic\Database\Connection::tenant((string)$t['database_name']),
                             (string)$t['database_name']);
             }

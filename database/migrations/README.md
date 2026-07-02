@@ -3,6 +3,19 @@
 Incremental schema changes that apply **on top of** the baseline in
 [`../schema.sql`](../schema.sql).
 
+This folder is shared by **both** deployment modes: the single-tenant `DB_*`
+database and every multi-tenant SaaS tenant database run the exact same PHP
+endpoint classes, so they need the exact same schema. A file added here rolls
+out to the legacy DB via `php scripts/migrate.php` and to every tenant via
+`php scripts/migrate.php tenants` (and automatically to any tenant provisioned
+afterward). Don't duplicate a migration into a separate tenant-only file —
+that split existed before and silently drifted (see git history around
+2026-07-02), which is exactly the failure mode this shared folder avoids.
+
+(The super-admin registry — `tenants`, `tenant_domains`, `super_admin_users` —
+is a genuinely different schema with its own baseline and migrations folder:
+[`../schema-super.sql`](../schema-super.sql) / [`super/`](super/).)
+
 ## How it works
 
 - `../schema.sql` is the canonical, full schema for a **fresh** database. Every
@@ -14,12 +27,15 @@ Incremental schema changes that apply **on top of** the baseline in
 - Apply pending migrations with the runner:
 
   ```bash
-  php scripts/migrate.php          # apply everything not yet recorded
-  php scripts/migrate.php status   # list applied / pending, apply nothing
+  php scripts/migrate.php              # single-tenant DB: apply everything not yet recorded
+  php scripts/migrate.php status       # single-tenant: list applied / pending, apply nothing
+  php scripts/migrate.php tenant <db>  # one tenant DB
+  php scripts/migrate.php tenants      # every tenant in the super registry
   ```
 
-  Applied filenames are recorded in the `schema_migrations` table, so the
-  runner is idempotent — re-running only applies what is new.
+  Applied filenames are recorded in each database's own `schema_migrations`
+  table, so the runner is idempotent — re-running only applies what is new,
+  and single-tenant/tenant scopes don't interfere with each other's ledgers.
 
 ## Writing a migration
 

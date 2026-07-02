@@ -176,12 +176,18 @@ final class SuperController
     {
         $body = self::jsonBody();
 
-        $slug   = trim((string)($body['slug']          ?? ''));
-        $name   = trim((string)($body['name']          ?? ''));
-        $dbName = trim((string)($body['database_name'] ?? ''));
+        $slug       = trim((string)($body['slug']          ?? ''));
+        $name       = trim((string)($body['name']          ?? ''));
+        $dbName     = trim((string)($body['database_name'] ?? ''));
+        $adminName  = trim((string)($body['admin_name']    ?? ''));
+        $adminEmail = trim((string)($body['admin_email']   ?? ''));
 
         if ($slug === '' || $name === '') {
             self::jsonExit(['error' => '`slug` and `name` are required'], 422);
+        }
+
+        if ($adminEmail !== '' && !filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
+            self::jsonExit(['error' => '`admin_email` is not a valid email address'], 422);
         }
 
         // Sanitize slug: lowercase, replace non-alphanum with underscore.
@@ -206,11 +212,14 @@ final class SuperController
             self::jsonExit(['error' => 'A tenant with that slug or database name already exists'], 409);
         }
 
-        // Insert.
+        // Insert. admin_name/admin_email are stored on the tenant row so
+        // TenantProvisioner can seed that person's login (instead of a
+        // generic placeholder) and so re-provisioning later still knows who
+        // to seed for if the first attempt failed before seeding ran.
         $stmt = $db->prepare(
-            'INSERT INTO tenants (slug, name, database_name, status) VALUES (?, ?, ?, ?)'
+            'INSERT INTO tenants (slug, name, database_name, admin_name, admin_email, status) VALUES (?, ?, ?, ?, ?, ?)'
         );
-        $stmt->execute([$slug, $name, $dbName, 'provisioning']);
+        $stmt->execute([$slug, $name, $dbName, $adminName !== '' ? $adminName : null, $adminEmail !== '' ? $adminEmail : null, 'provisioning']);
         $tenantId = (int)$db->lastInsertId();
 
         // Fetch the new row.
@@ -220,7 +229,7 @@ final class SuperController
 
         // Provision the database.
         try {
-            TenantProvisioner::provision($tenantRow);
+            $seeded = TenantProvisioner::provision($tenantRow);
             $db->prepare("UPDATE tenants SET status = 'active' WHERE id = ?")->execute([$tenantId]);
             $tenantRow['status'] = 'active';
         } catch (\Throwable $e) {
@@ -231,7 +240,15 @@ final class SuperController
             ], 500);
         }
 
-        self::jsonExit(['tenant' => $tenantRow], 201);
+        $response = ['tenant' => $tenantRow];
+        if ($seeded !== null) {
+            // Only present on first provision — the venue admin's initial
+            // login. Share this with them out-of-band; it isn't stored
+            // anywhere in plaintext and won't be returned again.
+            $response['seeded'] = $seeded;
+        }
+
+        self::jsonExit($response, 201);
     }
 
     /** @return never */
@@ -283,7 +300,7 @@ final class SuperController
         $tenant = self::fetchTenant($id);
 
         try {
-            TenantProvisioner::provision($tenant);
+            $seeded = TenantProvisioner::provision($tenant);
             Connection::super()->prepare("UPDATE tenants SET status = 'active' WHERE id = ?")->execute([$id]);
         } catch (\Throwable $e) {
             self::jsonExit(['error' => 'Provisioning failed: ' . $e->getMessage()], 500);
@@ -291,6 +308,11 @@ final class SuperController
 
         $updated = self::fetchTenant($id);
         $updated['domains'] = self::fetchDomains($id);
+        if ($seeded !== null) {
+            // Only happens if this tenant had no venues yet (e.g. recovering
+            // from a provision that failed before seeding ran).
+            self::jsonExit(['tenant' => $updated, 'seeded' => $seeded]);
+        }
         self::jsonExit(['tenant' => $updated]);
     }
 

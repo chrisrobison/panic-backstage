@@ -140,10 +140,12 @@ src/
       TikTokAdapter.php     TikTok Content Posting API v2
 
 database/
-  schema.sql              Single-tenant baseline schema
-  migrations/             Single-tenant incremental changes (NNN_*.sql)
-  migrations/super/       Super-admin registry schema (tenants, tenant_domains)
-  migrations/tenant/      Per-tenant schema — the baseline for every tenant DB
+  schema.sql              App schema baseline — shared by the single-tenant DB
+                          AND every tenant DB (identical code runs against both)
+  migrations/             Incremental changes on top of schema.sql (NNN_*.sql),
+                          applied to the single-tenant DB and/or any tenant DB
+  schema-super.sql        Super-admin registry baseline (tenants, tenant_domains)
+  migrations/super/       Incremental changes on top of schema-super.sql
   seed.php
 
 scripts/
@@ -235,14 +237,21 @@ pending migrations, and re-running only applies what is new. Write migrations
 to be safe to re-run (`IF [NOT] EXISTS`, guarded `ALTER`s), since MySQL
 auto-commits DDL and a half-failed migration cannot be rolled back.
 
-The command above targets the single-tenant `DB_*` database. Multi-tenant
-deployments add two more migration scopes — `database/migrations/super/` (the
-super-admin registry) and `database/migrations/tenant/` (the baseline applied to
-every tenant database) — run with `migrate.php super`, `tenant <db>`, and
-`tenants`. See [Multi-Tenant / SaaS Mode](#multi-tenant--saas-mode). As of the
-2026-07-02 squash, `schema.sql` is current through migration `044` (single-tenant
-scope only) — the `super`/`tenant` scopes still apply their own migration files
-individually and haven't been squashed.
+The command above targets the single-tenant `DB_*` database, but `schema.sql`
+and `database/migrations/` are also what every **tenant** database is built
+from in multi-tenant mode (`migrate.php tenant <db>` / `tenants`) — the same
+PHP endpoint classes run unchanged against a tenant DB, so it has to stay
+structurally identical to the single-tenant one. There used to be a separate,
+hand-maintained `database/migrations/tenant/` baseline; it was retired because
+it silently drifted from the single-tenant migrations (four columns present in
+the single-tenant DB were missing from newly-provisioned tenants). Now there's
+one baseline and one migrations folder for both.
+
+The super-admin registry is a genuinely separate schema (`tenants`,
+`tenant_domains`, `super_admin_users` — not app data) with its own baseline,
+[`database/schema-super.sql`](database/schema-super.sql), and its own
+migrations folder, `database/migrations/super/`, run with `migrate.php super`.
+See [Multi-Tenant / SaaS Mode](#multi-tenant--saas-mode).
 
 When the migration list grows long, fold it back into the baseline: dump a
 fully-migrated database's structure over `database/schema.sql` and clear
@@ -341,10 +350,27 @@ DELETE /api/super/tenants/{id}/domains/{domId}   remove a domain alias
 GET    /api/super/me                             current super admin
 ```
 
+`POST /api/super/tenants` body: `{ slug, name, database_name?, admin_name?, admin_email? }`.
+`slug` and `name` are required; `database_name` is derived from `slug` if
+omitted. `admin_name`/`admin_email` (optional but recommended) seed that
+person's login into the new tenant instead of a generic placeholder — see
+below. When provisioning actually seeds demo data (a brand-new, empty
+tenant), the response includes a `seeded: { admin_email, admin_password,
+venue_id }` object with the one-time generated password; share it with the
+venue out-of-band, it is never returned again.
+
 Creating a tenant runs `Panic\Tenant\TenantProvisioner`: it `CREATE DATABASE`s
-the tenant schema (idempotent), applies every `database/migrations/tenant/*.sql`
-in order, and creates the `clients/<slug>/{assets,logs,mail,contracts}` data
-tree — kept outside `public/` so tenant files are never directly web-accessible.
+the tenant schema (idempotent), loads `database/schema.sql` (the same baseline
+the single-tenant DB uses, applied in an `IF NOT EXISTS` form so re-running it
+against a live tenant — the "Re-provision" action — never drops anything),
+applies + records any `database/migrations/*.sql` files not yet folded into
+that baseline, creates the `clients/<slug>/{assets,logs,mail,contracts}` data
+tree — kept outside `public/` so tenant files are never directly
+web-accessible — and, only if the tenant has no venues yet, seeds generic
+demo data (`database/seed_demo_data.php`, the same generator `seed.php` uses
+for local dev) personalized with the tenant's `name` and, when supplied,
+`admin_name`/`admin_email`. Re-provisioning an already-active tenant skips
+seeding entirely so it never inserts a second demo venue on top of real data.
 
 ### Migrations across scopes
 
@@ -353,15 +379,16 @@ The runner (`scripts/migrate.php`) is scope-aware; each scope keeps its own
 
 ```bash
 php scripts/migrate.php                    # single-tenant DB (DB_*) — legacy default
-php scripts/migrate.php super              # super registry  (database/migrations/super/)
-php scripts/migrate.php tenant <database>  # one tenant DB   (database/migrations/tenant/)
+php scripts/migrate.php super              # super registry  (database/schema-super.sql + migrations/super/)
+php scripts/migrate.php tenant <database>  # one tenant DB   (database/schema.sql + migrations/)
 php scripts/migrate.php tenants            # every tenant in the super registry
 php scripts/migrate.php status [super | tenant <database> | tenants]
 ```
 
-After adding a tenant-scoped migration, run `php scripts/migrate.php tenants` to
-roll it out to every existing venue; newly provisioned tenants pick it up
-automatically.
+After adding a migration, run `php scripts/migrate.php tenants` (in addition to
+the legacy single-tenant run) to roll it out to every existing venue; newly
+provisioned tenants pick it up automatically since `TenantProvisioner` applies
+the same `database/migrations/` folder.
 
 ## Running Locally
 
