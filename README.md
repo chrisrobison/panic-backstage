@@ -239,23 +239,25 @@ The command above targets the single-tenant `DB_*` database. Multi-tenant
 deployments add two more migration scopes — `database/migrations/super/` (the
 super-admin registry) and `database/migrations/tenant/` (the baseline applied to
 every tenant database) — run with `migrate.php super`, `tenant <db>`, and
-`tenants`. See [Multi-Tenant / SaaS Mode](#multi-tenant--saas-mode). Note that
-some newer tables (outbox, messages, wizard defaults, contract signatures,
-notification preferences) currently live only as migrations on top of
-`schema.sql`, not yet folded into the single-tenant baseline.
+`tenants`. See [Multi-Tenant / SaaS Mode](#multi-tenant--saas-mode). As of the
+2026-07-02 squash, `schema.sql` is current through migration `044` (single-tenant
+scope only) — the `super`/`tenant` scopes still apply their own migration files
+individually and haven't been squashed.
 
 When the migration list grows long, fold it back into the baseline: dump a
 fully-migrated database's structure over `database/schema.sql` and clear
 `database/migrations/`. Regenerate with:
 
 ```bash
-mysqldump --defaults-extra-file=<client.cnf> --no-data --no-tablespaces \
-  --skip-add-drop-table --skip-comments panic_backstage > database/schema.sql
+mysqldump --no-data --single-transaction --add-drop-table --routines \
+  --triggers --set-charset panic_backstage > database/schema.sql
 ```
 
-Then re-add the leading `CREATE DATABASE IF NOT EXISTS` / `USE` lines, strip the
-volatile `AUTO_INCREMENT=N` table counters, switch `CREATE TABLE` to
-`CREATE TABLE IF NOT EXISTS`, and keep the `schema_migrations` table definition.
+Then trim the mysqldump header/footer boilerplate and per-table
+`-- Table structure for table` comments so the file matches the existing
+minimal style (see the top of `database/schema.sql` for the three `SET`
+lines it starts with), delete the now-folded migration files, and bump
+"Next number" in `database/migrations/README.md`.
 
 ### Contacts / CRM import
 
