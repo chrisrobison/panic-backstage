@@ -2143,6 +2143,231 @@ pb-event-summary, pb-event-readiness, pb-event-next-action { display: contents; 
 }
 .admin-table small.muted { font-size: 12px; }
 
+/* ── DB Browser ───────────────────────────────────────────────────────────
+   Resizable split-pane inspector: a table list on the left, the selected
+   table's rows filling the right, and (once a row is clicked) that right
+   pane splitting vertically into a rows strip on top and a fieldset-style
+   record detail below. Both the sidebar width and the rows/detail split are
+   drag-resizable, mouse-driven the same way as a desktop file browser. */
+pb-admin-db-browser { display: block; }
+
+.dbx {
+  display: flex;
+  align-items: stretch;
+  height: calc(100vh - 230px);
+  min-height: 480px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.dbx-tables {
+  display: flex;
+  flex-direction: column;
+  width: 260px;
+  min-width: 180px;
+  max-width: 440px;
+  flex-shrink: 0;
+  position: relative;
+  border-right: 1px solid var(--line);
+  background: var(--bg);
+}
+.dbx-tables-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 760;
+  font-size: 14px;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+.dbx-tables-head i { color: var(--muted); }
+.dbx-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--soft);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.dbx-table-items { list-style: none; margin: 0; padding: 6px; overflow-y: auto; flex: 1; min-height: 0; }
+.dbx-table-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--ink);
+  font-weight: 650;
+  font-size: 13.5px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+.dbx-table-item:hover { background: var(--soft); }
+.dbx-table-item.active { background: var(--ink); color: #fff; }
+.dbx-table-item.active .dbx-table-rows { color: rgba(255, 255, 255, .7); }
+.dbx-table-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dbx-table-rows { flex-shrink: 0; font-size: 11.5px; color: var(--muted); font-weight: 700; }
+.dbx-none { padding: 14px; color: var(--muted); font-size: 13px; }
+
+/* Sidebar width drag handle */
+.dbx-resize-v {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+  background: transparent;
+}
+.dbx-resize-v:hover, .dbx-resize-v.resizing { background: var(--line); }
+
+.dbx-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dbx-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted);
+}
+.dbx-empty i { font-size: 34px; color: var(--line); }
+
+.dbx-split { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dbx-rows-pane { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.dbx-split.has-detail .dbx-rows-pane { flex: 0 0 auto; height: 55%; }
+
+/* Rows/detail split drag handle */
+.dbx-resize-h {
+  height: 7px;
+  margin-top: -4px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  position: relative;
+  z-index: 5;
+  background: transparent;
+}
+.dbx-resize-h:hover, .dbx-resize-h.resizing { background: var(--line); }
+
+.dbx-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.dbx-toolbar-title { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.dbx-toolbar-title i { color: var(--muted); }
+.dbx-pager { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.dbx-range { white-space: nowrap; }
+.dbx-page-num { white-space: nowrap; font-weight: 700; color: var(--ink); }
+.dbx-pager button { padding: 5px 8px; }
+
+.dbx-rows-scroll { flex: 1; min-height: 0; overflow: auto; }
+.dbx-data { font-size: 13px; }
+.dbx-data th, .dbx-data td { white-space: nowrap; }
+.dbx-data thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.dbx-pk { color: var(--amber); margin-left: 4px; font-size: 11px; }
+.dbx-null { color: var(--muted); }
+.dbx-nulltag {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  color: var(--muted);
+  background: var(--soft);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.dbx-row { cursor: pointer; transition: background 120ms; }
+.dbx-row:hover td { background: var(--bg); }
+.dbx-row.selected td { background: #eaf1ff; }
+.dbx-loading { display: flex; align-items: center; gap: 8px; padding: 24px; color: var(--muted); }
+
+/* ── Detail pane (fieldset-style record inspector) ── */
+.dbx-detail-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+.dbx-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  flex-shrink: 0;
+}
+.dbx-detail-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
+.dbx-detail-title i { color: var(--muted); }
+.dbx-detail-scroll { flex: 1; min-height: 0; overflow: auto; padding: 0 16px 16px; }
+
+.dbx-fieldset {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 2px 16px 16px;
+  margin: 0;
+  background: var(--panel);
+}
+.dbx-fieldset legend {
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.dbx-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px 22px;
+  padding-top: 10px;
+}
+.dbx-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dbx-field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 760;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.dbx-field-type { font-weight: 600; text-transform: none; letter-spacing: 0; color: #b7bec9; font-size: 11px; }
+.dbx-field-value {
+  font-size: 14px;
+  color: var(--ink);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.dbx-field.is-null .dbx-field-value { color: var(--muted); }
+
+@media (max-width: 860px) {
+  .dbx { flex-direction: column; height: auto; min-height: 0; }
+  .dbx-tables { width: 100% !important; max-width: none; max-height: 240px; border-right: none; border-bottom: 1px solid var(--line); }
+  .dbx-resize-v { display: none; }
+  .dbx-split.has-detail .dbx-rows-pane { height: 320px !important; }
+  .dbx-resize-h { display: none; }
+  .dbx-fields { grid-template-columns: 1fr; }
+}
+
 /* Lightweight modal for edit dialogs (Users / Staff / Templates) */
 .modal-backdrop {
   position: fixed;

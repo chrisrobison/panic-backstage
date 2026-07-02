@@ -15,6 +15,7 @@ const ADMIN_TABS = [
   { key: 'payments',  title: 'Payments',  icon: 'fa-credit-card' },
   { key: 'wizard',    title: 'Wizard',    icon: 'fa-wand-magic-sparkles' },
   { key: 'venue',     title: 'Venue',     icon: 'fa-building' },
+  { key: 'db',        title: 'DB Browser', icon: 'fa-database' },
 ];
 
 
@@ -38,7 +39,7 @@ class AdminPage extends PanicElement {
       this.render();
     }));
     const outlet = $('.admin-outlet', this);
-    const tag = { users: 'pb-admin-users', duplicates: 'pb-user-duplicates', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts', payments: 'pb-payment-settings', wizard: 'pb-admin-wizard-defaults', venue: 'pb-admin-venue' }[this.tab];
+    const tag = { users: 'pb-admin-users', duplicates: 'pb-user-duplicates', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts', payments: 'pb-payment-settings', wizard: 'pb-admin-wizard-defaults', venue: 'pb-admin-venue', db: 'pb-admin-db-browser' }[this.tab];
     outlet.replaceChildren(document.createElement(tag));
   }
 }

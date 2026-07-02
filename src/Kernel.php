@@ -272,6 +272,13 @@ final class Kernel
             return [Outbox::class, ['outboxId' => $this->intOrNull($segments[1] ?? null)]];
         }
 
+        // Database browser — read-only tenant DB inspector (admin; manage_users gate inside endpoint)
+        //   GET /api/db-browser            → list tables
+        //   GET /api/db-browser/{table}    → paginated rows + columns
+        if ($segments[0] === 'db-browser') {
+            return [DatabaseBrowser::class, ['table' => $segments[1] ?? null]];
+        }
+
         // Messages — in-app staff messaging (Inbox / Archive / Outbox)
         //   /api/messages
         //   /api/messages/recipients | /api/messages/unread-count

@@ -4,6 +4,7 @@ import './core.js';
 import './print.js';
 import './contracts.js';
 import './admin.js';
+import './db-browser.js';
 import './contacts.js';
 import './user-emails.js';
 import './ticketing-admin.js';
@@ -121,6 +122,7 @@ class AppShell extends PanicElement {
             <a data-nav="admin-contracts" href="#admin-contracts" title="Contracts"><i class="fa-solid fa-file-signature" aria-hidden="true"></i>Contracts</a>
             <a data-nav="admin-payments" href="#admin-payments" title="Payments"><i class="fa-solid fa-credit-card" aria-hidden="true"></i>Payments</a>
             <a data-nav="admin-venue" href="#admin-venue" title="Venue"><i class="fa-solid fa-building" aria-hidden="true"></i>Venue</a>
+            <a data-nav="admin-db" href="#admin-db" title="Database browser" data-nav-db><i class="fa-solid fa-database" aria-hidden="true"></i>DB Browser</a>
             <a data-nav="outbox" href="#outbox" title="All sent email"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i>All Email</a>
           </div>
         </div>
@@ -255,6 +257,8 @@ class AppShell extends PanicElement {
     }
     if (!this.capabilities?.manage_users) {
       $$('[data-nav="admin-duplicates"]', this).forEach((link) => link.remove());
+      // DB browser is restricted to tenant instance admins / super admins.
+      $$('[data-nav-db]', this).forEach((link) => link.remove());
     }
     if (!this.capabilities?.manage_contacts) {
       $$('[data-nav-contacts]', this).forEach((link) => link.remove());
