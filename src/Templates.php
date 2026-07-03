@@ -53,6 +53,12 @@ final class Templates extends BaseEndpoint
                 'SELECT t.*, v.name venue_name FROM event_templates t JOIN venues v ON v.id = t.venue_id ORDER BY t.name'
             ),
             'venues'          => $this->db->all('SELECT * FROM venues ORDER BY name'),
+            // Bookable sub-spaces (rooms) within each venue, for the quick-create
+            // dialog's Room picker. Archived rooms are excluded, same as the
+            // calendar/booking flows.
+            'resources'       => $this->db->all(
+                'SELECT * FROM resources WHERE active = 1 ORDER BY venue_id, sort_order, name'
+            ),
             'types'           => self::TYPES,
             'wizard_defaults' => $wizardDefaults,
         ]);

@@ -233,10 +233,14 @@ final class Events extends BaseEndpoint
                 return $conflict;
             }
         }
+        [$resourceId, $resourceError] = $this->resolveResourceId($body, (int) $body['venue_id']);
+        if ($resourceError) {
+            return $resourceError;
+        }
         $id = $this->db->insert(
-            'INSERT INTO events (venue_id, title, slug, event_type, status, description_public, description_internal, av_requirements, catering_notes, date, end_date, doors_time, show_time, end_time, load_in_time, age_restriction, ticket_price, deposit_amount, potential_revenue, ticket_url, ticket_system, contract_url, venue_contract_url, walkthrough_done, settlement_doc_url, capacity, estimated_guests, public_visibility, owner_user_id, promoter_name, promoter_email, promoter_phone, client_org, booker_name, booker_email, booker_phone)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $newStatus, $isPrivate ? null : self::nullableString($body['description_public'] ?? null), self::nullableString($body['description_internal'] ?? null), self::nullableString($body['av_requirements'] ?? null), self::nullableString($body['catering_notes'] ?? null), $body['date'], self::nullableDate($body['end_date'] ?? null, $body['date']), date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), date_or_null($body['load_in_time'] ?? null), $body['age_restriction'] ?? null, $isPrivate ? 0 : (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), self::nullableString($body['venue_contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), ($body['capacity'] ?? null) ?: null, ($body['estimated_guests'] ?? null) ?: null, $publicVisibility, $ownerId, self::nullableString($body['promoter_name'] ?? null), self::nullableString($body['promoter_email'] ?? null), self::nullableString($body['promoter_phone'] ?? null), self::nullableString($body['client_org'] ?? null), $isPrivate ? null : self::nullableString($body['booker_name'] ?? null), $isPrivate ? null : self::nullableString($body['booker_email'] ?? null), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? null)]
+            'INSERT INTO events (venue_id, resource_id, title, slug, event_type, status, description_public, description_internal, av_requirements, catering_notes, date, end_date, doors_time, show_time, end_time, load_in_time, age_restriction, ticket_price, deposit_amount, potential_revenue, ticket_url, ticket_system, contract_url, venue_contract_url, walkthrough_done, settlement_doc_url, capacity, estimated_guests, public_visibility, owner_user_id, promoter_name, promoter_email, promoter_phone, client_org, booker_name, booker_email, booker_phone)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [(int) $body['venue_id'], $resourceId, $body['title'], $slug, $body['event_type'], $newStatus, $isPrivate ? null : self::nullableString($body['description_public'] ?? null), self::nullableString($body['description_internal'] ?? null), self::nullableString($body['av_requirements'] ?? null), self::nullableString($body['catering_notes'] ?? null), $body['date'], self::nullableDate($body['end_date'] ?? null, $body['date']), date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), date_or_null($body['load_in_time'] ?? null), $body['age_restriction'] ?? null, $isPrivate ? 0 : (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), self::nullableString($body['venue_contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), ($body['capacity'] ?? null) ?: null, ($body['estimated_guests'] ?? null) ?: null, $publicVisibility, $ownerId, self::nullableString($body['promoter_name'] ?? null), self::nullableString($body['promoter_email'] ?? null), self::nullableString($body['promoter_phone'] ?? null), self::nullableString($body['client_org'] ?? null), $isPrivate ? null : self::nullableString($body['booker_name'] ?? null), $isPrivate ? null : self::nullableString($body['booker_email'] ?? null), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? null)]
         );
         $this->assignEventCode($id);
         log_activity($this->db, $id, $this->userId(), 'event created', ['title' => $body['title']]);
@@ -455,10 +459,14 @@ final class Events extends BaseEndpoint
             return Response::json(['error' => 'date is required'], 422);
         }
         $title = ($body['title'] ?? '') !== '' ? $body['title'] : ($template['default_title'] ?: $template['name']);
+        [$resourceId, $resourceError] = $this->resolveResourceId($body, (int) $template['venue_id']);
+        if ($resourceError) {
+            return $resourceError;
+        }
         $id = $this->db->insert(
-            "INSERT INTO events (venue_id, title, slug, event_type, status, description_public, date, doors_time, show_time, age_restriction, ticket_price, owner_user_id)
-             VALUES (?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?)",
-            [(int) $template['venue_id'], $title, $this->uniqueSlug($title . '-' . $date), $template['event_type'], $template['default_description_public'], $date, ($body['doors_time'] ?? '') ?: '19:00', ($body['show_time'] ?? '') ?: '20:00', $template['default_age_restriction'], (float) $template['default_ticket_price'], $this->userId()]
+            "INSERT INTO events (venue_id, resource_id, title, slug, event_type, status, description_public, date, doors_time, show_time, age_restriction, ticket_price, owner_user_id)
+             VALUES (?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?)",
+            [(int) $template['venue_id'], $resourceId, $title, $this->uniqueSlug($title . '-' . $date), $template['event_type'], $template['default_description_public'], $date, ($body['doors_time'] ?? '') ?: '19:00', ($body['show_time'] ?? '') ?: '20:00', $template['default_age_restriction'], (float) $template['default_ticket_price'], $this->userId()]
         );
         $this->assignEventCode($id);
         foreach ($this->jsonList($template['checklist_json']) as $task) {
@@ -602,6 +610,32 @@ final class Events extends BaseEndpoint
         if ($value === null) return null;
         $s = trim((string) $value);
         return $s === '' ? null : $s;
+    }
+
+    /** Coerce an optional id input ('', null, '3') to an int or null. */
+    private static function nullableInt($value): ?int
+    {
+        if ($value === null) return null;
+        if (is_string($value) && trim($value) === '') return null;
+        return (int) $value;
+    }
+
+    /**
+     * Resolve the optional `resource_id` (a room within the given venue) from
+     * the request body, validating it actually belongs to that venue so a
+     * stale/mismatched dropdown selection can't attach the wrong room.
+     */
+    private function resolveResourceId(array $body, int $venueId): array
+    {
+        $resourceId = self::nullableInt($body['resource_id'] ?? null);
+        if ($resourceId === null) {
+            return [null, null];
+        }
+        $resource = $this->db->one('SELECT id FROM resources WHERE id = ? AND venue_id = ?', [$resourceId, $venueId]);
+        if (!$resource) {
+            return [null, Response::json(['error' => 'Selected room does not belong to the chosen venue.'], 422)];
+        }
+        return [$resourceId, null];
     }
 
     /**

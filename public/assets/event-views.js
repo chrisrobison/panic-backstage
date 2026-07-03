@@ -55,11 +55,12 @@ async function openEventQuickCreate({ date = null } = {}) {
     if (e.key === 'Escape') { document.removeEventListener('keydown', onEsc); close(); }
   });
 
-  let templates, venues, types;
+  let templates, venues, resources, types;
   try {
     const data = (await api('/templates')) || {};
     templates = data.templates || [];
     venues    = data.venues    || [];
+    resources = data.resources || [];
     types     = data.types     || ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'];
   } catch (err) {
     // The dialog may have been closed while the request was in flight.
@@ -90,6 +91,8 @@ async function openEventQuickCreate({ date = null } = {}) {
       <label>Type <select name="event_type">${types.map((t) => `<option value="${esc(t)}">${esc(titleCase(t))}</option>`).join('')}</select></label>
     </fieldset>
 
+    <label>Room <select name="resource_id"><option value="">— No specific room —</option></select></label>
+
     <p class="info-note wide">Venue costs (full day): <strong>Downstairs (21+)</strong> — $2,000 · <strong>Upstairs</strong> — $3,000. Events must not lose money.</p>
     <div class="wide quick-create-actions">
       <button type="submit" class="primary">Create event</button>
@@ -101,10 +104,28 @@ async function openEventQuickCreate({ date = null } = {}) {
   // Make the second "Cancel" close button work, too.
   $$('[data-close]', dialog).forEach((btn) => btn.addEventListener('click', close));
 
-  const form          = $('[data-form="quick-create"]', dialog);
+  const form           = $('[data-form="quick-create"]', dialog);
   const templateSelect = $('select[name="template_id"]', form);
-  const titleInput    = $('input[name="title"]', form);
-  const blankFields   = $('.quick-create-blank-fields', form);
+  const titleInput     = $('input[name="title"]', form);
+  const blankFields    = $('.quick-create-blank-fields', form);
+  const venueSelect    = $('select[name="venue_id"]', form);
+  const roomSelect     = $('select[name="resource_id"]', form);
+
+  // The Room picker (bookable sub-space, e.g. Green Room / Patio) depends on
+  // which venue is in play: the selected template's venue when a template is
+  // chosen, or the Venue dropdown's value for a blank event.
+  function currentVenueId() {
+    if (!blankFields.hidden) return venueSelect.value;
+    const chosen = templates.find((t) => String(t.id) === templateSelect.value);
+    return chosen ? String(chosen.venue_id) : '';
+  }
+  function refreshRoomOptions() {
+    const venueId = currentVenueId();
+    const prev = roomSelect.value;
+    const rooms = resources.filter((r) => String(r.venue_id) === venueId);
+    roomSelect.innerHTML = `<option value="">— No specific room —</option>`
+      + rooms.map((r) => `<option value="${esc(r.id)}" ${String(r.id) === prev ? 'selected' : ''}>${esc(r.name)}</option>`).join('');
+  }
 
   // Keep the title in sync with the chosen template's default until the user
   // edits it manually. Show the venue/type fields when "Blank event" is picked.
@@ -122,7 +143,10 @@ async function openEventQuickCreate({ date = null } = {}) {
     } else {
       blankFields.querySelectorAll('select').forEach((select) => select.required = false);
     }
+    refreshRoomOptions();
   });
+  venueSelect.addEventListener('change', refreshRoomOptions);
+  refreshRoomOptions();
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();

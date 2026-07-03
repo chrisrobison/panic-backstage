@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `quick-create` — Add Room dropdown sourced from the rooms/resources table
 - **Fixed** `event-detail` — Shorten Wizard/Share buttons and fix broken portal link routing
 - **Added** `admin` — Add and finish the DB Browser tab
 - **Added** `contracts` — Email the contract PDF and drive e-signature from the editor
