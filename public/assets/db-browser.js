@@ -1,4 +1,4 @@
-import { esc, api, publish, PanicElement, $, $$ } from './core.js';
+import { esc, api, publish, PanicElement, $, $$, apiUrl, getToken } from './core.js';
 
 // ── DB Browser ────────────────────────────────────────────────────────────────
 // Read-only inspector for the current tenant database. Restricted to tenant
@@ -23,6 +23,10 @@ class AdminDbBrowser extends PanicElement {
     this.loadingRows = false;
     this.sidebarWidth = 260;  // px, drag-resizable
     this.splitPercent = 55;   // % height of the rows pane once a row is open
+    this.filters = {};       // { colName: rawFilterText } — per-column search row
+    this.sort = null;        // currently sorted column name, or null
+    this.sortDir = 'asc';    // 'asc' | 'desc'
+    this._filterTimer = null;
 
     publish('page.context', {
       title: 'Database Browser',
@@ -44,15 +48,41 @@ class AdminDbBrowser extends PanicElement {
     this.table = name;
     this.page = 1;
     this.selectedIndex = -1;
+    this.filters = {};
+    this.sort = null;
+    this.sortDir = 'asc';
     await this.loadRows();
   }
 
-  async loadRows() {
+  /** Builds the shared page/sort/filter query string used by both row loads and downloads. */
+  queryParams(extra = {}) {
+    const params = new URLSearchParams(extra);
+    if (this.sort) {
+      params.set('sort', this.sort);
+      params.set('dir', this.sortDir);
+    }
+    Object.entries(this.filters).forEach(([col, value]) => {
+      if (value) params.set(`filter[${col}]`, value);
+    });
+    return params;
+  }
+
+  // `showLoading` swaps the whole rows pane for a spinner (fine for table/page
+  // switches); filter/sort-triggered reloads pass false so the existing rows
+  // (and the filter input the user is typing in) stay put until fresh data
+  // arrives. `preserveFocus` names the filter input to refocus afterward.
+  async loadRows({ showLoading = true, preserveFocus = null } = {}) {
     if (!this.table) return;
-    this.loadingRows = true;
-    this.render();
+    this.loadingRows = showLoading;
+    if (showLoading) this.render();
+
+    let caret = null;
+    const focusedBefore = preserveFocus && $(`[data-filter="${preserveFocus}"]`, this);
+    if (focusedBefore) caret = { start: focusedBefore.selectionStart, end: focusedBefore.selectionEnd };
+
     try {
-      const data = await api(`/db-browser/${encodeURIComponent(this.table)}?page=${this.page}&limit=${PAGE_SIZE}`);
+      const params = this.queryParams({ page: this.page, limit: PAGE_SIZE });
+      const data = await api(`/db-browser/${encodeURIComponent(this.table)}?${params.toString()}`);
       this.columns = data.columns || [];
       this.rows = data.rows || [];
       this.total = data.total || 0;
@@ -65,6 +95,13 @@ class AdminDbBrowser extends PanicElement {
     } finally {
       this.loadingRows = false;
       this.render();
+      if (preserveFocus) {
+        const input = $(`[data-filter="${preserveFocus}"]`, this);
+        if (input) {
+          input.focus();
+          if (caret) input.setSelectionRange(caret.start, caret.end);
+        }
+      }
     }
   }
 
@@ -80,6 +117,55 @@ class AdminDbBrowser extends PanicElement {
   selectRow(index) {
     this.selectedIndex = this.selectedIndex === index ? -1 : index;
     this.render();
+  }
+
+  // ─── Filter row / sortable headers ──────────────────────────────────────────
+
+  onFilterInput(col, value) {
+    this.filters = { ...this.filters, [col]: value };
+    this.page = 1;
+    this.selectedIndex = -1;
+    clearTimeout(this._filterTimer);
+    this._filterTimer = setTimeout(() => this.loadRows({ showLoading: false, preserveFocus: col }), 350);
+  }
+
+  toggleSort(col) {
+    if (this.sort === col) {
+      this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sort = col;
+      this.sortDir = 'asc';
+    }
+    this.page = 1;
+    this.loadRows();
+  }
+
+  // ─── Download (CSV / XLS / SQL) ─────────────────────────────────────────────
+
+  async download(format) {
+    if (!this.table) return;
+    try {
+      const params = this.queryParams({ format });
+      const resp = await fetch(apiUrl(`/db-browser/${encodeURIComponent(this.table)}/export?${params.toString()}`), {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Export failed (${resp.status})`);
+      }
+      const blob = await resp.blob();
+      const stamp = new Date().toISOString().slice(0, 10);
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(blob),
+        download: `${this.table}-${stamp}.${format}`,
+      });
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch (error) {
+      publish('toast.show', { message: error.message || 'Download failed.', tone: 'error' });
+    }
   }
 
   // ─── Value formatting ────────────────────────────────────────────────────────
@@ -150,24 +236,43 @@ class AdminDbBrowser extends PanicElement {
     return `
       <div class="dbx-toolbar">
         <div class="dbx-toolbar-title"><i class="fa-solid fa-table" aria-hidden="true"></i> <strong>${esc(this.table)}</strong></div>
-        <div class="dbx-pager">
-          <span class="dbx-range">${from}–${to} of ${Number(this.total).toLocaleString()}</span>
-          <button type="button" class="small secondary" data-page="-1" ${this.page <= 1 ? 'disabled' : ''} aria-label="Previous page"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
-          <span class="dbx-page-num">${this.page} / ${maxPage}</span>
-          <button type="button" class="small secondary" data-page="1" ${this.page >= maxPage ? 'disabled' : ''} aria-label="Next page"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+        <div class="dbx-toolbar-actions">
+          <details class="print-menu dbx-download-menu">
+            <summary class="button small secondary" title="Download this table's data"><i class="fa-solid fa-download" aria-hidden="true"></i> Download</summary>
+            <div class="print-menu-items">
+              <button type="button" data-download="csv"><i class="fa-solid fa-file-csv" aria-hidden="true"></i> CSV</button>
+              <button type="button" data-download="xls"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Excel (XLS)</button>
+              <button type="button" data-download="sql"><i class="fa-solid fa-database" aria-hidden="true"></i> SQL (INSERT statements)</button>
+            </div>
+          </details>
+          <div class="dbx-pager">
+            <span class="dbx-range">${from}–${to} of ${Number(this.total).toLocaleString()}</span>
+            <button type="button" class="small secondary" data-page="-1" ${this.page <= 1 ? 'disabled' : ''} aria-label="Previous page"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
+            <span class="dbx-page-num">${this.page} / ${maxPage}</span>
+            <button type="button" class="small secondary" data-page="1" ${this.page >= maxPage ? 'disabled' : ''} aria-label="Next page"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+          </div>
         </div>
       </div>
     `;
   }
 
   renderRowsTable() {
-    if (!this.rows.length) return '<div class="empty-state">No records in this table.</div>';
+    if (!this.columns.length) return '<div class="empty-state">No records in this table.</div>';
     return `
       <table class="data-table dbx-data">
         <thead>
-          <tr>${this.columns.map((c) => `<th title="${esc(c.type)}${c.key ? ` · ${esc(c.key)}` : ''}">${esc(c.name)}${c.key === 'PRI' ? ' <i class="fa-solid fa-key dbx-pk" aria-hidden="true"></i>' : ''}</th>`).join('')}</tr>
+          <tr>${this.columns.map((c) => {
+            const active = this.sort === c.name;
+            const arrow = active ? (this.sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+            return `<th class="${active ? 'sorted' : ''}" title="${esc(c.type)}${c.key ? ` · ${esc(c.key)}` : ''}">
+              <button type="button" class="th-sort" data-sort-col="${esc(c.name)}" aria-sort="${active ? (this.sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}">${esc(c.name)}<span class="sort-arrow">${arrow}</span></button>${c.key === 'PRI' ? ' <i class="fa-solid fa-key dbx-pk" aria-hidden="true"></i>' : ''}
+            </th>`;
+          }).join('')}</tr>
+          <tr class="dbx-filter-row">${this.columns.map((c) => `
+            <th><input type="text" class="dbx-filter-input" data-filter="${esc(c.name)}" value="${esc(this.filters[c.name] || '')}" placeholder="Filter…" aria-label="Filter ${esc(c.name)}"></th>
+          `).join('')}</tr>
         </thead>
-        <tbody>
+        <tbody>${!this.rows.length ? `<tr><td class="dbx-nomatch" colspan="${this.columns.length}">No matching records.</td></tr>` : ''}
           ${this.rows.map((row, index) => `
             <tr class="dbx-row ${index === this.selectedIndex ? 'selected' : ''}" data-row="${index}" tabindex="0">
               ${this.columns.map((c) => {
@@ -227,7 +332,33 @@ class AdminDbBrowser extends PanicElement {
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
       });
     });
+    $$('[data-sort-col]', this).forEach((btn) => btn.addEventListener('click', () => this.toggleSort(btn.dataset.sortCol)));
+    $$('[data-filter]', this).forEach((input) => {
+      input.addEventListener('input', () => this.onFilterInput(input.dataset.filter, input.value));
+      input.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        clearTimeout(this._filterTimer);
+        this.loadRows({ showLoading: false, preserveFocus: input.dataset.filter });
+      });
+    });
+    $$('[data-download]', this).forEach((btn) => btn.addEventListener('click', () => {
+      this.download(btn.dataset.download);
+      btn.closest('details')?.removeAttribute('open');
+    }));
+    this.bindStickyFilterRow();
     this.bindResize();
+  }
+
+  // The filter row sits directly under the header row and must stick just below
+  // it. Row height depends on font/icon rendering, so measure it live instead of
+  // hard-coding a pixel offset in CSS.
+  bindStickyFilterRow() {
+    const headRow = $('.dbx-data thead tr:first-child', this);
+    const filterRow = $('.dbx-data thead tr.dbx-filter-row', this);
+    if (!headRow || !filterRow) return;
+    const top = `${headRow.getBoundingClientRect().height}px`;
+    $$('th', filterRow).forEach((th) => { th.style.top = top; });
   }
 
   // ─── Drag-to-resize (sidebar width, rows/detail split) ──────────────────────

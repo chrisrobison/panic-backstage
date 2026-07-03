@@ -2271,6 +2271,8 @@ pb-admin-db-browser { display: block; }
 }
 .dbx-toolbar-title { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .dbx-toolbar-title i { color: var(--muted); }
+.dbx-toolbar-actions { display: flex; align-items: center; gap: 14px; }
+.dbx-download-menu .print-menu-items button { display: flex; align-items: center; gap: 8px; }
 .dbx-pager { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
 .dbx-range { white-space: nowrap; }
 .dbx-page-num { white-space: nowrap; font-weight: 700; color: var(--ink); }
@@ -2279,7 +2281,21 @@ pb-admin-db-browser { display: block; }
 .dbx-rows-scroll { flex: 1; min-height: 0; overflow: auto; }
 .dbx-data { font-size: 13px; }
 .dbx-data th, .dbx-data td { white-space: nowrap; }
-.dbx-data thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.dbx-data thead th { position: sticky; top: 0; background: var(--panel); z-index: 2; }
+.dbx-data thead tr.dbx-filter-row th { position: sticky; z-index: 1; padding: 6px 10px; border-top: 0; }
+.dbx-filter-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.dbx-filter-input:focus { outline: 2px solid var(--accent, #2563eb); outline-offset: 1px; }
+.dbx-nomatch { color: var(--muted); text-align: center; padding: 18px; white-space: normal; }
 .dbx-pk { color: var(--amber); margin-left: 4px; font-size: 11px; }
 .dbx-null { color: var(--muted); }
 .dbx-nulltag {

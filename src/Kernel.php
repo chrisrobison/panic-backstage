@@ -273,10 +273,11 @@ final class Kernel
         }
 
         // Database browser — read-only tenant DB inspector (admin; manage_users gate inside endpoint)
-        //   GET /api/db-browser            → list tables
-        //   GET /api/db-browser/{table}    → paginated rows + columns
+        //   GET /api/db-browser                 → list tables
+        //   GET /api/db-browser/{table}         → paginated rows + columns (?page=&limit=&sort=&dir=&filter[col]=)
+        //   GET /api/db-browser/{table}/export  → download matching rows (?format=csv|xls|sql)
         if ($segments[0] === 'db-browser') {
-            return [DatabaseBrowser::class, ['table' => $segments[1] ?? null]];
+            return [DatabaseBrowser::class, ['table' => $segments[1] ?? null, 'action' => $segments[2] ?? null]];
         }
 
         // Messages — in-app staff messaging (Inbox / Archive / Outbox)

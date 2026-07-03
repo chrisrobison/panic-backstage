@@ -24,8 +24,14 @@ final class Response
 
     public static function csv(string $content, string $filename): self
     {
+        return self::download($content, $filename, 'text/csv; charset=utf-8');
+    }
+
+    /** Generic file-attachment response (used for CSV/XLS/SQL exports etc.). */
+    public static function download(string $content, string $filename, string $contentType): self
+    {
         return new self($content, 200, [
-            'Content-Type'        => 'text/csv; charset=utf-8',
+            'Content-Type'        => $contentType,
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
     }
