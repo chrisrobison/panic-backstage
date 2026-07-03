@@ -433,6 +433,8 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
   right: 0;
   z-index: 30;
   min-width: 232px;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 32px));
   padding: 10px 6px 8px;
   background: #fff;
   border: 1px solid var(--line);
@@ -441,9 +443,9 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
 }
 .metric-menu-head { margin: 0 10px 8px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .metric-menu-list { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; }
-.metric-menu-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 7px; font-size: 14px; color: var(--ink); cursor: pointer; }
+.metric-menu-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 7px; font-size: 14px; color: var(--ink); cursor: pointer; white-space: nowrap; }
 .metric-menu-item:hover { background: #f4f6fa; }
-.metric-menu-item input { margin: 0; cursor: pointer; }
+.metric-menu-item input { flex: none; width: 16px; height: 16px; margin: 0; cursor: pointer; }
 .icon-bubble {
   width: 58px;
   height: 58px;
@@ -836,7 +838,7 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
   font: inherit; color: var(--ink); white-space: nowrap; user-select: none;
 }
 .section-toggle-item:hover { background: #f3f3f3; }
-.section-toggle-item input[type="checkbox"] { margin: 0; cursor: pointer; accent-color: var(--red, #c0392b); }
+.section-toggle-item input[type="checkbox"] { flex: none; width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--red, #c0392b); }
 
 .guest-totals { font-size: 13px; }
 .guest-list-body { padding: 8px 18px 16px; }
