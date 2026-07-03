@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `promote` — Add real in-app "Connect X account" OAuth flow
 - **Added** `quick-create` — Add Room dropdown sourced from the rooms/resources table
 - **Fixed** `event-detail` — Shorten Wizard/Share buttons and fix broken portal link routing
 - **Added** `admin` — Add and finish the DB Browser tab

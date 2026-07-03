@@ -5,6 +5,7 @@ namespace Panic\Promote;
 
 use Panic\BaseEndpoint;
 use Panic\CredentialEncryption;
+use Panic\Database;
 use Panic\Request;
 use Panic\Response;
 
@@ -26,6 +27,10 @@ use Panic\Response;
  *   }
  *
  * Tokens are never returned in GET responses — only status, config, and metadata.
+ *
+ * self::storeCredential() is also called directly by in-app OAuth callback
+ * endpoints (e.g. Promote\TwitterOAuth) so a real "Connect" flow writes the
+ * exact same row shape as a manually-pasted token.
  */
 final class CredentialSettings extends BaseEndpoint
 {
@@ -113,14 +118,39 @@ final class CredentialSettings extends BaseEndpoint
         $body    = $request->body();
         $venueId = (int) ($body['venue_id'] ?? 1);
 
-        $accessToken  = isset($body['access_token'])  ? (string) $body['access_token']  : null;
-        $refreshToken = isset($body['refresh_token']) ? (string) $body['refresh_token'] : null;
-        $config       = isset($body['config'])        ? json_encode($body['config'])     : null;
-
         // Validate config is valid JSON-serialisable
         if (isset($body['config']) && !is_array($body['config']) && !is_object($body['config'])) {
             return Response::json(['error' => 'config must be a JSON object'], 422);
         }
+
+        $accessToken  = isset($body['access_token'])  ? (string) $body['access_token']  : null;
+        $refreshToken = isset($body['refresh_token']) ? (string) $body['refresh_token'] : null;
+        $config       = isset($body['config'])        ? (array) $body['config']         : null;
+
+        $status = self::storeCredential($this->db, $venueId, $destKey, $accessToken, $refreshToken, $config);
+
+        return $this->ok(['saved' => true, 'status' => $status]);
+    }
+
+    /**
+     * Encrypt (when configured) and upsert an access/refresh token pair for a
+     * venue+destination, keeping promote_destinations.status in sync.
+     *
+     * Shared by the manual PUT above and by OAuth callback endpoints (e.g.
+     * Promote\TwitterOAuth) so both paths write the exact same row shape that
+     * the settings page and Promote adapters already read.
+     *
+     * @return string The resulting cred_status ('connected' or 'needs_auth').
+     */
+    public static function storeCredential(
+        Database $db,
+        int      $venueId,
+        string   $destKey,
+        ?string  $accessToken,
+        ?string  $refreshToken = null,
+        ?array   $config = null
+    ): string {
+        $configJson = $config !== null ? json_encode($config) : null;
 
         // Encrypt tokens before storage.
         // Falls back to storing plaintext when encryption is not configured
@@ -144,7 +174,7 @@ final class CredentialSettings extends BaseEndpoint
         $connectedAt = $hasToken ? date('Y-m-d H:i:s') : null;
 
         // Upsert
-        $existing = $this->db->one(
+        $existing = $db->one(
             'SELECT id FROM promote_credentials WHERE venue_id = ? AND destination_key = ?',
             [$venueId, $destKey]
         );
@@ -175,18 +205,18 @@ final class CredentialSettings extends BaseEndpoint
                 $sets[]   = 'refresh_token = ?';
                 $params[] = $refreshToken;
             }
-            if ($config !== null) {
+            if ($configJson !== null) {
                 $sets[]   = 'config = ?';
-                $params[] = $config;
+                $params[] = $configJson;
             }
 
             $params[] = (int) $existing['id'];
-            $this->db->run(
+            $db->run(
                 'UPDATE promote_credentials SET ' . implode(', ', $sets) . ' WHERE id = ?',
                 $params
             );
         } else {
-            $this->db->insert(
+            $db->insert(
                 'INSERT INTO promote_credentials
                     (venue_id, destination_key, access_token, refresh_token,
                      enc_access_token, enc_refresh_token, enc_key_version,
@@ -197,20 +227,22 @@ final class CredentialSettings extends BaseEndpoint
                     $accessToken, $refreshToken,          // plaintext (NULL if encrypted)
                     $encAccessToken, $encRefreshToken,    // ciphertext (NULL if no key)
                     CredentialEncryption::isConfigured() ? 1 : 0,
-                    $config, $status, $connectedAt,
+                    $configJson, $status, $connectedAt,
                 ]
             );
         }
 
-        // Also sync promote_destinations.status so the broadcast modal reflects reality
-        if ($accessToken) {
-            $this->db->run(
+        // Also sync promote_destinations.status so the broadcast modal reflects reality.
+        // Uses $hasToken (not the now-nulled $accessToken) so this fires correctly
+        // whether or not CREDENTIAL_ENCRYPTION_KEY is configured.
+        if ($hasToken) {
+            $db->run(
                 "UPDATE promote_destinations SET status = 'connected' WHERE destination_key = ?",
                 [$destKey]
             );
         }
 
-        return $this->ok(['saved' => true, 'status' => $status]);
+        return $status;
     }
 
     // ── Disconnect ────────────────────────────────────────────────────────────

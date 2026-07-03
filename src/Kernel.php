@@ -319,6 +319,11 @@ final class Kernel
             if (($segments[1] ?? '') === 'eventbrite' && ($segments[2] ?? '') === 'org') {
                 return [Promote\EventbriteSetup::class, []];
             }
+            // POST /api/promote/oauth/twitter/start ; GET /api/promote/oauth/twitter/callback
+            // — in-app "Connect X account" OAuth 2.0 PKCE flow.
+            if (($segments[1] ?? '') === 'oauth' && ($segments[2] ?? '') === 'twitter') {
+                return [Promote\TwitterOAuth::class, ['action' => $segments[3] ?? '']];
+            }
             // GET|PUT|DELETE /api/promote/credentials[/{destKey}]
             if (($segments[1] ?? '') === 'credentials') {
                 return [Promote\CredentialSettings::class, ['destKey' => $segments[2] ?? null]];
@@ -476,6 +481,8 @@ final class Kernel
             Scanner::class,             // /api/scan/redeem (scanner-token); JWT mgmt paths
                                         // still gated via requireEventCapability (null user => denied)
             QrCode::class,              // /assets/qr.svg — public QR image generator
+            Promote\TwitterOAuth::class, // /api/promote/oauth/twitter/callback (browser redirect from X, no JWT);
+                                        // the sibling /start action self-gates via requireGlobalCapability
         ], true);
     }
 

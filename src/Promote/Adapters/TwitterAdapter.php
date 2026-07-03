@@ -20,14 +20,18 @@ namespace Panic\Promote\Adapters;
  *   2. Under App Settings → User Authentication Settings:
  *        - Type of App: Web App / Automated App
  *        - App permissions: Read and write
- *        - Redirect URI: can be anything (e.g. https://mabuhaygardens.com/x-callback)
- *   3. Under Keys and Tokens → OAuth 2.0 Client ID and Client Secret: note both.
- *   4. Generate a User Access Token (with tweet.write + offline.access scopes)
- *      via the OAuth 2.0 PKCE flow (use Postman or curl with PKCE):
- *        - Authorize URL: https://twitter.com/i/oauth2/authorize
- *        - Token URL: https://api.twitter.com/2/oauth2/token
- *   5. Save the access_token (and refresh_token if offline.access was included)
- *      in Settings → Promote → Twitter / X.
+ *        - Redirect URI: {APP_URL}/api/promote/oauth/twitter/callback
+ *   3. Under Keys and Tokens → OAuth 2.0 Client ID and Client Secret: put both
+ *      in TWITTER_CLIENT_ID / TWITTER_CLIENT_SECRET in .env.
+ *   4. In Settings → Promote → Twitter / X, click "Connect X account" — this
+ *      runs the OAuth 2.0 PKCE flow in-app (Panic\Promote\TwitterOAuth) and
+ *      stores the resulting access_token/refresh_token automatically.
+ *
+ *   Alternative (no .env changes / no in-app button): generate a User Access
+ *   Token manually with tweet.write + offline.access scopes via Postman or
+ *   curl with PKCE (Authorize URL: https://twitter.com/i/oauth2/authorize,
+ *   Token URL: https://api.twitter.com/2/oauth2/token) and paste the
+ *   access_token/refresh_token directly into Settings → Promote → Twitter / X.
  *
  * Rate limits (Free tier, 2024):
  *   - 17 tweet.write calls per 15 minutes per user

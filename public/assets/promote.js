@@ -1641,7 +1641,7 @@ const PLATFORM_FIELDS = {
         key: 'access_token',
         label: 'OAuth 2.0 User Access Token',
         type: 'password',
-        hint: 'From X Developer Portal → Your App → Keys & Tokens. Requires tweet.write + offline.access scopes via the OAuth 2.0 PKCE flow.',
+        hint: 'Use the "Connect X account" button below, or paste a token manually from X Developer Portal → Your App → Keys & Tokens (requires tweet.write + offline.access scopes).',
       },
       {
         key: 'refresh_token',
@@ -1870,6 +1870,7 @@ class PromoteSettings extends PanicElement {
     this.autoPublishSettings = null;
     this.autoPublishDestinations = [];
     await this.load();
+    this.handleOAuthReturn();
   }
 
   async load() {
@@ -2071,7 +2072,11 @@ class PromoteSettings extends PanicElement {
       ? `<button type="button" class="button secondary small" data-eb-org-lookup>
            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Fetch Org ID
          </button>`
-      : '';
+      : destKey === 'twitter'
+        ? `<button type="button" class="button secondary small" data-x-connect>
+             <i class="fa-brands fa-x-twitter" aria-hidden="true"></i> Connect X account
+           </button>`
+        : '';
 
     return `<div class="promote-settings-card" data-card="${esc(destKey)}">
       <div class="promote-settings-card-head">
@@ -2103,6 +2108,46 @@ class PromoteSettings extends PanicElement {
     card.querySelector(`[data-save="${destKey}"]`)?.addEventListener('click', () => this.save(destKey));
     card.querySelector(`[data-disconnect="${destKey}"]`)?.addEventListener('click', () => this.disconnect(destKey));
     card.querySelector('[data-eb-org-lookup]')?.addEventListener('click', () => this.fetchEventbriteOrg(destKey));
+    card.querySelector('[data-x-connect]')?.addEventListener('click', () => this.connectTwitter());
+  }
+
+  // Kicks off the in-app OAuth 2.0 PKCE flow: ask the backend for an authorize
+  // URL (stashing a code_verifier/state server-side), then hand the browser
+  // off to X. The callback redirects back to this page — see handleOAuthReturn().
+  async connectTwitter() {
+    try {
+      const data = await api('/promote/oauth/twitter/start', {
+        method: 'POST',
+        body: JSON.stringify({ venue_id: this.venueId }),
+      });
+      if (!data?.authorize_url) throw new Error('No authorize URL returned');
+      window.location.href = data.authorize_url;
+    } catch (err) {
+      publish('toast.show', { message: `Could not start X connection: ${err?.message || err}`, tone: 'error' });
+    }
+  }
+
+  // Detects a ?promote_oauth=...&oauth_status=... round-trip from an OAuth
+  // callback (e.g. TwitterOAuth), toasts the result, and strips the one-time
+  // query params so a page refresh doesn't re-show the toast.
+  handleOAuthReturn() {
+    const params = new URLSearchParams(location.search);
+    const destKey = params.get('promote_oauth');
+    if (!destKey) return;
+
+    const status  = params.get('oauth_status');
+    const message = params.get('oauth_message');
+    const label   = PLATFORM_FIELDS[destKey]?.label || destKey;
+
+    if (status === 'connected') {
+      publish('toast.show', { message: `${label} connected successfully.`, tone: 'success' });
+    } else {
+      publish('toast.show', { message: `${label} connection failed${message ? `: ${message}` : ''}`, tone: 'error' });
+    }
+
+    const url = new URL(location.href);
+    url.search = '';
+    history.replaceState(null, '', url);
   }
 
   async save(destKey) {

@@ -22,6 +22,12 @@ final class Response
         return self::json(['error' => 'Method not allowed'], 405);
     }
 
+    /** Browser redirect (e.g. handing off to a third-party OAuth authorize page, or back into the SPA). */
+    public static function redirect(string $url, int $status = 302): self
+    {
+        return new self(null, $status, ['Location' => $url]);
+    }
+
     public static function csv(string $content, string $filename): self
     {
         return self::download($content, $filename, 'text/csv; charset=utf-8');
@@ -42,7 +48,7 @@ final class Response
         foreach ($this->headers as $name => $value) {
             header("$name: $value");
         }
-        if ($this->status === 204) {
+        if ($this->status === 204 || isset($this->headers['Location'])) {
             return;
         }
         // Non-JSON responses (e.g. text/html ticket pages, image/svg+xml QR codes)
