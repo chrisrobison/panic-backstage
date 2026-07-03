@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `event-detail` — Shorten Wizard/Share buttons and fix broken portal link routing
 - **Added** `admin` — Add and finish the DB Browser tab
 - **Added** `contracts` — Email the contract PDF and drive e-signature from the editor
 - **Added** — Use pencil icon for tier edit and move delete into the edit modal

@@ -14,21 +14,10 @@ namespace Panic;
  *   POST /api/portal/{tokenId}/revoke
  *   GET  /api/portal/{eventId}/list-links
  *
- * Route wiring needed in Kernel.php resolve() — see KERNEL ROUTE note below.
- *
- * KERNEL ROUTE TO ADD MANUALLY:
- * In resolve(), add before the default fallback at the bottom:
- *
- *   'portal' => match($action) {
- *       'view'        => [Portal::class, ['action' => 'view']],
- *       'create-link' => [Portal::class, ['action' => 'create-link', 'eventId' => (int)($segments[2] ?? 0)]],
- *       'revoke'      => [Portal::class, ['action' => 'revoke',      'tokenId' => (int)($segments[2] ?? 0)]],
- *       'list-links'  => [Portal::class, ['action' => 'list-links',  'eventId' => (int)($segments[2] ?? 0)]],
- *       default       => [Portal::class, ['action' => '']],
- *   },
- *
- * Also add Portal::class to isPublic() so the 'view' action is reachable
- * without a JWT.  The staff actions perform their own requireAuth() check.
+ * Route wiring lives in Kernel.php resolve() (segments[0] === 'portal').
+ * Portal::class is also listed in isPublic() so the 'view' action is
+ * reachable without a JWT; the staff actions perform their own
+ * requireAuth() check.
  */
 final class Portal extends BaseEndpoint
 {

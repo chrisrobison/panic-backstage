@@ -248,10 +248,22 @@ final class Kernel
         }
 
         // Client portal — token-gated read-only event view for promoters/clients
+        //   GET  /api/portal/view?token=...        (public)
+        //   POST /api/portal/{eventId}/create-link
+        //   GET  /api/portal/{eventId}/list-links
+        //   POST /api/portal/{tokenId}/revoke
         if ($segments[0] === 'portal') {
-            $action  = $segments[1] ?? 'view';
-            $tokenId = $this->intOrNull($segments[2] ?? null);
-            $eventId = $this->intOrNull($segments[2] ?? null);
+            $sub = $segments[1] ?? 'view';
+            if ($sub === 'view') {
+                $action  = 'view';
+                $tokenId = null;
+                $eventId = null;
+            } else {
+                $action  = $segments[2] ?? '';
+                $id      = $this->intOrNull($sub);
+                $tokenId = $action === 'revoke' ? $id : null;
+                $eventId = in_array($action, ['create-link', 'list-links'], true) ? $id : null;
+            }
             return [Portal::class, ['action' => $action, 'tokenId' => $tokenId, 'eventId' => $eventId]];
         }
 
