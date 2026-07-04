@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `email` — Add weekly "shows this week" lineup email generator
 - **Fixed** `css` — Stop checkboxes stretching in dropdown checklists
 - **Added** `promote` — Add real in-app "Connect X account" OAuth flow
 - **Added** `quick-create` — Add Room dropdown sourced from the rooms/resources table
