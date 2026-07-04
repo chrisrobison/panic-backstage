@@ -170,8 +170,10 @@ final class Mailer
      *                                        Downloadable file attachments (e.g. a PDF).
      *                                        Each: filename, optional mime (defaults to
      *                                        application/octet-stream), and raw bytes.
+     * @return int|null The new outbox row id, or null when no DB was injected
+     *                   or the outbox insert failed.
      */
-    public function send(string $to, string $subject, string $textBody, ?string $htmlBody = null, ?string $template = null, array $inline = [], array $attachments = []): void
+    public function send(string $to, string $subject, string $textBody, ?string $htmlBody = null, ?string $template = null, array $inline = [], array $attachments = []): ?int
     {
         // Strip header injection attempts from anything that ends up in headers.
         $to      = $this->sanitizeHeaderValue($to);
@@ -181,7 +183,7 @@ final class Mailer
 
         $this->writeToFile($to, $message);
         $this->pipeToSendmail($to, $message);
-        $this->logToOutbox($to, $subject, $textBody, $htmlBody, $template, $inline);
+        return $this->logToOutbox($to, $subject, $textBody, $htmlBody, $template, $inline);
     }
 
     // ─── Message builder ───────────────────────────────────────────────────────
@@ -468,11 +470,13 @@ final class Mailer
      * is inlined as a `data:` URI before the HTML is persisted.
      *
      * @param array<string,string> $inline  Content-ID (bare) => raw image bytes.
+     * @return int|null The new outbox row id, or null when no DB was injected
+     *                   or the insert failed.
      */
-    private function logToOutbox(string $to, string $subject, string $textBody, ?string $htmlBody, ?string $template, array $inline = []): void
+    private function logToOutbox(string $to, string $subject, string $textBody, ?string $htmlBody, ?string $template, array $inline = []): ?int
     {
         if ($this->db === null) {
-            return;
+            return null;
         }
         if ($htmlBody !== null && $htmlBody !== '' && $inline !== []) {
             $htmlBody = $this->inlineCidImages($htmlBody, $inline);
@@ -484,10 +488,11 @@ final class Mailer
             );
         } catch (\Throwable) {
             // Never let outbox failures interrupt mail delivery.
-            return;
+            return null;
         }
 
         $this->mirrorToInbox($to, $subject, $textBody, $htmlBody, $template, $outboxId);
+        return $outboxId;
     }
 
     /**

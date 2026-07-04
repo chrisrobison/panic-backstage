@@ -605,6 +605,13 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
 .status-advanced { background: #d8f0e1; color: #0f7c3f; }
 .status-completed, .status-settled { background: #e6e0ff; color: #5240a9; }
 .status-canceled { background: #fde2e1; color: #b42318; }
+/* Campaign send-status pills (draft/sending/sent/partial_failure/failed) — reuse
+   the existing status-badge hue vocabulary so they read as the same family. */
+.status-draft { background: #eef0f3; color: #5a606b; }
+.status-sending { background: #d9ebff; color: #1466bd; }
+.status-sent { background: #d3f1df; color: #0c7a3c; }
+.status-partial_failure { background: #ffedc2; color: #a06400; }
+.status-failed { background: #fde2e1; color: #b42318; }
 
 .attention-list { display: grid; gap: 18px; padding: 18px; }
 .attention-card {
@@ -3883,7 +3890,9 @@ button.promote-accent:hover,
 pb-outbox-page,
 pb-messages-inbox,
 pb-messages-archive,
-pb-messages-sent {
+pb-messages-sent,
+pb-msg-campaigns,
+pb-msg-lists {
   flex: 1 1 0;
   min-height: 0;
   display: flex;
@@ -4055,12 +4064,16 @@ pb-outbox-page.detail-open .outbox-detail-pane {
    so the drag-to-resize handle can control the split precisely. */
 pb-messages-inbox .outbox-detail-pane,
 pb-messages-archive .outbox-detail-pane,
-pb-messages-sent .outbox-detail-pane {
+pb-messages-sent .outbox-detail-pane,
+pb-msg-campaigns .outbox-detail-pane,
+pb-msg-lists .outbox-detail-pane {
   transition: flex-basis .22s ease;
 }
 pb-messages-inbox.detail-open .outbox-detail-pane,
 pb-messages-archive.detail-open .outbox-detail-pane,
-pb-messages-sent.detail-open .outbox-detail-pane {
+pb-messages-sent.detail-open .outbox-detail-pane,
+pb-msg-campaigns.detail-open .outbox-detail-pane,
+pb-msg-lists.detail-open .outbox-detail-pane {
   max-height: none;
   /* Use flex-basis so the pane participates in the flex split properly;
      the table pane above (flex: 1 1 0) fills whatever is left over. */
@@ -4069,7 +4082,9 @@ pb-messages-sent.detail-open .outbox-detail-pane {
 }
 pb-messages-inbox.resizing .outbox-detail-pane,
 pb-messages-archive.resizing .outbox-detail-pane,
-pb-messages-sent.resizing .outbox-detail-pane {
+pb-messages-sent.resizing .outbox-detail-pane,
+pb-msg-campaigns.resizing .outbox-detail-pane,
+pb-msg-lists.resizing .outbox-detail-pane {
   transition: none;
 }
 
@@ -4165,7 +4180,9 @@ pb-messages-sent.resizing .outbox-detail-pane {
   pb-outbox-page,
   pb-messages-inbox,
   pb-messages-archive,
-  pb-messages-sent {
+  pb-messages-sent,
+  pb-msg-campaigns,
+  pb-msg-lists {
     flex: none;
     display: block;
   }
@@ -4180,7 +4197,9 @@ pb-messages-sent.resizing .outbox-detail-pane {
   pb-outbox-page.detail-open .outbox-detail-pane,
   pb-messages-inbox.detail-open .outbox-detail-pane,
   pb-messages-archive.detail-open .outbox-detail-pane,
-  pb-messages-sent.detail-open .outbox-detail-pane {
+  pb-messages-sent.detail-open .outbox-detail-pane,
+  pb-msg-campaigns.detail-open .outbox-detail-pane,
+  pb-msg-lists.detail-open .outbox-detail-pane {
     height: auto;
     max-height: 55vh;
   }
@@ -4202,6 +4221,268 @@ pb-messages-sent.resizing .outbox-detail-pane {
   .outbox-head { gap: 10px; }
   .outbox-meta-list { flex-direction: column; }
 }
+
+/* ── Campaigns ────────────────────────────────────────────────────────────────
+   Marketing email campaigns (pb-msg-campaigns). Layout mirrors the Outbox/
+   Messages split pane above (same .outbox-* classes) — these rules only cover
+   the campaign-specific pieces layered on top of it: editable name/subject,
+   a bounded-height HTML/text editor (now sharing the pane with recipients +
+   actions instead of filling it), the recipient picker, and the event-picker
+   modal used by "Generate from Event(s)". ──────────────────────────────────── */
+
+.campaign-detail-body { display: flex; flex-direction: column; }
+
+.campaign-editor-pane { display: flex; flex-direction: column; min-height: 0; }
+
+.campaign-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+/* Inline-editable text fields — transparent at rest, dashed hint on hover,
+   solid focus ring on edit (same treatment as .contract-section-body). */
+.campaign-name-input,
+.campaign-subject-input {
+  display: block;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  padding: 4px 6px;
+  margin: 0 0 6px -6px;
+  font: inherit;
+  color: var(--ink);
+  transition: outline .12s, background .12s, border-color .12s;
+}
+.campaign-title-row .campaign-name-input { width: auto; flex: 1 1 auto; font-size: 17px; font-weight: 800; margin-bottom: 0; }
+.campaign-name-input:hover:not([readonly]),
+.campaign-subject-input:hover:not([readonly]) { border-color: var(--line); background: var(--bg); }
+.campaign-name-input:focus,
+.campaign-subject-input:focus {
+  outline: none;
+  border-color: var(--ink);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(16,19,24,.08);
+}
+.campaign-name-input[readonly],
+.campaign-subject-input[readonly] { color: var(--muted); cursor: default; }
+
+.campaign-locked-note { font-style: italic; margin: 2px 0 0; }
+
+/* Editor frame/text-editor now share the detail pane with the recipients and
+   actions sections below, so they get a bounded height instead of flex: 1 1 0. */
+.campaign-editor-frame.outbox-email-frame { flex: 0 0 340px; min-height: 220px; }
+.campaign-text-editor.outbox-raw-body { flex: 0 0 340px; min-height: 220px; overflow-y: auto; }
+
+.campaign-recipients-pane,
+.campaign-actions-row {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  padding: 16px 20px;
+}
+.campaign-actions-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.campaign-section-title { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+.campaign-lists-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 160px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.campaign-list-check.checkbox-row { display: flex; width: 100%; padding: 4px 0; }
+
+.campaign-adhoc-search { position: relative; margin-bottom: 10px; }
+.campaign-contact-search-label.outbox-search-label { width: 100%; }
+.campaign-contact-search { width: 100%; }
+
+.campaign-contact-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+.campaign-contact-results li { padding: 2px 0; }
+.campaign-contact-add {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--ink);
+  border: 0;
+  border-radius: 5px;
+  padding: 7px 8px;
+  font-weight: 400;
+  cursor: pointer;
+}
+.campaign-contact-add:hover { background: var(--bg); }
+
+.campaign-contact-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.campaign-contact-chip.chip { display: inline-flex; align-items: center; gap: 6px; padding-right: 6px; }
+.chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.chip-remove:hover { background: var(--red); color: #fff; }
+
+.campaign-recipient-count { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+
+.campaign-send-test-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.campaign-send-test-email { min-width: 220px; }
+
+/* Event-picker modal (Generate from Event(s)) */
+.campaign-event-picker { display: flex; flex-direction: column; gap: 14px; }
+.campaign-event-filter-label.outbox-search-label { width: 100%; }
+.campaign-event-filter { width: 100%; }
+.campaign-event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 46vh;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.campaign-event-list li { border-bottom: 1px solid var(--line); }
+.campaign-event-list li:last-child { border-bottom: 0; }
+.campaign-event-check.checkbox-row { display: flex; width: 100%; padding: 10px 12px; gap: 10px; }
+.campaign-event-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.campaign-event-date { flex-shrink: 0; white-space: nowrap; }
+.campaign-event-picker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ── Mailing Lists ────────────────────────────────────────────────────────────
+   Named recipient groups (pb-msg-lists). Same Outbox/Messages split-pane shell;
+   these rules cover the list-specific content: editable name/description,
+   the members table toolbar/actions, and the add-contacts search+checklist.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+.mlist-add-form { align-items: end; }
+.mlist-add-form .mlist-field-error { grid-column: 1 / -1; }
+
+.mlist-field-error { font-size: 12px; color: var(--red); }
+
+.mlist-detail-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.mlist-name-input {
+  display: block;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  padding: 4px 6px;
+  margin: 0 0 0 -6px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+  transition: outline .12s, background .12s, border-color .12s;
+}
+.mlist-name-input:hover { border-color: var(--line); background: var(--bg); }
+.mlist-name-input:focus {
+  outline: none;
+  border-color: var(--ink);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(16,19,24,.08);
+}
+
+.mlist-desc-input {
+  display: block;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  padding: 4px 6px;
+  margin: 0 0 0 -6px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  transition: outline .12s, background .12s, border-color .12s;
+}
+.mlist-desc-input:hover { border-color: var(--line); background: var(--bg); }
+.mlist-desc-input:focus {
+  outline: none;
+  border-color: var(--ink);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(16,19,24,.08);
+}
+
+.mlist-h3 { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+.mlist-members,
+.mlist-add-contacts {
+  border-top: 1px solid var(--line);
+  padding: 16px 20px;
+}
+.mlist-members-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.mlist-member-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+.mlist-add-contacts-results {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 6px 10px;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.mlist-add-contacts-results li { padding: 4px 0; }
+
+.mlist-add-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+
 /* ── Event + Contract Creation Wizard ──────────────────────────────────────── */
 
 pb-event-wizard { display: block; }

@@ -59,19 +59,39 @@ function getAppUser() { return _appUser; }
 function setAppUser(user) { _appUser = user || null; }
 
 
+// ── Real LARC/PAN bus adapter ────────────────────────────────────────────────
+// pan.mjs (loaded in index.html) is a component autoloader; on init it mounts a
+// <pan-bus> element and dynamically imports pan-bus-lite.mjs, the actual pub/sub
+// implementation, which exposes window.pan.bus.publish()/subscribe() once ready
+// and announces readiness via a `pan:sys.ready` CustomEvent on `document`. This
+// adapter waits for that signal (buffering early calls) and then delegates to
+// the real bus, translating its unsubscribe-function return into this app's
+// existing AbortSignal-based unsubscribe convention so every call site keeps
+// calling publish(topic, payload) / subscribe(topic, handler, signal) unchanged.
+let _panReady = false;
+const _panPending = [];
+document.addEventListener('pan:sys.ready', () => {
+  _panReady = true;
+  _panPending.splice(0).forEach((fn) => fn());
+}, { once: true });
+// Fallback: if the CDN never responds, stop buffering after 3s so we degrade to
+// silent no-ops instead of an unbounded pending-call queue.
+setTimeout(() => { if (!_panReady) { _panReady = true; _panPending.splice(0).forEach((fn) => fn()); } }, 3000);
+
+function _whenPanReady(fn) { _panReady ? fn() : _panPending.push(fn); }
+
 function publish(topic, payload = {}) {
-  document.dispatchEvent(new CustomEvent(topic, { detail: payload }));
-  document.dispatchEvent(new CustomEvent('pan:publish', { detail: { topic, payload } }));
+  _whenPanReady(() => {
+    if (window.pan?.bus) window.pan.bus.publish(topic, payload);
+  });
 }
 
-
 function subscribe(topic, handler, signal) {
-  const local = (event) => handler(event.detail);
-  const pan = (event) => {
-    if (event.detail?.topic === topic) handler(event.detail.payload);
-  };
-  document.addEventListener(topic, local, { signal });
-  document.addEventListener('pan:message', pan, { signal });
+  _whenPanReady(() => {
+    if (signal?.aborted || !window.pan?.bus) return;
+    const unsubscribe = window.pan.bus.subscribe(topic, (msg) => handler(msg.data));
+    signal?.addEventListener('abort', () => unsubscribe(), { once: true });
+  });
 }
 
 

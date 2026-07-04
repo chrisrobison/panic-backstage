@@ -152,6 +152,38 @@ final class Kernel
             return [Contacts::class, ['contactId' => $this->intOrNull($segments[1] ?? null)]];
         }
 
+        // Email campaigns (admin; manage_campaigns gate inside endpoint)
+        //   GET    /api/campaigns                              list
+        //   GET    /api/campaigns/eligible-events               events available for the "generate from events" picker
+        //   POST   /api/campaigns/generate-from-events           create a campaign from picked events
+        //   GET    /api/campaigns/{id}                           show one
+        //   POST   /api/campaigns                                create a blank campaign
+        //   PATCH  /api/campaigns/{id}                           update draft fields
+        //   DELETE /api/campaigns/{id}                           delete a draft
+        //   GET    /api/campaigns/{id}/recipients/preview         preview recipient resolution
+        //   POST   /api/campaigns/{id}/send                       send to resolved recipients
+        //   POST   /api/campaigns/{id}/send-test                  send a one-off test copy
+        if ($segments[0] === 'campaigns') {
+            $seg1 = $segments[1] ?? null;
+            if ($seg1 === 'eligible-events' || $seg1 === 'generate-from-events') {
+                return [Campaigns::class, ['action' => $seg1]];
+            }
+            return [Campaigns::class, [
+                'campaignId' => $this->intOrNull($seg1),
+                'action'     => $segments[2] ?? null,
+                'subAction'  => $segments[3] ?? null,
+            ]];
+        }
+
+        // Mailing lists (marketing; manage_campaigns gate inside endpoint)
+        if ($segments[0] === 'mailing-lists') {
+            return [MailingLists::class, [
+                'listId'  => $this->intOrNull($segments[1] ?? null),
+                'child'   => $segments[2] ?? null,
+                'childId' => $this->intOrNull($segments[3] ?? null),
+            ]];
+        }
+
         // Public event pages (unauthenticated)
         if ($segments[0] === 'public' && ($segments[1] ?? '') === 'events') {
             return [PublicEvents::class, ['slug' => $segments[2] ?? null]];

@@ -74,7 +74,7 @@ abstract class BaseEndpoint implements Endpoint
         'venue_admin' => [
             'view_all_events', 'create_events', 'manage_templates', 'manage_users',
             'manage_staff_roster', 'manage_contract_library', 'view_all_contracts',
-            'manage_contacts',
+            'manage_contacts', 'manage_campaigns',
             // New global capabilities
             'manage_leads', 'view_leads',
             'manage_crm_profiles',

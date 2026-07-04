@@ -14,6 +14,8 @@ import { HELP_SECTIONS } from './help.js';
 import './promote.js';
 import './outbox.js';
 import './messages.js';
+import './campaigns.js';
+import './mailing-lists.js';
 import './events.js';
 import './event-wizard.js';
 import './leads.js';
@@ -92,6 +94,8 @@ class AppShell extends PanicElement {
             <a data-nav="inbox" href="#inbox" title="Inbox"><i class="fa-solid fa-inbox" aria-hidden="true"></i>Inbox<span class="nav-badge" data-inbox-badge hidden></span></a>
             <a data-nav="archive" href="#archive" title="Archive"><i class="fa-solid fa-box-archive" aria-hidden="true"></i>Archive</a>
             <a data-nav="sent" href="#sent" title="Outbox"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i>Outbox</a>
+            <a data-nav="campaigns" data-nav-campaigns href="#campaigns" title="Campaigns"><i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i>Campaigns</a>
+            <a data-nav="lists" data-nav-campaigns href="#lists" title="Lists"><i class="fa-solid fa-rectangle-list" aria-hidden="true"></i>Lists</a>
           </div>
         </div>
         <div class="nav-group" data-group="events">
@@ -263,6 +267,9 @@ class AppShell extends PanicElement {
     if (!this.capabilities?.manage_contacts) {
       $$('[data-nav-contacts]', this).forEach((link) => link.remove());
     }
+    if (!this.capabilities?.manage_campaigns) {
+      $$('[data-nav-campaigns]', this).forEach((link) => link.remove());
+    }
     const leadsLinks = $$('[data-nav-leads]', this);
     const hasLeads = this.capabilities?.view_leads || this.capabilities?.manage_leads;
     leadsLinks.forEach((el) => { el.hidden = !hasLeads; });
@@ -374,6 +381,8 @@ class AppShell extends PanicElement {
     if (route === 'inbox') return this.mount(outlet, 'pb-messages-inbox');
     if (route === 'archive') return this.mount(outlet, 'pb-messages-archive');
     if (route === 'sent') return this.mount(outlet, 'pb-messages-sent');
+    if (route === 'campaigns') return this.mount(outlet, 'pb-msg-campaigns');
+    if (route === 'lists') return this.mount(outlet, 'pb-msg-lists');
     if (route === 'new-event') return this.mount(outlet, 'pb-event-wizard');
     return this.mount(outlet, 'pb-dashboard');
   }

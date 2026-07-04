@@ -21,7 +21,7 @@
   // Non-essential UI-preference keys this app may store. Used to purge remembered
   // preferences if the user declines (or later withdraws) preference consent.
   // "pb_sections_" is a prefix: per-event, per-user section-visibility prefs.
-  var PREF_KEYS = ["pb.navGroups", "pb.navCollapsed", "pb-msg-detail-h"];
+  var PREF_KEYS = ["pb.navGroups", "pb.navCollapsed", "pb-msg-detail-h", "pb-campaign-detail-h", "pb-mlist-detail-h"];
   var PREF_PREFIXES = ["pb_sections_"];
 
   function read() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }

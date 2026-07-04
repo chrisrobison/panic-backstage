@@ -1,0 +1,8 @@
+{{venue_name}} — {{heading}}
+{{week_range}}
+
+{{events_text}}
+
+--
+{{venue_name}} · {{venue_address_line}}
+{{footer_note}}
