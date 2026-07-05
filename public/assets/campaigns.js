@@ -49,6 +49,8 @@ class CampaignsPage extends PanicElement {
     this._debounce = null;
     this._contactDebounce = null;
     this._previewDebounce = null;
+    this._recipientsDialog = null; // open "Recipients" modal, if any
+    this._recipientsPaneEl = null; // element inside that modal the picker renders into
 
     this._app = document.getElementById('app');
     if (this._app) this._app.classList.add('workspace-outbox');
@@ -66,6 +68,7 @@ class CampaignsPage extends PanicElement {
 
   disconnectedCallback() {
     this._app?.classList.remove('workspace-outbox');
+    this.closeRecipientsModal();
     this.abort?.abort();
   }
 
@@ -96,6 +99,7 @@ class CampaignsPage extends PanicElement {
   }
 
   async loadCampaign(id) {
+    this.closeRecipientsModal();
     try {
       const data = await api(`/campaigns/${id}`);
       this.selected = data.campaign;
@@ -161,7 +165,6 @@ class CampaignsPage extends PanicElement {
             </div>
             <div class="outbox-detail-body campaign-detail-body">
               <div class="campaign-editor-pane"></div>
-              <div class="campaign-recipients-pane" hidden></div>
               <div class="campaign-actions-row" hidden></div>
             </div>
           </div>
@@ -251,8 +254,8 @@ class CampaignsPage extends PanicElement {
 
     this.renderDetailMeta();
     this.renderEditor();
-    this.renderRecipients();
     this.renderActions();
+    this.initRecipients();
 
     $$('.outbox-row', this).forEach((row) => {
       const active = Number(row.dataset.id) === this.selected.id;
@@ -387,18 +390,62 @@ class CampaignsPage extends PanicElement {
   }
 
   // ── Render: recipient picker ─────────────────────────────────────────────────
+  // The picker lives in a modal (opened via the "Recipients" button in the
+  // actions row) rather than inline in the detail pane, so it never overlaps
+  // the email preview above it. `initRecipients` just primes the recipient
+  // count (for the button label / Send button state) without opening anything.
 
-  async renderRecipients() {
-    const el = $('.campaign-recipients-pane', this);
-    if (!el || !this.selected) return;
-    const c = this.selected;
-
-    if (c.status !== 'draft') {
-      el.hidden = true;
-      el.innerHTML = '';
+  async initRecipients() {
+    if (!this.selected) return;
+    if (this.selected.status !== 'draft') {
+      this._recipientCount = 0;
+      this.renderActions();
       return;
     }
-    el.hidden = false;
+    if (!this._lists) {
+      try {
+        const data = await api('/mailing-lists');
+        this._lists = data.lists || [];
+      } catch {
+        this._lists = [];
+      }
+    }
+    this.refreshRecipientPreview();
+  }
+
+  openRecipientsModal() {
+    if (!this.selected || this.selected.status !== 'draft' || this._recipientsDialog) return;
+
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-backdrop';
+    dialog.innerHTML = `
+      <div class="modal-card wide">
+        <div class="section-head padded">
+          <h2>Recipients</h2>
+          <button type="button" class="small secondary" data-close>Close</button>
+        </div>
+        <div class="modal-card-body padded campaign-recipients-pane"></div>
+      </div>`;
+    document.body.appendChild(dialog);
+    this._recipientsDialog = dialog;
+
+    const close = () => this.closeRecipientsModal();
+    $$('[data-close]', dialog).forEach((btn) => btn.addEventListener('click', close));
+    dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
+
+    this.renderRecipientsInto($('.campaign-recipients-pane', dialog));
+  }
+
+  closeRecipientsModal() {
+    if (!this._recipientsDialog) return;
+    this._recipientsDialog.remove();
+    this._recipientsDialog = null;
+    this._recipientsPaneEl = null;
+  }
+
+  async renderRecipientsInto(el) {
+    if (!el || !this.selected) return;
+    this._recipientsPaneEl = el;
 
     if (!this._lists) {
       try {
@@ -410,7 +457,6 @@ class CampaignsPage extends PanicElement {
     }
 
     el.innerHTML = `
-      <h3 class="campaign-section-title">Recipients</h3>
       ${this._lists.length ? `<div class="campaign-lists-checklist">
         ${this._lists.map((l) => `<label class="checkbox-row campaign-list-check">
           <input type="checkbox" data-list-id="${esc(l.id)}" ${this.selectedListIds.has(l.id) ? 'checked' : ''}>
@@ -472,7 +518,7 @@ class CampaignsPage extends PanicElement {
           search.value = '';
           results.hidden = true;
           results.innerHTML = '';
-          const chips = $('.campaign-contact-chips', this);
+          const chips = $('.campaign-contact-chips', this._recipientsPaneEl);
           if (chips) chips.innerHTML = this.contactChipsHtml();
           this.bindContactChipRemove();
           this.refreshRecipientPreview();
@@ -491,10 +537,12 @@ class CampaignsPage extends PanicElement {
   }
 
   bindContactChipRemove() {
-    $$('[data-remove-contact]', this).forEach((btn) => {
+    const root = this._recipientsPaneEl;
+    if (!root) return;
+    $$('[data-remove-contact]', root).forEach((btn) => {
       btn.addEventListener('click', () => {
         this.selectedContacts.delete(Number(btn.dataset.removeContact));
-        const chips = $('.campaign-contact-chips', this);
+        const chips = $('.campaign-contact-chips', root);
         if (chips) chips.innerHTML = this.contactChipsHtml();
         this.bindContactChipRemove();
         this.refreshRecipientPreview();
@@ -508,15 +556,15 @@ class CampaignsPage extends PanicElement {
   }
 
   async loadRecipientPreview() {
-    const el = $('.campaign-recipient-count', this);
-    if (!el || !this.selected) return;
+    if (!this.selected) return;
+    const countEl = this._recipientsPaneEl ? $('.campaign-recipient-count', this._recipientsPaneEl) : null;
 
     const listIds = [...this.selectedListIds].join(',');
     const contactIds = [...this.selectedContacts.keys()].join(',');
 
     if (!listIds && !contactIds) {
       this._recipientCount = 0;
-      el.textContent = '0 recipients will receive this.';
+      if (countEl) countEl.textContent = '0 recipients will receive this.';
       this.renderActions();
       return;
     }
@@ -528,14 +576,14 @@ class CampaignsPage extends PanicElement {
     try {
       const data = await api(`/campaigns/${this.selected.id}/recipients/preview?${qs}`);
       this._recipientCount = data.count || 0;
-      el.textContent = `${this._recipientCount} recipient${this._recipientCount === 1 ? '' : 's'} will receive this.`;
+      if (countEl) countEl.textContent = `${this._recipientCount} recipient${this._recipientCount === 1 ? '' : 's'} will receive this.`;
     } catch (err) {
-      el.textContent = `Couldn't calculate recipients: ${err.message}`;
+      if (countEl) countEl.textContent = `Couldn't calculate recipients: ${err.message}`;
     }
     this.renderActions();
   }
 
-  // ── Render: actions row (send test / send campaign) ─────────────────────────
+  // ── Render: actions row (recipients / send test / send campaign) ────────────
 
   renderActions() {
     const el = $('.campaign-actions-row', this);
@@ -546,6 +594,9 @@ class CampaignsPage extends PanicElement {
     const canSend = c.status === 'draft' && (this._recipientCount || 0) > 0;
 
     el.innerHTML = `
+      ${c.status === 'draft' ? `<button type="button" class="small secondary campaign-recipients-btn">
+        <i class="fa-solid fa-users" aria-hidden="true"></i> Recipients (${this._recipientCount || 0})
+      </button>` : ''}
       <button type="button" class="small secondary campaign-send-test-btn">Send Test…</button>
       <div class="campaign-send-test-form" hidden>
         <input type="email" class="campaign-send-test-email" placeholder="test@example.com" aria-label="Test email address">
@@ -555,6 +606,7 @@ class CampaignsPage extends PanicElement {
       ${c.status === 'draft' ? `<button type="button" class="small campaign-send-btn" ${canSend ? '' : 'disabled'}>Send Campaign</button>` : ''}
     `;
 
+    $('.campaign-recipients-btn', el)?.addEventListener('click', () => this.openRecipientsModal());
     $('.campaign-send-test-btn', el)?.addEventListener('click', () => {
       const form = $('.campaign-send-test-form', el);
       form.hidden = !form.hidden;
@@ -612,6 +664,7 @@ class CampaignsPage extends PanicElement {
 
   async closeDetail() {
     if (this.selected) await this.saveCurrentViewIfDirty();
+    this.closeRecipientsModal();
     this.selected = null;
     const pane = $('.outbox-detail-pane', this);
     if (pane) pane.hidden = true;

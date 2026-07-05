@@ -4226,9 +4226,9 @@ pb-msg-lists.resizing .outbox-detail-pane {
    Marketing email campaigns (pb-msg-campaigns). Layout mirrors the Outbox/
    Messages split pane above (same .outbox-* classes) — these rules only cover
    the campaign-specific pieces layered on top of it: editable name/subject,
-   a bounded-height HTML/text editor (now sharing the pane with recipients +
-   actions instead of filling it), the recipient picker, and the event-picker
-   modal used by "Generate from Event(s)". ──────────────────────────────────── */
+   the full-height HTML/text editor, the actions row (Recipients / Send Test /
+   Send Campaign), the Recipients picker modal, and the event-picker modal
+   used by "Generate from Event(s)". ──────────────────────────────────── */
 
 .campaign-detail-body { display: flex; flex-direction: column; }
 
@@ -4271,25 +4271,25 @@ pb-msg-lists.resizing .outbox-detail-pane {
 
 .campaign-locked-note { font-style: italic; margin: 2px 0 0; }
 
-/* Editor frame/text-editor now share the detail pane with the recipients and
-   actions sections below, so they get a bounded height instead of flex: 1 1 0. */
-.campaign-editor-frame.outbox-email-frame { flex: 0 0 340px; min-height: 220px; }
-.campaign-text-editor.outbox-raw-body { flex: 0 0 340px; min-height: 220px; overflow-y: auto; }
+/* The editor frame/text-editor fill the whole detail pane (same as the base
+   .outbox-email-frame flex: 1 1 0) — Recipients now lives in its own modal
+   (opened via the "Recipients" button in the actions row below) instead of
+   an inline section, so it no longer competes with the preview for space. */
 
-.campaign-recipients-pane,
 .campaign-actions-row {
   flex-shrink: 0;
   border-top: 1px solid var(--line);
   padding: 16px 20px;
-}
-.campaign-actions-row {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.campaign-section-title { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.campaign-recipients-btn i { margin-right: 2px; }
+
+/* Recipients modal content (rendered into .modal-card-body.padded) */
+.campaign-recipients-pane.modal-card-body { max-height: 70vh; }
 
 .campaign-lists-checklist {
   display: flex;
