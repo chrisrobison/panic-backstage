@@ -42,7 +42,7 @@ RewriteRule ^api(?:/(.*))?$ public/api/index.php [L,QSA]
 # the SPA catch-all below. Mirror the rule in public/.htaccess here so the
 # root-level rewrite engine sees it before falling through to index.html.
 RewriteRule ^t(?:/(.*))?$ public/api/index.php [L,QSA]
-RewriteRule ^(login|event|invite|scanner)\.html$ public/$1.html [L]
+RewriteRule ^(login|event|invite|scanner|sign)\.html$ public/$1.html [L]
 
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

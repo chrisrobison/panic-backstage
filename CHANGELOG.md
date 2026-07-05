@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `contracts` — Route sign.html through to public/ instead of the SPA shell
 - **Fixed** `campaigns` — Restore email preview height in detail pane
 - **Fixed** `campaigns` — Move Recipients picker into a modal off the detail pane
 - **Added** `messages` — Add email Campaigns + Lists tools under Messages nav

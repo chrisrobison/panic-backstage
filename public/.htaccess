@@ -22,11 +22,11 @@ RewriteRule ^assets/qr\.png$ api/index.php [L]
   php_value post_max_size 12M
 </IfModule>
 
-# Never cache or index login.html or invite.html — both can carry a one-shot
-# token in the query string. We don't want caches, archives, or search
-# crawlers to retain those URLs.
+# Never cache or index login.html, invite.html, or sign.html — all three can
+# carry a one-shot token in the query string. We don't want caches, archives,
+# or search crawlers to retain those URLs.
 <IfModule mod_headers.c>
-  <FilesMatch "^(login|invite|scanner)\.html$">
+  <FilesMatch "^(login|invite|scanner|sign)\.html$">
     Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
     Header set Pragma "no-cache"
     Header set Expires "0"
