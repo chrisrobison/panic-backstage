@@ -4232,7 +4232,7 @@ pb-msg-lists.resizing .outbox-detail-pane {
 
 .campaign-detail-body { display: flex; flex-direction: column; }
 
-.campaign-editor-pane { display: flex; flex-direction: column; min-height: 0; }
+.campaign-editor-pane { flex: 1 1 0; display: flex; flex-direction: column; min-height: 0; }
 
 .campaign-title-row {
   display: flex;

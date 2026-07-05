@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `campaigns` — Restore email preview height in detail pane
 - **Fixed** `campaigns` — Move Recipients picker into a modal off the detail pane
 - **Added** `messages` — Add email Campaigns + Lists tools under Messages nav
 - **Added** `email` — Add weekly "shows this week" lineup email generator
