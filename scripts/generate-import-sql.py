@@ -511,6 +511,11 @@ stat = {'inserted': 0, 'updated': 0, 'unchanged': 0, 'seeded': 0,
         'unlinked': 0, 'relinked': 0}
 unlinked_rows = []
 
+# Slug reassignments for already-linked events, deferred to a two-phase
+# rename after the main loop (see below) instead of being written inline —
+# see the note at the emission site for why.
+pending_slug_updates: list[tuple[int, str]] = []
+
 for ev in events_rows:
     specs = field_specs(ev)
     shadow_now = {col: comp for (col, comp, _sql) in specs}
@@ -536,7 +541,15 @@ for ev in events_rows:
                 set_parts = [f"{col} = {sql}" for col, sql in changed]
                 names = {col for col, _ in changed}
                 if 'title' in names or 'date' in names:
-                    set_parts.append(f"slug = {esc(ev['slug'])}")
+                    # Don't set slug inline here: this event's new slug can be
+                    # another row's *current* (not-yet-updated) slug — e.g. a
+                    # block of sheet edits that shuffles several events' titles
+                    # at once. Setting it immediately makes success depend on
+                    # this statement happening to come after whichever other
+                    # statement vacates that slug, which is fragile ordering
+                    # this generator doesn't otherwise guarantee. Deferred to
+                    # the two-phase rename after the main loop instead.
+                    pending_slug_updates.append((app_id, ev['slug']))
                 out.append(f"UPDATE events SET {', '.join(set_parts)} WHERE id = {app_id};")
                 stat['updated'] += 1
             else:
@@ -615,6 +628,26 @@ for ev in events_rows:
         f"VALUES (@eid, {esc(shadow_json)}, NOW()) "
         f"ON DUPLICATE KEY UPDATE raw_json = VALUES(raw_json), synced_at = VALUES(synced_at);"
     )
+
+if pending_slug_updates:
+    out.extend([
+        "",
+        "-- ── Slug renames (two-phase) ──────────────────────────────────",
+        "-- `slug` is UNIQUE, so a rename can collide with another row's",
+        "-- CURRENT slug value mid-transaction — either a legitimate cascade",
+        "-- (several events' titles shuffled in one sheet edit) or a stale",
+        "-- row this sync doesn't otherwise touch. Phase 1 vacates every",
+        "-- renaming event to a placeholder derived from its own id (always",
+        "-- unique, so it can never collide with anything). Phase 2 then",
+        "-- assigns the real slugs, order-independent since every event in",
+        "-- this batch has already given up its old slug. A genuine conflict",
+        "-- (the target slug still held by an untouched row) correctly fails",
+        "-- phase 2 rather than being silently papered over.",
+    ])
+    for app_id, _new_slug in pending_slug_updates:
+        out.append(f"UPDATE events SET slug = CONCAT('__pending_slug__', id) WHERE id = {app_id};")
+    for app_id, new_slug in pending_slug_updates:
+        out.append(f"UPDATE events SET slug = {esc(new_slug)} WHERE id = {app_id};")
 
 out.extend(["", "COMMIT;"])
 

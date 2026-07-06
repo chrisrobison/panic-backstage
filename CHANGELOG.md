@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `sync` — Defer slug renames to a two-phase update to avoid ordering-dependent import failures
 - **Added** `campaigns` — Add bulk add, CSV import, segment lists, and contact-side list view to mailing lists
 - **Added** `events` — Support multi-day event display across calendar and agenda views
 - **Fixed** `contracts` — Route sign.html through to public/ instead of the SPA shell
