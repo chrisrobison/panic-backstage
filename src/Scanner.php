@@ -351,6 +351,10 @@ final class Scanner extends BaseEndpoint
             ]
         );
 
+        // Human-facing event reference (EVT-N); falls back to the raw id only
+        // if the event somehow has no code yet.
+        $eventCode = (string) ($this->db->one('SELECT external_id FROM events WHERE id = ?', [$eventId])['external_id'] ?? '') ?: null;
+
         return $this->ok([
             'result'      => $result,
             'admitted'    => $result === 'admitted',
@@ -358,6 +362,7 @@ final class Scanner extends BaseEndpoint
             'tier'        => $tier,
             'ticket_code' => $code,
             'event_id'    => $eventId,
+            'event_code'  => $eventCode,
         ]);
     }
 

@@ -133,8 +133,8 @@
           if (res.body && /pin/i.test(res.body.error || '')) els.pin.focus();
           return;
         }
-        if (res.body && res.body.event_id && !els.eventLabel.textContent) {
-          els.eventLabel.textContent = 'Event #' + res.body.event_id;
+        if (res.body && (res.body.event_code || res.body.event_id) && !els.eventLabel.textContent) {
+          els.eventLabel.textContent = res.body.event_code || ('Event #' + res.body.event_id);
         }
         render(res.body, res.ok);
       })
