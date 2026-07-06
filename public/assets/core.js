@@ -279,6 +279,22 @@ function badge(status) {
 }
 
 
+// Shared with contacts.js and mailing-lists.js (both render a contact's
+// marketing opt-in flag and a list-membership status the same way) so
+// there's exactly one copy of this markup/wording.
+function optedBadge(contactLike) {
+  return Number(contactLike?.marketing_opted_in)
+    ? '<span class="badge status-confirmed">Opted in</span>'
+    : '<span class="badge status-empty">Not opted</span>';
+}
+
+function memberStatusBadge(status) {
+  return status === 'subscribed'
+    ? '<span class="badge status-confirmed">Subscribed</span>'
+    : '<span class="badge status-canceled">Unsubscribed</span>';
+}
+
+
 function option(value, selected, label = value, labelFn) {
   const display = labelFn ? labelFn(value) : titleCase(label);
   return `<option value="${esc(value)}" ${String(value) === String(selected ?? '') ? 'selected' : ''}>${esc(display)}</option>`;
@@ -514,4 +530,4 @@ function mdToHtml(text) {
   }).join('\n');
 }
 
-export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml };
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml };

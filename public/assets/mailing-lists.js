@@ -1,4 +1,4 @@
-import { esc, api, publish, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
+import { esc, api, publish, PanicElement, addToggle, bindAddToggle, optedBadge, memberStatusBadge, $, $$ } from './core.js';
 
 // ── Mailing Lists (admin) ────────────────────────────────────────────────────
 // Named, reusable recipient groups layered on top of `contacts`. Same
@@ -17,15 +17,43 @@ function fmtDate(raw) {
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function fmtDateTime(raw) {
+  if (!raw) return 'never';
+  const d = new Date(String(raw).replace(' ', 'T'));
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
 const contactName = (c) => `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email || '(no name)';
 
-const optedBadge = (c) => Number(c.marketing_opted_in)
-  ? '<span class="badge status-confirmed">Opted in</span>'
-  : '<span class="badge status-empty">Opted out</span>';
+// Shared between the "New list" create form and a segment list's rules panel
+// in the detail pane — same 4 criteria fields (see ContactFilters on the
+// backend), just rendered into two different forms.
+function rulesFieldsHtml(values = {}) {
+  const opted = values.opted !== undefined && values.opted !== null ? String(values.opted) : '';
+  return `
+    <label>Opted in
+      <select name="opted">
+        <option value="" ${opted === '' ? 'selected' : ''}>Any</option>
+        <option value="1" ${opted === '1' ? 'selected' : ''}>Opted in only</option>
+        <option value="0" ${opted === '0' ? 'selected' : ''}>Not opted in only</option>
+      </select>
+    </label>
+    <label>Min spend ($) <input type="number" name="min_spend" min="0" step="1" value="${esc(values.min_spend ?? '')}" placeholder="e.g. 500"></label>
+    <label>Min events <input type="number" name="min_events" min="0" step="1" value="${esc(values.min_events ?? '')}" placeholder="e.g. 3"></label>
+    <label>Min tickets <input type="number" name="min_tickets" min="0" step="1" value="${esc(values.min_tickets ?? '')}" placeholder="e.g. 5"></label>
+  `;
+}
 
-const memberStatusBadge = (status) => status === 'subscribed'
-  ? '<span class="badge status-confirmed">Subscribed</span>'
-  : '<span class="badge status-canceled">Unsubscribed</span>';
+function readRulesFromForm(form) {
+  const rules = {};
+  const opted = form.elements.opted?.value;
+  if (opted === '0' || opted === '1') rules.opted = opted;
+  for (const key of ['min_spend', 'min_events', 'min_tickets']) {
+    const raw = form.elements[key]?.value;
+    if (raw !== '' && raw != null) rules[key] = Number(raw);
+  }
+  return rules;
+}
 
 // Column definition drives both the table header and the client-side sort
 // (the /mailing-lists endpoint returns everything unpaginated, so sorting the
@@ -56,9 +84,14 @@ class MailingListsPage extends PanicElement {
     this._mDebounce = null;
 
     // Add-contacts sub-state
-    this.acResults  = [];
-    this.acSelected = new Set();
-    this._acDebounce = null;
+    this.acResults    = [];
+    this.acSelected   = new Set();
+    this.acTotal      = 0;
+    this.acOptedOnly  = false;
+    this._acDebounce  = null;
+
+    // CSV import sub-state
+    this.importBusy = false;
 
     this._app = document.getElementById('app');
     if (this._app) this._app.classList.add('workspace-outbox');
@@ -137,6 +170,8 @@ class MailingListsPage extends PanicElement {
     this.mPages = 1;
     this.acResults = [];
     this.acSelected = new Set();
+    this.acTotal = 0;
+    this.acOptedOnly = false;
 
     this.renderDetail();
     this.loadMembers();
@@ -168,6 +203,12 @@ class MailingListsPage extends PanicElement {
         <form class="row-form mlist-add-form" data-add-form hidden>
           <label>Name <input name="name" required maxlength="160" placeholder="List name" autocomplete="off"></label>
           <label>Description <span class="muted small">(optional)</span><input name="description" maxlength="500" placeholder="What is this list for?" autocomplete="off"></label>
+          <fieldset class="mlist-type-fieldset">
+            <legend>List type</legend>
+            <label><input type="radio" name="list_type" value="static" checked> Static <span class="muted small">(you choose members)</span></label>
+            <label><input type="radio" name="list_type" value="segment"> Smart <span class="muted small">(auto-updates from rules)</span></label>
+          </fieldset>
+          <div class="mlist-rules-form" data-new-rules-form hidden>${rulesFieldsHtml()}</div>
           <button type="submit" class="small">Create list</button>
           <button type="button" class="small secondary" data-cancel-add>Cancel</button>
           <span class="mlist-field-error" data-create-error hidden></span>
@@ -229,14 +270,39 @@ class MailingListsPage extends PanicElement {
 
               <section class="mlist-add-contacts">
                 <h3 class="mlist-h3">Add contacts</h3>
-                <label class="outbox-search-label" aria-label="Search contacts to add">
-                  <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                  <input class="outbox-search mlist-add-contacts-search" type="search" placeholder="Search contacts by name or email…" autocomplete="off">
-                </label>
+                <div class="mlist-add-contacts-head">
+                  <label class="outbox-search-label" aria-label="Search contacts to add">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    <input class="outbox-search mlist-add-contacts-search" type="search" placeholder="Search contacts by name or email…" autocomplete="off">
+                  </label>
+                  <label class="check-label mlist-add-opted-only"><input type="checkbox" class="mlist-add-opted-filter"> Opted in only</label>
+                </div>
                 <ul class="mlist-add-contacts-results" hidden></ul>
                 <div class="mlist-add-actions" hidden>
                   <button type="button" class="small" data-add-selected disabled>Add selected (0)</button>
+                  <button type="button" class="small secondary" data-add-all-matching hidden>Add all matching</button>
                 </div>
+              </section>
+
+              <section class="mlist-import-csv">
+                <h3 class="mlist-h3">Import CSV</h3>
+                <p class="muted small">Upload a CSV with an <code>email</code> column (plus optional <code>first_name</code>, <code>last_name</code>, <code>phone</code>, <code>opted_in</code>). New emails become new contacts; existing ones are matched and added to this list.</p>
+                <form class="row-form mlist-import-form" data-import-form>
+                  <input type="file" name="csv" accept=".csv,text/csv" required aria-label="CSV file">
+                  <button type="submit" class="small">Import CSV</button>
+                </form>
+                <div class="mlist-import-result" data-import-result hidden></div>
+              </section>
+
+              <section class="mlist-segment-rules">
+                <h3 class="mlist-h3">Segment rules</h3>
+                <p class="mlist-segment-meta">This list's membership is computed automatically — add/remove contacts by editing the rules below, then refresh. Last refreshed <strong data-segment-refreshed>never</strong>.</p>
+                <form class="row-form mlist-rules-edit-form" data-rules-edit-form>
+                  <div class="mlist-rules-form">${rulesFieldsHtml()}</div>
+                  <button type="submit" class="small">Save rules</button>
+                  <button type="button" class="small secondary" data-refresh-segment>Refresh now</button>
+                  <span class="mlist-field-error" data-rules-error hidden></span>
+                </form>
               </section>
             </div>
           </div>
@@ -325,6 +391,33 @@ class MailingListsPage extends PanicElement {
     $('[data-meta-count]', this).textContent = Number(l.member_count || 0).toLocaleString();
     $('[data-meta-created]', this).textContent = fmtDate(l.created_at);
 
+    // A segment (smart) list's membership is fully computed — hide the
+    // manual add paths and show the rules/refresh panel instead. A static
+    // list is the reverse. list_type is immutable, so this never has to
+    // handle a list switching sides mid-session.
+    const isSegment = l.list_type === 'segment';
+    const addContactsSection = $('.mlist-add-contacts', this);
+    const importSection = $('.mlist-import-csv', this);
+    const rulesSection = $('.mlist-segment-rules', this);
+    if (addContactsSection) addContactsSection.hidden = isSegment;
+    if (importSection) importSection.hidden = isSegment;
+    if (rulesSection) rulesSection.hidden = !isSegment;
+
+    if (isSegment) {
+      const rulesForm = $('.mlist-rules-edit-form', this);
+      if (rulesForm) {
+        const rules = l.segment_rules || {};
+        if (rulesForm.elements.opted) rulesForm.elements.opted.value = rules.opted !== undefined ? String(rules.opted) : '';
+        if (rulesForm.elements.min_spend) rulesForm.elements.min_spend.value = rules.min_spend ?? '';
+        if (rulesForm.elements.min_events) rulesForm.elements.min_events.value = rules.min_events ?? '';
+        if (rulesForm.elements.min_tickets) rulesForm.elements.min_tickets.value = rules.min_tickets ?? '';
+      }
+      const rulesErr = $('[data-rules-error]', this);
+      if (rulesErr) { rulesErr.hidden = true; rulesErr.textContent = ''; }
+      const refreshedEl = $('[data-segment-refreshed]', this);
+      if (refreshedEl) refreshedEl.textContent = fmtDateTime(l.segment_refreshed_at);
+    }
+
     // Reset the members/add-contacts sub-panels' static controls.
     const mSearch = $('.mlist-members-search', this);
     if (mSearch) mSearch.value = '';
@@ -332,9 +425,14 @@ class MailingListsPage extends PanicElement {
     if (mFilter) mFilter.value = '';
     const acSearch = $('.mlist-add-contacts-search', this);
     if (acSearch) acSearch.value = '';
+    const acOptedFilter = $('.mlist-add-opted-filter', this);
+    if (acOptedFilter) acOptedFilter.checked = false;
     const acResults = $('.mlist-add-contacts-results', this);
     if (acResults) { acResults.hidden = true; acResults.innerHTML = ''; }
     $('.mlist-add-actions', this).hidden = true;
+    const importResult = $('[data-import-result]', this);
+    if (importResult) { importResult.hidden = true; importResult.innerHTML = ''; }
+    $('.mlist-import-form', this)?.reset();
 
     $$('.outbox-row', this).forEach((row) => {
       const active = Number(row.dataset.id) === l.id;
@@ -413,22 +511,30 @@ class MailingListsPage extends PanicElement {
     const tbody = $('.mlist-members-table tbody', this);
     if (!tbody) return;
 
+    // Segment lists compute their own membership (see /refresh) — manual
+    // toggle/remove would just get overwritten on the next refresh, so those
+    // controls are hidden rather than offered and silently discarded.
+    const isSegment = this.selected?.list_type === 'segment';
+
     if (!this.members.length) {
-      const empty = (this.mQuery || this.mStatus) ? 'No members match.' : 'No members yet — add contacts below.';
+      const empty = (this.mQuery || this.mStatus)
+        ? 'No members match.'
+        : (isSegment ? 'No contacts match this segment’s rules yet.' : 'No members yet — add contacts below.');
       tbody.innerHTML = `<tr><td colspan="5" class="outbox-empty">${esc(empty)}</td></tr>`;
     } else {
       tbody.innerHTML = this.members.map((m) => {
         const nextStatus = m.status === 'subscribed' ? 'unsubscribed' : 'subscribed';
         const toggleLabel = m.status === 'subscribed' ? 'Unsubscribe' : 'Resubscribe';
+        const actions = isSegment
+          ? '<span class="mlist-segment-badge"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Auto</span>'
+          : `<button type="button" class="small secondary" data-toggle-status="${esc(nextStatus)}">${esc(toggleLabel)}</button>
+             <button type="button" class="small danger" data-remove-member>Remove</button>`;
         return `<tr data-contact-id="${esc(m.contact_id)}">
           <td data-label="Name">${esc(contactName(m))}</td>
           <td data-label="Email">${esc(m.email || '—')}</td>
           <td data-label="Marketing">${optedBadge(m)}</td>
           <td data-label="Status">${memberStatusBadge(m.status)}</td>
-          <td data-label="" class="mlist-member-actions">
-            <button type="button" class="small secondary" data-toggle-status="${esc(nextStatus)}">${esc(toggleLabel)}</button>
-            <button type="button" class="small danger" data-remove-member>Remove</button>
-          </td>
+          <td data-label="" class="mlist-member-actions">${actions}</td>
         </tr>`;
       }).join('');
     }
@@ -491,16 +597,20 @@ class MailingListsPage extends PanicElement {
     const actionsEl = $('.mlist-add-actions', this);
     if (!query) {
       this.acResults = [];
+      this.acTotal = 0;
       if (resultsEl) { resultsEl.hidden = true; resultsEl.innerHTML = ''; }
       if (actionsEl) actionsEl.hidden = true;
       return;
     }
     try {
       const qs = new URLSearchParams({ q: query, page: '1', limit: '20' });
+      if (this.acOptedOnly) qs.set('opted', '1');
       const data = await api(`/contacts?${qs}`);
       this.acResults = data.contacts || [];
+      this.acTotal = data.total || 0;
     } catch (err) {
       this.acResults = [];
+      this.acTotal = 0;
       publish('toast.show', { message: err.message, tone: 'error' });
     }
     this.renderAddContactsResults();
@@ -530,6 +640,7 @@ class MailingListsPage extends PanicElement {
     }
     actionsEl.hidden = false;
     this.updateAddSelectedButton();
+    this.updateAddAllButton();
 
     $$('[data-contact-checkbox]', resultsEl).forEach((cb) => {
       cb.addEventListener('change', () => {
@@ -546,6 +657,17 @@ class MailingListsPage extends PanicElement {
     if (!btn) return;
     btn.textContent = `Add selected (${this.acSelected.size})`;
     btn.disabled = this.acSelected.size === 0;
+  }
+
+  updateAddAllButton() {
+    const btn = $('[data-add-all-matching]', this);
+    if (!btn) return;
+    if (this.acTotal > 0) {
+      btn.hidden = false;
+      btn.textContent = `Add all ${this.acTotal.toLocaleString()} matching`;
+    } else {
+      btn.hidden = true;
+    }
   }
 
   async addSelectedContacts() {
@@ -578,6 +700,90 @@ class MailingListsPage extends PanicElement {
     }
   }
 
+  /** "Add all N matching" — resolves the whole search (not just the visible page) server-side. */
+  async addAllMatching() {
+    if (!this.selected || !this.acTotal) return;
+    const query = $('.mlist-add-contacts-search', this)?.value.trim() || '';
+    if (!confirm(`Add all ${this.acTotal.toLocaleString()} matching contacts to this list?`)) return;
+
+    const btn = $('[data-add-all-matching]', this);
+    if (btn) btn.disabled = true;
+    try {
+      const body = {};
+      if (query) body.q = query;
+      if (this.acOptedOnly) body.opted = '1';
+      const { added } = await api(`/mailing-lists/${this.selected.id}/add-by-filter`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      publish('toast.show', { message: `${added} contact${added === 1 ? '' : 's'} added.` });
+
+      this.acSelected = new Set();
+      this.acResults = [];
+      this.acTotal = 0;
+      const searchInput = $('.mlist-add-contacts-search', this);
+      if (searchInput) searchInput.value = '';
+      const resultsEl = $('.mlist-add-contacts-results', this);
+      if (resultsEl) { resultsEl.hidden = true; resultsEl.innerHTML = ''; }
+      $('.mlist-add-actions', this).hidden = true;
+
+      this.mPage = 1;
+      await this.loadMembers();
+      await this.syncMemberCount();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // ── CSV import ───────────────────────────────────────────────────────────
+
+  async importCsv(e) {
+    e.preventDefault();
+    if (!this.selected || this.importBusy) return;
+    const form = e.target;
+    const resultEl = $('[data-import-result]', this);
+    const btn = $('button[type="submit"]', form);
+
+    this.importBusy = true;
+    if (btn) btn.disabled = true;
+    if (resultEl) { resultEl.hidden = true; resultEl.innerHTML = ''; }
+
+    try {
+      const data = await api(`/mailing-lists/${this.selected.id}/import`, {
+        method: 'POST',
+        body: new FormData(form),
+      });
+      const parts = [
+        `${data.created || 0} new contact${data.created === 1 ? '' : 's'}`,
+        `${data.updated || 0} matched`,
+        `${data.added_to_list || 0} added to list`,
+      ];
+      if (data.skipped) parts.push(`${data.skipped} row${data.skipped === 1 ? '' : 's'} skipped`);
+      publish('toast.show', { message: parts.join(', ') + '.' });
+
+      if (resultEl) {
+        const errors = Array.isArray(data.errors) ? data.errors : [];
+        resultEl.hidden = errors.length === 0;
+        if (errors.length) {
+          resultEl.innerHTML = `<p class="muted small">Rows with problems:</p>
+            <ul class="mlist-import-errors">${errors.map((e) => `<li>Row ${esc(e.row)}: ${esc(e.message)}</li>`).join('')}</ul>`;
+        }
+      }
+
+      form.reset();
+      this.mPage = 1;
+      await this.loadMembers();
+      await this.syncMemberCount();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    } finally {
+      this.importBusy = false;
+      if (btn) btn.disabled = false;
+    }
+  }
+
   // ── Event binding (one-time, on static shell elements) ──────────────────
 
   bindEvents() {
@@ -592,26 +798,41 @@ class MailingListsPage extends PanicElement {
       }, 300);
     });
 
-    // New-list inline form
+    // New-list inline form: Static/Smart toggle reveals the rules mini-form
+    const newRulesForm = $('[data-new-rules-form]', this);
+    $$('.mlist-add-form input[name="list_type"]', this).forEach((radio) => {
+      radio.addEventListener('change', () => {
+        if (newRulesForm) newRulesForm.hidden = radio.value !== 'segment' || !radio.checked;
+      });
+    });
+
     const addForm = $('.mlist-add-form', this);
     addForm?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const form = e.target;
       const name = form.elements.name.value.trim();
       const description = form.elements.description.value.trim();
+      const listType = form.elements.list_type.value;
       const errEl = $('[data-create-error]', form);
       if (errEl) { errEl.hidden = true; errEl.textContent = ''; }
       if (!name) return;
 
+      const body = { name, description };
+      if (listType === 'segment') {
+        body.list_type = 'segment';
+        body.segment_rules = readRulesFromForm(form);
+      }
+
       const btn = $('button[type="submit"]', form);
       btn.disabled = true;
       try {
-        const { list } = await api('/mailing-lists', { method: 'POST', body: JSON.stringify({ name, description }) });
+        const { list } = await api('/mailing-lists', { method: 'POST', body: JSON.stringify(body) });
         this.lists = [list, ...this.lists];
         this.query = '';
         const outerSearch = $('.outbox-search:not(.mlist-members-search):not(.mlist-add-contacts-search)', this);
         if (outerSearch) outerSearch.value = '';
         form.reset();
+        if (newRulesForm) newRulesForm.hidden = true;
         form.setAttribute('hidden', '');
         $('[data-add]', this)?.classList.remove('active');
         publish('toast.show', { message: `List "${list.name}" created.` });
@@ -620,6 +841,54 @@ class MailingListsPage extends PanicElement {
       } catch (err) {
         if (errEl) { errEl.textContent = err.message; errEl.hidden = false; }
         else publish('toast.show', { message: err.message, tone: 'error' });
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Detail: segment-list rules edit + refresh
+    $('.mlist-rules-edit-form', this)?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!this.selected) return;
+      const form = e.target;
+      const errEl = $('[data-rules-error]', this);
+      if (errEl) { errEl.hidden = true; errEl.textContent = ''; }
+      const btn = $('button[type="submit"]', form);
+      btn.disabled = true;
+      try {
+        const { list } = await api(`/mailing-lists/${this.selected.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ segment_rules: readRulesFromForm(form) }),
+        });
+        Object.assign(this.selected, list);
+        const row = this.lists.find((x) => x.id === this.selected.id);
+        if (row && row !== this.selected) Object.assign(row, list);
+        publish('toast.show', { message: 'Rules saved and list refreshed.' });
+        this.renderRows();
+        $('[data-segment-refreshed]', this).textContent = fmtDateTime(list.segment_refreshed_at);
+        $('[data-meta-count]', this).textContent = Number(list.member_count || 0).toLocaleString();
+        this.mPage = 1;
+        await this.loadMembers();
+      } catch (err) {
+        if (errEl) { errEl.textContent = err.message; errEl.hidden = false; }
+        else publish('toast.show', { message: err.message, tone: 'error' });
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    $('[data-refresh-segment]', this)?.addEventListener('click', async () => {
+      if (!this.selected) return;
+      const btn = $('[data-refresh-segment]', this);
+      btn.disabled = true;
+      try {
+        const { added, removed, total_matching: totalMatching } = await api(`/mailing-lists/${this.selected.id}/refresh`, { method: 'POST' });
+        publish('toast.show', { message: `Refreshed: ${added} added, ${removed} removed, ${totalMatching} total matching.` });
+        await this.syncMemberCount();
+        $('[data-segment-refreshed]', this).textContent = fmtDateTime(new Date().toISOString());
+        this.mPage = 1;
+        await this.loadMembers();
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
       } finally {
         btn.disabled = false;
       }
@@ -674,13 +943,23 @@ class MailingListsPage extends PanicElement {
       this.loadMembers();
     });
 
-    // Add-contacts: search (debounced) + add-selected button
+    // Add-contacts: search (debounced) + opted-only filter + add-selected / add-all buttons
     const acSearch = $('.mlist-add-contacts-search', this);
     acSearch?.addEventListener('input', () => {
       clearTimeout(this._acDebounce);
       this._acDebounce = setTimeout(() => this.searchContactsForAdd(acSearch.value.trim()), 300);
     });
+    const acOptedFilter = $('.mlist-add-opted-filter', this);
+    acOptedFilter?.addEventListener('change', () => {
+      this.acOptedOnly = acOptedFilter.checked;
+      const q = acSearch?.value.trim();
+      if (q) this.searchContactsForAdd(q);
+    });
     $('[data-add-selected]', this)?.addEventListener('click', () => this.addSelectedContacts());
+    $('[data-add-all-matching]', this)?.addEventListener('click', () => this.addAllMatching());
+
+    // CSV import
+    $('.mlist-import-form', this)?.addEventListener('submit', (e) => this.importCsv(e));
 
     // Drag-to-resize handle between the list table and detail panes
     // (identical pattern to messages.js, distinct persisted pref key).

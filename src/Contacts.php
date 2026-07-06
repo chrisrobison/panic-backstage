@@ -12,11 +12,16 @@ use function Panic\boolish;
  *
  *   GET    /api/contacts            list (?q= &opted=0|1 &sort= &dir= &page= &limit=)
  *   GET    /api/contacts/{id}       show one
+ *   GET    /api/contacts/{id}/lists which mailing lists this contact belongs to
  *   POST   /api/contacts            create (manual)
  *   PATCH  /api/contacts/{id}       update editable fields
  *   DELETE /api/contacts/{id}       delete
  *
- * Gated by the manage_contacts global capability (venue_admin).
+ * Gated by the manage_contacts global capability (venue_admin). Note: writes
+ * to list membership (add/toggle/remove) are NOT duplicated here — the
+ * contact-side "Mailing Lists" UI calls MailingLists' own member endpoints
+ * directly (gated by manage_campaigns), so there is exactly one place that
+ * writes list_membership rows.
  */
 final class Contacts extends BaseEndpoint
 {
@@ -36,7 +41,13 @@ final class Contacts extends BaseEndpoint
         if ($denied = $this->requireGlobalCapability('manage_contacts')) {
             return $denied;
         }
-        $id = $this->params['contactId'] ?? null;
+        $id     = $this->params['contactId'] ?? null;
+        $action = $this->params['action'] ?? null;
+
+        if ($id && $action === 'lists' && $request->method() === 'GET') {
+            return $this->contactLists((int) $id);
+        }
+
         return match ($request->method()) {
             'GET'    => $id ? $this->show((int) $id) : $this->index($request),
             'POST'   => $this->create($request),
@@ -48,21 +59,11 @@ final class Contacts extends BaseEndpoint
 
     private function index(Request $request): Response
     {
-        $where = [];
-        $params = [];
-
-        $q = trim((string) $request->query('q'));
-        if ($q !== '') {
-            $where[] = '(first_name LIKE ? OR last_name LIKE ? OR CONCAT(first_name, " ", last_name) LIKE ? OR email LIKE ? OR phone LIKE ?)';
-            $like = '%' . $q . '%';
-            array_push($params, $like, $like, $like, $like, $like);
-        }
-        $opted = $request->query('opted');
-        if ($opted === '0' || $opted === '1') {
-            $where[] = 'marketing_opted_in = ?';
-            $params[] = (int) $opted;
-        }
-        $whereSql = $where ? (' WHERE ' . implode(' AND ', $where)) : '';
+        // Also accepts min_spend/min_events/min_tickets (see ContactFilters) —
+        // not surfaced in the Contacts page UI yet, but shared with the
+        // mailing-list bulk-add/segment-list filter criteria so both sides
+        // stay in lockstep with a single WHERE-building implementation.
+        ['where' => $whereSql, 'params' => $params] = ContactFilters::buildWhere($request->query());
 
         $sortKey = (string) $request->query('sort');
         $sortCol = self::SORTS[$sortKey] ?? 'last_name';
@@ -109,6 +110,35 @@ final class Contacts extends BaseEndpoint
             return $this->notFound('Contact not found');
         }
         return $this->ok(['contact' => $row]);
+    }
+
+    /**
+     * Read-only: which mailing lists this contact is on. Writes go through
+     * MailingLists' own /members endpoints (see class docblock) — this just
+     * lets the Contacts UI show/pick from that data without a second copy of
+     * the membership-editing logic.
+     */
+    private function contactLists(int $id): Response
+    {
+        $contact = $this->db->one('SELECT id FROM contacts WHERE id = ?', [$id]);
+        if (!$contact) {
+            return $this->notFound('Contact not found');
+        }
+
+        $memberships = $this->db->all(
+            'SELECT ml.id AS list_id, ml.name AS list_name, ml.list_type,
+                    lm.status, lm.added_at, lm.added_via
+             FROM list_membership lm
+             JOIN mailing_lists ml ON ml.id = lm.list_id
+             WHERE lm.contact_id = ?
+             ORDER BY ml.name',
+            [$id]
+        );
+
+        return $this->ok([
+            'memberships' => $memberships,
+            'can_manage'  => $this->hasGlobalCapability('manage_campaigns'),
+        ]);
     }
 
     private function create(Request $request): Response

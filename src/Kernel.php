@@ -148,8 +148,12 @@ final class Kernel
         }
 
         // Marketing / CRM contacts (admin)
+        //   GET /api/contacts/{id}/lists  which mailing lists this contact belongs to
         if ($segments[0] === 'contacts') {
-            return [Contacts::class, ['contactId' => $this->intOrNull($segments[1] ?? null)]];
+            return [Contacts::class, [
+                'contactId' => $this->intOrNull($segments[1] ?? null),
+                'action'    => $segments[2] ?? null,
+            ]];
         }
 
         // Email campaigns (admin; manage_campaigns gate inside endpoint)

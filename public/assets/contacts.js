@@ -2,7 +2,7 @@
 // Top-level admin page for the audience/customer list seeded from the ticketing
 // provider's "Fan View" export. Server-side search, sort, filter and paging
 // (the table can grow large), plus add/edit/delete via a modal.
-import { esc, api, PanicElement, formData, money, publish, helpLink, $, $$ } from './core.js';
+import { esc, api, PanicElement, formData, money, publish, helpLink, optedBadge, memberStatusBadge, $, $$ } from './core.js';
 
 const fmtDate = (value) => {
   if (!value) return '—';
@@ -10,9 +10,6 @@ const fmtDate = (value) => {
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 };
 const fullName = (c) => `${c.first_name || ''} ${c.last_name || ''}`.trim() || '(no name)';
-const optedBadge = (c) => Number(c.marketing_opted_in)
-  ? '<span class="badge status-confirmed">Opted in</span>'
-  : '<span class="badge status-empty">Not opted</span>';
 
 class ContactsPage extends PanicElement {
   async connect() {
@@ -158,6 +155,102 @@ class ContactsPage extends PanicElement {
     }
   }
 
+  // Reads via GET /contacts/{id}/lists; writes reuse MailingLists' own
+  // /mailing-lists/{id}/members endpoints directly rather than duplicating
+  // membership-editing logic on the contacts side (see src/Contacts.php).
+  async loadContactLists(dialog, contactId) {
+    const body = $('[data-contact-lists-body]', dialog);
+    try {
+      const membershipData = await api(`/contacts/${contactId}/lists`);
+      let allLists = [];
+      if (membershipData.can_manage) {
+        const listsData = await api('/mailing-lists');
+        allLists = listsData.lists || [];
+      }
+      this.renderContactLists(dialog, contactId, membershipData, allLists);
+    } catch (error) {
+      if (body) body.innerHTML = `<p class="error-text">Could not load mailing lists: ${esc(error.message)}</p>`;
+    }
+  }
+
+  renderContactLists(dialog, contactId, membershipData, allLists) {
+    const body = $('[data-contact-lists-body]', dialog);
+    if (!body) return;
+    const memberships = membershipData.memberships || [];
+    const canManage = Boolean(membershipData.can_manage);
+
+    const rows = memberships.length ? memberships.map((m) => {
+      const isSegment = m.list_type === 'segment';
+      let actions = '';
+      if (isSegment) {
+        actions = '<span class="mlist-segment-badge"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Auto (segment)</span>';
+      } else if (canManage) {
+        const nextStatus = m.status === 'subscribed' ? 'unsubscribed' : 'subscribed';
+        actions = `<button type="button" class="small secondary" data-toggle-list="${esc(m.list_id)}" data-next-status="${esc(nextStatus)}">${m.status === 'subscribed' ? 'Unsubscribe' : 'Resubscribe'}</button>
+          <button type="button" class="small danger" data-remove-list="${esc(m.list_id)}">Remove</button>`;
+      }
+      return `<li>
+        <span class="contact-list-name"><strong>${esc(m.list_name)}</strong> ${memberStatusBadge(m.status)}</span>
+        <span class="contact-list-actions">${actions}</span>
+      </li>`;
+    }).join('') : '<li class="muted">Not on any mailing list.</li>';
+
+    const joinedIds = new Set(memberships.map((m) => m.list_id));
+    const available = allLists.filter((l) => l.list_type !== 'segment' && !joinedIds.has(l.id));
+    const addControl = canManage && available.length ? `<div class="contact-list-add">
+        <select data-add-list-select aria-label="Add to a mailing list">
+          <option value="">Add to list…</option>
+          ${available.map((l) => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')}
+        </select>
+        <button type="button" class="small" data-add-list disabled>Add</button>
+      </div>` : '';
+    const hint = !canManage ? '<p class="muted small">Contact an admin to change mailing list membership.</p>' : '';
+
+    body.innerHTML = `<ul class="contact-lists-list">${rows}</ul>${addControl}${hint}`;
+
+    $$('[data-toggle-list]', body).forEach((btn) => btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        await api(`/mailing-lists/${btn.dataset.toggleList}/members/${contactId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: btn.dataset.nextStatus }),
+        });
+        await this.loadContactLists(dialog, contactId);
+      } catch (error) {
+        publish('toast.show', { message: error.message, tone: 'error' });
+        btn.disabled = false;
+      }
+    }));
+    $$('[data-remove-list]', body).forEach((btn) => btn.addEventListener('click', async () => {
+      if (!confirm('Remove this contact from the list? This fully deletes their membership.')) return;
+      btn.disabled = true;
+      try {
+        await api(`/mailing-lists/${btn.dataset.removeList}/members/${contactId}`, { method: 'DELETE' });
+        await this.loadContactLists(dialog, contactId);
+      } catch (error) {
+        publish('toast.show', { message: error.message, tone: 'error' });
+        btn.disabled = false;
+      }
+    }));
+    const addSelect = $('[data-add-list-select]', body);
+    const addBtn = $('[data-add-list]', body);
+    addSelect?.addEventListener('change', () => { if (addBtn) addBtn.disabled = !addSelect.value; });
+    addBtn?.addEventListener('click', async () => {
+      if (!addSelect?.value) return;
+      addBtn.disabled = true;
+      try {
+        await api(`/mailing-lists/${addSelect.value}/members`, {
+          method: 'POST',
+          body: JSON.stringify({ contact_ids: [contactId] }),
+        });
+        await this.loadContactLists(dialog, contactId);
+      } catch (error) {
+        publish('toast.show', { message: error.message, tone: 'error' });
+        addBtn.disabled = false;
+      }
+    });
+  }
+
   openModal(contact) {
     const isEdit = Boolean(contact && contact.id);
     const c = contact || {};
@@ -177,6 +270,10 @@ class ContactsPage extends PanicElement {
         <div class="wide form-actions"><button type="submit" class="primary">${isEdit ? 'Save changes' : 'Add contact'}</button><button type="button" class="secondary" data-close>Cancel</button></div>
         <p class="error-text wide" data-error></p>
       </form>
+      ${isEdit ? `<section class="contact-lists padded" data-contact-lists>
+        <h3 class="mlist-h3">Mailing Lists</h3>
+        <div data-contact-lists-body class="muted">Loading…</div>
+      </section>` : ''}
     </div>`;
     document.body.appendChild(dialog);
     const close = () => dialog.remove();
@@ -186,6 +283,7 @@ class ContactsPage extends PanicElement {
       if (event.key === 'Escape') { document.removeEventListener('keydown', onEsc); close(); }
     });
     $('input[name="first_name"]', dialog).focus();
+    if (isEdit) this.loadContactLists(dialog, c.id);
 
     $('[data-form="contact"]', dialog).addEventListener('submit', async (event) => {
       event.preventDefault();
