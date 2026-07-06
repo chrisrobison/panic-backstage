@@ -192,6 +192,17 @@ function longDate(date) {
 }
 
 
+// Renders "Fri, Jul 10" or, for a multi-day event (end_date set and different
+// from date), "Fri, Jul 10 – Sun, Jul 12". Shared everywhere an event's date
+// is displayed so a multi-day booking never looks like a single-day one.
+function eventDateRangeLabel(event) {
+  const start = shortDate(eventDate(event));
+  if (!event?.end_date || event.end_date === event.date) return start;
+  const end = shortDate(eventDate({ date: event.end_date }));
+  return `${start} – ${end}`;
+}
+
+
 function isoDate(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -310,7 +321,7 @@ function eventRow(event) {
   const issue = event.primary_blocker || (Number(event.approved_flyers) ? 'Flyer approved' : 'Flyer needs review');
   return `<tr>
     <td data-label="ID"><a href="#event-${esc(event.id)}" class="event-code">${esc(event.external_id || '—')}</a></td>
-    <td data-label="Date" title="${esc(longDate(eventDate(event)))}">${esc(shortDate(eventDate(event)))}</td>
+    <td data-label="Date" title="${esc(longDate(eventDate(event)))}">${esc(eventDateRangeLabel(event))}</td>
     <td data-label="Event"><a href="#event-${esc(event.id)}">${esc(event.title)}</a></td>
     <td data-label="Status">${badge(event.status)}</td>
     <td data-label="Main Issue"><span class="status-dot ${esc(event.primary_blocker ? 'red' : statusTone(event.status))}"></span>${esc(issue)}</td>
@@ -503,4 +514,4 @@ function mdToHtml(text) {
   }).join('\n');
 }
 
-export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml };
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml };

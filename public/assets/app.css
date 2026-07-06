@@ -703,6 +703,15 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
 /* Private event calendar chip — subtle grey background to distinguish from public shows. */
 .mini-event-private { background: color-mix(in srgb, var(--muted) 12%, transparent); }
 .mini-event-lock { font-size: 10px; flex-shrink: 0; margin-right: 1px; line-height: 1; }
+/* Multi-day event chip on the day cells *after* its start day — same event,
+   de-emphasised so the eye still lands on the day it actually begins. */
+.mini-event-continued { opacity: 0.62; }
+.mini-event-continued .mini-event-title { font-style: italic; }
+.mini-event-continues { font-size: 10px; flex-shrink: 0; line-height: 1; color: var(--muted); }
+/* Agenda view: same event shown on a later day of its own range. */
+.cal-agenda-row-continued { opacity: 0.62; }
+.cal-agenda-row-continued .cal-agenda-title { font-style: italic; }
+.cal-agenda-daynum { font-style: normal; font-weight: 600; font-size: 11px; }
 /* Private event badge in workspace header / form section-head */
 .badge-private { font-size: 13px; margin-left: 8px; vertical-align: middle; }
 .badge.status-private { background: #e8e4f0; color: #5b3b9a; }

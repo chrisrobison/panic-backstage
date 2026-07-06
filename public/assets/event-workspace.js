@@ -1,7 +1,7 @@
 // ── Event workspace shell ────────────────────────────────────────────────────
 // The event workspace (tabs, print menu, publish toggle) plus the read-only
 // summary/readiness/next-action bus cards and the autosaving details form.
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
 import { openPrintWindow } from './print.js';
 import './paint-splat.js';
 import './event-vendors.js';
@@ -94,7 +94,7 @@ class EventSummary extends EventBusCard {
         <span class="flyer-title">${esc(event.title)}</span>
       </div>
       <div class="facts-grid">
-        ${factCell('Date', shortDate(eventDate(event)))}
+        ${factCell('Date', eventDateRangeLabel(event))}
         ${factCell('Doors', timeLabel(event.doors_time))}
         ${factCell('Show', timeLabel(event.show_time))}
         ${factCell('Status', badge(event.status))}
@@ -216,7 +216,7 @@ class EventWorkspace extends PanicElement {
     const isPrivate = event.event_type === 'private_event';
     publish('page.context', {
       title: `${event.title}${isPrivate ? ' 🔒' : ''}`,
-      blurb: `${shortDate(eventDate(event))} at ${event.venue_name}`,
+      blurb: `${eventDateRangeLabel(event)} at ${event.venue_name}`,
     });
     const publishBtn = $('[data-publish]', this);
     if (publishBtn) publishBtn.textContent = Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page';
@@ -256,7 +256,7 @@ class EventWorkspace extends PanicElement {
     </details>`;
     publish('page.context', {
       title: `${event.title}${isPrivate ? ' 🔒' : ''}`,
-      blurb: `${shortDate(eventDate(event))} at ${event.venue_name}`,
+      blurb: `${eventDateRangeLabel(event)} at ${event.venue_name}`,
     });
     this.innerHTML = `<section class="event-top">
       <div>
@@ -456,6 +456,7 @@ class EventDetailsForm extends HTMLElement {
         <form class="grid-form padded">
           <label>Title <input name="title" required value="${esc(event.title)}"${disabled}></label>
           <label>Date <input type="date" name="date" required value="${esc(event.date)}"${disabled}></label>
+          <label>End Date <input type="date" name="end_date" value="${esc(event.end_date || '')}" min="${esc(event.date)}"${disabled}></label>
           <label>Location <select name="venue_id"${disabled}>${data.venues.map((venue) => option(venue.id, event.venue_id, venue.name)).join('')}</select></label>
           <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
           <label>Status ${statusSelect}</label>
@@ -488,6 +489,7 @@ class EventDetailsForm extends HTMLElement {
       this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Event Details ${helpLink('details', 'Event Details')}</h2></div><form class="grid-form padded">
         <label>Title <input name="title" required value="${esc(event.title)}"${disabled}></label>
         <label>Date <input type="date" name="date" required value="${esc(event.date)}"${disabled}></label>
+        <label>End Date <input type="date" name="end_date" value="${esc(event.end_date || '')}" min="${esc(event.date)}"${disabled}></label>
         <label>Location <select name="venue_id"${disabled}>${data.venues.map((venue) => option(venue.id, event.venue_id, venue.name)).join('')}</select></label>
         <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
         <label>Status ${statusSelect}</label>
@@ -552,6 +554,15 @@ class EventDetailsForm extends HTMLElement {
       // Setting any one show-time back-fills the empty others before we save,
       // so all three persist in the same PATCH.
       if (field.name in TIME_OFFSETS) autofillEventTimes(form, field.name);
+      // Keep the End Date picker's min in sync with Date, and drop a
+      // now-invalid End Date rather than silently saving a backwards range.
+      if (field.name === 'date') {
+        const endDateInput = form.end_date;
+        if (endDateInput) {
+          endDateInput.min = field.value;
+          if (endDateInput.value && endDateInput.value < field.value) endDateInput.value = '';
+        }
+      }
       save(field.name);
     }));
     // Pressing Enter in a field still saves, but never reloads the page.

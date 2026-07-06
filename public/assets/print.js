@@ -1,4 +1,4 @@
-import { esc, titleCase, publish, eventDate, shortDate, timeLabel, money, statusLabel, can, table, mdToHtml } from './core.js';
+import { esc, titleCase, publish, eventDate, eventDateRangeLabel, timeLabel, money, statusLabel, can, table, mdToHtml } from './core.js';
 
 
 // ── Print feature ────────────────────────────────────────────────────────────
@@ -93,7 +93,10 @@ const PRINT_CSS = `
 function printDateRange(event) {
   const date = eventDate(event);
   if (!date) return 'Date TBA';
-  return date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const long = (d) => d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  if (!event?.end_date || event.end_date === event.date) return long(date);
+  const end = eventDate({ date: event.end_date });
+  return end ? `${long(date)} – ${long(end)}` : long(date);
 }
 
 
@@ -265,7 +268,7 @@ function renderGuestListSection(data) {
 function renderEventFactsSection(data) {
   const event = data.event;
   const facts = [
-    ['Date', shortDate(eventDate(event))],
+    ['Date', eventDateRangeLabel(event)],
     ['Doors', timeLabel(event.doors_time)],
     ['Show', timeLabel(event.show_time)],
     ['End', timeLabel(event.end_time)],

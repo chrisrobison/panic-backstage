@@ -2,7 +2,7 @@
 // Dashboard, Calendar, Pipeline, Events list, Template picker, and the two
 // public/unauthenticated pages (public event page + invite acceptance). Also
 // owns the quick-create event modal (shared by the calendar and the topbar).
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, setAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, mdToHtml, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, setAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, mdToHtml, $, $$ } from './core.js';
 
 // Default dashboard metric cards, in display order, shown when a user has not
 // customized their selection. Keys must match the DASHBOARD_METRIC_KEYS list in
@@ -24,6 +24,15 @@ function venueZoneMap(venues) {
     map.set(Number(venue.id), { zone, label });
   });
   return map;
+}
+
+// True when `iso` (a YYYY-MM-DD string) falls anywhere in an event's date
+// range — `[event.date, event.end_date || event.date]` inclusive. A single-day
+// event (no end_date) only ever spans its own date, so this is a drop-in
+// replacement for the old `event.date === iso` check everywhere on the
+// calendar.
+function eventSpansDay(event, iso) {
+  return event.date <= iso && (event.end_date || event.date) >= iso;
 }
 
 // ── Quick-create event modal ─────────────────────────────────────────────────
@@ -82,6 +91,7 @@ async function openEventQuickCreate({ date = null } = {}) {
     </label>
 
     <label>Date <input type="date" name="date" required value="${esc(startDate)}"></label>
+    <label>End Date <span class="field-hint muted small">Optional — multi-day events</span><input type="date" name="end_date" min="${esc(startDate)}"></label>
     <label class="wide">Title <input name="title" required value="${esc(defaultTemplate?.default_title || defaultTemplate?.name || '')}" placeholder="Event title"></label>
     <label>Doors <input type="time" name="doors_time" value="19:00"></label>
     <label>Show <input type="time" name="show_time" value="20:00"></label>
@@ -110,6 +120,15 @@ async function openEventQuickCreate({ date = null } = {}) {
   const blankFields    = $('.quick-create-blank-fields', form);
   const venueSelect    = $('select[name="venue_id"]', form);
   const roomSelect     = $('select[name="resource_id"]', form);
+  const dateInput      = $('input[name="date"]', form);
+  const endDateInput   = $('input[name="end_date"]', form);
+
+  // Keep the End Date picker's min in sync with Date, and drop a now-invalid
+  // End Date rather than let the user submit a backwards range.
+  dateInput.addEventListener('change', () => {
+    endDateInput.min = dateInput.value;
+    if (endDateInput.value && endDateInput.value < dateInput.value) endDateInput.value = '';
+  });
 
   // The Room picker (bookable sub-space, e.g. Green Room / Patio) depends on
   // which venue is in play: the selected template's venue when a template is
@@ -154,6 +173,12 @@ async function openEventQuickCreate({ date = null } = {}) {
     submit.disabled = true;
     submit.textContent = 'Creating…';
     $('[data-error]', form).textContent = '';
+    if (endDateInput.value && endDateInput.value < dateInput.value) {
+      $('[data-error]', form).textContent = 'End Date cannot be before Date.';
+      submit.disabled = false;
+      submit.textContent = 'Create event';
+      return;
+    }
     const fd = formData(form);
     try {
       let created;
@@ -214,7 +239,7 @@ class DashboardView extends PanicElement {
       <section class="dashboard-grid">
         <article class="panel"><div class="section-head padded"><h2>Next 14 Days</h2><a class="button secondary small" href="#calendar">Calendar</a></div>${table(events)}</article>
         <article class="panel"><div class="section-head padded"><h2>Needs Attention</h2><a class="button secondary small" href="#events">All Events</a></div>
-          <div class="attention-list">${attention.length ? attention.map((event) => `<a class="attention-card ${event.primary_blocker ? '' : 'amber'}" href="#event-${esc(event.id)}"><span class="icon-bubble ${event.primary_blocker ? 'red' : 'amber'}">!</span><span><strong>${esc(event.title)}</strong><p>${esc(event.primary_blocker || 'Flyer or publish step needs review')}</p><small>${esc(shortDate(eventDate(event)))}</small></span><span class="arrow"></span></a>`).join('') : emptyState('No urgent items in the next two weeks.')}</div>
+          <div class="attention-list">${attention.length ? attention.map((event) => `<a class="attention-card ${event.primary_blocker ? '' : 'amber'}" href="#event-${esc(event.id)}"><span class="icon-bubble ${event.primary_blocker ? 'red' : 'amber'}">!</span><span><strong>${esc(event.title)}</strong><p>${esc(event.primary_blocker || 'Flyer or publish step needs review')}</p><small>${esc(eventDateRangeLabel(event))}</small></span><span class="arrow"></span></a>`).join('') : emptyState('No urgent items in the next two weeks.')}</div>
         </article>
       </section>`;
 
@@ -514,29 +539,38 @@ class EventCalendar extends PanicElement {
     const createable = this.canCreate ? ' calendar-clickable' : '';
     const today  = isoDate(new Date());
 
-    const miniEvent = (event) => {
+    // `iso` is the day cell this mini-event chip is being rendered into — for
+    // a multi-day event that's every day from event.date through event.end_date,
+    // so we can tell the start cell (full title + time) from a continuation
+    // cell (muted, arrow-prefixed, no time — the time already showed on day 1).
+    const miniEvent = (event, iso) => {
       const meta = this._zoneOf(event);
+      const isMultiDay = Boolean(event.end_date && event.end_date !== event.date);
+      const isContinuation = isMultiDay && iso !== event.date;
       const time = this._fmtTime(event.doors_time || event.show_time);
       const loadIn = event.load_in_time ? `Load-in ${this._fmtTime(event.load_in_time)}` : '';
       const isPrivate = event.event_type === 'private_event';
-      const tip = [isPrivate ? '🔒 Private' : null, statusLabel(event.status), meta.label, time, loadIn].filter(Boolean).join(' · ');
-      return `<a class="mini-event${isPrivate ? ' mini-event-private' : ''}" href="#event-${esc(event.id)}" title="${esc(tip)}">`
+      const rangeLabel = isMultiDay ? `${shortDate(new Date(event.date + 'T12:00:00'))} – ${shortDate(new Date(event.end_date + 'T12:00:00'))}` : null;
+      const tip = [isPrivate ? '🔒 Private' : null, statusLabel(event.status), meta.label, rangeLabel, time, loadIn].filter(Boolean).join(' · ');
+      return `<a class="mini-event${isPrivate ? ' mini-event-private' : ''}${isContinuation ? ' mini-event-continued' : ''}" href="#event-${esc(event.id)}" title="${esc(tip)}">`
         + `<span class="status-dot ${roomTone(meta.zone)}"></span>`
         + (isPrivate ? '<span class="mini-event-lock" aria-hidden="true">🔒</span>' : '')
+        + (isContinuation ? '<span class="mini-event-continues" aria-hidden="true">&#8618;</span>' : '')
         + `<span class="mini-event-title">${esc(event.title)}</span>`
-        + (time ? `<span class="mini-event-time">${esc(time)}</span>` : '')
+        + (time && !isContinuation ? `<span class="mini-event-time">${esc(time)}</span>` : '')
         + `</a>`;
     };
 
-    const dayCellBody = (dayEvents) => {
+    const dayCellBody = (dayEvents, iso) => {
       const visible = dayEvents.filter((e) => e.status !== 'canceled');
       if (!visible.length) return `<div class="program-night">${this.canCreate ? '+ Available' : 'Available'}</div>`;
       const up   = visible.filter((e) => this._zoneOf(e).zone === 'up');
       const both = visible.filter((e) => this._zoneOf(e).zone === 'both');
       const down = visible.filter((e) => this._zoneOf(e).zone === 'down');
-      return `<div class="cell-zone zone-up" data-floor="Upstairs">${up.map(miniEvent).join('')}</div>`
-        + (both.length ? `<div class="zone-both">${both.map(miniEvent).join('')}</div>` : '')
-        + `<div class="cell-zone zone-down" data-floor="Downstairs (21+)">${down.map(miniEvent).join('')}</div>`;
+      const render = (e) => miniEvent(e, iso);
+      return `<div class="cell-zone zone-up" data-floor="Upstairs">${up.map(render).join('')}</div>`
+        + (both.length ? `<div class="zone-both">${both.map(render).join('')}</div>` : '')
+        + `<div class="cell-zone zone-down" data-floor="Downstairs (21+)">${down.map(render).join('')}</div>`;
     };
 
     return `${this._legend()}
@@ -544,10 +578,10 @@ class EventCalendar extends PanicElement {
         ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d) => `<div class="weekday">${d}</div>`).join('')}
         ${days.map((date) => {
           const iso = isoDate(date);
-          const dayEvents = events.filter((e) => e.date === iso);
+          const dayEvents = events.filter((e) => eventSpansDay(e, iso));
           const isToday = iso === today ? ' cal-today' : '';
           const clickAttr = this.canCreate ? ` data-create-date="${esc(iso)}" role="button" tabindex="0"` : '';
-          return `<div class="calendar-day${createable}${isToday}"${clickAttr}><span class="day-num">${date.getDate()}</span>${dayCellBody(dayEvents)}</div>`;
+          return `<div class="calendar-day${createable}${isToday}"${clickAttr}><span class="day-num">${date.getDate()}</span>${dayCellBody(dayEvents, iso)}</div>`;
         }).join('')}
       </div>`;
   }
@@ -575,7 +609,7 @@ class EventCalendar extends PanicElement {
       <div class="cal-mini-grid">
         ${days.map((date) => {
           const iso = isoDate(date);
-          const dayEvts = events.filter((e) => e.date === iso && e.status !== 'canceled');
+          const dayEvts = events.filter((e) => eventSpansDay(e, iso) && e.status !== 'canceled');
           const isToday   = iso === today;
           const isSel     = iso === this.selectedDate;
           const isCurMo   = date.getMonth() === this.month.getMonth();
@@ -595,7 +629,7 @@ class EventCalendar extends PanicElement {
   _renderDayContent() {
     const events       = this._events;
     const selectedDate = this.selectedDate;
-    const dayEvents    = events.filter((e) => e.date === selectedDate && e.status !== 'canceled');
+    const dayEvents    = events.filter((e) => eventSpansDay(e, selectedDate) && e.status !== 'canceled');
     const dateObj      = new Date(selectedDate + 'T12:00:00');
     const dayLabel     = dateObj.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -604,11 +638,19 @@ class EventCalendar extends PanicElement {
     const down = dayEvents.filter((e) => this._zoneOf(e).zone === 'down');
 
     const agendaRow = (event) => {
-      const time = this._fmtTime(event.doors_time || event.show_time);
+      const isMultiDay = Boolean(event.end_date && event.end_date !== event.date);
+      const isContinuation = isMultiDay && selectedDate !== event.date;
+      const time = isContinuation ? '' : this._fmtTime(event.doors_time || event.show_time);
       const isPrivate = event.event_type === 'private_event';
-      return `<a class="cal-agenda-row" href="#event-${esc(event.id)}">
+      const dayNum = isMultiDay
+        ? Math.round((new Date(selectedDate + 'T12:00:00') - new Date(event.date + 'T12:00:00')) / 86400000) + 1
+        : null;
+      const dayCount = isMultiDay
+        ? Math.round((new Date(event.end_date + 'T12:00:00') - new Date(event.date + 'T12:00:00')) / 86400000) + 1
+        : null;
+      return `<a class="cal-agenda-row${isContinuation ? ' cal-agenda-row-continued' : ''}" href="#event-${esc(event.id)}">
         <span class="cal-agenda-time">${esc(time)}</span>
-        <span class="cal-agenda-title">${isPrivate ? '<span aria-hidden="true">🔒</span> ' : ''}${esc(event.title)}</span>
+        <span class="cal-agenda-title">${isPrivate ? '<span aria-hidden="true">🔒</span> ' : ''}${esc(event.title)}${isMultiDay ? ` <span class="cal-agenda-daynum muted">(Day ${dayNum}/${dayCount})</span>` : ''}</span>
         ${badge(event.status)}
       </a>`;
     };
@@ -747,7 +789,7 @@ class PipelineBoard extends PanicElement {
           const pipeStatuses = isPrivate
             ? PRIVATE_EVENT_STATUSES.filter((s) => !['settled', 'canceled'].includes(s))
             : statuses;
-          return `<article class="pipe-card${isPrivate ? ' pipe-card-private' : ''}"><strong>${isPrivate ? '🔒 ' : ''}${esc(event.title)}</strong><span>${esc(shortDate(eventDate(event)))}</span><small>${esc(event.owner_name || 'Unassigned')}</small><small>${esc(event.open_items || 0)} open items / ${esc(event.incomplete_tasks || 0)} tasks</small>${editable ? `<form data-event="${esc(event.id)}" class="inline-status">${select('status', pipeStatuses, event.status, statusLabel)}<button class="small">Move</button><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></form>` : `<div class="inline-status"><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></div>`}</article>`;
+          return `<article class="pipe-card${isPrivate ? ' pipe-card-private' : ''}"><strong>${isPrivate ? '🔒 ' : ''}${esc(event.title)}</strong><span>${esc(eventDateRangeLabel(event))}</span><small>${esc(event.owner_name || 'Unassigned')}</small><small>${esc(event.open_items || 0)} open items / ${esc(event.incomplete_tasks || 0)} tasks</small>${editable ? `<form data-event="${esc(event.id)}" class="inline-status">${select('status', pipeStatuses, event.status, statusLabel)}<button class="small">Move</button><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></form>` : `<div class="inline-status"><a class="button secondary small" href="#event-${esc(event.id)}">Open</a></div>`}</article>`;
         }).join('') || '<small>No events</small>'}</article>`;
       }).join('')}</section>
     </section>`;
@@ -851,7 +893,7 @@ class PublicEventPage extends PanicElement {
     try {
       const data = await api(`/public/events/${encodeURIComponent(slug || '')}`);
       const event = data.event;
-      this.innerHTML = `<main class="public-container"><article class="public-event">${data.flyer ? `<img class="public-flyer" src="${esc(assetUrl(data.flyer.file_path))}" alt="">` : `<div class="public-flyer flyer">${esc(event.title)}</div>`}<div class="public-copy"><p class="eyebrow">${esc(shortDate(eventDate(event)))} - ${esc(event.venue_name)}</p><h1>${esc(event.title)}</h1><p><strong>Doors</strong> ${esc(timeLabel(event.doors_time))} - <strong>Show</strong> ${esc(timeLabel(event.show_time))}</p><p>${esc(event.age_restriction || 'All ages unless noted')} - ${Number(event.ticket_price) > 0 ? money(event.ticket_price) : 'Free / door'}</p>${event.ticket_url ? `<a class="button public-tickets-link" href="${esc(event.ticket_url)}">Tickets</a>` : ''}<pb-ticket-purchase event-id="${esc(String(event.id))}"></pb-ticket-purchase>${event.description_public ? `<div class="event-description">${mdToHtml(event.description_public)}</div>` : ''}<h2>Lineup</h2><ul class="plain-list">${data.lineup.map((item) => `<li>${esc(item.display_name)} ${item.set_time ? `<span>${esc(timeLabel(item.set_time))}</span>` : ''}</li>`).join('')}</ul><p class="muted">${esc(event.address)}, ${esc(event.city)}, ${esc(event.state)}</p></div></article></main>`;
+      this.innerHTML = `<main class="public-container"><article class="public-event">${data.flyer ? `<img class="public-flyer" src="${esc(assetUrl(data.flyer.file_path))}" alt="">` : `<div class="public-flyer flyer">${esc(event.title)}</div>`}<div class="public-copy"><p class="eyebrow">${esc(eventDateRangeLabel(event))} - ${esc(event.venue_name)}</p><h1>${esc(event.title)}</h1><p><strong>Doors</strong> ${esc(timeLabel(event.doors_time))} - <strong>Show</strong> ${esc(timeLabel(event.show_time))}</p><p>${esc(event.age_restriction || 'All ages unless noted')} - ${Number(event.ticket_price) > 0 ? money(event.ticket_price) : 'Free / door'}</p>${event.ticket_url ? `<a class="button public-tickets-link" href="${esc(event.ticket_url)}">Tickets</a>` : ''}<pb-ticket-purchase event-id="${esc(String(event.id))}"></pb-ticket-purchase>${event.description_public ? `<div class="event-description">${mdToHtml(event.description_public)}</div>` : ''}<h2>Lineup</h2><ul class="plain-list">${data.lineup.map((item) => `<li>${esc(item.display_name)} ${item.set_time ? `<span>${esc(timeLabel(item.set_time))}</span>` : ''}</li>`).join('')}</ul><p class="muted">${esc(event.address)}, ${esc(event.city)}, ${esc(event.state)}</p></div></article></main>`;
     } catch (error) {
       this.showError(error);
     }

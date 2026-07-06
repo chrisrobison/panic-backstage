@@ -85,7 +85,11 @@ final class Events extends BaseEndpoint
             }
         }
         if ($request->query('start_date')) {
-            $where[] = 'e.date >= ?';
+            // COALESCE so a multi-day event that started before the requested
+            // window but is still running (end_date within/after it) is still
+            // returned — a plain `e.date >= ?` would drop it entirely once its
+            // start date scrolled out of the visible range.
+            $where[] = 'COALESCE(e.end_date, e.date) >= ?';
             $params[] = $request->query('start_date');
         }
         if ($request->query('end_date')) {
@@ -464,9 +468,9 @@ final class Events extends BaseEndpoint
             return $resourceError;
         }
         $id = $this->db->insert(
-            "INSERT INTO events (venue_id, resource_id, title, slug, event_type, status, description_public, date, doors_time, show_time, age_restriction, ticket_price, owner_user_id)
-             VALUES (?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?)",
-            [(int) $template['venue_id'], $resourceId, $title, $this->uniqueSlug($title . '-' . $date), $template['event_type'], $template['default_description_public'], $date, ($body['doors_time'] ?? '') ?: '19:00', ($body['show_time'] ?? '') ?: '20:00', $template['default_age_restriction'], (float) $template['default_ticket_price'], $this->userId()]
+            "INSERT INTO events (venue_id, resource_id, title, slug, event_type, status, description_public, date, end_date, doors_time, show_time, age_restriction, ticket_price, owner_user_id)
+             VALUES (?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(int) $template['venue_id'], $resourceId, $title, $this->uniqueSlug($title . '-' . $date), $template['event_type'], $template['default_description_public'], $date, self::nullableDate($body['end_date'] ?? null, $date), ($body['doors_time'] ?? '') ?: '19:00', ($body['show_time'] ?? '') ?: '20:00', $template['default_age_restriction'], (float) $template['default_ticket_price'], $this->userId()]
         );
         $this->assignEventCode($id);
         foreach ($this->jsonList($template['checklist_json']) as $task) {

@@ -97,6 +97,13 @@ const WIZARD_FLOW = {
           required: true,
         },
         {
+          id: 'end_date',
+          label: 'End Date',
+          type: 'date',
+          minField: 'date',
+          help: 'Optional — only for events spanning more than one day (e.g. a comedy workshop or weekend rental). Leave blank for single-day events.',
+        },
+        {
           id: 'venue_id',
           label: 'Room / Venue',
           type: 'select',
@@ -551,6 +558,7 @@ class EventContractWizard extends PanicElement {
 
     d.title              = event.title || '';
     d.date                = event.date || d.date;
+    d.end_date            = event.end_date || '';
     d.venue_id            = event.venue_id != null ? String(event.venue_id) : '';
     d.event_type          = event.event_type || '';
     if (event.doors_time) d.doors_time = String(event.doors_time).slice(0, 5);
@@ -788,6 +796,16 @@ class EventContractWizard extends PanicElement {
                              rows="3">${esc(val)}</textarea>`;
         break;
 
+      case 'date': {
+        const min = field.minField ? String(this.wizardData[field.minField] || '') : '';
+        control = `<input type="date"
+                          name="${esc(field.id)}"
+                          value="${esc(val)}"
+                          ${min ? `min="${esc(min)}"` : ''}
+                          ${req}>`;
+        break;
+      }
+
       case 'contact_search':
         control = `
           <div class="contact-search-wrap" data-contact-wrap>
@@ -934,11 +952,14 @@ class EventContractWizard extends PanicElement {
       finFact = `<div class="sidebar-fact"><span>Rental fee</span><strong>${esc(money(d.rental_fee))}</strong></div>`;
     }
 
-    // Format date nicely
+    // Format date nicely — show a range once an End Date is set.
     let dateStr = '';
     if (d.date) {
       try {
         dateStr = shortDate(new Date(d.date + 'T12:00:00'));
+        if (d.end_date && d.end_date !== d.date) {
+          dateStr += ` – ${shortDate(new Date(d.end_date + 'T12:00:00'))}`;
+        }
       } catch { dateStr = d.date; }
     }
 
@@ -986,6 +1007,9 @@ class EventContractWizard extends PanicElement {
       }
       const val = String(this.wizardData[field.id] ?? '').trim();
       if (!val) errors.push(`${field.label} is required.`);
+    }
+    if (this.wizardData.end_date && this.wizardData.date && this.wizardData.end_date < this.wizardData.date) {
+      errors.push('End Date cannot be before the start Date.');
     }
     return errors;
   }
@@ -1067,6 +1091,12 @@ class EventContractWizard extends PanicElement {
     // ── Live sidebar update on field change ───────────────────────────────────
     $('[data-wizard-form]', this)?.addEventListener('change', (e) => {
       if (e.target.name) this.wizardData[e.target.name] = e.target.value;
+      // Keep the End Date picker's min in sync as the Date field changes, so
+      // the browser's own date widget can't be used to pick an earlier day.
+      if (e.target.name === 'date') {
+        const endDateInput = $('input[name="end_date"]', this);
+        if (endDateInput) endDateInput.min = e.target.value;
+      }
       this._refreshSidebar();
     });
 
@@ -1407,6 +1437,10 @@ class EventContractWizard extends PanicElement {
   _buildEventPayload() {
     const d = this.wizardData;
     const payload = { title: d.title, date: d.date };
+    // Always sent (even blank) so clearing the End Date field on an existing
+    // multi-day event collapses it back to a single-day event instead of the
+    // stale value silently surviving via the sourceEvent spread in _finishEdit.
+    payload.end_date = d.end_date || '';
     // Only new events default to "proposed" — editing an existing event must
     // never silently reset a further-along status (confirmed, booked, etc.).
     if (!this.sourceEventId) payload.status = 'proposed';
