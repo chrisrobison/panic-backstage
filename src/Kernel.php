@@ -468,6 +468,10 @@ final class Kernel
             if ($child === 'assets' && ($segments[3] ?? '') === 'generate-flyer') {
                 return [Events\GenerateFlyer::class, ['eventId' => $eventId]];
             }
+            // Recurring events: GET/POST/DELETE /events/{id}/series
+            if ($child === 'series') {
+                return [Events\Series::class, ['eventId' => $eventId]];
+            }
             return match ($child) {
                 'tasks'      => [Events\Tasks::class,    ['eventId' => $eventId, 'taskId'     => $childId]],
                 'blockers',

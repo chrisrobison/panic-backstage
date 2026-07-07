@@ -18,9 +18,11 @@
 //                        from the flow config, validates, and on finish:
 //                          Create mode (no sourceEventId):
 //                            1. POST /events                     → create event
-//                            2. POST /events/{id}/contracts      → create contract
-//                            3. PATCH /contracts/{id}            → fill deal terms
-//                            4. POST /contracts/{id}/reevaluate  → smart clauses
+//                            2. POST /events/{id}/series         → (optional) spin off a
+//                                                                   recurring series, if set
+//                            3. POST /events/{id}/contracts      → create contract
+//                            4. PATCH /contracts/{id}            → fill deal terms
+//                            5. POST /contracts/{id}/reevaluate  → smart clauses
 //                          Edit mode (sourceEventId set):
 //                            1. PATCH /events/{sourceEventId}                  → update event
 //                            2. PATCH /contracts/{id} (or create if none yet)  → update deal terms
@@ -45,7 +47,8 @@
 //  To gate a step:    add a `condition` expression (see typedef below)
 //  To gate a field:   same — add a `condition` on the field object
 //  Field types:       text | email | number | date | time | textarea |
-//                     select | bool | contact_search | deal_type_picker
+//                     select | bool | contact_search | deal_type_picker |
+//                     recurrence_picker
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
@@ -61,6 +64,7 @@ import {
   $,
   $$,
 } from './core.js';
+import './recurrence.js'; // registers <pb-recurrence-fields>, used by the recurrence_picker field type
 
 // ── Wizard flow configuration ─────────────────────────────────────────────────
 //
@@ -102,6 +106,14 @@ const WIZARD_FLOW = {
           type: 'date',
           minField: 'date',
           help: 'Optional — only for events spanning more than one day (e.g. a comedy workshop or weekend rental). Leave blank for single-day events.',
+        },
+        {
+          id: 'recurrence',
+          label: 'Recurring Event',
+          type: 'recurrence_picker',
+          wide: true,
+          condition: { field: 'editing_mode', notIn: ['1'] },
+          help: 'Creates additional independent events on a repeating schedule — each occurrence gets its own contract, staffing, and ticketing.',
         },
         {
           id: 'venue_id',
@@ -461,6 +473,10 @@ class EventContractWizard extends PanicElement {
   async connect() {
     this.stepIndex     = 0;
     this.wizardData    = {};      // accumulated form data, keyed by field id
+    // Synthetic flag (not a real event column) used purely to gate the
+    // recurrence_picker field's `condition` — recurring series are only ever
+    // spun off from a brand-new event (see _finishCreate), never when editing.
+    this.wizardData.editing_mode = this.sourceEventId ? '1' : '0';
     this.meta          = null;    // { venues, event_types, contract_templates }
     this._searchTimer  = null;    // debounce handle for contact typeahead
     this._submitting   = false;   // prevent double-submit
@@ -763,6 +779,10 @@ class EventContractWizard extends PanicElement {
 
       case 'deal_type_picker':
         control = this._dealTypePickerHtml(String(val));
+        break;
+
+      case 'recurrence_picker':
+        control = `<pb-recurrence-fields></pb-recurrence-fields>`;
         break;
 
       case 'select': {
@@ -1096,6 +1116,8 @@ class EventContractWizard extends PanicElement {
       if (e.target.name === 'date') {
         const endDateInput = $('input[name="end_date"]', this);
         if (endDateInput) endDateInput.min = e.target.value;
+        const recurrenceFields = $('pb-recurrence-fields', this);
+        if (recurrenceFields) recurrenceFields.anchorDate = e.target.value;
       }
       this._refreshSidebar();
     });
@@ -1135,6 +1157,17 @@ class EventContractWizard extends PanicElement {
           clearTimeout(this._searchTimer);
           this._searchTimer = setTimeout(() => this._runContactSearch(contactInput), 280);
         }
+      });
+    }
+
+    // ── Recurring event pattern picker ────────────────────────────────────────
+    // Only meaningful in create mode — editing an existing event never spins
+    // off a series here (see _finish/_finishEdit).
+    const recurrenceFields = $('pb-recurrence-fields', this);
+    if (recurrenceFields) {
+      recurrenceFields.anchorDate = this.wizardData.date || '';
+      recurrenceFields.addEventListener('change', (e) => {
+        this.wizardData.recurrence = e.detail; // { pattern, dates, description } or null
       });
     }
 
@@ -1350,14 +1383,38 @@ class EventContractWizard extends PanicElement {
       body:   JSON.stringify(eventPayload),
     });
 
-    // 2 ── Create the contract draft ───────────────────────────────────────
+    // 2 ── Spin off a recurring series, if the Basics step set one up ──────
+    // Best-effort: the primary event already exists at this point, so a
+    // failure here (e.g. a room conflict on one of the generated dates)
+    // surfaces as a warning toast rather than aborting the whole wizard.
+    const recurrence = this.wizardData.recurrence;
+    if (recurrence?.dates?.length) {
+      try {
+        const seriesRes = await api(`/events/${createdEvent.id}/series`, {
+          method: 'POST',
+          body: JSON.stringify({
+            pattern: recurrence.pattern,
+            description: recurrence.description,
+            end_type: recurrence.pattern.endType,
+            end_date: recurrence.pattern.endDate || null,
+            occurrence_count: recurrence.pattern.occurrenceCount || null,
+            dates: recurrence.dates,
+          }),
+        });
+        publish('toast.show', { message: `Also created ${seriesRes.created_event_ids.length} recurring events.`, tone: 'success' });
+      } catch (err) {
+        publish('toast.show', { message: `Event created, but the recurring series could not be created: ${err.message || err}`, tone: 'error' });
+      }
+    }
+
+    // 3 ── Create the contract draft ───────────────────────────────────────
     const contractPayload = this._buildContractPayload(createdEvent);
     const createdContract = await api(`/events/${createdEvent.id}/contracts`, {
       method: 'POST',
       body:   JSON.stringify(contractPayload),
     });
 
-    // 3 ── Patch deal terms onto the contract ──────────────────────────────
+    // 4 ── Patch deal terms onto the contract ──────────────────────────────
     const dealTerms = this._buildDealTerms();
     if (Object.keys(dealTerms).length) {
       await api(`/contracts/${createdContract.id}`, {
@@ -1366,7 +1423,7 @@ class EventContractWizard extends PanicElement {
       });
     }
 
-    // 4 ── Smart clause re-evaluation (non-fatal if it fails) ─────────────
+    // 5 ── Smart clause re-evaluation (non-fatal if it fails) ─────────────
     await api(`/contracts/${createdContract.id}/reevaluate`, { method: 'POST' })
       .catch((err) => console.warn('[wizard] reevaluate skipped:', err.message));
 
