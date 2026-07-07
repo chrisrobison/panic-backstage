@@ -1130,6 +1130,7 @@
     <a href="#create-event" class="section">Creating the event</a>
     <a href="#multi-day-events" class="section">Multi-day events</a>
     <a href="#recurring-events" class="section">Recurring events</a>
+    <a href="#event-qr" class="section">QR codes for the public page</a>
     <a href="#pipeline" class="section">The status pipeline</a>
     <a href="#hold" class="section">Hold</a>
     <a href="#intake" class="section">Intake Complete</a>
@@ -1201,6 +1202,12 @@
     <a href="#admin-staff" class="section">Staff roster</a>
     <a href="#admin-templates" class="section">Event templates</a>
     <a href="#venue-policy" class="section">Venue policy</a>
+
+    <div class="nav-section">Part IX — Messages</div>
+    <a href="#campaigns-lists" class="chapter">Chapter 9: Campaigns &amp; Mailing Lists</a>
+    <a href="#msg-campaigns" class="section">Email campaigns</a>
+    <a href="#msg-lists" class="section">Mailing lists</a>
+    <a href="#msg-segments" class="section">Smart (segment) lists</a>
 
     <div class="nav-section">Quick Reference</div>
     <a href="#roles" class="chapter">Roles &amp; Who Does What</a>
@@ -1714,6 +1721,31 @@
       <span class="callout-title">💡 No bulk edit across a series</span>
       <p>There's no "change this and all future occurrences" action. Each occurrence is a completely normal event once created — update its time, venue, staffing, contract, or anything else the same way you would for any other show, one at a time.</p>
     </div>
+
+    <!-- QR CODES ────────────────────────────────────────────────────────── -->
+    <h2 id="event-qr">QR codes for the public page</h2>
+
+    <p>Every event automatically gets a scannable QR code linking straight to its public page — no third-party QR generator needed. It shows up in two places: inline on the public page itself, next to the flyer, and in a <strong>QR Code</strong> panel you can pop open from the event header (next to <strong>Public Page</strong>).</p>
+
+    <div class="two-col">
+      <div class="callout note" style="margin:0">
+        <span class="callout-title">📱 Header panel</span>
+        <p>Click <strong>QR Code</strong> in the event header. The panel shows the code, the link it encodes (click the field to copy it), a <strong>Download PNG</strong> link, and a <strong>Save to Assets</strong> button.</p>
+      </div>
+      <div class="callout note" style="margin:0">
+        <span class="callout-title">🖨️ For flyers &amp; print</span>
+        <p>Click <strong>Generate QR code</strong> in the event's Assets panel — or <strong>Save to Assets</strong> in the header panel — to save it as a downloadable PNG asset (a <code>qr_code</code> type, alongside flyers and photos).</p>
+      </div>
+    </div>
+
+    <p style="margin-top:20px">Regenerating replaces the event's existing QR asset in place rather than piling up duplicates — there's only ever one <code>qr_code</code> asset per event.</p>
+
+    <div class="callout tip">
+      <span class="callout-title">🔗 The link never goes stale</span>
+      <p>The code encodes the event's stable, id-based public URL rather than its title-based slug, so a code printed weeks ago keeps working even after the title or date changes and the slug changes with it.</p>
+    </div>
+
+    <p>Generating or regenerating a QR code requires the <code>upload_assets</code> capability — the same gate as uploading any other asset.</p>
 
     <!-- THE STATUS PIPELINE ─────────────────────────────────────────────── -->
     <h2 id="pipeline">The status pipeline</h2>
@@ -3766,6 +3798,108 @@
 
   </div><!-- /book-content -->
 </div><!-- /chapter 6 -->
+
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- PART IX: MESSAGES — CAMPAIGNS & MAILING LISTS                               -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<div class="part-break" id="messages-part">
+  <div class="part-num">Part IX</div>
+  <h2>Campaigns &amp; Mailing Lists</h2>
+  <p>Marketing email, built in: draft and send one-off campaigns, and build reusable audiences to send them to.</p>
+</div>
+
+<div id="campaigns-lists" class="chapter-page">
+  <div class="chapter-hero">
+    <span class="chapter-num">Chapter 9</span>
+    <h1>Campaigns &amp; Mailing Lists</h1>
+    <p class="lead">Backstage can draft, edit, and send marketing email directly — no separate email-marketing tool required — and target it using reusable mailing lists layered on top of Contacts. Find both under <strong>Messages</strong> in the sidebar.</p>
+  </div>
+
+  <div class="book-content">
+
+    <div class="callout note">
+      <span class="callout-title">🔐 Venue-admin only</span>
+      <p>Campaigns and Lists are gated by the <code>manage_campaigns</code> capability — the same grant as the Contacts CRM tools. If you don't see <strong>Messages &rarr; Campaigns</strong> or <strong>Messages &rarr; Lists</strong> in the sidebar, your account doesn't have it.</p>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">💡 Not the same thing as Panic Promote</span>
+      <p>A <a href="#promote-overview">Panic Promote campaign</a> coordinates one event's social media, listing sites, and press. An email Campaign here is just the email channel — a newsletter or event blast — and it's independent of whatever's happening in Promote for that event.</p>
+    </div>
+
+    <!-- EMAIL CAMPAIGNS ─────────────────────────────────────────────────── -->
+    <h2 id="msg-campaigns">Email campaigns</h2>
+
+    <p>Open <strong>Messages &rarr; Campaigns</strong> to see every campaign that's been drafted or sent, with its recipient and failure counts. Two ways to start a new one:</p>
+
+    <div class="two-col">
+      <div class="callout note" style="margin:0">
+        <span class="callout-title">✉️ New Blank Email</span>
+        <p>Name it and start writing. Both the HTML and plain-text bodies start from a blank starter template — you fill in the content yourself.</p>
+      </div>
+      <div class="callout note" style="margin:0">
+        <span class="callout-title">📅 Generate from Event(s)</span>
+        <p>Pick one or more upcoming events from a filterable list and Backstage builds a ready-to-send lineup email — the same event-card rendering as the weekly "shows this week" digest.</p>
+      </div>
+    </div>
+
+    <p style="margin-top:20px">Only events that are <strong>public</strong> and already <em>Published</em> or <em>Advanced</em> can be picked for a generated campaign — anything earlier in the pipeline (or a private rental) is left off the picker entirely, and if you had somehow targeted an ineligible one it's dropped with a count shown so nothing silently disappears.</p>
+
+    <h3>Editing a draft</h3>
+    <p>A campaign is only editable while its status is <strong>draft</strong>. Toggle between the <span class="ui-label button">HTML</span> and <span class="ui-label button">Plain text</span> views to edit each body — they're saved independently and both go out together, so keep them consistent yourself. The name and subject line are editable right in the detail header.</p>
+
+    <h3>Choosing recipients</h3>
+    <p>Click <span class="ui-label button">Recipients</span> to open the picker: check any mailing lists to include, and search for individual opted-in contacts to add one at a time. The panel recalculates and shows a live recipient count as you adjust the selection.</p>
+
+    <div class="callout warn">
+      <span class="callout-title">⚠️ Opt-in is enforced at send time, not pick time</span>
+      <p>You can select a list or contact that isn't opted in — Backstage simply excludes those rows from the actual send (recorded as <em>skipped, opted out</em>) rather than blocking you or silently including them. Only contacts with marketing email turned on are ever counted or emailed.</p>
+    </div>
+
+    <h3>Sending</h3>
+    <table>
+      <tr><th>Action</th><th>What it does</th></tr>
+      <tr><td><strong>Send Test&hellip;</strong></td><td>Emails the current draft to one address you type in (yourself, a coworker) so you can proof it. Doesn't lock the draft or touch recipient counts.</td></tr>
+      <tr><td><strong>Send Campaign</strong></td><td>Sends to every resolved, opted-in recipient and moves the campaign out of <em>draft</em> for good — it can no longer be edited or deleted. Each recipient's outcome (sent/failed/skipped) is tracked individually, so one failed delivery never stops the rest of the send.</td></tr>
+    </table>
+
+    <!-- MAILING LISTS ───────────────────────────────────────────────────── -->
+    <h2 id="msg-lists">Mailing lists</h2>
+
+    <p>A mailing list is a reusable, named audience built on top of the Contacts CRM — build a VIP list, a genre list, or "opted-in regulars" once and reuse it across every future campaign instead of re-picking recipients by hand each time. Manage lists under <strong>Messages &rarr; Lists</strong>, or from a contact's own record (its <strong>Mailing Lists</strong> section shows every list that contact belongs to and lets you toggle membership without leaving the page).</p>
+
+    <p>Every list is created as one of two types, and <strong>the type can never be changed afterward</strong> — create a new list instead of trying to convert one, since there's no sensible rule for what should happen to existing members on a type switch:</p>
+
+    <ul>
+      <li><strong>Static</strong> — you choose members by hand. Membership only ever changes when you change it.</li>
+      <li><strong>Smart (segment)</strong> — membership is computed from saved rules and only re-synced when you click <strong>Refresh now</strong>. See below.</li>
+    </ul>
+
+    <h3>Building a static list</h3>
+    <ul>
+      <li><strong>Search &amp; check</strong> — search contacts by name or email, optionally filter to <em>Opted in only</em>, check the ones you want, and click <strong>Add selected</strong>.</li>
+      <li><strong>Add all matching</strong> — adds every contact matching the current search/filter in one action, not just the ones visible on screen. Capped at 2,000 contacts per action to keep any single write bounded.</li>
+      <li><strong>Import CSV</strong> — upload a CSV with an <code>email</code> column (required) plus optional <code>first_name</code>, <code>last_name</code>, <code>phone</code>, and <code>opted_in</code> columns (max 5,000 rows / 5&nbsp;MB per upload). Rows are matched to existing contacts by email, or create new contacts. A bad row (missing or invalid email) is reported individually rather than failing the whole upload.</li>
+    </ul>
+
+    <div class="callout note">
+      <span class="callout-title">📋 A CSV import is not consent</span>
+      <p>Uploading a list of names and emails never changes anyone's opt-in status by itself — the <code>opted_in</code> column is only applied when it's explicitly present in the file. Someone appearing in an imported CSV is not automatically opted in to marketing email.</p>
+    </div>
+
+    <!-- SEGMENT LISTS ───────────────────────────────────────────────────── -->
+    <h2 id="msg-segments">Smart (segment) lists</h2>
+
+    <p>A smart list's membership is computed, not hand-picked. Its rules panel combines opted-in status with minimum spend, minimum events attended, and minimum tickets purchased — the same filters used elsewhere on the Contacts page. Click <strong>Refresh now</strong> at any time to re-run those rules and sync membership; there's no background job doing this automatically, so a smart list can go stale until someone refreshes it.</p>
+
+    <div class="callout tip">
+      <span class="callout-title">💡 A refresh only touches what it added</span>
+      <p>Refreshing a segment list only adds or removes contacts that <em>the segment rules themselves</em> previously added — a member you (or a CSV import) added to that same list by hand is never evicted by a refresh, and vice versa. This is also why list type can't change after creation: a list is either fully computed or fully manual, never an ambiguous mix.</p>
+    </div>
+
+  </div><!-- /book-content -->
+</div><!-- /chapter 9 -->
 
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
