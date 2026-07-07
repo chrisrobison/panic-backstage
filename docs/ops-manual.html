@@ -1202,6 +1202,8 @@
     <a href="#admin-staff" class="section">Staff roster</a>
     <a href="#admin-templates" class="section">Event templates</a>
     <a href="#venue-policy" class="section">Venue policy</a>
+    <a href="#admin-db" class="section">Database browser</a>
+    <a href="#admin-db-history" class="section">Database history &amp; undo</a>
 
     <div class="nav-section">Part IX — Messages</div>
     <a href="#campaigns-lists" class="chapter">Chapter 9: Campaigns &amp; Mailing Lists</a>
@@ -3795,6 +3797,67 @@
       <span class="callout-title">Keep the policy verified</span>
       <p>After any changes to rates, room capacities, or house rules, update the Venue Policy and mark it as <code>is_verified</code>. Unverified policy values show a warning label in the booking workflow — this is intentional, to prompt staff to confirm the numbers rather than assume they're current.</p>
     </div>
+
+    <!-- DATABASE BROWSER ─────────────────────────────────────────────────────── -->
+    <h2 id="admin-db">Database browser</h2>
+
+    <p>Admin → DB Browser is a read-only inspector for every table in this venue's database — for the questions the rest of the app doesn't have a screen for: "what's actually stored in this row?" Restricted to venue admins.</p>
+
+    <p>Pick a table on the left. The rows pane supports per-column filtering (the search row under the column headers) and sorting (click a header). Click any row to open a full field-by-field detail card underneath. A Download button exports the current filtered/sorted view as CSV, Excel, or a <code>.sql</code> file of ready-to-run <code>INSERT</code> statements (capped at 20,000 rows).</p>
+
+    <div class="callout note">
+      <span class="callout-title">Read-only, by design</span>
+      <p>The Database Browser has no way to edit or delete a row — it's purely for looking. To actually correct bad data, and to see exactly who or what changed it, use <a href="#admin-db-history">Database history &amp; undo</a> below.</p>
+    </div>
+
+    <!-- DATABASE HISTORY & UNDO ──────────────────────────────────────────────── -->
+    <h2 id="admin-db-history">Database history &amp; undo</h2>
+
+    <p>Admin → DB History is an audit trail of every insert, update, and delete made to this venue's database, with a one-click undo for any individual entry. It exists to answer a question the rest of the app can't: <em>something changed and I don't know why — what happened, and can I get it back?</em></p>
+
+    <h3>Why this exists</h3>
+
+    <p>Most edits made through the app show up in an event's own activity log. But that log only covers writes made <em>through the app's own code paths</em>. A background sync job, a one-off data-repair script, or someone connecting to the database directly all bypass it completely — which means the edit that actually caused a problem can be the one piece of history nowhere else records. Database history is implemented at the database level (triggers on every table, not application code), so it catches every write regardless of where it came from.</p>
+
+    <div class="callout note">
+      <span class="callout-title">Where this came from</span>
+      <p>This feature exists because of a real incident: a scheduled sync job silently overwrote event data from a spreadsheet with a broken row-linking column, and there was no record anywhere in the app of what had changed or when. Tracing it took hours of cross-referencing spreadsheet backups and git history. Database history turns that into a five-minute lookup.</p>
+    </div>
+
+    <h3>Reading an entry</h3>
+
+    <p>Each row in the list is one write to one table: when it happened, which table and row id, whether it was an insert, update, or delete, who or what did it, and — for updates — a short summary of which fields actually changed. Filter the list by table, row id, actor, action type, or whether an entry has already been undone.</p>
+
+    <div class="field-ref">
+      <div class="field-ref-title">List &amp; Detail Fields</div>
+      <div class="field-row">
+        <div class="field-name">Actor</div>
+        <div class="field-desc"><code>user #12</code> for a change made by a logged-in person; a script name (e.g. <code>sync-mabevents.py</code>) for an automated job; <em>unattributed</em> for a write made directly against the database with no app session to tag it (for example, from a <code>mysql</code> command line).</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Changed fields</div>
+        <div class="field-desc">For updates only: every column whose value actually differs between the before and after row. Shown as a Before → After table in the detail panel.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Undo SQL</div>
+        <div class="field-desc">The exact SQL statement that reverses this entry — a <code>DELETE</code> undoing an insert, an <code>INSERT</code> undoing a delete, or an <code>UPDATE</code> restoring the prior field values. Generated automatically from the row's own before/after data; viewable (collapsed by default) in the detail panel for anyone who wants to see precisely what Undo will run.</div>
+      </div>
+    </div>
+
+    <h3>Undo — and redo</h3>
+
+    <p>Open any entry's detail panel and click <strong>Undo</strong> to run its stored reverse SQL immediately. There's a confirmation prompt first, since it takes effect right away — there's no draft or preview step.</p>
+
+    <p>There is deliberately no separate "redo" feature. Undoing a change is itself a real write to the database, so it fires the same triggers and creates its own new history entry — the exact reverse of the one just undone. To redo something you undid by mistake, open <em>that new entry</em> and click Undo on it. The detail panel always shows the link between a paired entry either direction ("this undid entry #123" / "undone → see entry #456"), so the chain is easy to follow.</p>
+
+    <div class="callout danger">
+      <span class="callout-title">Undo runs immediately</span>
+      <p>Undo is not a request or a suggestion — clicking it executes the reverse SQL statement against the live database right away. An entry can only be undone once (the button is replaced with a confirmation afterward), but there's no limit on how many times you can undo-the-undo back and forth. Think of it the same way you'd think about running a raw SQL statement yourself, because that's exactly what it is.</p>
+    </div>
+
+    <h3>What it can't do</h3>
+
+    <p>Database history only covers the database itself. Writes to disk — uploaded files, generated PDFs, sent email — aren't touched by an undo, so reverting a database change doesn't un-send an email or restore a deleted file. History entries older than 30 days are pruned automatically by a nightly job to keep the table from growing without bound. For recovery beyond that window, or a whole-database point-in-time restore rather than a single row, ask whoever runs the server about the separate 5-minute database snapshot backups kept outside the app.</p>
 
   </div><!-- /book-content -->
 </div><!-- /chapter 6 -->

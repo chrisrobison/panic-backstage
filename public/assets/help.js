@@ -95,6 +95,8 @@ export const HELP_SECTIONS = [
       { slug: 'admin-templates', title: 'Editing event templates' },
       { slug: 'admin-contracts', title: 'Contract library &amp; templates' },
       { slug: 'admin-payments', title: 'Payment providers' },
+      { slug: 'admin-db',       title: 'Database browser' },
+      { slug: 'admin-db-history', title: 'Database history &amp; undo' },
     ],
   },
   {
@@ -1159,6 +1161,36 @@ const HELP_CONTENT = {
       <li>The webhook URL is registered in the processor's dashboard.</li>
       <li>On an event, switch <a href="#help-ticketing">Ticketing</a> to in-house mode, add an <em>on sale</em> tier, and publish the page.</li>
     </ol>
+  `,
+
+  'admin-db': `
+    <h2>Database browser</h2>
+    <p>Admin &rarr; DB Browser (<code>#admin-db</code>) is a read-only inspector for every table in this venue's database. It's meant for admins tracking down a data question — "what's actually in this row?" — without needing direct database access. Restricted to venue admins.</p>
+    <h3>Browsing</h3>
+    <p>Pick a table on the left. The rows pane supports per-column filtering (the search row under the headers) and sorting (click a column header). Click any row to open a full field-by-field detail card below it.</p>
+    <h3>Downloading</h3>
+    <p>The Download button exports the current filtered/sorted view as CSV, Excel, or a <code>.sql</code> file of ready-to-run <code>INSERT</code> statements — capped at 20,000 rows.</p>
+    <p>This tool is read-only by design; it has no way to edit or delete a row. To actually correct bad data (and see who/what wrote it), use <a href="#help-admin-db-history">Database history &amp; undo</a> instead.</p>
+  `,
+
+  'admin-db-history': `
+    <h2>Database history &amp; undo</h2>
+    <p>Admin &rarr; DB History (<code>#admin-db-history</code>) is an audit trail of every insert, update, and delete on this venue's database — no matter whether it came from the app, a background sync job, or someone at a terminal — with a one-click undo for any entry. Restricted to venue admins; this is more sensitive than the read-only <a href="#help-admin-db">Database browser</a>, so it has its own permission.</p>
+
+    <h3>Why this exists</h3>
+    <p>Most edits already show up in an event's own activity log. But some writes — an automated sync, a data-fix script, a stray edit run directly against the database — never go through the app at all, so nothing records them anywhere else. Database history catches <em>every</em> write at the database level, so nothing that changes your data is invisible.</p>
+
+    <h3>Reading the list</h3>
+    <p>Each row is one write: when it happened, which table and row id, whether it was an insert/update/delete, who or what did it, and — for updates — which fields actually changed. Filter by table, row id, actor, action, or whether an entry has already been undone.</p>
+    <p>The <strong>Actor</strong> column shows who made the change: <code>user #12</code> for something done by a logged-in person, or a script name (e.g. <code>sync-mabevents.py</code>) for an automated job. An entry with no actor recorded is labeled <em>unattributed</em> — this happens for writes made directly against the database outside the app (for example, from a <code>mysql</code> command line), which have no session to tag.</p>
+
+    <h3>Undo — and redo</h3>
+    <p>Click any entry to open its detail panel: the full before/after values (or the full row, for an insert or delete) and an <strong>Undo</strong> button. Undo runs a stored, ready-made reverse SQL statement immediately — deleting an inserted row, restoring a deleted row, or reverting an update's fields back to what they were.</p>
+    <p>There's no separate "redo" feature, and none is needed: undoing a change is itself a real write, so it creates its own new history entry — the exact reverse of the one you just undid. To redo something you undid by mistake, open that new entry and click Undo on <em>it</em>. The detail panel always shows a link between paired entries ("this undid entry #123" / "undone → see entry #456") so you can follow the chain either direction.</p>
+    <p>An entry can only be undone once; the button is replaced with a confirmation once it has been. Undoing always asks you to confirm first, since it runs immediately — there's no draft or preview step.</p>
+
+    <h3>What it can't do</h3>
+    <p>History only covers the database itself — writes to disk (uploaded files, generated PDFs, sent email) aren't touched by an undo, so reverting a database change doesn't un-send an email or restore a deleted file. Entries older than 30 days are automatically pruned to keep the table from growing without bound; for recovery beyond that window, or for a whole-database point-in-time restore, ask whoever runs the server about the separate 5-minute snapshot backups.</p>
   `,
 
   // ── Messages: Campaigns & Lists ─────────────────────────────────────────────

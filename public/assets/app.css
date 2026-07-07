@@ -2444,6 +2444,51 @@ pb-admin-db-browser { display: block; }
   .dbx-fields { grid-template-columns: 1fr; }
 }
 
+/* ── DB History (audit log + undo/redo) ─────────────────────────────────────── */
+.dbh-filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.dbh-filters select, .dbh-filters input {
+  font: inherit; font-size: 13px; padding: 6px 10px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink);
+}
+.dbh-filters input { min-width: 160px; }
+.dbh-pager { padding: 8px 16px; border-top: 1px solid var(--line); justify-content: flex-end; flex-shrink: 0; }
+.dbh-table td:last-child { white-space: normal; }
+.dbh-table td:nth-child(6) { white-space: normal; max-width: 320px; }
+
+.dbh-meta { display: grid; gap: 6px; padding: 14px 16px; font-size: 13px; border-bottom: 1px solid var(--line); }
+.dbh-meta strong { color: var(--muted); font-weight: 700; margin-right: 6px; }
+
+.dbh-sql { margin: 0 16px 16px; }
+.dbh-sql summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--muted); padding: 6px 0; }
+.dbh-sql-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.dbh-actions { padding: 4px 16px 20px; }
+
+.dbh-diff td { white-space: normal; }
+.dbh-before { color: var(--danger); text-decoration: line-through; text-decoration-color: rgba(180, 35, 24, .4); }
+.dbh-after { color: #0c7a3c; font-weight: 600; }
+
+.badge.dbh-insert { background: #d3f1df; color: #0c7a3c; }
+.badge.dbh-update { background: #d9ebff; color: #1466bd; }
+.badge.dbh-delete { background: #fde2e1; color: #b42318; }
+.badge.dbh-gray   { background: #eef0f3; color: #5a606b; }
+
+@media (max-width: 860px) {
+  .dbh-filters { flex-direction: column; }
+  .dbh-filters select, .dbh-filters input { width: 100%; box-sizing: border-box; }
+}
+
 /* Lightweight modal for edit dialogs (Users / Staff / Templates) */
 .modal-backdrop {
   position: fixed;

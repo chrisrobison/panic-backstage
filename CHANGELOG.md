@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `admin` — Audit-trigger DB history with undo/redo UI, docs
 - **Documentation** — Document event QR codes and the Campaigns/Mailing Lists feature
 - **Fixed** `events` — Stop silent field wipes on partial event-detail saves
 - **Fixed** `events` — Make generated QR codes use the stable id-based public link

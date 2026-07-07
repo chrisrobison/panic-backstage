@@ -30,6 +30,13 @@ final class Kernel
         // Populate $auth->user() from Bearer token if present
         $this->auth->authenticate($request);
 
+        // Attribute subsequent writes in db_history to the authenticated user
+        // (falls back to the generic 'cli:'/anonymous actor set in the
+        // Database constructor for unauthenticated/public endpoints).
+        if ($user = $this->auth->user()) {
+            $this->db->setActor('user:' . $user['id']);
+        }
+
         try {
             [$class, $params] = $this->resolve($request->path());
             if (!class_exists($class)) {
@@ -326,6 +333,15 @@ final class Kernel
         //   GET /api/db-browser/{table}/export  → download matching rows (?format=csv|xls|sql)
         if ($segments[0] === 'db-browser') {
             return [DatabaseBrowser::class, ['table' => $segments[1] ?? null, 'action' => $segments[2] ?? null]];
+        }
+
+        // DB history — browse the audit-trigger log and undo/redo entries
+        // (admin; manage_db_history gate inside endpoint)
+        //   GET  /api/db-history                → paginated list (?table=&pk=&actor=&action=&from=&to=&undone=&page=&limit=)
+        //   GET  /api/db-history/{id}            → one entry (full old/new JSON + undo SQL)
+        //   POST /api/db-history/{id}/undo       → execute the undo (also how you "redo": undo the undo's own entry)
+        if ($segments[0] === 'db-history') {
+            return [DbHistory::class, ['id' => $this->intOrNull($segments[1] ?? null), 'action' => $segments[2] ?? null]];
         }
 
         // Messages — in-app staff messaging (Inbox / Archive / Outbox)

@@ -5,6 +5,7 @@ import './print.js';
 import './contracts.js';
 import './admin.js';
 import './db-browser.js';
+import './db-history.js';
 import './contacts.js';
 import './user-emails.js';
 import './ticketing-admin.js';
@@ -127,6 +128,7 @@ class AppShell extends PanicElement {
             <a data-nav="admin-payments" href="#admin-payments" title="Payments"><i class="fa-solid fa-credit-card" aria-hidden="true"></i>Payments</a>
             <a data-nav="admin-venue" href="#admin-venue" title="Venue"><i class="fa-solid fa-building" aria-hidden="true"></i>Venue</a>
             <a data-nav="admin-db" href="#admin-db" title="Database browser" data-nav-db><i class="fa-solid fa-database" aria-hidden="true"></i>DB Browser</a>
+            <a data-nav="admin-db-history" href="#admin-db-history" title="Database history &amp; undo" data-nav-db-history><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>DB History</a>
             <a data-nav="outbox" href="#outbox" title="All sent email"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i>All Email</a>
           </div>
         </div>
@@ -264,6 +266,11 @@ class AppShell extends PanicElement {
       // DB browser is restricted to tenant instance admins / super admins.
       $$('[data-nav-db]', this).forEach((link) => link.remove());
     }
+    if (!this.capabilities?.manage_db_history) {
+      // DB history + undo is more dangerous than read-only browsing, so it
+      // gets its own capability rather than reusing manage_users.
+      $$('[data-nav-db-history]', this).forEach((link) => link.remove());
+    }
     if (!this.capabilities?.manage_contacts) {
       $$('[data-nav-contacts]', this).forEach((link) => link.remove());
     }
@@ -273,7 +280,7 @@ class AppShell extends PanicElement {
     const leadsLinks = $$('[data-nav-leads]', this);
     const hasLeads = this.capabilities?.view_leads || this.capabilities?.manage_leads;
     leadsLinks.forEach((el) => { el.hidden = !hasLeads; });
-    if (!this.capabilities?.manage_users && !this.capabilities?.manage_staff_roster && !this.capabilities?.manage_templates) {
+    if (!this.capabilities?.manage_users && !this.capabilities?.manage_staff_roster && !this.capabilities?.manage_templates && !this.capabilities?.manage_db_history) {
       $$('[data-nav-admin]', this).forEach((el) => el.remove());
     }
     const pill = $('[data-user-pill]', this);

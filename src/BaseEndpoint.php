@@ -82,6 +82,7 @@ abstract class BaseEndpoint implements Endpoint
             'manage_systems_inventory',
             'admin_credential_encryption',
             'reopen_settlement',
+            'manage_db_history',
         ],
         'event_owner' => ['view_leads'],
         'promoter' => [],

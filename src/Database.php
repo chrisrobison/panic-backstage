@@ -31,6 +31,29 @@ final class Database
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
         ]);
+
+        // Default actor attribution for the audit-trigger history table (see
+        // migrations/xxx_add_audit_history.sql). Web requests overwrite this
+        // via setActor() once Kernel knows the authenticated user; anything
+        // that never calls setActor() (a cron job, a one-off script, `php -a`)
+        // is still attributed to the CLI script that ran it instead of showing
+        // up as an anonymous write — this is exactly the gap that made the
+        // 2026-07-06 MabEvents sync incident hard to trace.
+        if (PHP_SAPI === 'cli') {
+            $script = $_SERVER['argv'][0] ?? $_SERVER['SCRIPT_NAME'] ?? 'unknown';
+            $this->setActor('cli:' . basename($script));
+        }
+    }
+
+    /**
+     * Tag subsequent writes on this connection with who/what made them, read
+     * by the AFTER INSERT/UPDATE/DELETE triggers into db_history.actor.
+     * Safe to call repeatedly (e.g. once auth resolves mid-request).
+     */
+    public function setActor(string $actor): void
+    {
+        $stmt = $this->pdo->prepare('SET @app_actor = ?');
+        $stmt->execute([$actor]);
     }
 
     public function all(string $sql, array $params = []): array
