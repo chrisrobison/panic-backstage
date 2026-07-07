@@ -98,6 +98,15 @@ export const HELP_SECTIONS = [
     ],
   },
   {
+    group: 'Messages',
+    key: 'messages',
+    icon: 'fa-solid fa-envelope',
+    items: [
+      { slug: 'msg-campaigns', title: 'Campaigns' },
+      { slug: 'msg-lists',     title: 'Mailing Lists' },
+    ],
+  },
+  {
     group: 'Panic Promote',
     key: 'promote',
     icon: 'fa-solid fa-bullhorn',
@@ -1150,6 +1159,53 @@ const HELP_CONTENT = {
       <li>The webhook URL is registered in the processor's dashboard.</li>
       <li>On an event, switch <a href="#help-ticketing">Ticketing</a> to in-house mode, add an <em>on sale</em> tier, and publish the page.</li>
     </ol>
+  `,
+
+  // ── Messages: Campaigns & Lists ─────────────────────────────────────────────
+
+  'msg-campaigns': `
+    <h2>Campaigns</h2>
+    <p>An email campaign is a one-off marketing email — a newsletter, a "shows this week" blast, a single-event push — sent to your mailing lists and/or hand-picked contacts. Find it under <strong>Messages &rarr; Campaigns</strong> in the sidebar.</p>
+    <div class="note"><strong>Note:</strong> This is a different tool from <a href="#help-promote-campaigns">Panic Promote campaigns</a>, which coordinate an event's social/listing-site promotion. An email Campaign is only the email side of marketing, and can exist with or without a Promote campaign on the same event.</div>
+    <h3>Starting a campaign</h3>
+    <ul>
+      <li><strong>New Blank Email</strong> — name it and start writing; both the HTML and plain-text bodies begin from a blank starter template you fill in yourself.</li>
+      <li><strong>Generate from Event(s)</strong> — pick one or more upcoming public events from a filterable list and Backstage builds a ready-to-send "lineup" email from them (the same event-card rendering used by the weekly "shows this week" digest). Only events that are public and already <em>Published</em> or <em>Advanced</em> are offered; anything else is silently skipped and you're told how many were dropped.</li>
+    </ul>
+    <h3>Editing</h3>
+    <p>A campaign can only be edited while it's a <strong>draft</strong>. Toggle between the <strong>HTML</strong> and <strong>Plain text</strong> views to edit each body — they're saved independently and both go out together, so keep them in sync yourself. Name and subject are editable right in the detail header.</p>
+    <h3>Picking recipients</h3>
+    <p>Click <strong>Recipients</strong> to open the picker: check any mailing lists to include, and search opted-in contacts to add individually. The panel shows a live recipient count as you adjust the selection.</p>
+    <div class="warn"><strong>Important:</strong> Only contacts with marketing email turned on are ever counted or sent to — picking a list or a contact that isn't opted in doesn't add them to the send; they're simply excluded (and recorded as skipped) rather than blocking the whole send.</div>
+    <h3>Sending</h3>
+    <ul>
+      <li><strong>Send Test&hellip;</strong> — email the current draft to any single address (yourself, a coworker) to proof it before it goes out. Test sends don't lock the draft or affect recipient counts.</li>
+      <li><strong>Send Campaign</strong> — sends to every resolved, opted-in recipient and moves the campaign out of draft status for good (it can no longer be edited or deleted). The campaign list shows sent vs. failed counts per campaign; one recipient's delivery failure never stops the rest of the send.</li>
+    </ul>
+    <div class="tip"><strong>Tip:</strong> Only venue admins can see or use Campaigns and Lists — both are gated by the same <code>manage_campaigns</code> capability as the Contacts CRM.</div>
+  `,
+
+  'msg-lists': `
+    <h2>Mailing Lists</h2>
+    <p>Mailing lists are reusable, named audiences built on top of <a href="#help-contacts">Contacts</a> — build one once (a VIP list, a genre-specific list, "opted-in regulars") and reuse it across campaigns instead of re-picking recipients by hand every time. Manage them under <strong>Messages &rarr; Lists</strong>, or from a contact's own record.</p>
+    <h3>Static vs. Smart lists</h3>
+    <p>Every list is one of two types, chosen at creation and <strong>fixed for the life of the list</strong> — there's no converting one type to the other, since there's no good answer for what should happen to existing members on a type change. Make a new list instead.</p>
+    <ul>
+      <li><strong>Static</strong> — you choose members by hand: checkbox picker, "add all matching" a filter, or CSV import. Membership only changes when you change it.</li>
+      <li><strong>Smart (segment)</strong> — membership is computed from saved rules (opted-in, minimum spend, minimum events attended, minimum tickets bought) and kept in sync only when you click <strong>Refresh now</strong> — there's no background job re-running it automatically.</li>
+    </ul>
+    <h3>Adding members to a static list</h3>
+    <ul>
+      <li><strong>Search &amp; check</strong> — search contacts by name or email, optionally filter to <em>Opted in only</em>, check the ones you want, and click <strong>Add selected</strong>.</li>
+      <li><strong>Add all matching</strong> — instead of checking boxes one page at a time, this adds every contact matching your current search/filter in one shot, even beyond what's visible on screen.</li>
+      <li><strong>Import CSV</strong> — upload a CSV with an <code>email</code> column (required) plus optional <code>first_name</code>, <code>last_name</code>, <code>phone</code>, and <code>opted_in</code> columns. Rows are matched to existing contacts by email or create new ones; a bad row (missing/invalid email) is reported individually rather than failing the whole upload.</li>
+    </ul>
+    <div class="note"><strong>Note:</strong> Uploading a CSV without an <code>opted_in</code> column never changes anyone's opt-in status — a list of names and emails is not itself marketing consent. Opt-in is only touched when the column is explicitly present.</div>
+    <h3>Segment rules</h3>
+    <p>A smart list's rules panel lets you combine opted-in status with minimum spend, minimum events attended, and minimum tickets purchased. Click <strong>Refresh now</strong> any time to re-run the rules and sync membership — the refresh only ever adds or removes contacts it added itself via those rules, so a member you (or a CSV import) added by hand to the same list is never evicted by a refresh.</p>
+    <h3>From the contact side</h3>
+    <p>Open any contact's record and scroll to its <strong>Mailing Lists</strong> section to see every list they belong to, toggle their membership on individual lists, or add them to a new one — handy when you're already looking at one person rather than building a list from scratch.</p>
+    <div class="tip"><strong>Tip:</strong> Removing someone from a list only affects that list. To stop <em>all</em> marketing email to a contact, turn off their <em>Opted in</em> flag on the <a href="#help-contacts">Contacts</a> page — campaigns never send to anyone who isn't opted in, regardless of list membership.</div>
   `,
 
   statuses: `
