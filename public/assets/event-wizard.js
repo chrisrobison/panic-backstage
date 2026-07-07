@@ -1172,17 +1172,7 @@ class EventContractWizard extends PanicElement {
     }
 
     // ── Quick-create fallback ─────────────────────────────────────────────────
-    $('[data-quick-create]', this)?.addEventListener('click', () => {
-      if (confirm('Leave the wizard and use the simple quick-create form?')) {
-        // Import openEventQuickCreate lazily to avoid a circular dep
-        import('./event-views.js').then(({ openEventQuickCreate }) => {
-          location.hash = '#events';
-          openEventQuickCreate({ date: this.wizardData.date || null });
-        }).catch(() => {
-          location.hash = '#events';
-        });
-      }
-    });
+    $('[data-quick-create]', this)?.addEventListener('click', () => this._openQuickCreateFallback());
 
     // ── Keyboard shortcut: Ctrl/Cmd+Enter = Next / Finish ────────────────────
     document.addEventListener('keydown', (e) => {
@@ -1191,6 +1181,19 @@ class EventContractWizard extends PanicElement {
         ($('[data-next]', this) || $('[data-finish]', this))?.click();
       }
     }, { signal: this.abort.signal });
+  }
+
+  /** Leaves the wizard and opens the simple quick-create modal instead. */
+  _openQuickCreateFallback() {
+    if (confirm('Leave the wizard and use the simple quick-create form?')) {
+      // Import openEventQuickCreate lazily to avoid a circular dep
+      import('./event-views.js').then(({ openEventQuickCreate }) => {
+        location.hash = '#events';
+        openEventQuickCreate({ date: this.wizardData.date || null });
+      }).catch(() => {
+        location.hash = '#events';
+      });
+    }
   }
 
   // ── Data capture ──────────────────────────────────────────────────────────────
@@ -1318,9 +1321,7 @@ class EventContractWizard extends PanicElement {
     tmp.innerHTML = this._sidebarHtml();
     existing.replaceWith(tmp.firstElementChild);
     // Re-bind quick-create button since we replaced the element
-    $('.wizard-sidebar [data-quick-create]', this)?.addEventListener('click', () => {
-      $('[data-quick-create]', this.querySelector('.wizard-body'))?.click?.();
-    });
+    $('.wizard-sidebar [data-quick-create]', this)?.addEventListener('click', () => this._openQuickCreateFallback());
   }
 
   _scrollToTop() {
