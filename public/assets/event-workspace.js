@@ -618,7 +618,7 @@ class EventRecurrencePanel extends PanicElement {
 
     if (this._series) {
       this.innerHTML = `<section class="panel">
-        <div class="section-head padded"><h2>Recurrence</h2></div>
+        <div class="section-head padded"><h2>Recurrence ${helpLink('recurring-events', 'Recurrence')}</h2></div>
         <div class="padded">
           <p>Part of a series — <strong>${esc(this._series.description || 'Recurring')}</strong> (${this._siblings.length} events).</p>
           <ul class="recurrence-siblings">
@@ -638,7 +638,7 @@ class EventRecurrencePanel extends PanicElement {
     if (!this._canEdit) { this.innerHTML = ''; return; }
 
     this.innerHTML = `<section class="panel">
-      <div class="section-head padded"><h2>Recurrence</h2></div>
+      <div class="section-head padded"><h2>Recurrence ${helpLink('recurring-events', 'Recurrence')}</h2></div>
       <div class="grid-form padded">
         <pb-recurrence-fields></pb-recurrence-fields>
         <button type="button" class="wide secondary" data-create-series disabled>Create recurring events</button>

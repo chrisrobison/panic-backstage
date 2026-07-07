@@ -51,6 +51,8 @@ export const HELP_SECTIONS = [
       { slug: 'private-events',  title: 'Private events &amp; rentals' },
       { slug: 'overview',        title: 'Overview &amp; readiness' },
       { slug: 'details',         title: 'Event details' },
+      { slug: 'multi-day-events', title: 'Multi-day events' },
+      { slug: 'recurring-events', title: 'Recurring events' },
       { slug: 'tasks',        title: 'Tasks' },
       { slug: 'lineup',       title: 'Lineup &amp; bands' },
       { slug: 'schedule',     title: 'Schedule &amp; run sheet' },
@@ -284,6 +286,12 @@ const HELP_CONTENT = {
     <h3>Creating events from the calendar</h3>
     <p>Venue admins can click any day cell to open the quick-create modal. Pick a template (or Blank event), confirm the date, title, and times, and click <em>Create event</em> to jump straight into the new event workspace.</p>
 
+    <h3>Multi-day events</h3>
+    <p>An event with an <a href="#help-multi-day-events">End Date</a> set spans every day from its Date through its End Date as one continuous chip on the calendar and agenda views, instead of a single-day dot. The room is treated as booked for the entire range — a room-conflict check blocks any other booking that overlaps any day in that span, not just the start day.</p>
+
+    <h3>Recurring events</h3>
+    <p>A <a href="#help-recurring-events">recurring series</a> is <em>not</em> one chip repeating — every occurrence is its own separate event with its own date, so each one shows up as its own normal chip on whatever day it falls on. Open any occurrence's Event Details tab to see the rest of the series and jump between them.</p>
+
     <p>The dashboard, pipeline, and calendar all read from the same <code>/api/events</code> data, so adding or moving a show updates all three.</p>
   `,
 
@@ -357,6 +365,8 @@ const HELP_CONTENT = {
     <ul>
       <li><strong>Event Title</strong> (required) — the public-facing name, e.g. "Friday Night Live with The Slackers".</li>
       <li><strong>Date</strong> (required) — show date. Defaults to today.</li>
+      <li><strong>End Date</strong> — optional, only for events spanning more than one calendar day. See <a href="#help-multi-day-events">Multi-day events</a>.</li>
+      <li><strong>Recurring Event</strong> — optional. Check this to spin off a whole series (weekly, every other week, monthly by weekday or by date) instead of a single show — see <a href="#help-recurring-events">Recurring events</a>.</li>
       <li><strong>Room / Venue</strong> (required) — which space is being used (Downstairs 21+, Upstairs, Both Rooms, etc.).</li>
       <li><strong>Event Type</strong> (required) — Live Music, Karaoke, Open Mic, Promoter Night, DJ Night, Comedy, Private Event, or Special Event.</li>
       <li><strong>Doors Open / Show Time / End / Curfew</strong> — defaults to 7 pm / 8 pm / 11 pm.</li>
@@ -524,6 +534,7 @@ const HELP_CONTENT = {
     <ul>
       <li><strong>Title</strong> — the marquee name. Used everywhere: dashboard, calendar chips, public page, print packets.</li>
       <li><strong>Date</strong> — show date.</li>
+      <li><strong>End Date</strong> — optional. Only set this for an event that spans more than one calendar day (a festival, a weekend rental, a multi-day workshop). Leave it blank for a normal single-day show. See <a href="#help-multi-day-events">Multi-day events</a>.</li>
       <li><strong>Venue</strong> — choose from the venues your account can see.</li>
       <li><strong>Type</strong> — live music, karaoke, open mic, promoter night, DJ night, comedy, private event, or special event. Changing to or from <em>private event</em> changes the entire form layout.</li>
       <li><strong>Status</strong> — see <a href="#help-statuses">Event status reference</a>. Private events show a filtered dropdown.</li>
@@ -563,6 +574,58 @@ const HELP_CONTENT = {
     <ul>
       <li><strong>Public page visible</strong> — toggles the publish state from inside the form. The <em>Publish Public Page</em> button at the top of the workspace does the same thing in one click.</li>
     </ul>
+
+    <h3>Recurrence</h3>
+    <p>A "Recurrence" panel sits right below Event Details. If this event isn't part of a series yet, it shows a picker for turning it into one — see <a href="#help-recurring-events">Recurring events</a>. If it's already part of a series, the panel instead lists every sibling event with a link to jump to each one.</p>
+  `,
+
+  'multi-day-events': `
+    <h2>Multi-day events</h2>
+    <p>Most shows are a single-day thing, but some aren't — a festival, a weekend private rental, a multi-day workshop or artist residency. For those, set an <strong>End Date</strong> alongside the regular Date and the event spans every calendar day from Date through End Date instead of just one.</p>
+
+    <h3>Where to set it</h3>
+    <ul>
+      <li>The <a href="#help-event-wizard">event wizard</a>'s Step 1 — Event Basics.</li>
+      <li>The Quick Create modal.</li>
+      <li>The <a href="#help-details">Event Details</a> tab, any time after creation — the End Date field there is bounded to never be earlier than Date.</li>
+    </ul>
+    <p>Leave End Date blank (or set it equal to Date) for a normal single-day event — that's the default and the vast majority of shows.</p>
+
+    <h3>How it shows up</h3>
+    <ul>
+      <li><strong>Calendar &amp; agenda</strong> — instead of a single dot, the event renders as one continuous chip across every day in its range. See <a href="#help-calendar">Calendar</a>.</li>
+      <li><strong>Room conflicts</strong> — the venue is considered booked for the <em>entire</em> range. Trying to book the same room (or another room in the same building/zone) on any day inside that span will be blocked as a conflict, not just the first day.</li>
+      <li><strong>Everything else</strong> (contract, staffing, ticketing, guest list, settlement) stays attached to the single event record exactly like a normal show — a multi-day event is still one event, just with a wider footprint on the calendar.</li>
+    </ul>
+    <p class="help-tip">💡 Multi-day events are a different thing from <a href="#help-recurring-events">recurring events</a>. Multi-day is <em>one</em> event spanning several consecutive days (a festival). Recurring is <em>several separate</em> events on a repeating schedule (a weekly karaoke night) — each with its own date, contract, and staffing.</p>
+  `,
+
+  'recurring-events': `
+    <h2>Recurring events</h2>
+    <p>A recurring series is <strong>not</strong> a single event that magically shows up on multiple dates — every occurrence is created as its own fully independent event, with its own contract, staffing, ticketing, guest list, and status. Occurrences are linked only so the app can show you the rest of the series and let you jump between them. Editing, cancelling, or rebooking one occurrence never touches any of the others.</p>
+
+    <h3>Starting a series</h3>
+    <p>There are two ways to spin one up:</p>
+    <ul>
+      <li><strong>From the event wizard</strong> — check <strong>Recurring Event</strong> on Step 1 (Event Basics). The pattern you configure there is applied right after the first event is created, so the whole series exists by the time you finish the wizard.</li>
+      <li><strong>From an existing event</strong> — open its <a href="#help-details">Event Details</a> tab and use the <strong>Recurrence</strong> panel underneath it. This turns that single event into the first occurrence of a brand-new series (it must not already be part of one).</li>
+    </ul>
+
+    <h3>Picking a pattern</h3>
+    <p>The weekday (for weekly patterns) or day-of-month (for monthly patterns) is always taken from the date you're starting from — you don't pick it separately, so the pattern can never disagree with the date. Supported patterns:</p>
+    <ul>
+      <li><strong>Weekly</strong> — every week, every other week, every 3rd week, or every 4th week, on whichever day of the week your starting date falls on (e.g. "Every other Tuesday").</li>
+      <li><strong>Monthly by weekday</strong> — the same ordinal weekday every month (e.g. "First Thursday of the month", or "Last Friday of the month").</li>
+      <li><strong>Monthly by date</strong> — the same day-of-month every month (e.g. "the 15th").</li>
+    </ul>
+    <p>You must also choose an end condition — <strong>after N occurrences</strong> or <strong>on a specific date</strong> — and the total is capped at 52 occurrences per series. A live preview lists the dates that will be created so you can double-check before committing.</p>
+
+    <h3>Conflicts</h3>
+    <p>Every generated date is checked against existing bookings at that venue, exactly like a normal event create. If <em>any</em> date in the pattern conflicts with an existing booking, nothing is created — you'll see an error listing which date(s) collided so you can adjust the pattern (a different day, a shorter range, or fewer occurrences) and try again.</p>
+
+    <h3>Managing an existing series</h3>
+    <p>Open any occurrence's Event Details tab — the Recurrence panel lists every sibling in the series with its date and status, and links to jump straight to any of them. If one occurrence needs to drop out of the series (it was cancelled, moved to a different venue, whatever), use <strong>Remove this event from the series</strong> on that occurrence — it becomes a fully standalone event again and the rest of the series is unaffected.</p>
+    <p class="help-tip">💡 There's no bulk edit across a series (no "change this and all future occurrences"). Each occurrence is a completely normal event once created — update its time, venue, staffing, or anything else the same way you would for any other show.</p>
   `,
 
   tasks: `

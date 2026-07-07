@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** `events` — Document multi-day and recurring events
 - **Added** `events` — Support recurring events via materialized series
 - **Fixed** `scanner` — Show the EVT-N code on the scanner screen instead of the raw internal event id
 - **Fixed** `sync` — Defer slug renames to a two-phase update to avoid ordering-dependent import failures

@@ -1128,6 +1128,8 @@
     <a href="#booking" class="chapter">Chapter 2: Booking a Show</a>
     <a href="#inquiry" class="section">How inquiries arrive</a>
     <a href="#create-event" class="section">Creating the event</a>
+    <a href="#multi-day-events" class="section">Multi-day events</a>
+    <a href="#recurring-events" class="section">Recurring events</a>
     <a href="#pipeline" class="section">The status pipeline</a>
     <a href="#hold" class="section">Hold</a>
     <a href="#intake" class="section">Intake Complete</a>
@@ -1635,6 +1637,82 @@
     <div class="callout tip">
       <span class="callout-title">⏰ Time auto-fill</span>
       <p>If you set <strong>Doors</strong>, the system will automatically suggest Show time (1 hour after doors) and End time (5 hours after doors) if you leave those blank. You can always override. This saves time on common show formats.</p>
+    </div>
+
+    <!-- MULTI-DAY EVENTS ────────────────────────────────────────────────── -->
+    <h2 id="multi-day-events">Multi-day events</h2>
+
+    <p>Most shows are a single night. Some aren't — a two-day festival, a weekend private rental, a multi-day workshop or artist residency. For those, set an <strong>End Date</strong> alongside the regular <strong>Date</strong> and the event spans every calendar day from Date through End Date instead of just one.</p>
+
+    <p>You can set End Date in the wizard's Event Basics step, in the Quick Create modal, or later from the event's own <span class="ui-label tab">Details</span> tab. Leave it blank (the default) for an ordinary single-day show — the field only matters when it's filled in.</p>
+
+    <div class="two-col">
+      <div class="callout note" style="margin:0">
+        <span class="callout-title">📅 How it looks on the calendar</span>
+        <p>Instead of a single day's chip, the event renders as one continuous chip spanning every day in its range, on both the monthly calendar and the agenda view.</p>
+      </div>
+      <div class="callout warn" style="margin:0">
+        <span class="callout-title">🚪 Room conflicts</span>
+        <p>The room is considered booked for the <em>entire</em> range. Another booking that overlaps <em>any</em> day inside that span — not just the first day — will be blocked as a conflict.</p>
+      </div>
+    </div>
+
+    <p style="margin-top:20px">Everything else about the event — contract, staffing, ticketing, guest list, settlement — stays attached to that single event record exactly as it would for a normal show. A multi-day event is still <em>one</em> event; it just occupies a wider footprint on the calendar.</p>
+
+    <div class="callout tip">
+      <span class="callout-title">💡 Not the same thing as a recurring event</span>
+      <p>Multi-day is <strong>one</strong> event spanning several consecutive days (a festival). A <a href="#recurring-events">recurring event</a> is <strong>several separate</strong> events on a repeating schedule (a weekly karaoke night) — each with its own date, contract, and staffing. See the next section.</p>
+    </div>
+
+    <!-- RECURRING EVENTS ────────────────────────────────────────────────── -->
+    <h2 id="recurring-events">Recurring events</h2>
+
+    <p>A recurring series is <strong>not</strong> a single event that magically reappears on multiple dates. Every occurrence is created as its own fully independent event — its own contract, staffing, ticketing, guest list, and status ladder. Occurrences are linked only so the app can show you the rest of the series and let you jump between them. Editing, cancelling, or rebooking one occurrence never touches any of the others.</p>
+
+    <h3>Starting a series</h3>
+    <p>There are two ways to spin one up:</p>
+    <ul>
+      <li><strong>From the event wizard</strong> — check <span class="ui-label field">Recurring Event</span> on Step 1, Event Basics. The pattern is applied right after the first event is created, so the whole series exists by the time you finish the wizard.</li>
+      <li><strong>From an existing event</strong> — open its <span class="ui-label tab">Details</span> tab and use the <strong>Recurrence</strong> panel underneath it. This turns that single event into the first occurrence of a brand-new series. (An event that's already part of a series can't be turned into the start of a second one.)</li>
+    </ul>
+
+    <h3>Choosing a pattern</h3>
+    <p>The weekday (for weekly patterns) or day-of-month (for monthly patterns) is always taken from the date you're starting from — nobody picks it separately, so the pattern can never disagree with the date it was built from.</p>
+
+    <div class="form-mockup">
+      <div class="form-mockup-title">Recurrence picker</div>
+      <div class="form-row">
+        <div class="mock-field">
+          <label>Repeats</label>
+          <div class="mock-input">Weekly — every other week — on Tuesday</div>
+        </div>
+        <div class="mock-field">
+          <label>Ends</label>
+          <div class="mock-input">After 12 occurrences</div>
+        </div>
+      </div>
+    </div>
+
+    <p>Supported patterns:</p>
+    <ul>
+      <li><strong>Weekly</strong> — every week, every other week, every 3rd week, or every 4th week, on whichever day of the week the starting date falls on (e.g. "Every other Tuesday").</li>
+      <li><strong>Monthly by weekday</strong> — the same ordinal weekday every month (e.g. "First Thursday of the month", or "Last Friday of the month").</li>
+      <li><strong>Monthly by date</strong> — the same day-of-month every month (e.g. "the 15th").</li>
+    </ul>
+
+    <p>An end condition is required — either <strong>after N occurrences</strong> or <strong>on a specific date</strong> — and the total is capped at 52 occurrences per series. A live preview lists the dates that will be created so staff can double-check before committing.</p>
+
+    <div class="callout danger">
+      <span class="callout-title">⚠️ Conflicts block the whole batch</span>
+      <p>Every generated date is checked against existing bookings at that venue, exactly like a normal event create. If <strong>any</strong> date in the pattern conflicts with an existing booking, <strong>nothing is created</strong> — you'll see an error listing which date(s) collided so you can adjust the pattern (a different weekday, a shorter range, fewer occurrences) and try again.</p>
+    </div>
+
+    <h3>Managing an existing series</h3>
+    <p>Open any occurrence's <span class="ui-label tab">Details</span> tab — the Recurrence panel lists every sibling in the series with its date and status, and links to jump straight to any of them. If one occurrence needs to drop out (it was cancelled, moved to a different venue, whatever), use <strong>Remove this event from the series</strong> on that occurrence. It becomes a fully standalone event again; the rest of the series is unaffected.</p>
+
+    <div class="callout tip">
+      <span class="callout-title">💡 No bulk edit across a series</span>
+      <p>There's no "change this and all future occurrences" action. Each occurrence is a completely normal event once created — update its time, venue, staffing, contract, or anything else the same way you would for any other show, one at a time.</p>
     </div>
 
     <!-- THE STATUS PIPELINE ─────────────────────────────────────────────── -->
