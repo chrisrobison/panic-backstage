@@ -8,6 +8,7 @@ use Panic\QrCode;
 use Panic\Request;
 use Panic\Response;
 use Panic\Tenant\TenantContext;
+use function Panic\event_public_path;
 use function Panic\log_activity;
 
 /**
@@ -17,8 +18,9 @@ use function Panic\log_activity;
  *                                              can download/print it like any other asset.
  *
  * Re-running POST regenerates in place (one qr_code asset per event) rather than piling up
- * duplicates — the encoded URL never changes once the slug is set, so there's nothing to
- * version like the AI flyer prompt.
+ * duplicates — the encoded URL is keyed by the event's stable id (see event_public_path()),
+ * so it never changes even if the title/date (and therefore the slug) does — there's nothing
+ * to version like the AI flyer prompt.
  *
  * Requires the `upload_assets` capability (same gate as flyer generation).
  */
@@ -40,21 +42,21 @@ final class GenerateQr extends BaseEndpoint
     /** Return the URL that would be encoded, so the UI can show it before generating. */
     private function preview(int $eventId): Response
     {
-        $event = $this->db->one('SELECT slug FROM events WHERE id = ?', [$eventId]);
+        $event = $this->db->one('SELECT id FROM events WHERE id = ?', [$eventId]);
         if (!$event) {
             return $this->notFound();
         }
-        return $this->ok(['url' => $this->publicUrl((string) $event['slug'])]);
+        return $this->ok(['url' => $this->publicUrl($event)]);
     }
 
     private function generate(int $eventId): Response
     {
-        $event = $this->db->one('SELECT slug FROM events WHERE id = ?', [$eventId]);
+        $event = $this->db->one('SELECT id FROM events WHERE id = ?', [$eventId]);
         if (!$event) {
             return $this->notFound();
         }
 
-        $url = $this->publicUrl((string) $event['slug']);
+        $url = $this->publicUrl($event);
         $png = QrCode::generatePng($url, 600);
         if ($png === '') {
             return Response::json(['error' => 'Could not generate QR code'], 500);
@@ -100,10 +102,10 @@ final class GenerateQr extends BaseEndpoint
         return $this->ok(['id' => $assetId, 'file_path' => $path, 'url' => $url]);
     }
 
-    private function publicUrl(string $slug): string
+    private function publicUrl(array $event): string
     {
         $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
-        return $appUrl . '/event.html?slug=' . rawurlencode($slug);
+        return $appUrl . '/' . event_public_path($event);
     }
 
     /** Mirrors Assets::delete()'s traversal-safe unlink so a regenerate doesn't orphan the old file. */

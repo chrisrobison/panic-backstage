@@ -933,7 +933,7 @@ const HELP_CONTENT = {
     <h3>Toggling publish</h3>
     <p>Click <em>Publish Public Page</em> at the top of the event workspace to make it live, or <em>Hide Public Page</em> to take it offline. The same toggle exists as a checkbox in <a href="#help-details">Event details</a>.</p>
     <h3>Previewing</h3>
-    <p>Click <em>Public Page</em> in the event header to open the public page in a new tab. It is fetched anonymously from <code>/api/public/events/&lt;slug&gt;</code>; if the event is hidden the API returns an error.</p>
+    <p>Click <em>Public Page</em> in the event header to open the public page in a new tab. It is fetched anonymously from <code>/api/public/events/&lt;id&gt;</code> (old <code>&lt;slug&gt;</code> links still resolve too); if the event is hidden the API returns an error.</p>
   `,
 
   print: `
@@ -1176,7 +1176,7 @@ const HELP_CONTENT = {
     <h3>"This login link is invalid or has already been used"</h3>
     <p>Login links are single-use and expire after 24 hours. The most common cause of a "fresh" link appearing burned is a message previewer (iMessage, Slack, corporate URL scanners) silently visiting the link to render a preview — which used to consume the token. Backstage now shows a <em>Continue to your account</em> interstitial that only burns the token on a real click, so previewers should no longer be a problem; but if you've already followed an older-flow link, just request a new one from the login page.</p>
     <h3>Public page shows "Something went wrong"</h3>
-    <p>Either the event is hidden (toggle <em>Publish Public Page</em> on) or the slug is wrong. The public page only returns data for events with public visibility enabled.</p>
+    <p>Either the event is hidden (toggle <em>Publish Public Page</em> on) or the <code>id</code>/<code>slug</code> in the link doesn't match any event. The public page only returns data for events with public visibility enabled.</p>
     <h3>Upload failed</h3>
     <p>Check that the file is under the server's <code>upload_max_filesize</code> and is one of the accepted types (PNG, JPG, GIF, WEBP, PDF). The server enforces type by both extension and MIME via <code>finfo</code>.</p>
     <h3>Asset won't approve</h3>

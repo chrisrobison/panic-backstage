@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Make generated QR codes use the stable id-based public link
 - **Added** `events` — Add QR code generation for event public pages
 - **Fixed** `events` — Key public event page by stable id instead of slug
 - **Fixed** `scanner` — Show the EVT-N code on the scanner screen instead of the raw internal event id
