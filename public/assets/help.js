@@ -685,12 +685,15 @@ const HELP_CONTENT = {
       <li><strong>Band photo / Press photo</strong> — used for press kits and social.</li>
       <li><strong>Logo</strong> — band or sponsor mark.</li>
       <li><strong>Social square / Social story</strong> — sized for IG feed and IG/FB stories.</li>
+      <li><strong>QR code</strong> — auto-generated, links to the event's public page. See below.</li>
       <li><strong>Other</strong> — anything else.</li>
     </ul>
     <h3>Approval flow</h3>
     <p>Each asset has an approval status: <em>pending</em>, <em>approved</em>, or <em>rejected</em>. Promoters and admins click <em>Approve</em> or <em>Reject</em>. The dashboard's "Needs Flyer" counter watches the count of <em>approved</em> flyers per event.</p>
     <h3>Bands uploading their own assets</h3>
     <p>Bands with a backstage account and a band/artist invite on this event can upload their own press photos and stage plot PDFs without round-tripping through the booker.</p>
+    <h3>QR code</h3>
+    <p>Every public event automatically shows a scannable QR code in its own header (click <em>QR Code</em> next to <em>Public Page</em>) and directly on the public page itself, so a printed flyer or a phone held up at the door can hand off straight to the event listing. Click <em>Generate QR code</em> in this panel — or <em>Save to Assets</em> in the header's QR panel — to save it as a downloadable PNG asset for flyers and print. Regenerating replaces the existing QR asset rather than piling up duplicates.</p>
   `,
 
   invites: `
