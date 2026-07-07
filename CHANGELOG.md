@@ -11,6 +11,8 @@ a new empty [Unreleased] block above it.
 
 ## [Unreleased]
 - **Fixed** `events` — Stop silent field wipes on partial event-detail saves
+- **Fixed** `events` — Make generated QR codes use the stable id-based public link
+- **Added** `events` — Add QR code generation for event public pages
 - **Fixed** `events` — Key public event page by stable id instead of slug
 - **Fixed** `scanner` — Show the EVT-N code on the scanner screen instead of the raw internal event id
 - **Fixed** `sync` — Defer slug renames to a two-phase update to avoid ordering-dependent import failures

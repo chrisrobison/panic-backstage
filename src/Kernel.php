@@ -468,6 +468,10 @@ final class Kernel
             if ($child === 'assets' && ($segments[3] ?? '') === 'generate-flyer') {
                 return [Events\GenerateFlyer::class, ['eventId' => $eventId]];
             }
+            // Public-page QR code: GET/POST /events/{id}/assets/generate-qr
+            if ($child === 'assets' && ($segments[3] ?? '') === 'generate-qr') {
+                return [Events\GenerateQr::class, ['eventId' => $eventId]];
+            }
             return match ($child) {
                 'tasks'      => [Events\Tasks::class,    ['eventId' => $eventId, 'taskId'     => $childId]],
                 'blockers',
