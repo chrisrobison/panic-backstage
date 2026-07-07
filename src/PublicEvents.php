@@ -7,14 +7,24 @@ final class PublicEvents extends BaseEndpoint
 {
     public function handle(Request $request): Response
     {
-        $slug = $this->params['slug'] ?? $request->query('slug');
-        if (!$slug) {
+        // The path segment is the event id (current scheme — see
+        // Support::event_public_path()). Older links shared/printed/QR-coded
+        // before this change encoded the event's slug instead, so fall back
+        // to a slug lookup when the value isn't a bare id, keeping those
+        // links working indefinitely.
+        $idOrSlug = $this->params['idOrSlug'] ?? $request->query('id') ?? $request->query('slug');
+        if (!$idOrSlug) {
             return $this->notFound('Event not found');
         }
-        $event = $this->db->one(
-            'SELECT e.*, v.name venue_name, v.address, v.city, v.state FROM events e JOIN venues v ON v.id = e.venue_id WHERE e.slug = ? AND e.public_visibility = 1',
-            [$slug]
-        );
+        $event = ctype_digit((string) $idOrSlug)
+            ? $this->db->one(
+                'SELECT e.*, v.name venue_name, v.address, v.city, v.state FROM events e JOIN venues v ON v.id = e.venue_id WHERE e.id = ? AND e.public_visibility = 1',
+                [(int) $idOrSlug]
+            )
+            : $this->db->one(
+                'SELECT e.*, v.name venue_name, v.address, v.city, v.state FROM events e JOIN venues v ON v.id = e.venue_id WHERE e.slug = ? AND e.public_visibility = 1',
+                [(string) $idOrSlug]
+            );
         if (!$event) {
             return $this->notFound('Event unavailable');
         }

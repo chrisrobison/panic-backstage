@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use function Panic\event_public_path;
+
 /**
  * Public event syndication feeds (unauthenticated).
  *
@@ -356,7 +358,7 @@ final class Feed extends BaseEndpoint
 
     private function eventUrl(array $event): string
     {
-        return $this->appUrl() . '/event.html?slug=' . rawurlencode((string) $event['slug']);
+        return $this->appUrl() . '/' . event_public_path($event);
     }
 
     private function flyerUrl(array $event): string

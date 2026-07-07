@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use function Panic\event_public_path;
+
 /**
  * Shared event-query and card-rendering logic for "shows lineup" emails —
  * extracted from scripts/generate-weekly-lineup-email.php so both the CLI
@@ -256,7 +258,7 @@ final class EventEmailComposer
 
     private static function eventUrl(array $event): string
     {
-        return self::appUrl() . '/event.html?slug=' . rawurlencode((string) $event['slug']);
+        return self::appUrl() . '/' . event_public_path($event);
     }
 
     private static function flyerUrl(array $event): string
