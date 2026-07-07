@@ -6,9 +6,19 @@ $strippedBasePath = false;
 $basePath = rtrim((string) (getenv('APP_BASE_PATH') ?: env_value('APP_BASE_PATH')), '/');
 if ($basePath === '') {
     $parts = array_values(array_filter(explode('/', trim($path, '/')), 'strlen'));
-    $candidatePath = count($parts) > 1 ? '/' . implode('/', array_slice($parts, 1)) : '/';
-    if (($parts[0] ?? '') !== '' && ($candidatePath === '/' || str_starts_with($candidatePath, '/api/') || is_file(__DIR__ . $candidatePath))) {
-        $basePath = '/' . $parts[0];
+    $first = $parts[0] ?? '';
+    // A single path segment that is itself a real top-level file (e.g. a bare
+    // GET /index.html against a docroot with no mounted prefix — the normal
+    // shape for a fresh single-tenant install / CI, where APP_BASE_PATH is
+    // blank) can never be a tenant/base-path segment. Without this guard,
+    // count($parts) === 1 always forces $candidatePath to '/' below, which
+    // unconditionally matches the "bare mount point" branch and misfires a
+    // redirect to "/index.html/" instead of serving the file.
+    if ($first !== '' && !is_file(__DIR__ . '/' . $first)) {
+        $candidatePath = count($parts) > 1 ? '/' . implode('/', array_slice($parts, 1)) : '/';
+        if ($candidatePath === '/' || str_starts_with($candidatePath, '/api/') || is_file(__DIR__ . $candidatePath)) {
+            $basePath = '/' . $first;
+        }
     }
 }
 if ($basePath !== '') {

@@ -191,9 +191,7 @@ function runStatus(string $root, string $scope, ?string $dbArg): void
  */
 function applyMigrations(PDO $pdo, string $dir, bool $dryRun, bool $legacyInsert = false): void
 {
-    $hasLedger  = (bool)$pdo->query("SHOW TABLES LIKE 'schema_migrations'")->fetchAll();
-    $anyTable   = (bool)$pdo->query('SHOW TABLES')->fetchAll();
-    $isBootstrap = !$hasLedger && $anyTable;
+    $hasLedger = (bool)$pdo->query("SHOW TABLES LIKE 'schema_migrations'")->fetchAll();
 
     if (!$hasLedger && !$dryRun) {
         $pdo->exec(
@@ -214,19 +212,20 @@ function applyMigrations(PDO $pdo, string $dir, bool $dryRun, bool $legacyInsert
         return;
     }
 
-    if ($isBootstrap) {
-        echo "  Bootstrap mode: marking all files applied without executing.\n";
-        foreach ($files as $file) {
-            $filename = basename($file);
-            if (!$dryRun) {
-                $pdo->prepare("INSERT IGNORE INTO schema_migrations (filename) VALUES (?)")
-                    ->execute([$filename]);
-            }
-            echo "    [bootstrap] {$filename}\n";
-        }
-        return;
-    }
-
+    // No "bootstrap: mark applied without executing" shortcut here. That used
+    // to fire for any DB with tables but no ledger — which is also exactly
+    // the state right after a fresh `mysql < schema.sql` — on the assumption
+    // schema.sql is always fully current with zero pending migrations. That
+    // assumption silently breaks the moment a migration is added after a
+    // squash without schema.sql being regenerated (true of 050-052 as of
+    // this fix: schema.sql is only current through 049), because it marks
+    // real, unrun migrations "applied" — a fresh install or newly
+    // provisioned tenant then quietly ends up missing db_history,
+    // token_version, rate_limits, etc. Every migration in this folder is
+    // required to be idempotent (see migrations/README.md: guarded CREATE
+    // TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS), so just running all
+    // of them — including ones already reflected in schema.sql, which
+    // no-op — is both safe and correct in every case the shortcut covered.
     $appliedRows = $pdo->query('SELECT filename FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
     $applied     = array_flip($appliedRows);
 

@@ -3,7 +3,7 @@
  * Tests for CredentialEncryption service.
  *
  * Run with: php tests/credential_encryption_test.php
- * Or: php run-tests.sh (which discovers and runs all test files)
+ * Or: ./tests/run-php-tests.sh (discovers and runs every tests/*_test.php)
  */
 
 declare(strict_types=1);

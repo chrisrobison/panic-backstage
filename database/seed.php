@@ -16,6 +16,13 @@ try {
     $rootPdo = new PDO("mysql:host=$host;port=$port;charset=utf8mb4", $user, $password, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     ]);
+    // Create the target database if this is a true fresh install (matches
+    // the "mysql -u <user> -p <dbname> < schema.sql" usage documented at the
+    // top of schema.sql), then select it — the connection above has no
+    // dbname, so without this every statement in schema.sql fails with
+    // "No database selected".
+    $rootPdo->exec("CREATE DATABASE IF NOT EXISTS `$dbName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    $rootPdo->exec("USE `$dbName`");
     $rootPdo->exec(file_get_contents($root . '/database/schema.sql'));
 } catch (PDOException $error) {
     fwrite(STDERR, "Could not connect to MySQL with the configured credentials. Update .env and run again.\n");

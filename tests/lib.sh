@@ -27,21 +27,41 @@ ROOT_DIR="$(dirname "$TESTS_DIR")"
 STATE_FILE="$TESTS_DIR/.state"
 MAIL_DIR="$ROOT_DIR/storage/mail"
 
+# Load a KEY=VALUE file into the environment *without* sourcing it as a
+# script. .env files in this repo hold human-authored values like
+# `VENUE_MANAGER_NAME=Tom Watson` — dot-sourcing that directly makes bash
+# parse "Watson" as a command to run. This mirrors Env::load()'s own
+# semantics (trim, skip blank/comment lines, strip a matching pair of outer
+# quotes) instead of bash's assignment syntax.
+_load_kv_file() {
+    local file="$1" line key val
+    [ -f "$file" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line#"${line%%[![:space:]]*}"}"   # ltrim
+        [ -z "$line" ] && continue
+        case "$line" in
+            '#'*) continue ;;
+        esac
+        case "$line" in
+            *=*) ;;
+            *) continue ;;
+        esac
+        key="${line%%=*}"
+        val="${line#*=}"
+        # Trim a matching pair of surrounding quotes, same as Env::load().
+        case "$val" in
+            \"*\") val="${val#\"}"; val="${val%\"}" ;;
+            \'*\') val="${val#\'}"; val="${val%\'}" ;;
+        esac
+        export "$key=$val"
+    done < "$file"
+}
+
 # Load .env (best-effort; missing file is fine if TEST_BASE_URL is supplied).
-if [ -f "$ROOT_DIR/.env" ]; then
-    set -a
-    # shellcheck disable=SC1091
-    . "$ROOT_DIR/.env"
-    set +a
-fi
+_load_kv_file "$ROOT_DIR/.env"
 
 # Load prior test state (tokens, picked email, …) if present.
-if [ -f "$STATE_FILE" ]; then
-    set -a
-    # shellcheck disable=SC1090
-    . "$STATE_FILE"
-    set +a
-fi
+_load_kv_file "$STATE_FILE"
 
 BASE_URL="${TEST_BASE_URL:-${APP_URL:-http://localhost}}"
 BASE_URL="${BASE_URL%/}"

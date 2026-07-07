@@ -758,11 +758,18 @@ php scripts/endpoint-smoke.php http://localhost:8000
 
 ### Test suites
 
-Two zero-dependency suites (no npm, no build):
+Three zero-dependency suites (no npm, no build):
 
 ```bash
-# API smoke tests (curl + php) — run the numbered scripts in order:
-for t in tests/[0-9]*.sh; do bash "$t" || break; done
+# Hermetic PHP unit tests (no DB, no server) — pure logic, JWT claims, encryption, parsing:
+./tests/run-php-tests.sh
+#   RUN_DB_TESTS=1 ./tests/run-php-tests.sh   also runs the MySQL-backed ones
+#                                              (point .env at a throwaway DB first)
+
+# API integration tests (curl + php) against a running app + seeded DB:
+./run-tests.sh
+#   TEST_BASE_URL=... TEST_EMAIL=... ./run-tests.sh   to target something other
+#                                                      than the local dev install
 
 # UI tests — headless Chromium over the DevTools Protocol against the live DOM:
 node tests/ui/run.mjs
@@ -773,6 +780,16 @@ magic-link token, and asserts client-side behaviour (panel reveals, the
 ticketing mode toggle, the Doors/Show/End autofill, …) without persisting
 changes. It shares its browser/CDP/login machinery with
 `scripts/screenshots.mjs`. See [`tests/ui/README.md`](tests/ui/README.md).
+
+### CI
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull
+request: a `php -l` sweep of every source file, the hermetic PHP suite, and
+the API integration suite against a MariaDB service container seeded fresh
+each run (`php database/seed.php && php scripts/migrate.php`, then
+`admin@venue.local` / `changeme` is the account the integration tests sign in
+as). UI tests are not wired into CI yet — they need a Chromium binary and a
+seeded event id; run them locally before shipping UI changes.
 
 ## Ticketing And Payments
 
