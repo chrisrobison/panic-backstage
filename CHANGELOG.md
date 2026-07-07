@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Key public event page by stable id instead of slug
 - **Fixed** `scanner` — Show the EVT-N code on the scanner screen instead of the raw internal event id
 - **Fixed** `sync` — Defer slug renames to a two-phase update to avoid ordering-dependent import failures
 - **Added** `campaigns` — Add bulk add, CSV import, segment lists, and contact-side list view to mailing lists

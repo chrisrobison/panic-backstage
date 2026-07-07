@@ -889,9 +889,13 @@ class TemplatePicker extends PanicElement {
 class PublicEventPage extends PanicElement {
   async connect() {
     this.setLoading('Loading public event');
-    const slug = new URLSearchParams(location.search).get('slug');
+    const params = new URLSearchParams(location.search);
+    // Current links use ?id=<event id>; ?slug=<slug> is kept working for
+    // links minted before this page switched off slugs (which changed
+    // whenever an event's title/date was edited, breaking shared links).
+    const idOrSlug = params.get('id') || params.get('slug');
     try {
-      const data = await api(`/public/events/${encodeURIComponent(slug || '')}`);
+      const data = await api(`/public/events/${encodeURIComponent(idOrSlug || '')}`);
       const event = data.event;
       this.innerHTML = `<main class="public-container"><article class="public-event">${data.flyer ? `<img class="public-flyer" src="${esc(assetUrl(data.flyer.file_path))}" alt="">` : `<div class="public-flyer flyer">${esc(event.title)}</div>`}<div class="public-copy"><p class="eyebrow">${esc(eventDateRangeLabel(event))} - ${esc(event.venue_name)}</p><h1>${esc(event.title)}</h1><p><strong>Doors</strong> ${esc(timeLabel(event.doors_time))} - <strong>Show</strong> ${esc(timeLabel(event.show_time))}</p><p>${esc(event.age_restriction || 'All ages unless noted')} - ${Number(event.ticket_price) > 0 ? money(event.ticket_price) : 'Free / door'}</p>${event.ticket_url ? `<a class="button public-tickets-link" href="${esc(event.ticket_url)}">Tickets</a>` : ''}<pb-ticket-purchase event-id="${esc(String(event.id))}"></pb-ticket-purchase>${event.description_public ? `<div class="event-description">${mdToHtml(event.description_public)}</div>` : ''}<h2>Lineup</h2><ul class="plain-list">${data.lineup.map((item) => `<li>${esc(item.display_name)} ${item.set_time ? `<span>${esc(timeLabel(item.set_time))}</span>` : ''}</li>`).join('')}</ul><p class="muted">${esc(event.address)}, ${esc(event.city)}, ${esc(event.state)}</p></div></article></main>`;
     } catch (error) {
