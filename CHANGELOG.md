@@ -14,6 +14,8 @@ a new empty [Unreleased] block above it.
 - **Fixed** `events` — Make generated QR codes use the stable id-based public link
 - **Added** `events` — Add QR code generation for event public pages
 - **Fixed** `events` — Key public event page by stable id instead of slug
+- **Documentation** `events` — Document multi-day and recurring events
+- **Added** `events` — Support recurring events via materialized series
 - **Fixed** `scanner` — Show the EVT-N code on the scanner screen instead of the raw internal event id
 - **Fixed** `sync` — Defer slug renames to a two-phase update to avoid ordering-dependent import failures
 - **Added** `campaigns` — Add bulk add, CSV import, segment lists, and contact-side list view to mailing lists

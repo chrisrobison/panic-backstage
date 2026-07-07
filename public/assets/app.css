@@ -1028,6 +1028,34 @@ pb-event-summary, pb-event-readiness, pb-event-next-action { display: contents; 
   gap: 10px;
 }
 .form-section-note { font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; color: #a8aeb8; }
+/* Recurring events — <pb-recurrence-fields> (event-wizard.js Step 1 and the
+   Event Details "Recurrence" panel in event-workspace.js). Spans the full
+   width of whatever .grid-form it's dropped into; lays its own controls out
+   in a nested grid rather than participating in the parent's columns. */
+pb-recurrence-fields { display: block; grid-column: 1 / -1; }
+pb-recurrence-fields .recurrence-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+pb-recurrence-fields .recurrence-body > label,
+pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
+.recurrence-preview {
+  grid-column: 1 / -1;
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 13px;
+}
+.recurrence-preview li {
+  background: var(--chip-bg, rgba(127, 127, 127, 0.12));
+  border-radius: 999px;
+  padding: 2px 10px;
+}
 .info-note {
   padding: 10px 14px;
   background: #f0f6ff;

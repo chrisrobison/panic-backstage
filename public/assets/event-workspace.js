@@ -7,6 +7,7 @@ import './paint-splat.js';
 import './event-vendors.js';
 import './event-execution.js';
 import './event-closeout.js';
+import './recurrence.js'; // registers <pb-recurrence-fields>, used by EventRecurrencePanel below
 
 function factCell(label, value) {
   return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
@@ -299,6 +300,7 @@ class EventWorkspace extends PanicElement {
       <article class="panel"><div class="section-head padded"><h2>Internal Notes</h2></div><div class="notes">${esc(event.description_internal || 'No internal notes yet.')}</div></article>
     </section>
     <pb-event-details-form id="details"></pb-event-details-form>
+    <pb-event-recurrence></pb-event-recurrence>
     <pb-asset-manager id="assets"></pb-asset-manager>
     <pb-task-list id="tasks"></pb-task-list>
     ${isPrivate ? '' : '<pb-lineup-editor id="lineup"></pb-lineup-editor>'}
@@ -319,6 +321,7 @@ class EventWorkspace extends PanicElement {
     $('pb-event-next-action', this).data = data;
     $('pb-event-readiness', this).data = data;
     $('pb-event-details-form', this).data = data;
+    $('pb-event-recurrence', this).data = data;
     $('pb-task-list', this).data = data;
     if ($('pb-lineup-editor', this)) $('pb-lineup-editor', this).data = data;
     $('pb-run-sheet', this).data = data;
@@ -577,6 +580,133 @@ class EventDetailsForm extends HTMLElement {
   }
 }
 
+// ── Recurrence panel (Event Details tab) ──────────────────────────────────────
+// Two states: not yet part of a series — embeds <pb-recurrence-fields> plus a
+// "Create recurring events" action that POSTs /events/{id}/series — or already
+// part of one — a read-only summary + sibling list + "Remove from series".
+// Occurrences are fully independent once created; this panel never edits
+// siblings, only lists them.
+class EventRecurrencePanel extends PanicElement {
+  connect() {
+    this._eventId = null;
+    this._series = undefined; // undefined = not loaded yet
+    this._siblings = [];
+  }
+
+  set data(data) {
+    const event = data.event;
+    this._canEdit = can(data, 'edit_event');
+    this._anchorDate = event.date;
+    const isNewEvent = this._eventId !== event.id;
+    this._eventId = event.id;
+    if (isNewEvent) {
+      this._series = undefined;
+      this.load();
+    } else if (this._series !== undefined) {
+      this.render();
+    }
+  }
+
+  async load() {
+    try {
+      const res = await api(`/events/${this._eventId}/series`);
+      this._series = res.series || null;
+      this._siblings = res.events || [];
+    } catch (_) {
+      this._series = null;
+      this._siblings = [];
+    }
+    this.render();
+  }
+
+  render() {
+    if (this._series === undefined) return; // still loading — nothing to show yet
+    if (!this._series && !this._canEdit) { this.innerHTML = ''; return; }
+
+    if (this._series) {
+      this.innerHTML = `<section class="panel">
+        <div class="section-head padded"><h2>Recurrence ${helpLink('recurring-events', 'Recurrence')}</h2></div>
+        <div class="padded">
+          <p>Part of a series — <strong>${esc(this._series.description || 'Recurring')}</strong> (${this._siblings.length} events).</p>
+          <ul class="recurrence-siblings">
+            ${this._siblings.map((sibling) => {
+              const isThis = Number(sibling.id) === Number(this._eventId);
+              const dateLabel = esc(shortDate(new Date(`${sibling.date}T12:00:00`)));
+              return `<li>${isThis ? dateLabel : `<a href="#event-${esc(String(sibling.id))}">${dateLabel}</a>`} ${badge(sibling.status)}${isThis ? ' <span class="muted small">(this event)</span>' : ''}</li>`;
+            }).join('')}
+          </ul>
+          ${this._canEdit ? '<button type="button" class="secondary" data-remove-series>Remove this event from the series</button>' : ''}
+        </div>
+      </section>`;
+      $('[data-remove-series]', this)?.addEventListener('click', () => this.removeFromSeries());
+      return;
+    }
+
+    if (!this._canEdit) { this.innerHTML = ''; return; }
+
+    this.innerHTML = `<section class="panel">
+      <div class="section-head padded"><h2>Recurrence ${helpLink('recurring-events', 'Recurrence')}</h2></div>
+      <div class="grid-form padded">
+        <pb-recurrence-fields></pb-recurrence-fields>
+        <button type="button" class="wide secondary" data-create-series disabled>Create recurring events</button>
+      </div>
+    </section>`;
+
+    const fields = $('pb-recurrence-fields', this);
+    fields.anchorDate = this._anchorDate;
+    const createBtn = $('[data-create-series]', this);
+    let current = null;
+    fields.addEventListener('change', (event) => {
+      current = event.detail;
+      createBtn.disabled = !current;
+      createBtn.textContent = current
+        ? `Create ${current.dates.length} recurring event${current.dates.length === 1 ? '' : 's'}`
+        : 'Create recurring events';
+    });
+    createBtn.addEventListener('click', () => this.createSeries(current, createBtn));
+  }
+
+  async createSeries(value, button) {
+    if (!value) return;
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Creating…';
+    try {
+      const res = await api(`/events/${this._eventId}/series`, {
+        method: 'POST',
+        body: JSON.stringify({
+          pattern: value.pattern,
+          description: value.description,
+          end_type: value.pattern.endType,
+          end_date: value.pattern.endDate || null,
+          occurrence_count: value.pattern.occurrenceCount || null,
+          dates: value.dates,
+        }),
+      });
+      publish('toast.show', { message: `Created ${res.created_event_ids.length} recurring events.`, tone: 'success' });
+      this._series = undefined;
+      await this.load();
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Could not create the series.', tone: 'error' });
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
+  }
+
+  async removeFromSeries() {
+    if (!confirm('Remove this event from its recurring series? The other events are not affected.')) return;
+    try {
+      await api(`/events/${this._eventId}/series`, { method: 'DELETE' });
+      publish('toast.show', { message: 'Removed from series.', tone: 'success' });
+      this._series = undefined;
+      await this.load();
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Could not remove from series.', tone: 'error' });
+    }
+  }
+}
+
+
 // ── Portal link panel ─────────────────────────────────────────────────────────
 // Generates and lists time-limited read-only portal links for promoters/clients.
 // Staff-only — the panel is hidden when manage_contracts capability is absent.
@@ -782,6 +912,7 @@ customElements.define('pb-event-summary', EventSummary);
 customElements.define('pb-event-readiness', EventReadiness);
 customElements.define('pb-event-next-action', EventNextAction);
 customElements.define('pb-event-details-form', EventDetailsForm);
+customElements.define('pb-event-recurrence', EventRecurrencePanel);
 customElements.define('pb-portal-panel', PortalPanel);
 customElements.define('pb-qr-panel', QrPanel);
 

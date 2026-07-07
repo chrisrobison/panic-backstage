@@ -472,6 +472,10 @@ final class Kernel
             if ($child === 'assets' && ($segments[3] ?? '') === 'generate-qr') {
                 return [Events\GenerateQr::class, ['eventId' => $eventId]];
             }
+            // Recurring events: GET/POST/DELETE /events/{id}/series
+            if ($child === 'series') {
+                return [Events\Series::class, ['eventId' => $eventId]];
+            }
             return match ($child) {
                 'tasks'      => [Events\Tasks::class,    ['eventId' => $eventId, 'taskId'     => $childId]],
                 'blockers',
