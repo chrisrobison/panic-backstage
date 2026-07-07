@@ -55,3 +55,9 @@ $seeded = Panic\seed_demo_data($pdo, $root, [
 ]);
 
 echo "Seed complete. Login: {$seeded['admin_email']} / {$seeded['admin_password']}\n";
+if (!empty($seeded['primary_event_id'])) {
+    // Machine-parseable line (also handy to eyeball): a real, richly-populated
+    // event id for anything that needs one — e.g. `UI_EVENT_ID=... node
+    // tests/ui/run.mjs`. See tests/ui/README.md.
+    echo "UI_EVENT_ID={$seeded['primary_event_id']}\n";
+}

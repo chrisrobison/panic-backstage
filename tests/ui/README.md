@@ -30,7 +30,11 @@ The runner:
 
 Tests that need a specific event call `page.skip(...)` when `UI_EVENT_ID`
 doesn't exist or lacks the relevant feature, so the suite degrades gracefully
-on an unfamiliar database.
+on an unfamiliar database. The default `641027` is a real event in the
+long-lived dev DB; against a freshly seeded one, use the id
+`php database/seed.php` prints as `UI_EVENT_ID=<id>` (the "Local Band
+Showcase" demo event — flyer, tasks, blockers, run-of-show already populated).
+This is how CI (`.github/workflows/ci.yml`) does it.
 
 ## Writing a test
 

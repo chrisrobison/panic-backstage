@@ -160,6 +160,26 @@ function seed_demo_data(\PDO $pdo, string $root, array $opts = []): array
         $staffingStmt->execute([$eventIds[1], $shift[0], $shift[1], $shift[2], $shift[3], $shift[4], $shift[5]]);
     }
 
+    // A handful of CRM contacts so the Contacts page (KPIs, table, search) has
+    // something real to render on a fresh install instead of its empty state.
+    $contacts = [
+        ['Jordan',  'Levy',    'jordan.levy@demo.local',  '415-555-0201', 3, 145.00, 1],
+        ['Avery',   'Levinson','avery.levinson@demo.local', '415-555-0202', 1, 40.00,  0],
+        ['Morgan',  'Cruz',    'morgan.cruz@demo.local',  '415-555-0203', 5, 260.00, 1],
+        ['Sam',     'Iverson', null,                       null,           0, 0.00,   0],
+    ];
+    $contactStmt = $pdo->prepare(
+        'INSERT INTO contacts (source, first_name, last_name, email, phone, tickets_count, usd_spend, marketing_opted_in, opt_in_date, last_interaction)
+         VALUES ("manual", ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    foreach ($contacts as $c) {
+        $contactStmt->execute([
+            $c[0], $c[1], $c[2], $c[3], $c[4], $c[5], $c[6],
+            $c[6] ? $addDays(-30) : null,
+            $c[4] > 0 ? $addDays(-7) : null,
+        ]);
+    }
+
     // Contract clause library + starter templates (idempotent, venue-agnostic).
     require_once $root . '/database/seed_contracts.php';
     seed_contract_library($pdo);
@@ -168,5 +188,11 @@ function seed_demo_data(\PDO $pdo, string $root, array $opts = []): array
         'admin_email'    => $adminEmail,
         'admin_password' => $adminPassword,
         'venue_id'       => $venueId,
+        'event_ids'      => $eventIds,
+        // "Local Band Showcase" — the most fully-populated demo event (flyer,
+        // tasks, blockers, run-of-show, activity log). Good default fixture
+        // for anything that needs a real, non-trivial event id (e.g.
+        // tests/ui's UI_EVENT_ID).
+        'primary_event_id' => $eventIds[1] ?? null,
     ];
 }

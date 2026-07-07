@@ -784,12 +784,16 @@ changes. It shares its browser/CDP/login machinery with
 ### CI
 
 `.github/workflows/ci.yml` runs on every push to `main` and every pull
-request: a `php -l` sweep of every source file, the hermetic PHP suite, and
-the API integration suite against a MariaDB service container seeded fresh
-each run (`php database/seed.php && php scripts/migrate.php`, then
-`admin@venue.local` / `changeme` is the account the integration tests sign in
-as). UI tests are not wired into CI yet — they need a Chromium binary and a
-seeded event id; run them locally before shipping UI changes.
+request, four jobs: a `php -l` sweep of every source file; the hermetic PHP
+suite; the API integration suite; and the headless-Chromium UI suite — the
+latter two each against their own MariaDB service container, seeded fresh
+every run (`php database/seed.php && php scripts/migrate.php`,
+`admin@venue.local` / `changeme`). `seed_demo_data()` returns
+`primary_event_id` (the richly-populated "Local Band Showcase" demo event —
+`database/seed.php` also prints it as `UI_EVENT_ID=<id>`), which the UI job
+captures and passes to `tests/ui/run.mjs` so event-scoped tests run for real
+instead of skipping. ubuntu-latest ships Chrome preinstalled; the job fails
+fast with a clear message if a future runner image ever drops it.
 
 ## Ticketing And Payments
 
