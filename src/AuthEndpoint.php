@@ -641,12 +641,26 @@ final class AuthEndpoint extends BaseEndpoint
 
     private function passkeyLoginBegin(Request $request): Response
     {
+        $email = trim(strtolower((string) $request->body('email', '')));
+
+        // Throttle: unauthenticated and previously unlimited — every call
+        // writes a webauthn_challenges row, and supplying an email discloses
+        // via allowCredentials whether that account has passkeys registered.
+        // Keyed on IP always, and additionally on email when one is
+        // supplied, so neither a single source nor a single target account
+        // can exceed the cap alone.
+        $ip = Request::clientIp() ?? 'unknown';
+        if (RateLimiter::tooMany($this->db, 'passkey-login-begin:ip:' . $ip, 20, 900)
+            || ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)
+                && RateLimiter::tooMany($this->db, 'passkey-login-begin:email:' . $email, 8, 900))) {
+            return Response::json(['error' => 'Too many attempts. Please try again later.'], 429);
+        }
+
         $wc        = new Webauthn();
         $challenge = $wc->generateChallenge();
 
         // If an email is provided, limit allowCredentials to credentials for that account
         $allowCredentials = [];
-        $email            = trim(strtolower((string) $request->body('email', '')));
         if ($email && filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $user = $this->db->one('SELECT id FROM users WHERE email = ? LIMIT 1', [$email]);
             if ($user) {
@@ -684,6 +698,17 @@ final class AuthEndpoint extends BaseEndpoint
 
         if (!is_array($response) || $credId === '') {
             return Response::json(['error' => 'Credential data is required'], 422);
+        }
+
+        // Throttle: previously unlimited, so assertions could be forged/
+        // replayed against a given credential at whatever rate the client
+        // could push requests. Keyed on both IP and credential id so neither
+        // a single source nor a single target credential can exceed the cap
+        // alone.
+        $ip = Request::clientIp() ?? 'unknown';
+        if (RateLimiter::tooMany($this->db, 'passkey-login-complete:ip:' . $ip, 20, 900)
+            || RateLimiter::tooMany($this->db, 'passkey-login-complete:cred:' . $credId, 8, 900)) {
+            return Response::json(['error' => 'Too many attempts. Please try again later.'], 429);
         }
 
         // Extract and look up the challenge
