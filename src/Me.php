@@ -9,6 +9,10 @@ final class Me extends BaseEndpoint
     {
         $user = $this->auth->user();
         if ($user) {
+            // Internal-only claim used for the token revocation check
+            // (Kernel::handle()) — not meant for client consumption.
+            unset($user['token_version']);
+
             // Drop the one-time welcome message into this user's inbox on first
             // load. Idempotent + best-effort, so it covers every account-creation
             // path without breaking app load if messaging isn't migrated yet.

@@ -97,6 +97,16 @@ final class AuthEndpoint extends BaseEndpoint
             return Response::json(['error' => 'Valid email is required'], 422);
         }
 
+        // Throttle: unlimited requests would let an attacker mailbomb any
+        // address (each hit sends real mail) or hammer verify-status/verify
+        // guessing at scale. Keyed on both IP and email so neither a single
+        // source nor a single target can exceed the cap alone.
+        $ip = Request::clientIp() ?? 'unknown';
+        if (RateLimiter::tooMany($this->db, 'magic-link:ip:' . $ip, 10, 900)
+            || RateLimiter::tooMany($this->db, 'magic-link:email:' . $email, 4, 900)) {
+            return Response::json(['error' => 'Too many requests. Please try again later.'], 429);
+        }
+
         // Only mint + send if the address belongs to an existing user OR has
         // an unused, unexpired event_invites row. For unknown emails we
         // return `ok: true` anyway so the client UI doesn't reveal which
@@ -463,6 +473,16 @@ final class AuthEndpoint extends BaseEndpoint
             return Response::json(['error' => 'Email and password are required'], 422);
         }
 
+        // Throttle: previously unlimited, so a password could be brute-forced
+        // at whatever rate the client could push requests. Keyed on both IP
+        // and email so neither a single source nor a single target account
+        // can exceed the cap alone.
+        $ip = Request::clientIp() ?? 'unknown';
+        if (RateLimiter::tooMany($this->db, 'login:ip:' . $ip, 20, 900)
+            || RateLimiter::tooMany($this->db, 'login:email:' . $email, 8, 900)) {
+            return Response::json(['error' => 'Too many attempts. Please try again later.'], 429);
+        }
+
         // Primary-email login is unchanged: resolveUserByEmail tries the exact
         // users.email match FIRST. A VERIFIED alias resolves as an added fallback.
         $user = Identity::resolveUserByEmail($this->db, $email);
@@ -494,8 +514,15 @@ final class AuthEndpoint extends BaseEndpoint
             return Response::json(['error' => 'Current password is incorrect'], 401);
         }
 
+        // Bumping token_version invalidates every access token issued before
+        // this point (see Kernel::handle()'s revocation check) — a stolen
+        // bearer token stops working the moment the real owner changes their
+        // password instead of staying valid for the rest of its 90-day life.
         $hash = password_hash($newPassword, PASSWORD_BCRYPT);
-        $this->db->run('UPDATE users SET password_hash = ? WHERE id = ?', [$hash, $currentUser['id']]);
+        $this->db->run(
+            'UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?',
+            [$hash, $currentUser['id']]
+        );
 
         return $this->ok(['ok' => true]);
     }
@@ -898,7 +925,7 @@ final class AuthEndpoint extends BaseEndpoint
         $hash = $this->auth->hashToken($token);
         $row  = $this->db->one(
             'SELECT rt.id, rt.user_id,
-                    u.name, u.email, u.role
+                    u.name, u.email, u.role, u.token_version
              FROM   refresh_tokens rt
              JOIN   users u ON u.id = rt.user_id
              WHERE  rt.token_hash = ?
@@ -918,10 +945,11 @@ final class AuthEndpoint extends BaseEndpoint
         );
 
         $user = [
-            'id'    => (int) $row['user_id'],
-            'name'  => $row['name'],
-            'email' => $row['email'],
-            'role'  => $row['role'],
+            'id'            => (int) $row['user_id'],
+            'name'          => $row['name'],
+            'email'         => $row['email'],
+            'role'          => $row['role'],
+            'token_version' => (int) $row['token_version'],
         ];
 
         return $this->ok($this->issueTokenPair($user));

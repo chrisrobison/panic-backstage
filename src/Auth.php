@@ -41,12 +41,23 @@ final class Auth
         $payload = $this->validateAccessToken(substr($header, 7));
         if ($payload !== null) {
             $this->currentUser = [
-                'id'    => (int) ($payload['sub'] ?? 0),
-                'name'  => (string) ($payload['name'] ?? ''),
-                'email' => (string) ($payload['email'] ?? ''),
-                'role'  => (string) ($payload['role'] ?? 'viewer'),
+                'id'            => (int) ($payload['sub'] ?? 0),
+                'name'          => (string) ($payload['name'] ?? ''),
+                'email'         => (string) ($payload['email'] ?? ''),
+                'role'          => (string) ($payload['role'] ?? 'viewer'),
+                'token_version' => (int) ($payload['tv'] ?? 0),
             ];
         }
+    }
+
+    /**
+     * Discard the populated user, e.g. because Kernel found the token's
+     * embedded token_version no longer matches the current DB value
+     * (revoked — see the `tv` claim comment on issueAccessToken()).
+     */
+    public function clearUser(): void
+    {
+        $this->currentUser = null;
     }
 
     /**
@@ -74,7 +85,15 @@ final class Auth
     // Token helpers
     // -------------------------------------------------------------------------
 
-    /** Issue a signed HS256 access token valid for 90 days. */
+    /**
+     * Issue a signed HS256 access token valid for 90 days.
+     *
+     * Embeds the user's current token_version as the `tv` claim so the token
+     * can be revoked before its natural expiry: Kernel::handle() re-checks
+     * `tv` against users.token_version on every request and drops the
+     * session on a mismatch. Bump token_version (e.g. on password change) to
+     * invalidate every access token issued before that point.
+     */
     public function issueAccessToken(array $user): string
     {
         return $this->buildJwt([
@@ -82,6 +101,7 @@ final class Auth
             'name'  => $user['name'],
             'email' => $user['email'],
             'role'  => $user['role'],
+            'tv'    => (int) ($user['token_version'] ?? 0),
             'iat'   => time(),
             'exp'   => time() + (90 * 24 * 3600),  // 90 days
         ]);

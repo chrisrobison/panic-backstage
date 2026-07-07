@@ -73,8 +73,14 @@ if ($superDbName !== '') {
 // No SUPER_DB_NAME → connect using DB_* env vars exactly as before.
 // Also try clients/{hostname}/.env as an optional overlay so self-hosted
 // installs can keep base config in .env and override per-domain values below.
+// Strict hostname allowlist (lowercase letters, digits, dot, hyphen) before
+// the value is concatenated into a filesystem path — Host is attacker-
+// controlled, and TenantContext::host() only lowercases/strips the port, so
+// without this check a crafted Host (e.g. containing "/" or "..") could walk
+// Env::load() outside clients/ and merge an arbitrary file's contents into
+// the process environment.
 $_stHost = Panic\Tenant\TenantContext::host();
-if ($_stHost !== '') {
+if ($_stHost !== '' && preg_match('/^[a-z0-9.-]+$/', $_stHost) === 1) {
     Panic\Env::load($root . '/clients/' . $_stHost . '/.env');
 }
 unset($_stHost);

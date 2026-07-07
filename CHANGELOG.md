@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `security` — Close six auth/webhook holes flagged in review
 - **Added** `admin` — Audit-trigger DB history with undo/redo UI, docs
 - **Documentation** — Document event QR codes and the Campaigns/Mailing Lists feature
 - **Fixed** `events` — Stop silent field wipes on partial event-detail saves

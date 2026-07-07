@@ -47,8 +47,8 @@ final class PosWebhook extends BaseEndpoint
             ?: getenv('SQUARE_WEBHOOK_SIGNATURE_KEY')
             ?: '');
 
-        if ($secret !== '' && !$this->verifySquareSignature($rawBody, $signature, $secret)) {
-            error_log('PosWebhook: invalid HMAC signature — ignoring delivery');
+        if ($secret === '' || !$this->verifySquareSignature($rawBody, $signature, $secret)) {
+            error_log('PosWebhook: invalid or unconfigured HMAC signature — ignoring delivery');
             return Response::json(['error' => 'Invalid signature'], 400);
         }
 

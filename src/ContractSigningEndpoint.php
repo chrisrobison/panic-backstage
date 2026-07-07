@@ -565,12 +565,9 @@ final class ContractSigningEndpoint extends BaseEndpoint
         return 'storage/contracts/' . $contractId . '/signatures/' . $filename;
     }
 
+    /** Best-effort signer IP for the e-signature audit trail. See Request::clientIp(). */
     private function clientIp(): ?string
     {
-        $xff = (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
-        if ($xff !== '') {
-            return substr(trim(explode(',', $xff)[0]), 0, 45);
-        }
-        return isset($_SERVER['REMOTE_ADDR']) ? substr((string) $_SERVER['REMOTE_ADDR'], 0, 45) : null;
+        return Request::clientIp();
     }
 }

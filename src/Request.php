@@ -44,4 +44,23 @@ final class Request
         return null;
     }
     public function isSafeMethod(): bool { return in_array($this->method, ['GET', 'HEAD', 'OPTIONS'], true); }
+
+    /**
+     * Best-effort caller IP for rate limiting / audit logging.
+     *
+     * X-Forwarded-For is attacker-controlled unless a reverse proxy in front
+     * of us overwrites it, so — same convention as TenantContext::host() —
+     * it's only honoured when TRUST_PROXY=true. Otherwise REMOTE_ADDR (the
+     * actual TCP peer) is authoritative.
+     */
+    public static function clientIp(): ?string
+    {
+        if ((string) (getenv('TRUST_PROXY') ?: '') === 'true') {
+            $xff = (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
+            if ($xff !== '') {
+                return substr(trim(explode(',', $xff)[0]), 0, 45);
+            }
+        }
+        return isset($_SERVER['REMOTE_ADDR']) ? substr((string) $_SERVER['REMOTE_ADDR'], 0, 45) : null;
+    }
 }

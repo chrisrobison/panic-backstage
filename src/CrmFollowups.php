@@ -23,7 +23,7 @@ final class CrmFollowups extends BaseEndpoint
         $cronSecret = getenv('CRON_SECRET') ?: '';
         $authHeader = $request->header('X-Cron-Secret') ?? '';
 
-        if (!$this->isVenueAdmin() && ($cronSecret === '' || $authHeader !== $cronSecret)) {
+        if (!$this->isVenueAdmin() && ($cronSecret === '' || !hash_equals($cronSecret, $authHeader))) {
             return $this->forbidden('venue_admin role or cron secret required');
         }
 

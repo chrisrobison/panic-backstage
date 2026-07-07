@@ -30,6 +30,19 @@ final class Kernel
         // Populate $auth->user() from Bearer token if present
         $this->auth->authenticate($request);
 
+        // Revocation check: a stolen or otherwise-compromised bearer token
+        // must not remain usable for its full 90-day life. Every access
+        // token embeds the token_version that was current at issuance time;
+        // if it no longer matches users.token_version (bumped on password
+        // change — see AuthEndpoint::setPassword) the token is dead even
+        // though it hasn't expired yet.
+        if ($user = $this->auth->user()) {
+            $row = $this->db->one('SELECT token_version FROM users WHERE id = ?', [$user['id']]);
+            if ($row === null || (int) $row['token_version'] !== (int) ($user['token_version'] ?? 0)) {
+                $this->auth->clearUser();
+            }
+        }
+
         // Attribute subsequent writes in db_history to the authenticated user
         // (falls back to the generic 'cli:'/anonymous actor set in the
         // Database constructor for unauthenticated/public endpoints).
