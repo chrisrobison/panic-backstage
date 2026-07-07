@@ -5,6 +5,7 @@ namespace Panic;
 
 use function Panic\boolish;
 use function Panic\date_or_null;
+use function Panic\event_public_path;
 use function Panic\log_activity;
 use function Panic\slugify;
 
@@ -196,7 +197,7 @@ final class Events extends BaseEndpoint
             'access' => $this->eventAccess($id),
             'capabilities' => $this->eventCapabilities($id),
             'links' => [
-                'public_page' => 'event.html?slug=' . rawurlencode((string) $event['slug']),
+                'public_page' => event_public_path($event),
                 'invite_base' => 'invite.html?token=',
             ],
         ]);

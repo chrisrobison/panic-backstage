@@ -190,7 +190,7 @@ final class Kernel
 
         // Public event pages (unauthenticated)
         if ($segments[0] === 'public' && ($segments[1] ?? '') === 'events') {
-            return [PublicEvents::class, ['slug' => $segments[2] ?? null]];
+            return [PublicEvents::class, ['idOrSlug' => $segments[2] ?? null]];
         }
 
         // Public ticket purchase (unauthenticated):

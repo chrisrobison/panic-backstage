@@ -5,6 +5,8 @@ namespace Panic;
 
 use Panic\Payments\PaymentProviders;
 
+use function Panic\event_public_path;
+
 /**
  * Public (no-JWT) ticket purchase surface for an event's public page.
  *
@@ -193,7 +195,7 @@ final class PublicTickets extends BaseEndpoint
         // Start a hosted checkout with whichever provider is currently active.
         $env      = new Env();
         $appUrl   = rtrim((string) (getenv('APP_URL') ?: ''), '/');
-        $eventUrl = $appUrl . '/event.html?slug=' . rawurlencode((string) $event['slug']);
+        $eventUrl = $appUrl . '/' . event_public_path($event);
         $success  = $eventUrl . '&order=' . $orderId . '&checkout=success';
         $cancel   = $eventUrl . '&order=' . $orderId . '&checkout=cancel';
 

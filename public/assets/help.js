@@ -929,7 +929,7 @@ const HELP_CONTENT = {
 
   publish: `
     <h2>Publishing the public page</h2>
-    <p>Every event has a public-facing page at <code>/event.html?slug=&lt;slug&gt;</code> that shows the title, date, doors/show, age restriction, ticket link, public description, lineup, and the approved flyer.</p>
+    <p>Every event has a public-facing page at <code>/event.html?id=&lt;event id&gt;</code> that shows the title, date, doors/show, age restriction, ticket link, public description, lineup, and the approved flyer. The link is keyed by the event's stable id rather than its title-derived slug, so it keeps working even after the event is renamed or rescheduled.</p>
     <h3>Toggling publish</h3>
     <p>Click <em>Publish Public Page</em> at the top of the event workspace to make it live, or <em>Hide Public Page</em> to take it offline. The same toggle exists as a checkbox in <a href="#help-details">Event details</a>.</p>
     <h3>Previewing</h3>

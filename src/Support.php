@@ -20,6 +20,21 @@ function date_or_null(mixed $value): ?string
     return $value ? (string) $value : null;
 }
 
+/**
+ * Relative path (no host) to an event's public-facing page, keyed by the
+ * event's stable numeric id rather than its slug. Slugs are regenerated
+ * whenever an event's title or date changes (see Events::update()), which
+ * silently broke any link built from the old slug — the id never changes.
+ *
+ * Callers that need an absolute URL should prefix this with their own
+ * app-base URL (see Feed::eventUrl(), EventEmailComposer::eventUrl(),
+ * PublicTickets::checkout(), Events\GenerateQr::publicUrl()).
+ */
+function event_public_path(array $event): string
+{
+    return 'event.html?id=' . rawurlencode((string) $event['id']);
+}
+
 function log_activity(Database $db, int $eventId, ?int $userId, string $action, array $details = []): void
 {
     $db->run(

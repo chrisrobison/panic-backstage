@@ -889,9 +889,13 @@ class TemplatePicker extends PanicElement {
 class PublicEventPage extends PanicElement {
   async connect() {
     this.setLoading('Loading public event');
-    const slug = new URLSearchParams(location.search).get('slug');
+    const params = new URLSearchParams(location.search);
+    // Current links use ?id=<event id>; ?slug=<slug> is kept working for
+    // links minted before this page switched off slugs (which changed
+    // whenever an event's title/date was edited, breaking shared links).
+    const idOrSlug = params.get('id') || params.get('slug');
     try {
-      const data = await api(`/public/events/${encodeURIComponent(slug || '')}`);
+      const data = await api(`/public/events/${encodeURIComponent(idOrSlug || '')}`);
       const event = data.event;
       // QR code encodes this page's own canonical URL (not location.href, which
       // may carry transient ?order=&checkout= params from a just-completed
