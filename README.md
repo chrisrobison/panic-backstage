@@ -1,5 +1,7 @@
 # Panic Backstage
 
+[![CI](https://github.com/chrisrobison/panic-backstage/actions/workflows/ci.yml/badge.svg)](https://github.com/chrisrobison/panic-backstage/actions/workflows/ci.yml)
+
 Panic Backstage helps venues track every show from hold to settlement, including lineup, schedule, artwork, ticketing, open items, and event readiness.
 
 The app is intentionally boring to run:
