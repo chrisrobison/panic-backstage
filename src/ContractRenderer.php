@@ -21,7 +21,7 @@ final class ContractRenderer
         'venue_name' => 'Venue name', 'venue_address' => 'Venue address',
         'venue_city' => 'Venue city', 'venue_state' => 'Venue state',
         'counterparty_display' => 'Counterparty', 'title' => 'Contract title',
-        'event_date' => 'Event date', 'event_room' => 'Room', 'event_title' => 'Event',
+        'event_date' => 'Event date', 'event_end_date' => 'Event end date', 'event_room' => 'Room', 'event_title' => 'Event',
         'rental_fee' => 'Rental fee', 'deposit_amount' => 'Deposit', 'balance_due_date' => 'Balance due date',
         'bar_minimum' => 'Bar minimum', 'guarantee_amount' => 'Guarantee',
         'door_split_artist' => 'Artist/promoter split', 'door_split_venue' => 'Venue split',
@@ -120,6 +120,11 @@ final class ContractRenderer
         $cond['expected_attendance'] = $attendance !== null && $attendance !== '' ? (float) $attendance : null;
         $cond['room'] = $event['room'] ?? ($vars['room'] ?? null);
 
+        $eventEndDate = $event['end_date'] ?? null;
+        $cond['event_date'] = $event['date'] ?? null;
+        $cond['event_end_date'] = $eventEndDate;
+        $cond['is_multi_day'] = !empty($eventEndDate) && $eventEndDate !== ($event['date'] ?? null);
+
         // Display tokens (formatted strings).
         $counterparty = trim((string) ($contract['counterparty_name'] ?? ''));
         if (!empty($contract['counterparty_org'])) {
@@ -136,7 +141,8 @@ final class ContractRenderer
             'counterparty_display' => $counterparty,
             'title' => $contract['title'] ?? '',
             'event_title' => $event['title'] ?? '',
-            'event_date' => self::formatDate($event['date'] ?? ($contract['term_start'] ?? null)),
+            'event_date' => self::formatEventDateToken($event['date'] ?? ($contract['term_start'] ?? null), $eventEndDate),
+            'event_end_date' => self::formatDate($eventEndDate),
             'event_room' => self::titleize($event['room'] ?? ($vars['room'] ?? 'venue')),
             'age_restriction' => (string) $ageRestriction,
             'capacity' => $event['capacity'] ?? '',
@@ -354,6 +360,22 @@ final class ContractRenderer
         }
         $ts = strtotime((string) $value);
         return $ts ? date('F j, Y', $ts) : (string) $value;
+    }
+
+    /**
+     * {{event_date}} for a multi-day event renders as a range ("August 14, 2026
+     * – August 16, 2026") so clauses referencing a single "event_date" token
+     * (the flat-rental clause, etc.) don't silently describe only day one of a
+     * multi-day booking. $end is expected already normalized to null/distinct
+     * from $start (Events::nullableDate never stores a redundant same-day end_date).
+     */
+    private static function formatEventDateToken(mixed $start, mixed $end): string
+    {
+        $startFmt = self::formatDate($start);
+        if (!$end || $end === $start) {
+            return $startFmt;
+        }
+        return $startFmt . ' – ' . self::formatDate($end);
     }
 
     private static function titleize(string $value): string

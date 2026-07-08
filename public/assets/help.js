@@ -606,7 +606,8 @@ const HELP_CONTENT = {
     <ul>
       <li><strong>Calendar &amp; agenda</strong> — instead of a single dot, the event renders as one continuous chip across every day in its range. See <a href="#help-calendar">Calendar</a>.</li>
       <li><strong>Room conflicts</strong> — the venue is considered booked for the <em>entire</em> range. Trying to book the same room (or another room in the same building/zone) on any day inside that span will be blocked as a conflict, not just the first day.</li>
-      <li><strong>Everything else</strong> (contract, staffing, ticketing, guest list, settlement) stays attached to the single event record exactly like a normal show — a multi-day event is still one event, just with a wider footprint on the calendar.</li>
+      <li><strong>Staffing</strong> — the Staffing tab groups shifts by day first, then role, and each shift carries its own date within the event's range (defaulting to the start date). "Auto-fill from capacity" applies a full crew tier to <em>every</em> day in the range rather than once for the whole run, and both the payroll CSV export and the printed staffing schedule break out one section per day.</li>
+      <li><strong>Everything else</strong> (contract, ticketing, guest list, settlement) stays attached to the single event record exactly like a normal show — a multi-day event is still one event, just with a wider footprint on the calendar. The contract renderer also shows the full date range (e.g. "August 14 – August 16, 2026") anywhere it would otherwise print just the start date, and auto-includes a Multi-Day Event clause covering exclusivity, load-in/strike scheduling, and overnight-gear risk.</li>
     </ul>
     <p class="help-tip">💡 Multi-day events are a different thing from <a href="#help-recurring-events">recurring events</a>. Multi-day is <em>one</em> event spanning several consecutive days (a festival). Recurring is <em>several separate</em> events on a repeating schedule (a weekly karaoke night) — each with its own date, contract, and staffing.</p>
   `,
@@ -698,6 +699,7 @@ const HELP_CONTENT = {
     <h3>Adding a shift</h3>
     <p>Use the form at the bottom of the panel. Pick the staff member from the roster (or leave as TBD), set the role, call time, end time, hourly rate, status, and any notes. The roster is managed under <a href="#help-admin-staff">Admin &rarr; Staff</a>.</p>
     <p>When you pick a staff member from the dropdown, their default role and hourly rate prefill automatically — you can override either before saving.</p>
+    <p>For a <a href="#help-multi-day-events">multi-day event</a>, a Date field also appears on the shift form, bounded to the event's date range and defaulting to the first day — a 3-day festival needs separate shifts (and separate call times) for each day's crew, not one shift shared across the whole run.</p>
     <h3>Shift statuses</h3>
     <ul>
       <li><strong>scheduled</strong> — assigned but not confirmed.</li>
@@ -708,7 +710,7 @@ const HELP_CONTENT = {
       <li><strong>canceled</strong> — shift no longer needed.</li>
     </ul>
     <h3>Night-of-show</h3>
-    <p>Shifts are grouped by role for a clean read at the door. Print the staffing schedule from the <em>Print</em> menu — it lists call times, role, staff name and phone, and shift status, alongside the run sheet's staff_call times for cross-reference.</p>
+    <p>Shifts are grouped by role for a clean read at the door — for a multi-day event, they're grouped by day first, then role, so each day's crew reads as its own call sheet. Print the staffing schedule from the <em>Print</em> menu — it lists call times, role, staff name and phone, and shift status, alongside the run sheet's staff_call times for cross-reference (a multi-day event prints one table per day).</p>
     <h3>TBD shifts</h3>
     <p>You can save a shift without picking a staff member — it appears as <em>TBD</em>. Useful when you know you need (say) two security at 7:30 PM but haven't picked who yet.</p>
   `,

@@ -228,15 +228,11 @@ class StaffingManager extends HTMLElement {
     const roles  = data.staffRoles || ['manager','security','bartender','barback','door','sound','lighting','stagehand','runner','cleaner','other'];
     const statuses = data.staffingStatuses || ['scheduled','confirmed','declined','no_show','completed','canceled'];
     const editable = can(data, 'manage_staffing');
+    const event = data.event || {};
+    const isMultiDay = Boolean(event.end_date && event.end_date !== event.date);
 
     const rosterOptions = (selectedId) => `<option value="">— TBD —</option>${roster.map((s) => `<option value="${esc(s.id)}" data-default-role="${esc(s.default_role)}" data-default-rate="${esc(s.hourly_rate || '')}" ${Number(s.id) === Number(selectedId || 0) ? 'selected' : ''}>${esc(s.name)} (${esc(titleCase(s.default_role))})</option>`).join('')}`;
 
-    // Group shifts by role for a tidy night-of-show layout.
-    const grouped = shifts.reduce((map, shift) => {
-      const key = shift.role || 'other';
-      (map[key] = map[key] || []).push(shift);
-      return map;
-    }, {});
     const roleOrder = ['manager','sound','lighting','security','door','bartender','barback','stagehand','runner','cleaner','other'];
 
     const capacity = data.event?.capacity ? parseInt(data.event.capacity, 10) : 0;
@@ -255,12 +251,42 @@ class StaffingManager extends HTMLElement {
       { label: 'Notes', grid: 'minmax(120px, 1.4fr)', cell: (s) => esc(s.notes || '') },
     ];
 
-    const editForm = (shift) => `<form data-shift="${esc(shift.id)}" class="row-form record-form staffing-row"><label>Staff <select name="staff_member_id">${rosterOptions(shift.staff_member_id)}</select></label><label>Role ${select('role', roles, shift.role)}</label><label>Call <input type="time" name="call_time" value="${esc(shift.call_time || '')}"></label><label>End <input type="time" name="end_time" value="${esc(shift.end_time || '')}"></label><label>Rate <input type="number" step="0.01" name="hourly_rate" value="${esc(shift.hourly_rate || '')}" placeholder="$/hr"></label><label>Status ${select('status', statuses, shift.status)}</label><label>Notes <input name="notes" value="${esc(shift.notes || '')}"></label><button>Save</button><button type="button" class="small danger" data-delete="${esc(shift.id)}">Remove</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
+    // Date field only shows for multi-day events — a single-day event's shifts
+    // all implicitly belong to the event's only date, so there's nothing to pick.
+    const dateField = (value) => isMultiDay
+      ? `<label>Date <input type="date" name="shift_date" value="${esc(value || event.date || '')}" min="${esc(event.date || '')}" max="${esc(event.end_date || event.date || '')}" required></label>`
+      : '';
 
-    const groupSections = roleOrder
-      .filter((role) => grouped[role])
-      .map((role) => `<div class="staffing-section"><h3 class="guest-section-head">${esc(titleCase(role))} <span class="muted">${grouped[role].length} shift${grouped[role].length === 1 ? '' : 's'}</span></h3>${recordList(grouped[role], cols, editForm, editable, '', { labeled: true })}</div>`)
-      .join('');
+    const editForm = (shift) => `<form data-shift="${esc(shift.id)}" class="row-form record-form staffing-row">${dateField(shift.shift_date)}<label>Staff <select name="staff_member_id">${rosterOptions(shift.staff_member_id)}</select></label><label>Role ${select('role', roles, shift.role)}</label><label>Call <input type="time" name="call_time" value="${esc(shift.call_time || '')}"></label><label>End <input type="time" name="end_time" value="${esc(shift.end_time || '')}"></label><label>Rate <input type="number" step="0.01" name="hourly_rate" value="${esc(shift.hourly_rate || '')}" placeholder="$/hr"></label><label>Status ${select('status', statuses, shift.status)}</label><label>Notes <input name="notes" value="${esc(shift.notes || '')}"></label><button>Save</button><button type="button" class="small danger" data-delete="${esc(shift.id)}">Remove</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
+
+    // Group shifts by role for a tidy night-of-show layout, optionally scoped
+    // to a single day's shifts first when the event spans multiple days.
+    const roleSections = (shiftsForDay) => {
+      const grouped = shiftsForDay.reduce((map, shift) => {
+        const key = shift.role || 'other';
+        (map[key] = map[key] || []).push(shift);
+        return map;
+      }, {});
+      return roleOrder
+        .filter((role) => grouped[role])
+        .map((role) => `<div class="staffing-section"><h3 class="guest-section-head">${esc(titleCase(role))} <span class="muted">${grouped[role].length} shift${grouped[role].length === 1 ? '' : 's'}</span></h3>${recordList(grouped[role], cols, editForm, editable, '', { labeled: true })}</div>`)
+        .join('');
+    };
+
+    let groupSections;
+    if (isMultiDay) {
+      const byDate = shifts.reduce((map, shift) => {
+        const key = shift.shift_date || event.date;
+        (map[key] = map[key] || []).push(shift);
+        return map;
+      }, {});
+      groupSections = Object.keys(byDate).sort().map((date) => `<div class="staffing-day">
+        <h2 class="staffing-day-head">${dateLabel(date)} <span class="muted">${byDate[date].length} shift${byDate[date].length === 1 ? '' : 's'}</span></h2>
+        ${roleSections(byDate[date])}
+      </div>`).join('');
+    } else {
+      groupSections = roleSections(shifts);
+    }
 
     const rosterHint = roster.length
       ? ''
@@ -269,6 +295,7 @@ class StaffingManager extends HTMLElement {
         : '');
 
     const addForm = editable ? `<form data-form="add" data-add-form hidden class="row-form staffing-add">
+      ${dateField(event.date)}
       <label>Staff <select name="staff_member_id">${rosterOptions(null)}</select></label>
       <label>Role ${select('role', roles, 'security')}</label>
       <label>Call <input type="time" name="call_time"></label>
@@ -282,7 +309,7 @@ class StaffingManager extends HTMLElement {
 
     // Auto-fill button: only show when user can edit and event has a capacity set.
     const autoFillBtn = editable && capacity > 0
-      ? `<button type="button" class="small secondary" data-auto-staff title="Clear all shifts and rebuild from capacity-based staffing tiers">Auto-fill (${capacity} cap)</button>`
+      ? `<button type="button" class="small secondary" data-auto-staff title="Add missing shifts from capacity-based staffing tiers (per day, for multi-day events)">Auto-fill (${capacity} cap)</button>`
       : '';
 
     // Export payroll CSV button: shown to anyone with manage_staffing access.
@@ -391,24 +418,30 @@ class StaffingManager extends HTMLElement {
       }
     });
 
-    // Auto-fill from capacity tiers
+    // Auto-fill from capacity tiers — applies once per day for a multi-day event.
     $('[data-auto-staff]', this)?.addEventListener('click', async () => {
-      const cap  = parseInt(this.eventData?.event?.capacity, 10) || 0;
+      const cap = parseInt(this.eventData?.event?.capacity, 10) || 0;
       if (!cap) {
         publish('toast.show', { message: 'Set a capacity on the event first.', tone: 'error' });
         return;
       }
-      const tier  = staffingTierFor(cap);
-      const total = tier.reduce((sum, [, count]) => sum + count, 0);
+      const ev   = this.eventData?.event || {};
+      const days = (ev.end_date && ev.end_date !== ev.date)
+        ? Math.round((new Date(`${ev.end_date}T12:00:00`) - new Date(`${ev.date}T12:00:00`)) / 86400000) + 1
+        : 1;
+      const tier   = staffingTierFor(cap);
+      const perDay = tier.reduce((sum, [, count]) => sum + count, 0);
+      const total  = perDay * days;
       const preview = tier.map(([role, count]) => `${count} ${titleCase(role)}`).join(', ');
-      if (!confirm(`Reset staffing for ${cap} people?\n\nThis will clear all current shifts and create:\n${preview}\n\n${total} positions total. Continue?`)) return;
+      const dayNote = days > 1 ? `\n\nApplied per day across all ${days} days of this event.` : '';
+      if (!confirm(`Auto-fill staffing for ${cap} people?\n\nThis adds missing shifts to reach:\n${preview}${dayNote}\n\n${total} position${total === 1 ? '' : 's'} total. Existing shifts are kept — nothing is removed. Continue?`)) return;
       try {
         await api(`/events/${eventId}/staffing/from-capacity`, {
           method: 'POST',
           body: JSON.stringify({ capacity: cap }),
         });
         await refreshSection(this);
-        publish('toast.show', { message: `Staffing auto-filled for ${cap} people (${total} positions).` });
+        publish('toast.show', { message: `Staffing auto-filled for ${cap} people (${total} positions${days > 1 ? ` across ${days} days` : ''}).` });
       } catch (err) {
         publish('toast.show', { message: err.message, tone: 'error' });
       }

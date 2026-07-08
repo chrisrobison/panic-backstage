@@ -2400,6 +2400,14 @@ components:
           type: integer
         event_id:
           type: integer
+        shift_date:
+          type: string
+          format: date
+          nullable: true
+          description: >-
+            Which day of the event this shift falls on. Defaults to the event's start date
+            (events.date) when omitted; for a multi-day event (events.end_date set) it must fall
+            within [events.date, events.end_date].
         staff_member_id:
           type: integer
           nullable: true
@@ -2486,6 +2494,13 @@ components:
     EventStaffingCreateRequest:
       type: object
       properties:
+        shift_date:
+          type: string
+          format: date
+          description: >-
+            Defaults to the event's start date when omitted. Must be within
+            [events.date, events.end_date] (or equal to events.date for a single-day event) — a
+            date outside that range returns 422.
         staff_member_id:
           type: integer
           nullable: true
@@ -12156,9 +12171,12 @@ paths:
       description: >-
         Requires the `manage_staffing` event capability. Looks up the recommended headcount-by-role
         tier for the event's (or body-supplied) `capacity` and inserts missing shifts
-        (`source=generated`, `status=scheduled`). Non-destructive by default — only adds shifts for
-        roles that are short of the tier's recommended count; pass `{"replace": true}` (or
-        `?replace=1`) to first delete all existing shifts and rebuild from scratch.
+        (`source=generated`, `status=scheduled`), each tagged with its own `shift_date`.
+        For a multi-day event (`events.end_date` set), the tier is applied once per calendar day
+        in the event's date range — a 3-day event gets three full crews, not one shared across
+        the whole run. Non-destructive by default — only adds shifts for roles that are short of
+        the tier's recommended count on that day; pass `{"replace": true}` (or `?replace=1`) to
+        first delete all existing shifts and rebuild from scratch.
       tags:
         - Event Staffing
       parameters:
@@ -12214,6 +12232,8 @@ paths:
       description: >-
         Requires the `manage_staffing` event capability. Computes the same tier-based recommendation
         as `from-capacity` and diffs it against current shifts, but writes nothing to the database.
+        For a multi-day event, `suggested`/`existing`/`delta`/`suggested_count` are totals across
+        every day in the event's date range (one tier per day); `dates` lists each day counted.
       tags:
         - Event Staffing
       parameters:
@@ -12272,6 +12292,12 @@ paths:
                     type: integer
                   suggested_count:
                     type: integer
+                  dates:
+                    type: array
+                    items:
+                      type: string
+                      format: date
+                    description: Every calendar day in the event's date range that the tier was applied to.
         '403':
           description: Missing manage_staffing capability
           content:
@@ -12290,8 +12316,9 @@ paths:
       summary: Download a payroll CSV for the event's staffing shifts
       description: >-
         Requires the `manage_staffing` event capability. Returns a `text/csv` attachment (Event ID,
-        Event Title, Event Date, Staff Name, Email, Phone, Role, Source, Clock In, Clock Out, Actual
-        Hours, Est Hours, OT Hours, Notes), not a JSON body.
+        Event Title, Shift Date, Staff Name, Email, Phone, Role, Source, Clock In, Clock Out, Actual
+        Hours, Est Hours, OT Hours, Notes), not a JSON body. Shift Date is each shift's own
+        `shift_date` (falling back to the event's start date), not a single event-wide date.
       tags:
         - Event Staffing
       parameters:

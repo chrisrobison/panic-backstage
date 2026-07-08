@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** — Add day-scoped staffing shifts and a multi-day contract clause
 - **Documentation** `api` — Add a full OpenAPI 3.0 spec for the JSON API
 - **Documentation** `readme` — Add CI status badge
 - **Fixed** `security` — Pin DB session to UTC and stop mixing timezones in expiry checks

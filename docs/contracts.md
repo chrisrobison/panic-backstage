@@ -119,8 +119,14 @@ POST /api/signing/{token}/decline  decline to sign (records reason, voids contra
 
 Token sources: deal-term columns, `variables_json`, and built-ins
 (`venue_name`, `venue_address`, `venue_city`, `venue_state`,
-`counterparty_display`, `title`, `event_title`, `event_date`, `event_room`,
-`age_restriction`, `capacity`, `doors_time`, `show_time`, `end_time`).
+`counterparty_display`, `title`, `event_title`, `event_date`, `event_end_date`,
+`event_room`, `age_restriction`, `capacity`, `doors_time`, `show_time`, `end_time`).
+For a multi-day event (`events.end_date` set and different from `events.date`),
+`event_date` itself renders as a range ("August 14, 2026 – August 16, 2026")
+rather than just the start day — every existing clause that says "on
+{{event_date}}" (e.g. `flat_rental`) automatically describes the full
+engagement instead of only day one. `event_end_date` is the bare end date,
+for clauses that want to reference it on its own (e.g. a load-out deadline).
 
 Formatting heuristics by key: `*_fee|_amount|_minimum|_rate|_price` and
 `guarantee_amount` → money; keys containing `split`/`percent` → `NN%`;
@@ -147,7 +153,9 @@ Recursive rule object evaluated against the `cond` context:
 Operators: `eq`, `ne`, `in`, `nin`, `gt`, `gte`, `lt`, `lte`, `set`, `truthy`,
 `falsy`. Fields: any deal-term column, any variable, or derived helpers
 `age_policy` (`all_ages` vs `21_plus`, from `age_restriction`),
-`expected_attendance` (from `capacity`), and `room`.
+`expected_attendance` (from `capacity`), `room`, and `is_multi_day`
+(`events.end_date` set and different from `events.date`) — used to
+auto-include the `multi_day_event` clause.
 
 Template-module inclusion semantics:
 
@@ -177,7 +185,7 @@ php database/seed_contracts.php
 `database/seed.php` (full demo reset) also calls `seed_contract_library()` and
 truncates the contract tables.
 
-Ships **26 clauses** across **7 templates**: Recurring Night Agreement,
+Ships **27 clauses** across **7 templates**: Recurring Night Agreement,
 Private Event Rental, Promoter / Production Show, Artist / Band Performance,
 Famous / High-Draw Artist, Fundraiser / Charity Event, House-Produced Show.
 
