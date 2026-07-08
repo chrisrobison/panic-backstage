@@ -396,6 +396,14 @@
   let signerId = null;
   let sigMode  = 'type'; // 'type' | 'draw'
 
+  // Resolve the API base from this page's own location rather than hardcoding
+  // a domain-root path. The app is deployed under whatever path APP_URL (.env)
+  // points at (e.g. https://host/backstage) — sign.html lives at
+  // {APP_URL}/sign.html, so stripping the filename off window.location gives
+  // back that same prefix and a plain '/api/...' fetch would silently miss it,
+  // hitting a different app (or nothing) mounted at the domain root instead.
+  const apiBase = window.location.pathname.replace(/\/[^/]*$/, '') + '/api';
+
   // Canvas drawing state
   let isDrawing = false;
   let canvas, ctx;
@@ -419,7 +427,7 @@
   // ── Load contract ──────────────────────────────────────────────────────────
   async function loadContract() {
     try {
-      const res  = await fetch('/api/signing/' + encodeURIComponent(token));
+      const res  = await fetch(apiBase + '/signing/' + encodeURIComponent(token));
       const data = await res.json();
 
       if (!res.ok) {
@@ -445,7 +453,7 @@
       hide('loadingScreen');
 
       // Mark as viewed.
-      fetch('/api/signing/' + encodeURIComponent(token) + '/viewed', { method: 'POST' }).catch(() => {});
+      fetch(apiBase + '/signing/' + encodeURIComponent(token) + '/viewed', { method: 'POST' }).catch(() => {});
 
     } catch (err) {
       showError('Network error loading the agreement. Please refresh and try again.');
@@ -554,7 +562,7 @@
     }
 
     try {
-      const res  = await fetch('/api/signing/' + encodeURIComponent(token) + '/sign', {
+      const res  = await fetch(apiBase + '/signing/' + encodeURIComponent(token) + '/sign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -594,7 +602,7 @@
     hideDeclineDialog();
 
     try {
-      await fetch('/api/signing/' + encodeURIComponent(token) + '/decline', {
+      await fetch(apiBase + '/signing/' + encodeURIComponent(token) + '/decline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),

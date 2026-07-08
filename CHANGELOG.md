@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `contracts` — Resolve signing API calls relative to the app's own path
 - **Fixed** `mailing-lists` — Allow blank search in Add contacts to browse all
 - **Fixed** `mailing-lists` — Compact detail header, wider results, bulk opt-in add
 - **Fixed** `contracts` — Write signing-token expiry as UTC, not ambient timezone
