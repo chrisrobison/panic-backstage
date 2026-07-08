@@ -4227,6 +4227,22 @@ pb-msg-lists.resizing .outbox-detail-pane {
   flex-shrink: 0;
 }
 
+/* Mailing lists: the detail header packs name, description, member/created
+   meta, and the action buttons onto a single compact row — just tall
+   enough for the buttons — instead of the taller stacked layout the other
+   Outbox-shaped pages (Messages, Campaigns) use for longer subject lines.
+   Scoped to pb-msg-lists so those other pages are untouched. */
+pb-msg-lists .outbox-detail-head {
+  flex-wrap: nowrap;
+  align-items: center;
+  padding: 8px 20px;
+}
+pb-msg-lists .outbox-meta-list {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  gap: 4px 14px;
+}
+
 /* Meta key-value list */
 .outbox-meta-list {
   display: flex;
@@ -4314,6 +4330,8 @@ pb-msg-lists.resizing .outbox-detail-pane {
   .outbox-detail-head { padding: 10px 14px; }
   .outbox-detail-actions { width: 100%; justify-content: flex-end; }
   .outbox-email-frame { min-height: 180px; } /* floor for very small screens */
+  pb-msg-lists .outbox-detail-head { flex-wrap: wrap; }
+  pb-msg-lists .mlist-detail-fields { flex-wrap: wrap; }
 
   /* Responsive table: hide Template column, stack cells with labels */
   .outbox-table thead { display: none; }
@@ -4511,11 +4529,34 @@ pb-msg-lists.resizing .outbox-detail-pane {
 
 .mlist-field-error { font-size: 12px; color: var(--red); }
 
+/* Name + description sit side by side on one row (see the compact
+   pb-msg-lists .outbox-detail-head rule above) instead of stacked. */
 .mlist-detail-fields {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 8px;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Positions the validation error as a floating tooltip below the name
+   field instead of a block that would push the row taller. */
+.mlist-name-wrap {
+  position: relative;
+  flex: 0 1 220px;
+  min-width: 110px;
+}
+.mlist-name-wrap .mlist-field-error {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 3;
+  margin-top: 3px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  background: var(--panel);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(16,19,24,.18);
 }
 
 .mlist-name-input {
@@ -4526,7 +4567,7 @@ pb-msg-lists.resizing .outbox-detail-pane {
   background: transparent;
   padding: 4px 6px;
   margin: 0 0 0 -6px;
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 800;
   color: var(--ink);
   transition: outline .12s, background .12s, border-color .12s;
@@ -4541,13 +4582,12 @@ pb-msg-lists.resizing .outbox-detail-pane {
 
 .mlist-desc-input {
   display: block;
-  width: 100%;
-  resize: vertical;
+  flex: 1 1 240px;
+  min-width: 120px;
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
   padding: 4px 6px;
-  margin: 0 0 0 -6px;
   font: inherit;
   font-size: 13px;
   color: var(--ink);
@@ -4578,21 +4618,70 @@ pb-msg-lists.resizing .outbox-detail-pane {
   flex-wrap: wrap;
   margin-bottom: 10px;
 }
+/* Pushes the one-click bulk action to the right of the search + filter. */
+.mlist-add-contacts-head [data-add-all-opted] { margin-left: auto; }
 
 .mlist-member-actions { display: flex; gap: 6px; justify-content: flex-end; }
 
 .mlist-add-contacts-results {
   list-style: none;
   margin: 10px 0 0;
-  padding: 6px 10px;
-  max-height: 240px;
+  padding: 6px;
+  max-height: 320px;
   overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
 }
-.mlist-add-contacts-results li { padding: 4px 0; }
+.mlist-add-contacts-results li { padding: 0; }
+.mlist-add-contacts-results .mlist-add-contacts-empty { padding: 8px 6px; }
 
-.mlist-add-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+/* Each result fills the full width of the box (a plain flex .checkbox-row
+   only sizes to its single <label> child, which is what left-squished the
+   rows) and lays the checkbox, name/email, and opted badge out across it. */
+.mlist-add-contacts-results li.checkbox-row {
+  width: 100%;
+  border-radius: 6px;
+}
+.mlist-add-contacts-results li.checkbox-row:hover { background: var(--bg); }
+.mlist-add-contacts-results li.checkbox-row label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  cursor: pointer;
+}
+.mlist-add-contacts-results .mlist-contact-info {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mlist-add-contacts-results .mlist-contact-info strong {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mlist-add-contacts-results .mlist-contact-info .muted {
+  flex: 1 1 120px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mlist-add-contacts-results li.checkbox-row .badge { flex-shrink: 0; }
+
+.mlist-add-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+.mlist-add-actions-buttons { display: flex; gap: 8px; }
 
 .mlist-import-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .mlist-import-result { margin-top: 10px; }

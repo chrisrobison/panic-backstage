@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `mailing-lists` — Compact detail header, wider results, bulk opt-in add
 - **Fixed** `events` — Set browser tab title to the event's name on its public page
 - **Changed** — Add day-scoped staffing shifts and a multi-day contract clause
 - **Documentation** `api` — Add a full OpenAPI 3.0 spec for the JSON API
