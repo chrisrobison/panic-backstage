@@ -19,6 +19,8 @@ The app is intentionally boring to run:
 
 Panic Backstage is API-first. PHP endpoint classes return JSON only; HTML pages are static and use browser-native Web Components, `fetch()`, and LARC/PAN topic events to load and mutate data.
 
+The full API surface — every route, request/response schema, auth requirement, and required capability — is documented as an OpenAPI 3.0 spec at [`docs/openapi.yaml`](docs/openapi.yaml). Paste it into [Swagger Editor](https://editor.swagger.io/) or [Redocly](https://redocly.github.io/redoc/) for a browsable reference. It's maintained by hand alongside `src/Kernel.php` — update both together when routes change.
+
 The custom kernel in `src/Kernel.php` resolves constrained API paths to endpoint classes:
 
 ```text
