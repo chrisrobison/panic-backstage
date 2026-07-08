@@ -105,7 +105,7 @@ final class Scanner extends BaseEndpoint
                 'last_used_at' => $r['last_used_at'],
                 'created_at'   => $r['created_at'],
                 'active'       => $r['revoked_at'] === null
-                    && ($r['expires_at'] === null || strtotime((string) $r['expires_at']) > time()),
+                    && ($r['expires_at'] === null || db_timestamp_to_epoch((string) $r['expires_at']) > time()),
             ];
         }
 
@@ -260,7 +260,7 @@ final class Scanner extends BaseEndpoint
         if ($link === null || $link['revoked_at'] !== null) {
             return Response::json(['error' => 'Invalid or revoked scanner link.'], 401);
         }
-        if ($link['expires_at'] !== null && strtotime((string) $link['expires_at']) <= time()) {
+        if ($link['expires_at'] !== null && db_timestamp_to_epoch((string) $link['expires_at']) <= time()) {
             return Response::json(['error' => 'This scanner link has expired.'], 401);
         }
         if ($link['pin_hash'] !== null && !password_verify($pin, (string) $link['pin_hash'])) {

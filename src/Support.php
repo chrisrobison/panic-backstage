@@ -21,6 +21,27 @@ function date_or_null(mixed $value): ?string
 }
 
 /**
+ * Parse a DATETIME/TIMESTAMP string read back from the DB into a Unix epoch,
+ * treating it as UTC. The DB session is pinned to UTC (see Database.php /
+ * Database/Connection.php), independent of the app's display timezone
+ * (America/Los_Angeles, set in bootstrap.php for human-facing formatting).
+ *
+ * Use this — not bare strtotime() — anywhere a DB timestamp produced by
+ * NOW()/CURRENT_TIMESTAMP is compared against time() or another epoch (token
+ * expiry, rate-limit windows, etc). strtotime() on an unsuffixed string
+ * parses it in the ambient default timezone, which would silently skew the
+ * comparison by the offset between UTC and America/Los_Angeles.
+ */
+function db_timestamp_to_epoch(?string $value): ?int
+{
+    if ($value === null || $value === '') {
+        return null;
+    }
+    $ts = strtotime($value . ' UTC');
+    return $ts !== false ? $ts : null;
+}
+
+/**
  * Relative path (no host) to an event's public-facing page, keyed by the
  * event's stable numeric id rather than its slug. Slugs are regenerated
  * whenever an event's title or date changes (see Events::update()), which

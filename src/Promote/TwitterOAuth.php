@@ -6,6 +6,7 @@ namespace Panic\Promote;
 use Panic\BaseEndpoint;
 use Panic\Request;
 use Panic\Response;
+use function Panic\db_timestamp_to_epoch;
 
 /**
  * In-app OAuth 2.0 PKCE flow for the "Connect X account" button
@@ -117,7 +118,7 @@ final class TwitterOAuth extends BaseEndpoint
         // Single-use: consume immediately regardless of outcome to prevent replay.
         $this->db->run('DELETE FROM promote_oauth_states WHERE state = ?', [$state]);
 
-        if (!$row || strtotime((string) $row['created_at']) < time() - self::STATE_TTL_SECONDS) {
+        if (!$row || db_timestamp_to_epoch((string) $row['created_at']) < time() - self::STATE_TTL_SECONDS) {
             return $this->finish('error', 'This authorization link expired or was already used — try connecting again');
         }
 

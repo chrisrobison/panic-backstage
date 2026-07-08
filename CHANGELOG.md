@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `security` — Pin DB session to UTC and stop mixing timezones in expiry checks
 - **Fixed** `ci` — Pin app timezone and harden headless-Chromium launch
 - **Fixed** `event-wizard` — Restore Quick Create fallback button after sidebar refresh
 - **Fixed** `security` — Rate-limit passkey login begin/complete

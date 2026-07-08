@@ -30,6 +30,14 @@ final class Database
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
+            // Pin the session to UTC so NOW()/CURRENT_TIMESTAMP and every
+            // stored DATETIME/TIMESTAMP mean the same instant regardless of
+            // this MySQL server's configured system timezone. The app's
+            // display timezone (America/Los_Angeles, see bootstrap.php) is
+            // applied only when formatting for humans — see
+            // db_timestamp_to_epoch() in Support.php for the PHP-side half
+            // of this contract.
+            PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '+00:00'",
         ]);
 
         // Default actor attribution for the audit-trigger history table (see

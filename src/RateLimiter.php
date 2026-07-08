@@ -44,7 +44,7 @@ final class RateLimiter
             return false;
         }
 
-        $windowStarted = strtotime((string) $row['window_started_at']) ?: 0;
+        $windowStarted = db_timestamp_to_epoch((string) $row['window_started_at']) ?? 0;
         if ($windowStarted < time() - $windowSeconds) {
             $db->run(
                 'UPDATE rate_limits SET count = 1, window_started_at = NOW(6) WHERE bucket = ?',

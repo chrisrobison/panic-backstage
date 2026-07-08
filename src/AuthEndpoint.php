@@ -258,7 +258,7 @@ final class AuthEndpoint extends BaseEndpoint
             return Response::json(['error' => 'This confirmation link has already been used'], 401);
         }
 
-        if (strtotime((string) $row['expires_at']) < time()) {
+        if (db_timestamp_to_epoch((string) $row['expires_at']) < time()) {
             return Response::json(['error' => 'Invalid or expired confirmation link'], 401);
         }
 

@@ -7,6 +7,7 @@ use Panic\BaseEndpoint;
 use Panic\Mailer;
 use Panic\Request;
 use Panic\Response;
+use function Panic\db_timestamp_to_epoch;
 use function Panic\log_activity;
 
 /**
@@ -109,7 +110,7 @@ final class Invites extends BaseEndpoint
         if ($invite['used_at']) {
             return Response::json(['error' => 'This invite has already been accepted.'], 422);
         }
-        if (strtotime((string) $invite['expires_at']) < time()) {
+        if (db_timestamp_to_epoch((string) $invite['expires_at']) < time()) {
             return Response::json(['error' => 'This invite has expired. Create a new one.'], 422);
         }
 

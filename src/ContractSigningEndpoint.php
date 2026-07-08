@@ -291,7 +291,7 @@ final class ContractSigningEndpoint extends BaseEndpoint
         }
 
         // Check expiry.
-        if ($signer['token_expires_at'] && strtotime((string) $signer['token_expires_at']) < time()) {
+        if ($signer['token_expires_at'] && db_timestamp_to_epoch((string) $signer['token_expires_at']) < time()) {
             $this->db->run(
                 "UPDATE contract_signers SET status = 'expired' WHERE id = ?",
                 [(int) $signer['id']]
