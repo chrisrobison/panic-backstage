@@ -115,20 +115,35 @@ export async function launchBrowser({ cdpPort, scale = 1, width = 1440, height =
   const udd = mkdtempSync(path.join(tmpdir(), 'pb-cdp-'));
   const chrome = spawn(bin, [
     '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
+    '--disable-dev-shm-usage', // avoid crashes on CI runners with a small /dev/shm
     `--remote-debugging-port=${cdpPort}`, '--remote-debugging-address=127.0.0.1',
     `--user-data-dir=${udd}`, `--window-size=${width},${height}`, 'about:blank',
-  ], { stdio: 'ignore' });
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  // Buffer Chrome's own output so a launch failure is diagnosable instead of
+  // a bare "endpoint never came up" — headless Chrome logs its fatal error
+  // (missing libs, sandbox denial, etc.) to stderr before exiting.
+  let output = '';
+  chrome.stdout.on('data', (d) => { output += d; });
+  chrome.stderr.on('data', (d) => { output += d; });
+  let exited = false;
+  chrome.on('exit', (code, signal) => { exited = true; log(`chrome exited early (code=${code} signal=${signal})`); });
 
   let wsUrl = null;
   await waitFor(async () => {
+    if (exited) return true; // stop polling immediately if the process died
     try {
       const list = await (await fetch(`http://127.0.0.1:${cdpPort}/json/list`)).json();
       const page = list.find((t) => t.type === 'page');
       if (page?.webSocketDebuggerUrl) { wsUrl = page.webSocketDebuggerUrl; return true; }
     } catch { /* not ready */ }
     return false;
-  });
-  if (!wsUrl) { try { chrome.kill('SIGTERM'); } catch { /* ignore */ } throw new Error('Chromium DevTools endpoint never came up'); }
+  }, { tries: 100, gap: 200 }); // up to 20s: cold Chrome starts can be slow on shared CI runners
+  if (!wsUrl) {
+    try { chrome.kill('SIGTERM'); } catch { /* ignore */ }
+    const detail = output.trim() ? `\n--- chrome output ---\n${output.trim()}` : ' (no output captured)';
+    throw new Error('Chromium DevTools endpoint never came up' + detail);
+  }
 
   const ws = new WebSocket(wsUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
