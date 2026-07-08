@@ -692,9 +692,14 @@ HTML;
             }
 
             // Generate token — store only the hash.
-            $rawToken   = $this->auth->generateToken(48);
-            $tokenHash  = $this->auth->hashToken($rawToken);
-            $expiresAt  = date('Y-m-d H:i:s', time() + $ttlHours * 3600);
+            $rawToken     = $this->auth->generateToken(48);
+            $tokenHash    = $this->auth->hashToken($rawToken);
+            $expiresEpoch = time() + $ttlHours * 3600;
+            // Stored as UTC (gmdate) to match db_timestamp_to_epoch(), which reads
+            // token_expires_at back assuming UTC. Using date() here (ambient tz is
+            // America/Los_Angeles) would write local time and cause the read side
+            // to treat it as UTC, silently truncating the token's real TTL.
+            $expiresAt    = gmdate('Y-m-d H:i:s', $expiresEpoch);
 
             $signerId = $this->db->insert(
                 'INSERT INTO contract_signers
@@ -726,7 +731,7 @@ HTML;
                         'signer_name'    => $name,
                         'contract_title' => (string) ($contract['title'] ?? ''),
                         'signing_url'    => $signingUrl,
-                        'expires_date'   => date('F j, Y', strtotime($expiresAt)),
+                        'expires_date'   => date('F j, Y', $expiresEpoch),
                         'venue_name'     => (string) (getenv('MAIL_FROM_NAME') ?: 'The Venue'),
                     ]
                 );
@@ -805,9 +810,12 @@ HTML;
         $mailer   = new Mailer($this->root, $this->db);
 
         foreach ($pending as $signer) {
-            $rawToken  = $this->auth->generateToken(48);
-            $tokenHash = $this->auth->hashToken($rawToken);
-            $expiresAt = date('Y-m-d H:i:s', time() + $ttlHours * 3600);
+            $rawToken     = $this->auth->generateToken(48);
+            $tokenHash    = $this->auth->hashToken($rawToken);
+            $expiresEpoch = time() + $ttlHours * 3600;
+            // See comment in sendForSignature(): must be UTC to match
+            // db_timestamp_to_epoch()'s read-side assumption.
+            $expiresAt    = gmdate('Y-m-d H:i:s', $expiresEpoch);
 
             $this->db->run(
                 "UPDATE contract_signers SET status = 'sent', signing_token_hash = ?, token_expires_at = ? WHERE id = ?",
@@ -824,7 +832,7 @@ HTML;
                         'signer_name'    => (string) $signer['name'],
                         'contract_title' => (string) ($contract['title'] ?? ''),
                         'signing_url'    => $signingUrl,
-                        'expires_date'   => date('F j, Y', strtotime($expiresAt)),
+                        'expires_date'   => date('F j, Y', $expiresEpoch),
                         'venue_name'     => (string) (getenv('MAIL_FROM_NAME') ?: 'The Venue'),
                     ]
                 );

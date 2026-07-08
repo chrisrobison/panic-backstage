@@ -131,6 +131,28 @@ if ($testId) {
     check($isExpired, 'Expired token is detected as expired');
 }
 
+// Regression: token_expires_at must be written in UTC (gmdate), matching how
+// db_timestamp_to_epoch() reads it back in ContractSigningEndpoint::resolveToken().
+// Contracts::sendForSignature()/resendSigningLinks() used to write it with the
+// ambient-timezone date() (America/Los_Angeles). That doesn't break links
+// checked right after sending (the TTL is 7 days, so a several-hour skew
+// isn't yet "expired") — it silently truncates the real TTL by the UTC/LA
+// offset (7-8h), so links clicked near the end of their window fail with
+// "This signing link has expired" / "Signing Link Unavailable". Assert an
+// EXACT round-trip (not just "not expired yet") so this can't regress.
+if ($testId) {
+    $ttlHours   = 168;
+    $intendedExpiry = time() + $ttlHours * 3600;
+    $writtenAt      = gmdate('Y-m-d H:i:s', $intendedExpiry); // mirrors Contracts.php write side
+    $readBackEpoch  = \Panic\db_timestamp_to_epoch($writtenAt); // mirrors resolveToken() read side
+
+    check(
+        $readBackEpoch === $intendedExpiry,
+        'Signing token expiry round-trips exactly through write (gmdate) and read (db_timestamp_to_epoch)',
+        "intended={$intendedExpiry} readBack=" . ($readBackEpoch ?? 'null')
+    );
+}
+
 // ─── 4. Audit log ────────────────────────────────────────────────────────────
 echo "\nAudit log\n";
 
