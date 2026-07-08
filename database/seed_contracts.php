@@ -28,6 +28,9 @@ function seed_contract_library(\PDO $pdo): void
         ['base_parties', 'Parties & Engagement', 'base', 'none', 0, [],
             'This Agreement ("Agreement") is entered into between {{venue_name}} ("Venue"), located at {{venue_address}}, and {{counterparty_display}} ("Counterparty"). The parties agree to the terms set forth below for {{title}}.'],
 
+        ['multi_day_event', 'Multi-Day Event', 'operational', 'medium', 0, [],
+            'This engagement spans multiple consecutive calendar days: {{event_date}}. The Venue is reserved exclusively for the Counterparty'."'".'s use for the entire engagement period, including any agreed load-in, rehearsal, and strike days within that span. A day-by-day schedule (load-in, rehearsal, show, and strike times for each day) shall be confirmed in writing, either as an attached exhibit or in the event run sheet, before the first day of the engagement. Unless this Agreement states otherwise, the rental fee, security, and other deal terms above apply to the engagement as a whole rather than per day. Equipment, staging, and personal property left at the Venue overnight between days remain at the Counterparty'."'".'s own risk unless the parties have separately agreed to Venue-provided overnight security. Load-out running past the agreed end time on the final day is subject to a holdover fee as agreed by the parties.'],
+
         ['recurring_event', 'Recurring Engagement', 'operational', 'low', 0, ['recurrence_rule', 'trial_period_weeks', 'termination_notice_days'],
             'The Counterparty shall produce a recurring event at the Venue on the following schedule: {{recurrence_rule}}. The engagement begins on {{term_start}} and continues until {{term_end}} unless terminated earlier in accordance with this Agreement. The arrangement opens with a {{trial_period_weeks}}-week trial period, after which the parties will review attendance, bar sales, operational fit, and promotional performance on a {{review_cadence}} basis. Either party may terminate this recurring engagement with {{termination_notice_days}} days'."'".' written notice.'],
 
@@ -133,6 +136,7 @@ function seed_contract_library(\PDO $pdo): void
     $hasGuarantee= ['all' => [['field' => 'guarantee_amount', 'op' => 'gt', 'value' => 0]]];
     $hasDoorSplit= ['all' => [['field' => 'door_split_artist', 'op' => 'gt', 'value' => 0]]];
     $hasRental   = ['all' => [['field' => 'rental_fee', 'op' => 'gt', 'value' => 0]]];
+    $isMultiDay  = ['all' => [['field' => 'is_multi_day', 'op' => 'truthy']]];
 
     // name, description, contract_type, intro_text, [ [module_key, is_required, condition|null], ... ]
     // is_required modules are always included; a null condition means "on by
@@ -142,6 +146,7 @@ function seed_contract_library(\PDO $pdo): void
             'This Recurring Night Agreement establishes the terms for an ongoing programmed night at the Venue.',
             [
                 ['base_parties', 1, null],
+                ['multi_day_event', 0, $isMultiDay],
                 ['recurring_event', 1, null],
                 ['revenue_split', 1, null],
                 ['marketing', 0, null],
@@ -163,6 +168,7 @@ function seed_contract_library(\PDO $pdo): void
             'This Private Event Rental Agreement governs a one-time rental of Venue space.',
             [
                 ['base_parties', 1, null],
+                ['multi_day_event', 0, $isMultiDay],
                 ['flat_rental', 1, null],
                 ['bar_minimum', 0, $hasBarMin],
                 ['security', 0, $bigOrAllAge],
@@ -179,6 +185,7 @@ function seed_contract_library(\PDO $pdo): void
             'This Promoter Agreement governs an event produced at the Venue by an outside promoter.',
             [
                 ['base_parties', 1, null],
+                ['multi_day_event', 0, $isMultiDay],
                 ['door_split', 1, null],
                 ['ticketing', 0, $venueTix],
                 ['marketing', 0, null],
@@ -198,6 +205,7 @@ function seed_contract_library(\PDO $pdo): void
             'This Performance Agreement governs a booking of the Artist by the Venue.',
             [
                 ['base_parties', 1, null],
+                ['multi_day_event', 0, $isMultiDay],
                 ['guarantee', 0, $hasGuarantee],
                 ['door_split', 0, $hasDoorSplit],
                 ['hospitality', 0, null],
@@ -216,6 +224,7 @@ function seed_contract_library(\PDO $pdo): void
             'This Performance Agreement governs a high-demand engagement and includes enhanced control and settlement terms.',
             [
                 ['base_parties', 1, null],
+                ['multi_day_event', 0, $isMultiDay],
                 ['guarantee', 1, null],
                 ['advance_settlement', 1, null],
                 ['high_draw_controls', 1, null],
@@ -240,6 +249,7 @@ function seed_contract_library(\PDO $pdo): void
             'This Agreement governs a charitable fundraiser produced at the Venue.',
             [
                 ['base_parties', 1, null],
+                ['multi_day_event', 0, $isMultiDay],
                 ['fundraiser_terms', 1, null],
                 ['flat_rental', 0, $hasRental],
                 ['bar_minimum', 0, $hasBarMin],
@@ -259,6 +269,7 @@ function seed_contract_library(\PDO $pdo): void
             'This Agreement covers a show produced by the Venue, booking the named performer(s).',
             [
                 ['base_parties', 1, null],
+                ['multi_day_event', 0, $isMultiDay],
                 ['guarantee', 0, $hasGuarantee],
                 ['door_split', 0, $hasDoorSplit],
                 ['hospitality', 0, null],

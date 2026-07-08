@@ -6,8 +6,10 @@ namespace Panic;
 /**
  * GET /api/payroll/export?start=YYYY-MM-DD&end=YYYY-MM-DD
  *
- * Venue-admin-only batch payroll CSV covering all staffing rows for events
- * whose show_time falls within the requested date range.
+ * Venue-admin-only batch payroll CSV covering all staffing rows whose
+ * shift_date (each shift's own day — event.date for single-day events, the
+ * specific day of a multi-day event otherwise) falls within the requested
+ * date range.
  *
  * Defaults to the current calendar month when no dates are supplied.
  */
@@ -30,7 +32,7 @@ final class Payroll extends BaseEndpoint
             'SELECT
                e.id          event_id,
                e.title       event_title,
-               DATE(e.show_time) event_date,
+               COALESCE(es.shift_date, e.date) shift_date,
                sm.name       staff_name,
                sm.email      staff_email,
                sm.phone      staff_phone,
@@ -45,8 +47,8 @@ final class Payroll extends BaseEndpoint
              FROM event_staffing es
              JOIN events e ON e.id = es.event_id
              LEFT JOIN staff_members sm ON sm.id = es.staff_member_id
-             WHERE DATE(e.show_time) BETWEEN ? AND ?
-             ORDER BY e.show_time, es.role, sm.name',
+             WHERE COALESCE(es.shift_date, e.date) BETWEEN ? AND ?
+             ORDER BY shift_date, es.role, sm.name',
             [$start, $end]
         );
 
@@ -60,12 +62,12 @@ final class Payroll extends BaseEndpoint
      */
     private function buildCsvContent(array $rows): string
     {
-        $csv = "Event ID,Event Title,Event Date,Staff Name,Email,Phone,Role,Source,Clock In,Clock Out,Actual Hours,Est Hours,OT Hours,Notes\n";
+        $csv = "Event ID,Event Title,Shift Date,Staff Name,Email,Phone,Role,Source,Clock In,Clock Out,Actual Hours,Est Hours,OT Hours,Notes\n";
         foreach ($rows as $row) {
             $fields = [
                 $row['event_id'],
                 $row['event_title'],
-                $row['event_date'],
+                $row['shift_date'],
                 $row['staff_name'],
                 $row['staff_email'],
                 $row['staff_phone'],

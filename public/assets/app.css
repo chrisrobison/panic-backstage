@@ -2560,6 +2560,12 @@ body.lightbox-open { overflow: hidden; }
 /* ── Event staffing ───────────────────────────────────────────────────── */
 .staffing-body { padding: 12px 18px 18px; }
 .staffing-section + .staffing-section { margin-top: 14px; }
+.staffing-day + .staffing-day { margin-top: 22px; padding-top: 18px; border-top: 2px solid var(--line); }
+.staffing-day-head {
+  font-size: 15px; margin: 0 0 8px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.staffing-day-head .muted { font-weight: 400; font-size: 12px; margin-left: 8px; }
 .staffing-row {
   align-items: center;
   position: relative;

@@ -157,13 +157,14 @@ final class Staffing extends BaseEndpoint
 
     private function create(Request $request, int $eventId): Response
     {
-        [$payload, $error] = $this->payload($request);
+        [$payload, $error] = $this->payload($request, $eventId);
         if ($error) return $error;
         $id = $this->db->insert(
-            'INSERT INTO event_staffing (event_id, staff_member_id, role, call_time, end_time, hourly_rate, status, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO event_staffing (event_id, shift_date, staff_member_id, role, call_time, end_time, hourly_rate, status, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $eventId,
+                $payload['shift_date'],
                 $payload['staff_member_id'],
                 $payload['role'],
                 $payload['call_time'],
@@ -183,13 +184,14 @@ final class Staffing extends BaseEndpoint
     private function update(Request $request, int $eventId, int $staffingId): Response
     {
         if (!$staffingId) return $this->notFound();
-        [$payload, $error] = $this->payload($request);
+        [$payload, $error] = $this->payload($request, $eventId);
         if ($error) return $error;
         $rows = $this->db->run(
             'UPDATE event_staffing
-             SET staff_member_id=?, role=?, call_time=?, end_time=?, hourly_rate=?, status=?, notes=?
+             SET shift_date=?, staff_member_id=?, role=?, call_time=?, end_time=?, hourly_rate=?, status=?, notes=?
              WHERE id=? AND event_id=?',
             [
+                $payload['shift_date'],
                 $payload['staff_member_id'],
                 $payload['role'],
                 $payload['call_time'],
@@ -229,6 +231,11 @@ final class Staffing extends BaseEndpoint
      * Non-destructive preview of the capacity-based staffing recommendation.
      * Returns the suggested staffing tier and a diff against current shifts.
      * Nothing is written to the database.
+     *
+     * For a multi-day event, the tier applies once per day in the event's
+     * date range, so `suggested`/`existing`/`delta` are totals across every
+     * day (a single-day event has exactly one day, so the numbers are
+     * unchanged from before this method became date-aware).
      */
     private function previewCapacity(Request $request, int $eventId): Response
     {
@@ -237,10 +244,13 @@ final class Staffing extends BaseEndpoint
             return Response::json(['error' => 'capacity is required'], 422);
         }
 
-        $tier    = $this->tierForCapacity($capacity);
+        $tier  = $this->tierForCapacity($capacity);
+        [$eventStart, $eventEnd] = $this->eventDateRange($eventId);
+        $dates = $this->datesInRange($eventStart, $eventEnd);
+
         $current = $this->staffingFor($eventId);
 
-        // Build diff: what roles are new, unchanged, or removed
+        // Build diff: what roles are new, unchanged, or removed, totalled across every day.
         $currentRoleCounts = [];
         foreach ($current as $shift) {
             $currentRoleCounts[$shift['role']] = ($currentRoleCounts[$shift['role']] ?? 0) + 1;
@@ -249,7 +259,7 @@ final class Staffing extends BaseEndpoint
         $diff = [];
         foreach ($tier as $entry) {
             $role       = $entry['role'];
-            $suggested  = (int) ($entry['count'] ?? 1);
+            $suggested  = (int) ($entry['count'] ?? 1) * count($dates);
             $existing   = $currentRoleCounts[$role] ?? 0;
             $diff[]     = [
                 'role'      => $role,
@@ -287,7 +297,8 @@ final class Staffing extends BaseEndpoint
             'diff'              => $diff,
             'has_manual_shifts' => $hasManualShifts,
             'current_count'     => count($current),
-            'suggested_count'   => array_sum(array_column($tier, 'count')),
+            'suggested_count'   => array_sum(array_column($tier, 'count')) * count($dates),
+            'dates'             => $dates,
         ]);
     }
 
@@ -301,6 +312,12 @@ final class Staffing extends BaseEndpoint
      * Pass {"replace": true} in the request body to revert to the old
      * destructive behavior (clear all existing shifts first).
      *
+     * For a multi-day event (events.date .. events.end_date), the tier is
+     * applied once per calendar day in that range, each shift tagged with
+     * its own shift_date — a 3-day festival gets three full crews, not one
+     * shared across the whole run. A single-day event has exactly one date
+     * in range, so behavior is unchanged from before shift_date existed.
+     *
      * Sets source='generated' on all auto-populated rows.
      */
     private function fromCapacity(Request $request, int $eventId): Response
@@ -312,6 +329,8 @@ final class Staffing extends BaseEndpoint
 
         $replace = !empty($request->body('replace')) || ($request->query('replace') === '1');
         $tier    = $this->tierForCapacity($capacity);
+        [$eventStart, $eventEnd] = $this->eventDateRange($eventId);
+        $dates   = $this->datesInRange($eventStart, $eventEnd);
 
         $pdo = $this->db->pdo();
         $pdo->beginTransaction();
@@ -322,25 +341,29 @@ final class Staffing extends BaseEndpoint
                 $this->db->run('DELETE FROM event_staffing WHERE event_id = ?', [$eventId]);
             }
 
-            $current     = $this->staffingFor($eventId);
-            $currentRoles = [];
+            $current       = $replace ? [] : $this->staffingFor($eventId);
+            $currentByDate = [];
             foreach ($current as $shift) {
-                $currentRoles[$shift['role']] = ($currentRoles[$shift['role']] ?? 0) + 1;
+                $date = $shift['shift_date'] ?? $eventStart;
+                $currentByDate[$date][$shift['role']] = ($currentByDate[$date][$shift['role']] ?? 0) + 1;
             }
 
             $added = 0;
-            foreach ($tier as $entry) {
-                $role    = $entry['role'];
-                $needed  = max(1, (int) ($entry['count'] ?? 1));
-                $existing = $replace ? 0 : ($currentRoles[$role] ?? 0);
-                $toAdd   = $needed - $existing;
+            foreach ($dates as $date) {
+                $currentRoles = $currentByDate[$date] ?? [];
+                foreach ($tier as $entry) {
+                    $role     = $entry['role'];
+                    $needed   = max(1, (int) ($entry['count'] ?? 1));
+                    $existing = $currentRoles[$role] ?? 0;
+                    $toAdd    = $needed - $existing;
 
-                for ($i = 0; $i < $toAdd; $i++) {
-                    $this->db->run(
-                        'INSERT INTO event_staffing (event_id, role, status, source) VALUES (?, ?, ?, ?)',
-                        [$eventId, $role, 'scheduled', 'generated']
-                    );
-                    $added++;
+                    for ($i = 0; $i < $toAdd; $i++) {
+                        $this->db->run(
+                            'INSERT INTO event_staffing (event_id, shift_date, role, status, source) VALUES (?, ?, ?, ?, ?)',
+                            [$eventId, $date, $role, 'scheduled', 'generated']
+                        );
+                        $added++;
+                    }
                 }
             }
 
@@ -355,6 +378,7 @@ final class Staffing extends BaseEndpoint
             'capacity' => $capacity,
             'shifts_added' => $added,
             'replaced' => $replace,
+            'days' => count($dates),
         ]);
         return $this->ok(['staffing' => $this->staffingFor($eventId), 'shifts_added' => $added]);
     }
@@ -367,6 +391,31 @@ final class Staffing extends BaseEndpoint
             $capacity = (int) ($event['capacity'] ?? 0);
         }
         return $capacity;
+    }
+
+    /**
+     * @return array{0: string, 1: string} [start_date, end_date] — both event.date
+     *         when the event has no end_date (single-day).
+     */
+    private function eventDateRange(int $eventId): array
+    {
+        $event = $this->db->one('SELECT date, end_date FROM events WHERE id = ?', [$eventId]);
+        $start = (string) ($event['date'] ?? '');
+        $end   = (string) ($event['end_date'] ?? '') ?: $start;
+        return [$start, $end];
+    }
+
+    /** @return string[] every calendar date from $start to $end inclusive (Y-m-d) */
+    private function datesInRange(string $start, string $end): array
+    {
+        $dates  = [];
+        $cursor = new \DateTimeImmutable($start);
+        $last   = new \DateTimeImmutable($end);
+        while ($cursor <= $last) {
+            $dates[] = $cursor->format('Y-m-d');
+            $cursor  = $cursor->modify('+1 day');
+        }
+        return $dates ?: [$start];
     }
 
     /**
@@ -391,6 +440,8 @@ final class Staffing extends BaseEndpoint
      */
     public function createFromTemplate(int $eventId, array $entries): void
     {
+        $event     = $this->db->one('SELECT date FROM events WHERE id = ?', [$eventId]);
+        $shiftDate = $event['date'] ?? null;
         foreach ($entries as $entry) {
             if (!is_array($entry)) continue;
             $role  = $entry['role'] ?? 'other';
@@ -399,15 +450,15 @@ final class Staffing extends BaseEndpoint
             $notes = isset($entry['notes']) && $entry['notes'] !== '' ? $entry['notes'] : null;
             for ($i = 0; $i < $count; $i++) {
                 $this->db->run(
-                    'INSERT INTO event_staffing (event_id, role, status, notes) VALUES (?, ?, ?, ?)',
-                    [$eventId, $role, 'scheduled', $notes]
+                    'INSERT INTO event_staffing (event_id, shift_date, role, status, notes) VALUES (?, ?, ?, ?, ?)',
+                    [$eventId, $shiftDate, $role, 'scheduled', $notes]
                 );
             }
         }
     }
 
     /** @return array{0: array, 1: ?Response} */
-    private function payload(Request $request): array
+    private function payload(Request $request, int $eventId): array
     {
         $role = (string) $request->body('role', 'other');
         if (!in_array($role, StaffMembers::ROLES, true)) {
@@ -422,7 +473,16 @@ final class Staffing extends BaseEndpoint
         $rate = $request->body('hourly_rate');
         $rate = ($rate === '' || $rate === null) ? null : (float) $rate;
 
+        [$eventStart, $eventEnd] = $this->eventDateRange($eventId);
+        $shiftDate = trim((string) $request->body('shift_date', ''));
+        if ($shiftDate === '') {
+            $shiftDate = $eventStart;
+        } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $shiftDate) || $shiftDate < $eventStart || $shiftDate > $eventEnd) {
+            return [[], Response::json(['error' => "shift_date must be between {$eventStart} and {$eventEnd}"], 422)];
+        }
+
         return [[
+            'shift_date'      => $shiftDate,
             'staff_member_id' => $staffId,
             'role'            => $role,
             'call_time'       => $this->timeOrNull($request->body('call_time')),
@@ -449,7 +509,7 @@ final class Staffing extends BaseEndpoint
             'SELECT
                e.id          event_id,
                e.title       event_title,
-               DATE(e.show_time) event_date,
+               COALESCE(es.shift_date, e.date) shift_date,
                sm.name       staff_name,
                sm.email      staff_email,
                sm.phone      staff_phone,
@@ -465,7 +525,7 @@ final class Staffing extends BaseEndpoint
              JOIN events e ON e.id = es.event_id
              LEFT JOIN staff_members sm ON sm.id = es.staff_member_id
              WHERE es.event_id = ?
-             ORDER BY es.role, sm.name',
+             ORDER BY shift_date, es.role, sm.name',
             [$eventId]
         );
 
@@ -482,12 +542,12 @@ final class Staffing extends BaseEndpoint
      */
     private function buildCsvContent(array $rows): string
     {
-        $csv = "Event ID,Event Title,Event Date,Staff Name,Email,Phone,Role,Source,Clock In,Clock Out,Actual Hours,Est Hours,OT Hours,Notes\n";
+        $csv = "Event ID,Event Title,Shift Date,Staff Name,Email,Phone,Role,Source,Clock In,Clock Out,Actual Hours,Est Hours,OT Hours,Notes\n";
         foreach ($rows as $row) {
             $fields = [
                 $row['event_id'],
                 $row['event_title'],
-                $row['event_date'],
+                $row['shift_date'],
                 $row['staff_name'],
                 $row['staff_email'],
                 $row['staff_phone'],
@@ -515,7 +575,7 @@ final class Staffing extends BaseEndpoint
              FROM event_staffing s
              LEFT JOIN staff_members sm ON sm.id = s.staff_member_id
              WHERE s.event_id = ?
-             ORDER BY s.call_time, FIELD(s.role,"manager","sound","lighting","security","door","bartender","barback","stagehand","runner","cleaner","other"), s.id',
+             ORDER BY s.shift_date, s.call_time, FIELD(s.role,"manager","sound","lighting","security","door","bartender","barback","stagehand","runner","cleaner","other"), s.id',
             [$eventId]
         );
     }

@@ -163,8 +163,20 @@ function renderLineupSection(data) {
 }
 
 
+// Long-form day heading for a Y-M-D string, e.g. "Friday, August 14" — used to
+// break a multi-day event's staffing schedule into one table per day.
+function dayHeading(dateStr) {
+  const d = eventDate({ date: dateStr });
+  return d ? d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) : dateStr;
+}
+
 function renderStaffingSection(data) {
+  const event = data.event || {};
+  const isMultiDay = Boolean(event.end_date && event.end_date !== event.date);
   const shifts = (data.staffing || []).slice().sort((a, b) => {
+    const da = a.shift_date || event.date || '';
+    const db = b.shift_date || event.date || '';
+    if (da !== db) return da.localeCompare(db);
     const ta = a.call_time || '99:99:99';
     const tb = b.call_time || '99:99:99';
     return ta.localeCompare(tb);
@@ -172,13 +184,36 @@ function renderStaffingSection(data) {
   const collaborators = (data.collaborators || []).filter((c) => ['venue_admin','event_owner','promoter','staff','designer'].includes(c.event_role));
   const staffCalls = (data.schedule || []).filter((item) => item.item_type === 'staff_call');
 
-  const shiftRows = shifts.length ? shifts.map((s) => `<tr>
+  const shiftRow = (s) => `<tr>
     <td class="time">${esc(timeLabel(s.call_time))}${s.end_time ? `<br><span style="color:#666;">${esc(timeLabel(s.end_time))}</span>` : ''}</td>
     <td>${esc(titleCase(s.role))}</td>
     <td><strong>${esc(s.staff_name || 'TBD')}</strong>${s.staff_phone ? `<br><span style="color:#666;">${esc(s.staff_phone)}</span>` : ''}</td>
     <td>${printPill(s.status)}</td>
     <td>${esc(s.notes || '')}</td>
-  </tr>`).join('') : '';
+  </tr>`;
+  const shiftTable = (rows) => `<table>
+    <thead><tr><th class="time">Call / End</th><th>Role</th><th>Staff</th><th>Status</th><th>Notes</th></tr></thead>
+    <tbody>${rows.map(shiftRow).join('')}</tbody>
+  </table>`;
+
+  let shiftsBlock;
+  if (!shifts.length) {
+    shiftsBlock = `<h3 class="subsection">Shifts</h3><p class="empty">No shifts scheduled.</p>`;
+  } else if (isMultiDay) {
+    // One table per calendar day so a multi-day event's crew list reads as
+    // separate day-by-day call sheets rather than one undated pile of shifts.
+    const byDate = shifts.reduce((map, s) => {
+      const key = s.shift_date || event.date;
+      (map[key] = map[key] || []).push(s);
+      return map;
+    }, {});
+    shiftsBlock = Object.keys(byDate).sort()
+      .map((date) => `<h3 class="subsection">${esc(dayHeading(date))}</h3>${shiftTable(byDate[date])}`)
+      .join('');
+  } else {
+    shiftsBlock = `<h3 class="subsection">Shifts</h3>${shiftTable(shifts)}`;
+  }
+
   const peopleRows = collaborators.length ? collaborators.map((c) => `<tr>
     <td><strong>${esc(c.name || '—')}</strong></td>
     <td>${esc(titleCase(c.event_role))}</td>
@@ -191,11 +226,7 @@ function renderStaffingSection(data) {
   </tr>`).join('') : '';
 
   return `<h2 class="section">Staffing Schedule</h2>
-    <h3 class="subsection">Shifts</h3>
-    ${shiftRows ? `<table>
-      <thead><tr><th class="time">Call / End</th><th>Role</th><th>Staff</th><th>Status</th><th>Notes</th></tr></thead>
-      <tbody>${shiftRows}</tbody>
-    </table>` : `<p class="empty">No shifts scheduled.</p>`}
+    ${shiftsBlock}
     <h3 class="subsection">Event Collaborators</h3>
     ${peopleRows ? `<table>
       <thead><tr><th>Name</th><th>Role</th><th>Email</th></tr></thead>

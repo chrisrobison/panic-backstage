@@ -904,6 +904,7 @@ DROP TABLE IF EXISTS `event_staffing`;
 CREATE TABLE `event_staffing` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `event_id` int(11) NOT NULL,
+  `shift_date` date DEFAULT NULL,
   `staff_member_id` int(11) DEFAULT NULL,
   `role` enum('manager','security','bartender','barback','door','sound','lighting','stagehand','runner','cleaner','other') NOT NULL DEFAULT 'other',
   `call_time` time DEFAULT NULL,

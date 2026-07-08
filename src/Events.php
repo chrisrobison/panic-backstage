@@ -179,7 +179,7 @@ final class Events extends BaseEndpoint
                  FROM event_staffing es
                  LEFT JOIN staff_members sm ON sm.id = es.staff_member_id
                  WHERE es.event_id = ?
-                 ORDER BY es.call_time, FIELD(es.role,"manager","sound","lighting","security","door","bartender","barback","stagehand","runner","cleaner","other"), es.id',
+                 ORDER BY es.shift_date, es.call_time, FIELD(es.role,"manager","sound","lighting","security","door","bartender","barback","stagehand","runner","cleaner","other"), es.id',
                 [$id]
             ),
             'staffRoster' => $this->hasEventCapability($id, 'manage_staffing')
