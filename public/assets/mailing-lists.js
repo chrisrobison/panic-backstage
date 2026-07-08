@@ -273,7 +273,7 @@ class MailingListsPage extends PanicElement {
                 <div class="mlist-add-contacts-head">
                   <label class="outbox-search-label" aria-label="Search contacts to add">
                     <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                    <input class="outbox-search mlist-add-contacts-search" type="search" placeholder="Search contacts by name or email…" autocomplete="off">
+                    <input class="outbox-search mlist-add-contacts-search" type="search" placeholder="Search by name or email… (leave blank + Enter for everyone)" autocomplete="off">
                   </label>
                   <label class="check-label mlist-add-opted-only"><input type="checkbox" class="mlist-add-opted-filter"> Opted in only</label>
                   <button type="button" class="small" data-add-all-opted>Add everyone opted-in</button>
@@ -431,11 +431,7 @@ class MailingListsPage extends PanicElement {
     if (acSearch) acSearch.value = '';
     const acOptedFilter = $('.mlist-add-opted-filter', this);
     if (acOptedFilter) acOptedFilter.checked = false;
-    const acResults = $('.mlist-add-contacts-results', this);
-    if (acResults) { acResults.hidden = true; acResults.innerHTML = ''; }
-    $('.mlist-add-actions', this).hidden = true;
-    const acSelectAll = $('[data-select-all-contacts]', this);
-    if (acSelectAll) { acSelectAll.checked = false; acSelectAll.indeterminate = false; acSelectAll.disabled = true; }
+    this.resetAddContactsResults();
     const importResult = $('[data-import-result]', this);
     if (importResult) { importResult.hidden = true; importResult.innerHTML = ''; }
     $('.mlist-import-form', this)?.reset();
@@ -599,21 +595,11 @@ class MailingListsPage extends PanicElement {
   // ── Add contacts (ad-hoc search) ─────────────────────────────────────────
 
   async searchContactsForAdd(query) {
-    const resultsEl = $('.mlist-add-contacts-results', this);
-    const actionsEl = $('.mlist-add-actions', this);
-    // An empty query is only meaningful when paired with the opted-in
-    // filter — that's "browse everyone opted in" rather than a text
-    // search, and the backend supports filtering by opted alone. With
-    // neither a query nor the filter there's nothing to show.
-    if (!query && !this.acOptedOnly) {
-      this.acResults = [];
-      this.acTotal = 0;
-      if (resultsEl) { resultsEl.hidden = true; resultsEl.innerHTML = ''; }
-      if (actionsEl) actionsEl.hidden = true;
-      const selectAll = $('[data-select-all-contacts]', this);
-      if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; selectAll.disabled = true; }
-      return;
-    }
+    // A blank query is a valid "browse" search — it returns every contact
+    // (optionally narrowed by the opted-in filter) rather than nothing.
+    // This only runs from explicit user interaction (typing, clearing the
+    // search box, or toggling the opted-in filter) — see resetAddContactsResults()
+    // for the panel's hidden default/reset state.
     try {
       const qs = new URLSearchParams({ page: '1', limit: '20' });
       if (query) qs.set('q', query);
@@ -627,6 +613,20 @@ class MailingListsPage extends PanicElement {
       publish('toast.show', { message: err.message, tone: 'error' });
     }
     this.renderAddContactsResults();
+  }
+
+  /** Hides/clears the add-contacts results panel — used on first mount
+   *  (before any search has been run) and whenever a different list is
+   *  selected, so we don't show stale results from another list. */
+  resetAddContactsResults() {
+    this.acResults = [];
+    this.acTotal = 0;
+    const resultsEl = $('.mlist-add-contacts-results', this);
+    if (resultsEl) { resultsEl.hidden = true; resultsEl.innerHTML = ''; }
+    const actionsEl = $('.mlist-add-actions', this);
+    if (actionsEl) actionsEl.hidden = true;
+    const selectAll = $('[data-select-all-contacts]', this);
+    if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; selectAll.disabled = true; }
   }
 
   renderAddContactsResults() {
@@ -715,14 +715,9 @@ class MailingListsPage extends PanicElement {
       publish('toast.show', { message: skipped ? `${added} added, ${skipped} skipped (already invalid)` : `${added} added.` });
 
       this.acSelected = new Set();
-      this.acResults = [];
       const searchInput = $('.mlist-add-contacts-search', this);
       if (searchInput) searchInput.value = '';
-      const resultsEl = $('.mlist-add-contacts-results', this);
-      if (resultsEl) { resultsEl.hidden = true; resultsEl.innerHTML = ''; }
-      $('.mlist-add-actions', this).hidden = true;
-      const selectAll = $('[data-select-all-contacts]', this);
-      if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; selectAll.disabled = true; }
+      this.resetAddContactsResults();
 
       this.mPage = 1;
       await this.loadMembers();
@@ -753,15 +748,9 @@ class MailingListsPage extends PanicElement {
       publish('toast.show', { message: `${added} contact${added === 1 ? '' : 's'} added.` });
 
       this.acSelected = new Set();
-      this.acResults = [];
-      this.acTotal = 0;
       const searchInput = $('.mlist-add-contacts-search', this);
       if (searchInput) searchInput.value = '';
-      const resultsEl = $('.mlist-add-contacts-results', this);
-      if (resultsEl) { resultsEl.hidden = true; resultsEl.innerHTML = ''; }
-      $('.mlist-add-actions', this).hidden = true;
-      const selectAll = $('[data-select-all-contacts]', this);
-      if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; selectAll.disabled = true; }
+      this.resetAddContactsResults();
 
       this.mPage = 1;
       await this.loadMembers();
@@ -985,11 +974,20 @@ class MailingListsPage extends PanicElement {
       clearTimeout(this._acDebounce);
       this._acDebounce = setTimeout(() => this.searchContactsForAdd(acSearch.value.trim()), 300);
     });
+    // Enter runs the search immediately (bypassing the debounce) even when
+    // the box is empty, so "search blank to browse everyone" has an
+    // explicit trigger and doesn't rely on having typed-then-cleared text.
+    acSearch?.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      clearTimeout(this._acDebounce);
+      this.searchContactsForAdd(acSearch.value.trim());
+    });
     const acOptedFilter = $('.mlist-add-opted-filter', this);
     acOptedFilter?.addEventListener('change', () => {
       this.acOptedOnly = acOptedFilter.checked;
-      // Re-run: an empty query is valid once the opted-in filter is on
-      // (browse everyone opted in), and needs to re-clear if turned off.
+      // Re-run with whatever's in the search box — blank is fine, it just
+      // browses everyone (optionally narrowed to opted-in).
       this.searchContactsForAdd(acSearch?.value.trim() || '');
     });
     $('[data-select-all-contacts]', this)?.addEventListener('change', (e) => {

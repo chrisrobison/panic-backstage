@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `mailing-lists` — Allow blank search in Add contacts to browse all
 - **Fixed** `mailing-lists` — Compact detail header, wider results, bulk opt-in add
 - **Fixed** `events` — Set browser tab title to the event's name on its public page
 - **Changed** — Add day-scoped staffing shifts and a multi-day contract clause
