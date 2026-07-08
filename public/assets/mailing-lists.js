@@ -230,17 +230,17 @@ class MailingListsPage extends PanicElement {
         <div class="outbox-detail-pane" aria-label="Mailing list detail" role="region" hidden>
           <div class="outbox-detail-inner">
             <div class="outbox-detail-head">
-              <div class="outbox-detail-meta">
-                <div class="mlist-detail-fields">
-                  <input class="mlist-name-input" data-field="name" maxlength="160" aria-label="List name">
+              <div class="mlist-detail-fields">
+                <div class="mlist-name-wrap">
+                  <input class="mlist-name-input" data-field="name" maxlength="160" aria-label="List name" placeholder="List name">
                   <div class="mlist-field-error" data-name-error hidden></div>
-                  <textarea class="mlist-desc-input" data-field="description" maxlength="500" rows="2" placeholder="Add a description…" aria-label="List description"></textarea>
                 </div>
-                <dl class="outbox-meta-list">
-                  <div><dt>Members</dt><dd data-meta-count>0</dd></div>
-                  <div><dt>Created</dt><dd data-meta-created>—</dd></div>
-                </dl>
+                <input class="mlist-desc-input" type="text" data-field="description" maxlength="500" placeholder="Add a description…" aria-label="List description">
               </div>
+              <dl class="outbox-meta-list">
+                <div><dt>Members</dt><dd data-meta-count>0</dd></div>
+                <div><dt>Created</dt><dd data-meta-created>—</dd></div>
+              </dl>
               <div class="outbox-detail-actions">
                 <button type="button" class="small danger mlist-delete-btn">Delete list</button>
                 <button type="button" class="small secondary outbox-close" aria-label="Close list"><i class="fa-solid fa-xmark" aria-hidden="true"></i> Close</button>
@@ -273,14 +273,18 @@ class MailingListsPage extends PanicElement {
                 <div class="mlist-add-contacts-head">
                   <label class="outbox-search-label" aria-label="Search contacts to add">
                     <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                    <input class="outbox-search mlist-add-contacts-search" type="search" placeholder="Search contacts by name or email…" autocomplete="off">
+                    <input class="outbox-search mlist-add-contacts-search" type="search" placeholder="Search by name or email… (leave blank + Enter for everyone)" autocomplete="off">
                   </label>
                   <label class="check-label mlist-add-opted-only"><input type="checkbox" class="mlist-add-opted-filter"> Opted in only</label>
+                  <button type="button" class="small" data-add-all-opted>Add everyone opted-in</button>
                 </div>
                 <ul class="mlist-add-contacts-results" hidden></ul>
                 <div class="mlist-add-actions" hidden>
-                  <button type="button" class="small" data-add-selected disabled>Add selected (0)</button>
-                  <button type="button" class="small secondary" data-add-all-matching hidden>Add all matching</button>
+                  <label class="check-label mlist-add-select-all"><input type="checkbox" data-select-all-contacts disabled> Select all</label>
+                  <div class="mlist-add-actions-buttons">
+                    <button type="button" class="small" data-add-selected disabled>Add selected (0)</button>
+                    <button type="button" class="small secondary" data-add-all-matching hidden>Add all matching</button>
+                  </div>
                 </div>
               </section>
 
@@ -427,9 +431,7 @@ class MailingListsPage extends PanicElement {
     if (acSearch) acSearch.value = '';
     const acOptedFilter = $('.mlist-add-opted-filter', this);
     if (acOptedFilter) acOptedFilter.checked = false;
-    const acResults = $('.mlist-add-contacts-results', this);
-    if (acResults) { acResults.hidden = true; acResults.innerHTML = ''; }
-    $('.mlist-add-actions', this).hidden = true;
+    this.resetAddContactsResults();
     const importResult = $('[data-import-result]', this);
     if (importResult) { importResult.hidden = true; importResult.innerHTML = ''; }
     $('.mlist-import-form', this)?.reset();
@@ -593,17 +595,14 @@ class MailingListsPage extends PanicElement {
   // ── Add contacts (ad-hoc search) ─────────────────────────────────────────
 
   async searchContactsForAdd(query) {
-    const resultsEl = $('.mlist-add-contacts-results', this);
-    const actionsEl = $('.mlist-add-actions', this);
-    if (!query) {
-      this.acResults = [];
-      this.acTotal = 0;
-      if (resultsEl) { resultsEl.hidden = true; resultsEl.innerHTML = ''; }
-      if (actionsEl) actionsEl.hidden = true;
-      return;
-    }
+    // A blank query is a valid "browse" search — it returns every contact
+    // (optionally narrowed by the opted-in filter) rather than nothing.
+    // This only runs from explicit user interaction (typing, clearing the
+    // search box, or toggling the opted-in filter) — see resetAddContactsResults()
+    // for the panel's hidden default/reset state.
     try {
-      const qs = new URLSearchParams({ q: query, page: '1', limit: '20' });
+      const qs = new URLSearchParams({ page: '1', limit: '20' });
+      if (query) qs.set('q', query);
       if (this.acOptedOnly) qs.set('opted', '1');
       const data = await api(`/contacts?${qs}`);
       this.acResults = data.contacts || [];
@@ -614,6 +613,20 @@ class MailingListsPage extends PanicElement {
       publish('toast.show', { message: err.message, tone: 'error' });
     }
     this.renderAddContactsResults();
+  }
+
+  /** Hides/clears the add-contacts results panel — used on first mount
+   *  (before any search has been run) and whenever a different list is
+   *  selected, so we don't show stale results from another list. */
+  resetAddContactsResults() {
+    this.acResults = [];
+    this.acTotal = 0;
+    const resultsEl = $('.mlist-add-contacts-results', this);
+    if (resultsEl) { resultsEl.hidden = true; resultsEl.innerHTML = ''; }
+    const actionsEl = $('.mlist-add-actions', this);
+    if (actionsEl) actionsEl.hidden = true;
+    const selectAll = $('[data-select-all-contacts]', this);
+    if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; selectAll.disabled = true; }
   }
 
   renderAddContactsResults() {
@@ -633,7 +646,11 @@ class MailingListsPage extends PanicElement {
         return `<li class="checkbox-row">
           <label>
             <input type="checkbox" data-contact-checkbox value="${esc(c.id)}" ${checked}>
-            <strong>${esc(contactName(c))}</strong> <span class="muted">${esc(c.email || '—')}</span> ${optedBadge(c)}
+            <span class="mlist-contact-info">
+              <strong>${esc(contactName(c))}</strong>
+              <span class="muted">${esc(c.email || '—')}</span>
+            </span>
+            ${optedBadge(c)}
           </label>
         </li>`;
       }).join('');
@@ -641,6 +658,7 @@ class MailingListsPage extends PanicElement {
     actionsEl.hidden = false;
     this.updateAddSelectedButton();
     this.updateAddAllButton();
+    this.updateSelectAllCheckbox();
 
     $$('[data-contact-checkbox]', resultsEl).forEach((cb) => {
       cb.addEventListener('change', () => {
@@ -648,6 +666,7 @@ class MailingListsPage extends PanicElement {
         if (cb.checked) this.acSelected.add(id);
         else this.acSelected.delete(id);
         this.updateAddSelectedButton();
+        this.updateSelectAllCheckbox();
       });
     });
   }
@@ -657,6 +676,19 @@ class MailingListsPage extends PanicElement {
     if (!btn) return;
     btn.textContent = `Add selected (${this.acSelected.size})`;
     btn.disabled = this.acSelected.size === 0;
+  }
+
+  /** Keeps the "Select all" checkbox in sync with the loaded result page —
+   *  checked when every visible row is selected, indeterminate when some
+   *  (but not all) are, and disabled while there's nothing to select. */
+  updateSelectAllCheckbox() {
+    const cb = $('[data-select-all-contacts]', this);
+    if (!cb) return;
+    const total = this.acResults.length;
+    const selectedCount = this.acResults.filter((c) => this.acSelected.has(c.id)).length;
+    cb.disabled = total === 0;
+    cb.checked = total > 0 && selectedCount === total;
+    cb.indeterminate = selectedCount > 0 && selectedCount < total;
   }
 
   updateAddAllButton() {
@@ -683,12 +715,9 @@ class MailingListsPage extends PanicElement {
       publish('toast.show', { message: skipped ? `${added} added, ${skipped} skipped (already invalid)` : `${added} added.` });
 
       this.acSelected = new Set();
-      this.acResults = [];
       const searchInput = $('.mlist-add-contacts-search', this);
       if (searchInput) searchInput.value = '';
-      const resultsEl = $('.mlist-add-contacts-results', this);
-      if (resultsEl) { resultsEl.hidden = true; resultsEl.innerHTML = ''; }
-      $('.mlist-add-actions', this).hidden = true;
+      this.resetAddContactsResults();
 
       this.mPage = 1;
       await this.loadMembers();
@@ -719,13 +748,9 @@ class MailingListsPage extends PanicElement {
       publish('toast.show', { message: `${added} contact${added === 1 ? '' : 's'} added.` });
 
       this.acSelected = new Set();
-      this.acResults = [];
-      this.acTotal = 0;
       const searchInput = $('.mlist-add-contacts-search', this);
       if (searchInput) searchInput.value = '';
-      const resultsEl = $('.mlist-add-contacts-results', this);
-      if (resultsEl) { resultsEl.hidden = true; resultsEl.innerHTML = ''; }
-      $('.mlist-add-actions', this).hidden = true;
+      this.resetAddContactsResults();
 
       this.mPage = 1;
       await this.loadMembers();
@@ -949,14 +974,49 @@ class MailingListsPage extends PanicElement {
       clearTimeout(this._acDebounce);
       this._acDebounce = setTimeout(() => this.searchContactsForAdd(acSearch.value.trim()), 300);
     });
+    // Enter runs the search immediately (bypassing the debounce) even when
+    // the box is empty, so "search blank to browse everyone" has an
+    // explicit trigger and doesn't rely on having typed-then-cleared text.
+    acSearch?.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      clearTimeout(this._acDebounce);
+      this.searchContactsForAdd(acSearch.value.trim());
+    });
     const acOptedFilter = $('.mlist-add-opted-filter', this);
     acOptedFilter?.addEventListener('change', () => {
       this.acOptedOnly = acOptedFilter.checked;
-      const q = acSearch?.value.trim();
-      if (q) this.searchContactsForAdd(q);
+      // Re-run with whatever's in the search box — blank is fine, it just
+      // browses everyone (optionally narrowed to opted-in).
+      this.searchContactsForAdd(acSearch?.value.trim() || '');
+    });
+    $('[data-select-all-contacts]', this)?.addEventListener('change', (e) => {
+      const cb = e.target;
+      if (cb.checked) this.acResults.forEach((c) => this.acSelected.add(c.id));
+      else this.acResults.forEach((c) => this.acSelected.delete(c.id));
+      this.updateAddSelectedButton();
+      this.updateSelectAllCheckbox();
+      $$('[data-contact-checkbox]', this).forEach((rowCb) => { rowCb.checked = this.acSelected.has(Number(rowCb.value)); });
     });
     $('[data-add-selected]', this)?.addEventListener('click', () => this.addSelectedContacts());
     $('[data-add-all-matching]', this)?.addEventListener('click', () => this.addAllMatching());
+    // "Add everyone opted-in" — a one-click shortcut that turns on the
+    // opted-in filter, clears any text search, and runs the same
+    // server-side "add all matching" bulk-add used elsewhere (with its
+    // confirm-count dialog) so a whole opted-in audience can be added
+    // without hand-picking contacts.
+    $('[data-add-all-opted]', this)?.addEventListener('click', async () => {
+      if (!this.selected) return;
+      if (acSearch) acSearch.value = '';
+      if (acOptedFilter) acOptedFilter.checked = true;
+      this.acOptedOnly = true;
+      await this.searchContactsForAdd('');
+      if (!this.acTotal) {
+        publish('toast.show', { message: 'No opted-in contacts found to add.' });
+        return;
+      }
+      await this.addAllMatching();
+    });
 
     // CSV import
     $('.mlist-import-form', this)?.addEventListener('submit', (e) => this.importCsv(e));
