@@ -128,6 +128,18 @@ function previewLabel(date) {
   return parseISO(date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+/**
+ * The earliest date `pattern` could ever produce (ignoring whatever end
+ * condition is currently set) — e.g. anchor+7d for weekly, ~anchor+1mo for
+ * monthly. Used to bound the "On date" end-date picker so a user can't pick
+ * an end date that's guaranteed to yield zero occurrences (which previously
+ * made the Create button silently go back to disabled with no explanation).
+ */
+function firstOccurrenceDate(anchorISO, pattern) {
+  const [date] = generateOccurrenceDates(anchorISO, { ...pattern, endType: 'after_count', occurrenceCount: 1 });
+  return date || anchorISO;
+}
+
 // ── <pb-recurrence-fields> ────────────────────────────────────────────────────
 // Presentational only: checkbox + frequency + end-condition + a live preview.
 // Emits `change` with `{ pattern, dates, description }` (or `null` when the
@@ -218,13 +230,14 @@ class RecurrenceFields extends HTMLElement {
 
     const val = s.enabled ? this.value : null;
     const preview = val ? val.dates : [];
+    const minEndDate = firstOccurrenceDate(this._anchorDate, this._pattern());
     const previewHtml = s.enabled
       ? (preview.length
           ? `<ul class="recurrence-preview">
                ${preview.slice(0, 5).map((d) => `<li>${esc(previewLabel(d))}</li>`).join('')}
                ${preview.length > 5 ? `<li class="muted">+${preview.length - 5} more</li>` : ''}
              </ul>`
-          : `<p class="field-hint muted small">No matching dates in that range yet.</p>`)
+          : `<p class="field-hint error-text small">No matching dates in that range — the earliest possible occurrence is ${esc(previewLabel(minEndDate))}. Pick a later end date, or switch to "After N occurrences".</p>`)
       : '';
 
     this.innerHTML = `
@@ -258,7 +271,7 @@ class RecurrenceFields extends HTMLElement {
           </label>
           <label class="check-label">
             <input type="radio" name="rf_end_type" value="on_date" ${s.endType === 'on_date' ? 'checked' : ''}>
-            On date <input type="date" name="rf_end_date" min="${esc(this._anchorDate)}" value="${esc(s.endDate)}" ${s.endType !== 'on_date' ? 'disabled' : ''}>
+            On date <input type="date" name="rf_end_date" min="${esc(minEndDate)}" value="${esc(s.endDate)}" ${s.endType !== 'on_date' ? 'disabled' : ''}>
           </label>
           <p class="field-hint muted small wide">Max ${MAX_OCCURRENCES} occurrences per series. Each occurrence becomes its own independent event.</p>
           ${previewHtml}

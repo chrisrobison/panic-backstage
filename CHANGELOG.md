@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Bound recurrence end-date picker to first possible occurrence
 - **Fixed** `contracts` — Resolve signing API calls relative to the app's own path
 - **Fixed** `mailing-lists` — Allow blank search in Add contacts to browse all
 - **Fixed** `mailing-lists` — Compact detail header, wider results, bulk opt-in add
