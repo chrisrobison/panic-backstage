@@ -17,6 +17,31 @@
   <script>window.panAutoload = { paths: [] };</script>
   <script type="module" src="https://cdn.jsdelivr.net/npm/@larcjs/core@3.0.1/pan.mjs"></script>
   <script type="module" src="./assets/app.js?v=48"></script>
+  <script>
+    // pb-app-shell is defined manually by app.js above, not a module pan.mjs
+    // (loaded via the tag above) should ever guess a filename for. Without
+    // this, pan's autoloader can race app.js -- it mounts pan-bus via its own
+    // CDN fetch, then scans the DOM for undefined custom elements before
+    // app.js has finished loading its ~20-file import graph and registered
+    // the tag -- and, since panAutoload.paths above is deliberately empty,
+    // its `paths[0] + filename` fallback resolves to the literal string
+    // "undefinedpb-app-shell.mjs", an invalid module specifier the browser
+    // can't resolve (see console: "[pan] Failed to load undefinedpb-app-shell.mjs").
+    // Pointing pb-app-shell at app.js's own (already-loading) URL up front
+    // short-circuits that guess. This script must run after the app.js tag
+    // above so the element exists to query (module scripts don't block
+    // parsing), but it still runs, as a classic script, before any deferred
+    // module's top-level code -- including pan's DOM scan -- which only
+    // starts once the whole document has finished parsing. The browser's
+    // module cache dedupes the two imports of the identical URL, and since
+    // app.js has no default export, pan's own define() call is skipped,
+    // leaving app.js's real `customElements.define('pb-app-shell', ...)` as
+    // the only thing that registers the tag, same as before.
+    var appScript = document.querySelector('script[src*="assets/app.js"]');
+    if (appScript) {
+      document.querySelector('pb-app-shell')?.setAttribute('data-module', appScript.src);
+    }
+  </script>
   <script src="./assets/consent.js?v=2"></script>
 </body>
 </html>
