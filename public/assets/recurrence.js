@@ -201,6 +201,19 @@ class RecurrenceFields extends HTMLElement {
   _onChange(e) {
     const el = e.target;
     if (!el.name || !this.contains(el)) return;
+    // The native 'change' from an internal control is an implementation
+    // detail — consumers (EventRecurrencePanel, the New Event wizard) are
+    // only meant to see the synthesized 'change' dispatched below, which
+    // carries the coherent computed `detail`. Without stopping it here,
+    // that native event keeps bubbling after this handler returns and
+    // reaches any listener bound to `this` (e.g. the panel's) a *second*
+    // time with `detail: undefined` — right after the synthesized dispatch
+    // (nested inside this same call) already ran and set it correctly, so
+    // the bogus second firing clobbers it. Net effect: the Create button
+    // computed the right value for an instant, then immediately reverted
+    // to disabled, every single time — "check the box, fill out the form,
+    // click create, nothing happens".
+    e.stopImmediatePropagation();
     switch (el.name) {
       case 'rf_enabled':      this._state.enabled = el.checked; break;
       case 'rf_freq':         this._state.freq = el.value; break;

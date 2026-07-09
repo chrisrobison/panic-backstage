@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Stop double-firing recurrence change events that reset the Create button
 - **Fixed** `app-shell` — Stop pan.mjs autoloader racing app.js for pb-app-shell
 - **Fixed** `events` — Bound recurrence end-date picker to first possible occurrence
 - **Fixed** `contracts` — Resolve signing API calls relative to the app's own path
