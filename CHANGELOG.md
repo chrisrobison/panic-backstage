@@ -11,6 +11,7 @@ a new empty [Unreleased] block above it.
 
 ## [Unreleased]
 - **Fixed** `contracts` — Stop stale voided signer rows from blocking finalization
+- **Fixed** `signing` — Correct draw-signature canvas offset on HiDPI screens
 - **Changed** `added` — (added) Examples of Google Sheets previously used for tracking events
 - **Changed** `added` — (added) mockup used to build out the mobile calendar view. Added for posterity
 - **Fixed** `events` — Stop double-firing recurrence change events that reset the Create button
