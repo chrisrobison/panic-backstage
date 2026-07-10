@@ -43,6 +43,9 @@ test('a panel "+" reveals its hidden add form (Tasks)', async (page) => {
   if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
   await page.openEvent();
   if (!(await page.exists('#tasks [data-add]'))) return page.skip('no manage_tasks capability for this user');
+  // Sections now live behind real tabs — only the active tab's section is
+  // visible — so switch to Tasks before asserting visibility of anything inside it.
+  await page.click('.workspace-tabs a[data-tab="tasks"]');
   await page.until(`document.querySelector('#tasks form[data-add-form]')`);
   assert.notOk(await page.visible('#tasks form[data-add-form]'), 'add form hidden before clicking +');
   await page.click('#tasks [data-add]');
@@ -53,6 +56,8 @@ test('Invites add form is collapsed behind a "+" toggle', async (page) => {
   if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
   await page.openEvent();
   if (!(await page.exists('#invites'))) return page.skip('invites panel not available for this user');
+  // Switch to the Invites tab first — sections outside the active tab are display:none.
+  await page.click('.workspace-tabs a[data-tab="invites"]');
   await page.until(`document.querySelector('#invites form[data-add-form]')`);
   assert.notOk(await page.visible('#invites form[data-add-form]'), 'invite form hidden initially');
   await page.click('#invites [data-add]');

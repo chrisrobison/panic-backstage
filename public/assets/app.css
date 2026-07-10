@@ -944,11 +944,93 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
    custom-element hosts layout-transparent so their inner markup sits exactly
    where the old inline markup did (block flow or overview-grid grid items). */
 pb-event-summary, pb-event-readiness, pb-event-next-action { display: contents; }
+pb-event-overview { display: block; }
 .overview-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(330px, .75fr);
   gap: 18px;
 }
+
+/* ── Overview dashboard (card-grid summary, Overview tab) ──────────────────── */
+.overview-dashboard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.overview-dashboard .span-3 { grid-column: 1 / -1; }
+.overview-card { display: flex; flex-direction: column; margin-bottom: 0; }
+.overview-card .section-head h2 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.overview-card .section-head h2 i { color: var(--muted); font-size: 13px; width: 16px; text-align: center; }
+.ov-body { padding: 14px 18px; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.ov-body .empty-state { padding: 12px 0; }
+.ov-footer { border-top: 1px solid var(--line); background: var(--soft); }
+.ov-footer button {
+  width: 100%; padding: 10px 18px; font-size: 13px; font-weight: 700;
+  color: var(--accent, #2563eb); background: none; border: none; cursor: pointer; text-align: left;
+}
+.ov-footer button:hover { text-decoration: underline; }
+.ov-divider { height: 1px; background: var(--line); margin: 2px 0; }
+.ov-note { font-size: 13.5px; line-height: 1.5; margin: 0; overflow-wrap: anywhere; }
+
+.ov-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+.ov-stat label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 3px; }
+.ov-stat strong { font-size: 15px; font-weight: 700; }
+.ov-stat strong a { color: var(--accent, #2563eb); }
+
+.timeline-list { list-style: none; margin: 0; padding: 0; }
+.timeline-row { display: grid; grid-template-columns: 60px 14px 1fr; gap: 10px; align-items: start; padding: 6px 0; }
+.timeline-time { font-size: 12px; color: var(--muted); font-weight: 700; padding-top: 1px; white-space: nowrap; }
+.timeline-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent, #2563eb); margin-top: 4px; position: relative; }
+.timeline-row:not(:last-child) .timeline-dot::after {
+  content: ''; position: absolute; top: 12px; left: 50%; width: 1px; height: 26px;
+  background: var(--line); transform: translateX(-50%);
+}
+.timeline-label { font-size: 13.5px; line-height: 1.4; }
+
+.ov-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.ov-list li { display: flex; align-items: center; gap: 8px; font-size: 13.5px; flex-wrap: wrap; }
+.ov-role { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); min-width: 60px; }
+.ov-name { font-weight: 600; }
+.ov-time { margin-left: auto; font-size: 12px; white-space: nowrap; }
+.ov-lineup-list .ov-role { min-width: 28px; }
+
+.ov-contact-block + .ov-contact-block { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.ov-contact-heading { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 4px; }
+.ov-contact-name { font-size: 14px; font-weight: 700; margin: 0 0 3px; }
+.ov-contact-meta { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); }
+.ov-contact-meta a { color: inherit; }
+
+.ov-task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ov-task { display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px; }
+.ov-check {
+  width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--line);
+  flex: 0 0 auto; margin-top: 2px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #fff;
+}
+.ov-task.done .ov-check { background: var(--green); border-color: var(--green); }
+.ov-task.done .ov-task-title { text-decoration: line-through; color: var(--muted); }
+
+.ov-doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.ov-doc-card { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; min-width: 0; }
+.ov-doc-icon { width: 32px; height: 32px; border-radius: 6px; display: grid; place-items: center; font-size: 10px; font-weight: 800; color: #fff; flex: 0 0 auto; }
+.ov-doc-meta { min-width: 0; display: flex; flex-direction: column; }
+.ov-doc-meta strong { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-doc-meta span { font-size: 11px; color: var(--muted); }
+
+.chip-accent { background: var(--red); color: #fff; border-color: var(--red); }
+.chip-green  { background: #e3f6e8; color: #0c7a3c; border-color: #bfe8cc; }
+.chip-amber  { background: #fff0c9; color: #8a5a00; border-color: #f2d98a; }
+.chip-red    { background: #fde2e1; color: #b42318; border-color: #f6c2bf; }
+.chip-gray   { background: var(--soft); color: var(--muted); border-color: var(--line); }
+
+@media (max-width: 1180px) {
+  .overview-dashboard { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .overview-dashboard .span-3 { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .overview-dashboard { grid-template-columns: 1fr; }
+}
+
 .health-row, .task-row, .schedule-row, .asset-row, .performer-row {
   display: grid;
   align-items: center;

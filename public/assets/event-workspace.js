@@ -139,6 +139,215 @@ class EventNextAction extends EventBusCard {
   }
 }
 
+// ── Overview dashboard (card-grid summary) ──────────────────────────────────
+// A read-only, at-a-glance dashboard shown on the Overview tab: schedule
+// timeline, contacts, lineup, venue logistics (vendors), financial snapshot,
+// notes/tasks, and documents — each card links back to its full tab via a
+// `data-goto-tab` button that EventWorkspace intercepts (see connect()).
+// Mirrors the design of the other EventBusCard subclasses above: it re-renders
+// whenever fresh event data is broadcast on the bus.
+
+function ovIcon(name) {
+  return `<i class="fa-solid fa-${esc(name)}" aria-hidden="true"></i>`;
+}
+
+function ovCard({ icon, title, help, body, footerLabel, footerTab, wide }) {
+  const footer = footerLabel
+    ? `<div class="ov-footer"><button type="button" data-goto-tab="${esc(footerTab)}">${esc(footerLabel)} &rarr;</button></div>`
+    : '';
+  return `<article class="panel overview-card${wide ? ' span-3' : ''}">
+    <div class="section-head padded"><h2>${ovIcon(icon)} ${esc(title)}</h2>${help ? helpLink(help) : ''}</div>
+    <div class="ov-body">${body}</div>
+    ${footer}
+  </article>`;
+}
+
+function ovStat(label, value) {
+  if (value === '' || value == null) return '';
+  return `<div class="ov-stat"><label>${esc(label)}</label><strong>${value}</strong></div>`;
+}
+
+const DEPOSIT_STATUS_TONE = { received: 'green', partially_received: 'amber', requested: 'amber', waived: 'gray', refunded: 'red', not_required: 'gray' };
+
+class EventOverview extends EventBusCard {
+  connect() {
+    this._vendors = null;
+    this._vendorsEventId = null;
+    super.connect();
+  }
+
+  render() {
+    const data = this._data;
+    if (!data?.event) return;
+    const event = data.event;
+    const isPrivate = event.event_type === 'private_event';
+
+    // Vendors aren't part of the main event payload — fetch them lazily
+    // (once per event id) for the Venue Ops / Logistics card, same pattern
+    // EventRecurrencePanel uses for its own per-event data.
+    const eventId = event.id;
+    if (this._vendorsEventId !== eventId) {
+      this._vendorsEventId = eventId;
+      this._vendors = null;
+      api(`/events/${eventId}/vendors`).then((res) => {
+        if (this._vendorsEventId !== eventId) return; // stale response — event changed since
+        this._vendors = res.vendors || [];
+        this.render();
+      }).catch(() => {
+        if (this._vendorsEventId !== eventId) return;
+        this._vendors = [];
+        this.render();
+      });
+    }
+
+    this.innerHTML = `<div class="overview-dashboard">
+      ${this._scheduleCard(data)}
+      ${this._contactsCard(event, isPrivate)}
+      ${isPrivate ? '' : this._lineupCard(data)}
+      ${this._logisticsCard(event)}
+      ${this._financialCard(data, isPrivate)}
+      ${this._notesTasksCard(data)}
+      ${this._documentsCard(data)}
+    </div>`;
+  }
+
+  _scheduleCard(data) {
+    const items = data.schedule || [];
+    const shown = items.slice(0, 7);
+    const body = shown.length
+      ? `<ul class="timeline-list">${shown.map((item) => `<li class="timeline-row">
+          <span class="timeline-time">${item.start_time ? esc(timeLabel(item.start_time)) : 'TBA'}</span>
+          <span class="timeline-dot" aria-hidden="true"></span>
+          <span class="timeline-label">${esc(item.title)}${item.notes ? `<br><span class="muted small">${esc(item.notes)}</span>` : ''}</span>
+        </li>`).join('')}</ul>${items.length > shown.length ? `<p class="muted small">+${items.length - shown.length} more</p>` : ''}`
+      : emptyState('No schedule items yet.');
+    return ovCard({ icon: 'clock', title: 'Schedule / Timeline', help: 'schedule', body, footerLabel: 'Full Run Sheet', footerTab: 'schedule' });
+  }
+
+  _contactsCard(event, isPrivate) {
+    const rows = [];
+    const contactBlock = (heading, name, email, phone) => {
+      if (!name && !email && !phone) return '';
+      return `<div class="ov-contact-block">
+        <p class="ov-contact-heading">${esc(heading)}</p>
+        ${name ? `<p class="ov-contact-name">${esc(name)}${event.client_org ? ` <span class="muted">/ ${esc(event.client_org)}</span>` : ''}</p>` : ''}
+        <div class="ov-contact-meta">
+          ${phone ? `<span>${esc(phone)}</span>` : ''}
+          ${email ? `<span><a href="mailto:${esc(email)}">${esc(email)}</a></span>` : ''}
+        </div>
+      </div>`;
+    };
+    rows.push(contactBlock(isPrivate ? 'Client / Primary Contact' : 'Promoter / Artist', event.promoter_name, event.promoter_email, event.promoter_phone));
+    if (!isPrivate) rows.push(contactBlock('Booker', event.booker_name, event.booker_email, event.booker_phone));
+    const body = rows.filter(Boolean).join('') || emptyState('No contacts on file yet.');
+    return ovCard({ icon: 'address-book', title: 'Promoter / Contacts', help: 'details', body, footerLabel: 'Edit Details', footerTab: 'details' });
+  }
+
+  _lineupCard(data) {
+    const lineup = data.lineup || [];
+    const body = lineup.length
+      ? `<ul class="ov-list ov-lineup-list">${lineup.map((item, index) => `<li>
+          <span class="ov-role">#${esc(item.billing_order ?? index + 1)}</span>
+          <span class="ov-name">${esc(item.display_name)}</span>
+          ${index === 0 ? '<span class="chip chip-accent">Headliner</span>' : ''}
+          ${item.set_length_minutes ? `<span class="ov-time muted">${esc(item.set_length_minutes)} min</span>` : ''}
+        </li>`).join('')}</ul>`
+      : emptyState('No lineup yet.');
+    return ovCard({ icon: 'music', title: 'Band Lineup', help: 'lineup', body, footerLabel: 'Manage Lineup', footerTab: 'lineup' });
+  }
+
+  _logisticsCard(event) {
+    const RELEVANT = ['security', 'bar_service', 'sound_production'];
+    let body;
+    if (this._vendors === null) {
+      body = '<p class="muted small">Loading vendors…</p>';
+    } else {
+      const vendors = this._vendors;
+      const relevant = vendors.filter((v) => RELEVANT.includes(v.service_category));
+      const shown = relevant.length ? relevant : vendors.slice(0, 5);
+      const vendorList = shown.length
+        ? `<ul class="ov-list">${shown.map((v) => `<li>
+            <span class="ov-role">${esc(titleCase((v.service_category || '').replace(/_/g, ' ')))}</span>
+            <span class="ov-name">${esc(v.vendor_name)}${v.contact_name ? ` <span class="muted">(${esc(v.contact_name)})</span>` : ''}</span>
+          </li>`).join('')}</ul>`
+        : emptyState('No vendors on file yet.');
+      const notes = [];
+      if (event.av_requirements) notes.push(`<p class="ov-note"><strong>AV / Tech:</strong> ${esc(event.av_requirements)}</p>`);
+      if (event.catering_notes) notes.push(`<p class="ov-note"><strong>Catering / Bar:</strong> ${esc(event.catering_notes)}</p>`);
+      body = vendorList + notes.join('');
+    }
+    return ovCard({ icon: 'building', title: 'Venue Ops / Logistics', help: 'vendors', body, footerLabel: 'Manage Vendors', footerTab: 'vendors' });
+  }
+
+  _financialCard(data, isPrivate) {
+    const event = data.event;
+    const stats = [];
+    if (!isPrivate) stats.push(ovStat('Ticket Price', money(event.ticket_price)));
+    stats.push(ovStat('Capacity', event.capacity || '—'));
+    stats.push(ovStat('Est. Guests', event.estimated_guests || '—'));
+    if (event.deposit_amount != null && event.deposit_amount !== '') {
+      const tone = DEPOSIT_STATUS_TONE[event.deposit_status] || 'gray';
+      stats.push(ovStat('Deposit', `${money(event.deposit_amount)} <span class="chip chip-${esc(tone)}">${esc(statusLabel(event.deposit_status || 'not_required'))}</span>`));
+    }
+    if (event.potential_revenue != null && event.potential_revenue !== '') {
+      stats.push(ovStat('Potential Revenue', money(event.potential_revenue)));
+    }
+    if (!isPrivate) {
+      const ticketing = event.ticket_url
+        ? `<a href="${esc(event.ticket_url)}" target="_blank" rel="noopener noreferrer">On Sale <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>`
+        : '<span class="muted">Not listed</span>';
+      stats.push(ovStat('Tickets', ticketing));
+    }
+    // The Settlement tab only exists for non-private events with the
+    // capability — match that exact gate here so the footer link never
+    // points at a tab that isn't actually mounted.
+    const canViewSettlement = can(data, 'view_settlement');
+    const hasSettlementTab = canViewSettlement && !isPrivate;
+    let settlementBlock = '';
+    if (canViewSettlement && data.settlement) {
+      const s = data.settlement;
+      settlementBlock = `<div class="ov-divider"></div><div class="ov-stat-grid">
+        ${ovStat('Gross Ticket Sales', money(s.gross_ticket_sales))}
+        ${ovStat('Bar Sales', money(s.bar_sales))}
+        ${ovStat('Venue Net', money(s.venue_net))}
+      </div>`;
+    }
+    const body = `<div class="ov-stat-grid">${stats.join('')}</div>${settlementBlock}`;
+    return ovCard({ icon: 'dollar-sign', title: 'Financial / Ticketing', help: 'settlement', body, footerLabel: hasSettlementTab ? 'View Settlement' : 'Event Details', footerTab: hasSettlementTab ? 'settlement' : 'details' });
+  }
+
+  _notesTasksCard(data) {
+    const event = data.event;
+    const tasks = (data.tasks || []).slice(0, 6);
+    const notesHtml = event.description_internal
+      ? `<p class="ov-note">${esc(event.description_internal)}</p>`
+      : '';
+    const taskList = tasks.length
+      ? `<ul class="ov-task-list">${tasks.map((t) => `<li class="ov-task${t.status === 'done' ? ' done' : ''}">
+          <span class="ov-check">${t.status === 'done' ? '<i class="fa-solid fa-check" aria-hidden="true"></i>' : ''}</span>
+          <span class="ov-task-title">${esc(t.title)}</span>
+        </li>`).join('')}</ul>`
+      : emptyState('No tasks yet.');
+    const body = `${notesHtml}${notesHtml ? '<div class="ov-divider"></div>' : ''}${taskList}`;
+    return ovCard({ icon: 'list-check', title: 'Notes / Tasks', help: 'tasks', body, footerLabel: 'View All Tasks', footerTab: 'tasks' });
+  }
+
+  _documentsCard(data) {
+    const assets = data.assets || [];
+    const iconFor = (filename) => /\.(png|jpe?g|gif|webp|svg)$/i.test(filename) ? { label: 'IMG', color: '#f2994a' } : /\.pdf$/i.test(filename) ? { label: 'PDF', color: '#eb5757' } : /\.(xlsx?|csv)$/i.test(filename) ? { label: 'XLS', color: '#219653' } : { label: 'DOC', color: '#556' };
+    const body = assets.length
+      ? `<div class="ov-doc-grid">${assets.slice(0, 8).map((a) => {
+          const kind = iconFor(a.filename || '');
+          return `<div class="ov-doc-card">
+            <span class="ov-doc-icon" style="background:${kind.color}">${esc(kind.label)}</span>
+            <span class="ov-doc-meta"><strong title="${esc(a.title)}">${esc(a.title)}</strong><span>${esc(shortDate(new Date(String(a.created_at).replace(' ', 'T'))))}</span></span>
+          </div>`;
+        }).join('')}</div>`
+      : emptyState('No documents uploaded yet.');
+    return ovCard({ icon: 'paperclip', title: 'Documents / Attachments', help: 'assets', body, footerLabel: 'Manage Assets', footerTab: 'assets', wide: true });
+  }
+}
+
 // Human-readable labels for each section in the visibility dropdown.
 const SECTION_LABELS = {
   overview:     'Overview',
@@ -182,21 +391,53 @@ class EventWorkspace extends PanicElement {
     window.PBConsent?.savePref(this._prefsKey(userId, eventId), JSON.stringify(prefs));
   }
 
+  // Wire up "Sections" dropdown checkbox changes — hiding a section also
+  // removes its tab from the nav; if the hidden section was the active tab,
+  // fall back to Overview. All actual show/hide happens via real tabs now
+  // (see setActiveTab / _applySectionVisibility), not scroll position.
   _bindSectionToggles(userId, eventId, prefs) {
-    // Apply initial hidden state from loaded prefs
-    for (const [sectionId, visible] of Object.entries(prefs)) {
-      const el = this.querySelector(`#${CSS.escape(sectionId)}`);
-      if (el) el.style.display = visible ? '' : 'none';
-    }
-    // Wire up checkbox changes
     $$('[data-section-toggle]', this).forEach(checkbox => {
       checkbox.addEventListener('change', () => {
         prefs[checkbox.dataset.sectionToggle] = checkbox.checked;
         this._savePrefs(userId, eventId, prefs);
-        const el = this.querySelector(`#${CSS.escape(checkbox.dataset.sectionToggle)}`);
-        if (el) el.style.display = checkbox.checked ? '' : 'none';
+        if (!checkbox.checked && this._activeTab === checkbox.dataset.sectionToggle) {
+          this._activeTab = 'overview';
+        }
+        this._renderTabNav();
+        this._applySectionVisibility();
       });
     });
+  }
+
+  /** Rebuild just the tab nav (visible tabs = not hidden via prefs, plus overview/details always shown). */
+  _renderTabNav() {
+    const navEl = $('.workspace-tabs', this);
+    if (!navEl || !this._tabs) return;
+    const visibleTabs = this._tabs.filter((t) => t === 'overview' || t === 'details' || this._prefs[t] !== false);
+    if (!visibleTabs.includes(this._activeTab)) this._activeTab = 'overview';
+    navEl.innerHTML = visibleTabs.map((tab) => `<a class="${tab === this._activeTab ? 'active' : ''}" href="#${esc(tab)}" data-tab="${esc(tab)}">${esc(SECTION_LABELS[tab] || titleCase(tab))}</a>`).join('');
+    $$('a', navEl).forEach((a) => a.addEventListener('click', (event) => {
+      event.preventDefault();
+      this.setActiveTab(a.dataset.tab);
+    }));
+  }
+
+  /** Show only the active tab's section; every other tracked section is hidden. */
+  _applySectionVisibility() {
+    if (!this._tabs) return;
+    for (const tab of this._tabs) {
+      const el = this.querySelector(`#${CSS.escape(tab)}`);
+      if (el) el.style.display = tab === this._activeTab ? '' : 'none';
+    }
+  }
+
+  /** Switch the active tab — cheap, since every section is already mounted; only visibility changes. */
+  setActiveTab(tabId) {
+    if (!this._tabs?.includes(tabId) || tabId === this._activeTab) return;
+    this._activeTab = tabId;
+    this._renderTabNav();
+    this._applySectionVisibility();
+    $('.workspace-tabs', this)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   async connect() {
@@ -209,6 +450,15 @@ class EventWorkspace extends PanicElement {
       this.data = data;
       this._updateHeader(data);
     }, this.abort.signal);
+    // Overview cards (and any future in-panel link) can jump to another tab
+    // by rendering a `<button data-goto-tab="lineup">` — no custom events,
+    // no shadow DOM to cross, just a delegated click listener.
+    this.addEventListener('click', (event) => {
+      const trigger = event.target.closest('[data-goto-tab]');
+      if (!trigger) return;
+      event.preventDefault();
+      this.setActiveTab(trigger.dataset.gotoTab);
+    }, { signal: this.abort.signal });
   }
 
   /** Re-publish the topbar page context and patch the publish button after an in-place event update. */
@@ -249,6 +499,9 @@ class EventWorkspace extends PanicElement {
     const userId = user?.id ?? 'anon';
     const toggleableTabs = tabs.filter(t => t !== 'details');
     const prefs = this._loadPrefs(userId, event.id, toggleableTabs);
+    this._tabs = tabs;
+    this._prefs = prefs;
+    if (!this._activeTab) this._activeTab = 'overview';
     const sectionsDropdown = `<details class="print-menu sections-menu">
       <summary class="button secondary">Sections &#9662;</summary>
       <div class="print-menu-items">
@@ -292,15 +545,17 @@ class EventWorkspace extends PanicElement {
     </section>
     <pb-portal-panel id="portalPanel"></pb-portal-panel>
     <pb-qr-panel id="qrPanel"></pb-qr-panel>
-    <nav class="workspace-tabs tabs">${tabs.map((tab, index) => `<a class="${index === 0 ? 'active' : ''}" href="#${tab}">${esc(titleCase(tab))}</a>`).join('')}</nav>
+    <nav class="workspace-tabs tabs"></nav>
     <pb-event-summary></pb-event-summary>
     <pb-event-next-action></pb-event-next-action>
-    <section id="overview" class="overview-grid">
+    <section id="overview">
       <pb-event-readiness></pb-event-readiness>
-      <article class="panel"><div class="section-head padded"><h2>Internal Notes</h2></div><div class="notes">${esc(event.description_internal || 'No internal notes yet.')}</div></article>
+      <pb-event-overview></pb-event-overview>
     </section>
-    <pb-event-details-form id="details"></pb-event-details-form>
-    <pb-event-recurrence></pb-event-recurrence>
+    <section id="details">
+      <pb-event-details-form></pb-event-details-form>
+      <pb-event-recurrence></pb-event-recurrence>
+    </section>
     <pb-asset-manager id="assets"></pb-asset-manager>
     <pb-task-list id="tasks"></pb-task-list>
     ${isPrivate ? '' : '<pb-lineup-editor id="lineup"></pb-lineup-editor>'}
@@ -320,6 +575,7 @@ class EventWorkspace extends PanicElement {
     $('pb-event-summary', this).data = data;
     $('pb-event-next-action', this).data = data;
     $('pb-event-readiness', this).data = data;
+    $('pb-event-overview', this).data = data;
     $('pb-event-details-form', this).data = data;
     $('pb-event-recurrence', this).data = data;
     $('pb-task-list', this).data = data;
@@ -360,13 +616,8 @@ class EventWorkspace extends PanicElement {
       button.closest('details.print-menu')?.removeAttribute('open');
       openPrintWindow(button.dataset.print, this.data);
     }));
-    $$('.workspace-tabs a', this).forEach((tab) => tab.addEventListener('click', (event) => {
-      event.preventDefault();
-      const target = (tab.getAttribute('href') || '').slice(1);
-      const section = target ? this.querySelector(`#${CSS.escape(target)}`) : null;
-      if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      $$('.workspace-tabs a', this).forEach((other) => other.classList.toggle('active', other === tab));
-    }));
+    this._renderTabNav();
+    this._applySectionVisibility();
     this._bindSectionToggles(userId, event.id, prefs);
   }
 
@@ -911,6 +1162,7 @@ customElements.define('pb-event-workspace', EventWorkspace);
 customElements.define('pb-event-summary', EventSummary);
 customElements.define('pb-event-readiness', EventReadiness);
 customElements.define('pb-event-next-action', EventNextAction);
+customElements.define('pb-event-overview', EventOverview);
 customElements.define('pb-event-details-form', EventDetailsForm);
 customElements.define('pb-event-recurrence', EventRecurrencePanel);
 customElements.define('pb-portal-panel', PortalPanel);

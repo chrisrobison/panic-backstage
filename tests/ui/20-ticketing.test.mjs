@@ -4,6 +4,11 @@ import { test, assert } from './harness.mjs';
 
 async function openTicketing(page) {
   await page.openEvent();
+  // Sections live behind real tabs now — switch to Ticketing so its section
+  // is the visible one (page.visible() checks actual rendered geometry).
+  if (await page.exists('.workspace-tabs a[data-tab="ticketing"]')) {
+    await page.click('.workspace-tabs a[data-tab="ticketing"]');
+  }
   return page.until(`document.querySelector('#ticketing') && document.querySelector('#ticketing').children.length>0`, 8000);
 }
 
