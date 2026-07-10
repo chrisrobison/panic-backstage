@@ -146,9 +146,12 @@ final class ContractWebhooks extends BaseEndpoint
             ['email' => $email, 'source' => 'webhook']
         );
 
-        // Check if all signed.
+        // Check if all signed. Exclude 'voided' rows — dead placeholders left
+        // by a superseded resend (see Contracts::sendForSignature()) that can
+        // never become 'signed' and would otherwise permanently block a
+        // resent contract from finalizing.
         $unsigned = $this->db->one(
-            "SELECT COUNT(*) AS n FROM contract_signers WHERE contract_id = ? AND status != 'signed'",
+            "SELECT COUNT(*) AS n FROM contract_signers WHERE contract_id = ? AND status NOT IN ('signed', 'voided')",
             [$contractId]
         );
         if ((int) ($unsigned['n'] ?? 1) === 0) {
