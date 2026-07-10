@@ -15,12 +15,13 @@ use function Panic\boolish;
  *   GET    /api/events/{id}/ledger          list all non-void entries
  *   POST   /api/events/{id}/ledger          add an entry (corrections are new entries)
  *   DELETE /api/events/{id}/ledger/{eid}    void an entry (audit trail preserved)
+ *   PATCH  /api/events/{id}/ledger          toggle one or more closeout checklist items
  *   GET    /api/events/{id}/ledger/summary  server-calculated P&L summary
  *
  * All financial totals (venue_net, gross, margin) are computed server-side.
  * Client submits individual line-item inputs; server returns computed totals.
  *
- * Capabilities: read_event (GET), manage_ledger (POST/DELETE)
+ * Capabilities: read_event (GET), manage_ledger (POST/PATCH/DELETE)
  *               finalize_closeout to finalize/reopen
  */
 final class Ledger extends BaseEndpoint
@@ -49,6 +50,16 @@ final class Ledger extends BaseEndpoint
 
     private const SOURCES = ['manual','ticketing_sync','pos_import','vendor_link',
                               'staffing_link','payment_link','change_order_link','system'];
+
+    // Single source of truth for the closeout checklist's DB columns — shared
+    // by updateChecklist() (per-item PATCH toggle) and finalize() (completeness
+    // check), so the two can't drift the way they previously did: the closeout
+    // panel's checklist (event-closeout.js CHECKLIST_FIELDS) and this list used
+    // to name completely different, unrelated columns.
+    private const CHECKLIST_ITEMS = [
+        'contract_signed', 'deposit_received', 'vendors_confirmed',
+        'staffing_confirmed', 'bar_closed', 'cash_reconciled', 'all_invoices_collected',
+    ];
 
     public function handle(Request $request): Response
     {
@@ -85,6 +96,7 @@ final class Ledger extends BaseEndpoint
         return match ($request->method()) {
             'GET'    => $this->index($eventId),
             'POST'   => $this->addEntry($request, $eventId),
+            'PATCH'  => $this->updateChecklist($request, $eventId),
             'DELETE' => $this->voidEntry($request, $eventId, (int) $entryId),
             default  => Response::methodNotAllowed(),
         };
@@ -221,6 +233,59 @@ final class Ledger extends BaseEndpoint
         return $this->ok(['ok' => true, 'summary' => $this->calculateSummary($eventId)]);
     }
 
+    // ── Checklist ─────────────────────────────────────────────────────────────
+
+    /**
+     * PATCH /api/events/{id}/ledger — toggle one or more closeout checklist
+     * items. Body is a partial map of { field: 0|1, ... } restricted to
+     * self::CHECKLIST_ITEMS; unknown fields are rejected (422) rather than
+     * silently ignored, so a frontend/backend field-name mismatch — the
+     * exact bug this endpoint originally shipped without a handler for —
+     * fails loudly instead of quietly no-opping.
+     */
+    private function updateChecklist(Request $request, int $eventId): Response
+    {
+        $state = $this->ensureCloseoutState($eventId);
+
+        if (($state['status'] ?? '') === 'finalized') {
+            if (!$this->hasEventCapability($eventId, 'finalize_closeout')) {
+                return Response::json(['error' => 'Closeout is finalized — reopen to change checklist items'], 409);
+            }
+        }
+
+        $b = $request->body();
+
+        $unknown = array_diff(array_keys($b), self::CHECKLIST_ITEMS);
+        if (!empty($unknown)) {
+            return Response::json(['error' => 'Unknown checklist field(s): ' . implode(', ', $unknown)], 422);
+        }
+
+        // Safe to interpolate: keys are drawn only from the fixed
+        // self::CHECKLIST_ITEMS whitelist checked above, never from $b directly.
+        $updates = array_intersect_key($b, array_flip(self::CHECKLIST_ITEMS));
+        if (empty($updates)) {
+            return Response::json(['error' => 'No checklist fields provided'], 422);
+        }
+
+        $sets   = [];
+        $params = [];
+        foreach ($updates as $field => $value) {
+            $sets[]   = "$field = ?";
+            $params[] = boolish($value);
+        }
+        $params[] = $eventId;
+
+        $this->db->run(
+            'UPDATE event_closeout_state SET ' . implode(', ', $sets) . ' WHERE event_id = ?',
+            $params
+        );
+
+        log_activity($this->db, $eventId, $this->userId(), 'closeout checklist updated', $updates);
+
+        $closeout = $this->db->one('SELECT * FROM event_closeout_state WHERE event_id = ?', [$eventId]);
+        return $this->ok(['ok' => true, 'closeout' => $closeout]);
+    }
+
     // ── P&L Summary ───────────────────────────────────────────────────────────
 
     private function summary(int $eventId): Response
@@ -302,11 +367,7 @@ final class Ledger extends BaseEndpoint
         $b = $request->body();
 
         // Check all checklist items are done
-        $checklist = [
-            'actual_hours_confirmed', 'bar_revenue_reconciled', 'ticket_revenue_reconciled',
-            'vendor_costs_entered', 'incidents_reviewed', 'final_invoice_prepared',
-            'payment_obligations_recorded',
-        ];
+        $checklist = self::CHECKLIST_ITEMS;
 
         $missing = [];
         foreach ($checklist as $item) {
