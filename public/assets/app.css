@@ -878,28 +878,34 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
   white-space: nowrap;
 }
 .workspace-tabs a.active { color: #111; border-color: var(--red); font-weight: 900; }
+/* Compact header strip — sits above the tab nav. A small flyer thumbnail,
+   a single-row fact strip, and inline stat pills, all on one line so it
+   doesn't compete with the tabs/content below for vertical space. */
 .event-summary {
-  padding: 12px;
+  padding: 8px 14px;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 220px;
-  gap: 20px;
-  margin-bottom: 18px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 14px;
 }
 .flyer {
   position: relative;
   overflow: hidden;
-  min-height: 160px;
+  width: 110px;
+  height: 56px;
+  flex: 0 0 auto;
   border-radius: 6px;
   background: radial-gradient(circle at 80% 55%, var(--red) 0 10%, transparent 11%),
     linear-gradient(135deg, #111 0 60%, #2f3136);
   color: #fff;
-  padding: 22px;
-  font-size: 34px;
-  font-weight: 950;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-weight: 900;
   text-transform: uppercase;
-  line-height: .95;
+  line-height: 1.1;
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
 }
 /* Generative paint-splat background, sized to fill the flyer card. */
 .flyer-splat {
@@ -912,23 +918,33 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
 .flyer-title {
   position: relative;
   z-index: 1;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, .75), 0 1px 2px rgba(0, 0, 0, .9);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, .75), 0 1px 2px rgba(0, 0, 0, .9);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .facts-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
-  gap: 0;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 4px 0;
 }
 .fact {
-  padding: 15px 16px;
-  border-bottom: 1px solid var(--line);
-  min-height: 76px;
+  padding: 0 12px;
+  border-left: 1px solid var(--line);
+  min-height: auto;
 }
-.fact label { color: var(--muted); font-size: 13px; font-weight: 700; margin-bottom: 5px; }
-.fact strong { display: block; font-size: 16px; }
-.event-stats { border-left: 1px solid var(--line); display: grid; align-content: start; }
-.event-stat { padding: 16px 20px; border-bottom: 1px solid var(--line); color: #4b5360; }
-.event-stat strong { display: block; color: var(--danger); font-size: 28px; line-height: 1; }
+.fact:first-child { border-left: none; padding-left: 0; }
+.fact label { display: block; color: var(--muted); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; margin-bottom: 2px; }
+.fact strong { display: block; font-size: 13.5px; line-height: 1.3; }
+.event-stats { border-left: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding-left: 16px; flex: 0 0 auto; }
+.event-stat { display: flex; align-items: baseline; gap: 6px; padding: 0; border-bottom: 0; color: #4b5360; font-size: 12px; white-space: nowrap; }
+.event-stat strong { color: var(--danger); font-size: 16px; line-height: 1; }
+.event-stat button {
+  border: none; background: none; padding: 0; margin: 0;
+  font: inherit; font-size: 11px; color: var(--accent, #2563eb); cursor: pointer;
+}
+.event-stat button:hover { text-decoration: underline; }
 .next-action {
   border-color: #f2c86e;
   background: #fffaf0;
@@ -1937,9 +1953,6 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   .topbar { padding: 0 24px; }
   .search { width: min(420px, 52vw); }
   .dashboard-grid, .overview-grid { grid-template-columns: 1fr; }
-  .event-summary { grid-template-columns: 220px 1fr; }
-  .event-stats { grid-column: 1 / -1; grid-template-columns: repeat(2, 1fr); border-left: 0; display: grid; }
-  .facts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .health-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .calendar-grid {
     overflow-x: auto;
@@ -2089,15 +2102,13 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
     padding: 0 18px 10px;
   }
   .event-summary {
-    grid-template-columns: 1fr;
-    gap: 12px;
+    grid-template-columns: auto 1fr;
+    grid-template-areas: "flyer facts" "stats stats";
+    gap: 10px 14px;
   }
-  .flyer {
-    min-height: 150px;
-    font-size: 30px;
-  }
-  .facts-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .event-stats { grid-template-columns: repeat(2, 1fr); }
+  .flyer { grid-area: flyer; }
+  .facts-grid { grid-area: facts; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 0; }
+  .event-stats { grid-area: stats; border-left: 0; padding-left: 0; padding-top: 8px; border-top: 1px solid var(--line); }
   .next-action {
     grid-template-columns: 44px minmax(0, 1fr);
   }
@@ -2242,9 +2253,8 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   .weekday { min-height: 30px; }
   .program-night { font-size: 11px; }
   .event-summary { padding: 10px; }
-  .facts-grid, .event-stats, .health-row, .mobile-kpis { grid-template-columns: 1fr; }
-  .fact { min-height: auto; }
-  .event-stat { border-left: 0; }
+  .facts-grid, .health-row, .mobile-kpis { grid-template-columns: 1fr; }
+  .event-stats { flex-direction: column; align-items: flex-start; gap: 6px; }
   .next-action { grid-template-columns: 42px minmax(0, 1fr); padding: 14px; }
   .today-card { grid-template-columns: 1fr; text-align: left; }
   .today-card .icon-bubble { width: 68px; height: 68px; }

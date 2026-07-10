@@ -103,8 +103,8 @@ class EventSummary extends EventBusCard {
         ${factCell('Public Page', Number(event.public_visibility) ? 'Live' : 'Hidden')}
       </div>
       <div class="event-stats">
-        <div class="event-stat">Open Items<strong>${openItems}</strong><a href="#open-items">View</a></div>
-        <div class="event-stat">Tasks Left<strong>${tasksLeft}</strong><a href="#tasks">View</a></div>
+        <div class="event-stat">Open Items<strong>${openItems}</strong><button type="button" data-goto-tab="open-items">View</button></div>
+        <div class="event-stat">Tasks Left<strong>${tasksLeft}</strong><button type="button" data-goto-tab="tasks">View</button></div>
       </div>
     </article>`;
   }
@@ -545,8 +545,8 @@ class EventWorkspace extends PanicElement {
     </section>
     <pb-portal-panel id="portalPanel"></pb-portal-panel>
     <pb-qr-panel id="qrPanel"></pb-qr-panel>
-    <nav class="workspace-tabs tabs"></nav>
     <pb-event-summary></pb-event-summary>
+    <nav class="workspace-tabs tabs"></nav>
     <pb-event-next-action></pb-event-next-action>
     <section id="overview">
       <pb-event-readiness></pb-event-readiness>

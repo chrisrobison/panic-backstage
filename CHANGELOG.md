@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** — Move event header above tabs and make it compact
 - **Changed** — Redesign event workspace: real tabs + card-grid Overview dashboard
 - **Changed** — Add ListMaster: sidebar-of-lists list management UI
 - **Fixed** `closeout` — Add missing PATCH handler for checklist toggles, fix field-name drift
