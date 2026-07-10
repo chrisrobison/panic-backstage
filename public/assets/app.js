@@ -17,6 +17,7 @@ import './outbox.js';
 import './messages.js';
 import './campaigns.js';
 import './mailing-lists.js';
+import './listmaster.js';
 import './events.js';
 import './event-wizard.js';
 import './leads.js';
@@ -97,6 +98,7 @@ class AppShell extends PanicElement {
             <a data-nav="sent" href="#sent" title="Outbox"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i>Outbox</a>
             <a data-nav="campaigns" data-nav-campaigns href="#campaigns" title="Campaigns"><i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i>Campaigns</a>
             <a data-nav="lists" data-nav-campaigns href="#lists" title="Lists"><i class="fa-solid fa-rectangle-list" aria-hidden="true"></i>Lists</a>
+            <a data-nav="listmaster" data-nav-campaigns href="#listmaster" title="ListMaster"><i class="fa-solid fa-table-list" aria-hidden="true"></i>ListMaster</a>
           </div>
         </div>
         <div class="nav-group" data-group="events">
@@ -390,6 +392,7 @@ class AppShell extends PanicElement {
     if (route === 'sent') return this.mount(outlet, 'pb-messages-sent');
     if (route === 'campaigns') return this.mount(outlet, 'pb-msg-campaigns');
     if (route === 'lists') return this.mount(outlet, 'pb-msg-lists');
+    if (route === 'listmaster') return this.mount(outlet, 'pb-listmaster');
     if (route === 'new-event') return this.mount(outlet, 'pb-event-wizard');
     return this.mount(outlet, 'pb-dashboard');
   }

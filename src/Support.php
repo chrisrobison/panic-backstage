@@ -63,3 +63,20 @@ function log_activity(Database $db, int $eventId, ?int $userId, string $action, 
         [$eventId, $userId, $action, json_encode($details)]
     );
 }
+
+/**
+ * Same shape as log_activity() above, but for the per-contact audit trail
+ * (contact_activity — see database/migrations/055_listmaster_extras.sql)
+ * shown in ListMaster's contact detail "Activity" tab. Written from both
+ * Contacts.php (contact created/updated, tag assigned/removed) and
+ * MailingLists.php (list joined/left, status changed, CSV import) so a
+ * contact's full history reads as one timeline regardless of which endpoint
+ * touched it.
+ */
+function log_contact_activity(Database $db, int $contactId, ?int $userId, string $type, string $message, array $details = []): void
+{
+    $db->run(
+        'INSERT INTO contact_activity (contact_id, user_id, type, message, details_json) VALUES (?, ?, ?, ?, ?)',
+        [$contactId, $userId, $type, $message, $details ? json_encode($details) : null]
+    );
+}

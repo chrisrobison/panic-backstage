@@ -168,12 +168,32 @@ final class Kernel
         }
 
         // Marketing / CRM contacts (admin)
-        //   GET /api/contacts/{id}/lists  which mailing lists this contact belongs to
+        //   GET  /api/contacts/{id}/lists          which mailing lists this contact belongs to
+        //   GET  /api/contacts/{id}/activity       audit trail
+        //   GET/POST /api/contacts/{id}/tags       tags assigned to this contact
+        //   DELETE   /api/contacts/{id}/tags/{tagId}
+        //   POST /api/contacts/bulk-tag            assign one tag to many contacts at once
         if ($segments[0] === 'contacts') {
+            if (($segments[1] ?? null) === 'bulk-tag') {
+                return [Contacts::class, ['contactId' => null, 'action' => 'bulk-tag']];
+            }
             return [Contacts::class, [
                 'contactId' => $this->intOrNull($segments[1] ?? null),
                 'action'    => $segments[2] ?? null,
+                'subId'     => $this->intOrNull($segments[3] ?? null),
             ]];
+        }
+
+        // Tag definitions (admin; manage_campaigns gate inside endpoint) —
+        // assigning/unassigning a tag to a contact goes through /contacts
+        // above; this only manages the name/color definitions.
+        if ($segments[0] === 'contact-tags') {
+            return [ContactTags::class, ['tagId' => $this->intOrNull($segments[1] ?? null)]];
+        }
+
+        // "List storage: N of LIMIT contacts" meter (admin; manage_contacts gate inside endpoint)
+        if ($segments[0] === 'contact-storage') {
+            return [ContactStorage::class, []];
         }
 
         // Email campaigns (admin; manage_campaigns gate inside endpoint)
@@ -200,9 +220,17 @@ final class Kernel
         }
 
         // Mailing lists (marketing; manage_campaigns gate inside endpoint)
+        //   GET /api/mailing-lists/import-history | export-history  global
+        //   history logs — checked first since 'import-history'/'export-history'
+        //   aren't numeric ids and would otherwise be silently dropped by
+        //   intOrNull() below, colliding with the plain index route.
         if ($segments[0] === 'mailing-lists') {
+            $seg1 = $segments[1] ?? null;
+            if ($seg1 === 'import-history' || $seg1 === 'export-history') {
+                return [MailingLists::class, ['listId' => null, 'child' => $seg1, 'childId' => null]];
+            }
             return [MailingLists::class, [
-                'listId'  => $this->intOrNull($segments[1] ?? null),
+                'listId'  => $this->intOrNull($seg1),
                 'child'   => $segments[2] ?? null,
                 'childId' => $this->intOrNull($segments[3] ?? null),
             ]];

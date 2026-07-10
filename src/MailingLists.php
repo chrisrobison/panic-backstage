@@ -8,23 +8,34 @@ namespace Panic;
  * targeting mechanism for email campaigns (see `src/Campaigns.php`).
  *
  *   GET    /api/mailing-lists                        list (?q=)
- *   GET    /api/mailing-lists/{id}                    show one (+ member count)
+ *   GET    /api/mailing-lists/{id}                    show one (+ member/active/unsubscribed/bounced counts)
  *   POST   /api/mailing-lists                         create {name, description, list_type?, segment_rules?}
  *   PATCH  /api/mailing-lists/{id}                     update {name?, description?, segment_rules?}
  *   DELETE /api/mailing-lists/{id}                     delete (membership cascades)
- *   GET    /api/mailing-lists/{id}/members             list members (?q=&status=&page=&limit=)
+ *   GET    /api/mailing-lists/{id}/members             list members (?q=&status=&tag=&page=&limit=) — each row includes its tags + how many lists it's on
  *   POST   /api/mailing-lists/{id}/members             {contact_ids: int[]} bulk upsert-subscribe
- *   PATCH  /api/mailing-lists/{id}/members/{contactId} {status: subscribed|unsubscribed}
+ *   PATCH  /api/mailing-lists/{id}/members             {contact_ids: int[], status} bulk status change (subscribe/unsubscribe/mark bounced)
+ *   DELETE /api/mailing-lists/{id}/members             {contact_ids: int[]} bulk remove membership rows entirely
+ *   PATCH  /api/mailing-lists/{id}/members/{contactId} {status: subscribed|unsubscribed|bounced}
  *   DELETE /api/mailing-lists/{id}/members/{contactId} remove the membership row entirely
+ *   GET    /api/mailing-lists/{id}/export-members      CSV of every matching member (?q=&status=&tag=, same filters as the members list — unpaginated)
  *   POST   /api/mailing-lists/{id}/add-by-filter       {q?, opted?, min_spend?, min_events?, min_tickets?} add every matching contact
  *   POST   /api/mailing-lists/{id}/import              multipart CSV upload (field "csv") — create/match contacts by email, add to list
  *   POST   /api/mailing-lists/{id}/refresh             re-run a segment list's saved rules and sync membership
+ *   GET    /api/mailing-lists/import-history           global CSV import log across all lists (?list_id=&page=&limit=)
+ *   GET    /api/mailing-lists/export-history           global CSV export log across all lists (?list_id=&page=&limit=)
  *
  * A list's `list_type` is either 'static' (membership edited by hand/filter/
  * CSV) or 'segment' (membership fully computed from `segment_rules`, synced
  * only via /refresh). `list_type` cannot be changed once a list is created —
  * make a new list instead of converting one, since there's no good answer
  * for what should happen to existing members on a type change.
+ *
+ * A member's status is 'subscribed', 'unsubscribed', or 'bounced'. Bounced is
+ * manually set (Mark as bounced / bulk action) — this app has no outbound
+ * email provider bounce-webhook feed, so nothing flips it automatically;
+ * it exists so a hard-bounce an admin learns about by other means can be
+ * recorded and excluded from future sends, same as unsubscribing.
  *
  * Gated by the manage_campaigns global capability (venue_admin) — Lists is
  * part of the same nav group/feature as Campaigns, so it reuses that grant
@@ -49,6 +60,16 @@ final class MailingLists extends BaseEndpoint
         $child   = $this->params['child'] ?? null;
         $childId = $this->params['childId'] ?? null;
 
+        // Global (cross-list) history — routed by Kernel with listId=null,
+        // child='import-history'|'export-history' before the numeric-id
+        // parsing below would otherwise swallow the word as a non-numeric id.
+        if ($id === null && $child === 'import-history' && $request->method() === 'GET') {
+            return $this->importHistory($request);
+        }
+        if ($id === null && $child === 'export-history' && $request->method() === 'GET') {
+            return $this->exportHistory($request);
+        }
+
         if ($id && $child === 'members') {
             return $childId
                 ? $this->handleMember($request, (int) $id, (int) $childId)
@@ -63,6 +84,9 @@ final class MailingLists extends BaseEndpoint
         if ($id && $child === 'refresh' && $request->method() === 'POST') {
             return $this->refreshSegment((int) $id);
         }
+        if ($id && $child === 'export-members' && $request->method() === 'GET') {
+            return $this->exportMembers($request, (int) $id);
+        }
 
         return match ($request->method()) {
             'GET'    => $id ? $this->show((int) $id) : $this->index($request),
@@ -76,10 +100,105 @@ final class MailingLists extends BaseEndpoint
     private function handleMembers(Request $request, int $listId): Response
     {
         return match ($request->method()) {
-            'GET'   => $this->listMembers($request, $listId),
-            'POST'  => $this->addMembers($request, $listId),
-            default => Response::methodNotAllowed(),
+            'GET'    => $this->listMembers($request, $listId),
+            'POST'   => $this->addMembers($request, $listId),
+            'PATCH'  => $this->bulkUpdateMembers($request, $listId),
+            'DELETE' => $this->bulkRemoveMembers($request, $listId),
+            default  => Response::methodNotAllowed(),
         };
+    }
+
+    /** @return int[]|Response */
+    private function readContactIds(Request $request): array|Response
+    {
+        $contactIds = $request->body('contact_ids');
+        if (!is_array($contactIds) || $contactIds === []) {
+            return Response::json(['error' => 'contact_ids must be a non-empty array'], 422);
+        }
+        $contactIds = array_values(array_unique(array_filter(array_map(
+            static fn ($v) => is_numeric($v) ? (int) $v : null,
+            $contactIds
+        ), static fn ($v) => $v !== null && $v > 0)));
+        if ($contactIds === []) {
+            return Response::json(['error' => 'contact_ids must be a non-empty array of integers'], 422);
+        }
+        if (count($contactIds) > self::MAX_BULK_CONTACTS) {
+            return Response::json(['error' => 'Too many contacts at once (max ' . self::MAX_BULK_CONTACTS . ') — split into smaller batches'], 422);
+        }
+        return $contactIds;
+    }
+
+    /**
+     * Bulk status change — the "Unsubscribe" / "Mark as bounced" / "Resubscribe"
+     * bulk-select actions in the ListMaster member table. Segment lists are
+     * blocked the same way single-member updateMember() isn't (there's no
+     * such guard there today, kept consistent): a manual status write on a
+     * segment member would just get reasserted on the next refresh, so it's
+     * silently pointless rather than actively harmful — still worth telling
+     * the user rather than letting them think it stuck.
+     */
+    private function bulkUpdateMembers(Request $request, int $listId): Response
+    {
+        $list = $this->db->one('SELECT id, name, list_type FROM mailing_lists WHERE id = ?', [$listId]);
+        if (!$list) {
+            return $this->notFound('Mailing list not found');
+        }
+        $status = (string) $request->body('status', '');
+        if (!in_array($status, ['subscribed', 'unsubscribed', 'bounced'], true)) {
+            return Response::json(['error' => "status must be 'subscribed', 'unsubscribed', or 'bounced'"], 422);
+        }
+        $contactIds = $this->readContactIds($request);
+        if ($contactIds instanceof Response) {
+            return $contactIds;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($contactIds), '?'));
+        $matching = $this->db->all(
+            "SELECT contact_id FROM list_membership WHERE list_id = ? AND contact_id IN ({$placeholders})",
+            [$listId, ...$contactIds]
+        );
+        $matchedIds = array_map(static fn ($r) => (int) $r['contact_id'], $matching);
+        if ($matchedIds !== []) {
+            $inPlaceholders = implode(',', array_fill(0, count($matchedIds), '?'));
+            $this->db->run(
+                "UPDATE list_membership SET status = ? WHERE list_id = ? AND contact_id IN ({$inPlaceholders})",
+                [$status, $listId, ...$matchedIds]
+            );
+            foreach ($matchedIds as $contactId) {
+                log_contact_activity($this->db, $contactId, $this->userId(), 'status_changed', 'Marked ' . $status . ' on "' . $list['name'] . '"', ['list_id' => $listId, 'status' => $status]);
+            }
+        }
+
+        return $this->ok(['updated' => count($matchedIds), 'skipped' => count($contactIds) - count($matchedIds)]);
+    }
+
+    /** Bulk "Remove from List" — fully deletes the membership rows (not a status change). */
+    private function bulkRemoveMembers(Request $request, int $listId): Response
+    {
+        $list = $this->db->one('SELECT id, name FROM mailing_lists WHERE id = ?', [$listId]);
+        if (!$list) {
+            return $this->notFound('Mailing list not found');
+        }
+        $contactIds = $this->readContactIds($request);
+        if ($contactIds instanceof Response) {
+            return $contactIds;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($contactIds), '?'));
+        $matching = $this->db->all(
+            "SELECT contact_id FROM list_membership WHERE list_id = ? AND contact_id IN ({$placeholders})",
+            [$listId, ...$contactIds]
+        );
+        $matchedIds = array_map(static fn ($r) => (int) $r['contact_id'], $matching);
+        if ($matchedIds !== []) {
+            $inPlaceholders = implode(',', array_fill(0, count($matchedIds), '?'));
+            $this->db->run("DELETE FROM list_membership WHERE list_id = ? AND contact_id IN ({$inPlaceholders})", [$listId, ...$matchedIds]);
+            foreach ($matchedIds as $contactId) {
+                log_contact_activity($this->db, $contactId, $this->userId(), 'list_left', 'Removed from list "' . $list['name'] . '"', ['list_id' => $listId]);
+            }
+        }
+
+        return $this->ok(['removed' => count($matchedIds), 'skipped' => count($contactIds) - count($matchedIds)]);
     }
 
     private function handleMember(Request $request, int $listId, int $contactId): Response
@@ -107,8 +226,7 @@ final class MailingLists extends BaseEndpoint
         $whereSql = $where ? (' WHERE ' . implode(' AND ', $where)) : '';
 
         $lists = $this->db->all(
-            "SELECT ml.*,
-                    (SELECT COUNT(*) FROM list_membership lm WHERE lm.list_id = ml.id AND lm.status = 'subscribed') AS member_count
+            "SELECT ml.*, {$this->memberCountColumnsSql()}
              FROM mailing_lists ml{$whereSql}
              ORDER BY ml.name",
             $params
@@ -120,8 +238,7 @@ final class MailingLists extends BaseEndpoint
     private function show(int $id): Response
     {
         $row = $this->db->one(
-            "SELECT ml.*,
-                    (SELECT COUNT(*) FROM list_membership lm WHERE lm.list_id = ml.id AND lm.status = 'subscribed') AS member_count
+            "SELECT ml.*, {$this->memberCountColumnsSql()}
              FROM mailing_lists ml
              WHERE ml.id = ?",
             [$id]
@@ -284,9 +401,15 @@ final class MailingLists extends BaseEndpoint
         }
 
         $status = (string) $request->query('status');
-        if (in_array($status, ['subscribed', 'unsubscribed'], true)) {
+        if (in_array($status, ['subscribed', 'unsubscribed', 'bounced'], true)) {
             $where[] = 'lm.status = ?';
             $params[] = $status;
+        }
+
+        $tagId = $request->query('tag');
+        if (is_numeric($tagId)) {
+            $where[] = 'lm.contact_id IN (SELECT contact_id FROM contact_tag_assignments WHERE tag_id = ?)';
+            $params[] = (int) $tagId;
         }
 
         $whereSql = ' WHERE ' . implode(' AND ', $where);
@@ -302,8 +425,9 @@ final class MailingLists extends BaseEndpoint
         )['n'] ?? 0);
 
         $members = $this->db->all(
-            "SELECT c.id AS contact_id, c.first_name, c.last_name, c.email, c.marketing_opted_in,
-                    lm.status, lm.added_at, lm.updated_at
+            "SELECT c.id AS contact_id, c.first_name, c.last_name, c.email, c.phone, c.marketing_opted_in, c.created_at AS contact_created_at,
+                    lm.status, lm.added_at, lm.updated_at,
+                    (SELECT COUNT(*) FROM list_membership lm2 WHERE lm2.contact_id = c.id) AS lists_count
              FROM list_membership lm
              JOIN contacts c ON c.id = lm.contact_id
              {$whereSql}
@@ -311,6 +435,7 @@ final class MailingLists extends BaseEndpoint
              LIMIT {$limit} OFFSET {$offset}",
             $params
         );
+        $members = $this->attachTags($members, 'contact_id');
 
         return $this->ok([
             'members' => $members,
@@ -321,6 +446,39 @@ final class MailingLists extends BaseEndpoint
         ]);
     }
 
+    /**
+     * Batch-attaches a `tags` array (id/name/color) to each row, keyed off
+     * $idField (a contact id column already present in each row) — one extra
+     * query for the whole page rather than one per row. Shared by
+     * listMembers() and exportMembers() so the member table and its CSV
+     * export show the exact same tag data.
+     */
+    private function attachTags(array $rows, string $idField): array
+    {
+        if ($rows === []) {
+            return $rows;
+        }
+        $ids = array_values(array_unique(array_map(static fn ($r) => (int) $r[$idField], $rows)));
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $tagRows = $this->db->all(
+            "SELECT cta.contact_id, ct.id, ct.name, ct.color
+             FROM contact_tag_assignments cta
+             JOIN contact_tags ct ON ct.id = cta.tag_id
+             WHERE cta.contact_id IN ({$placeholders})
+             ORDER BY ct.name",
+            $ids
+        );
+        $byContact = [];
+        foreach ($tagRows as $t) {
+            $byContact[(int) $t['contact_id']][] = ['id' => (int) $t['id'], 'name' => $t['name'], 'color' => $t['color']];
+        }
+        foreach ($rows as &$row) {
+            $row['tags'] = $byContact[(int) $row[$idField]] ?? [];
+        }
+        unset($row);
+        return $rows;
+    }
+
     private function addMembers(Request $request, int $listId): Response
     {
         $list = $this->db->one('SELECT id FROM mailing_lists WHERE id = ?', [$listId]);
@@ -328,19 +486,9 @@ final class MailingLists extends BaseEndpoint
             return $this->notFound('Mailing list not found');
         }
 
-        $contactIds = $request->body('contact_ids');
-        if (!is_array($contactIds) || $contactIds === []) {
-            return Response::json(['error' => 'contact_ids must be a non-empty array'], 422);
-        }
-        $contactIds = array_values(array_unique(array_filter(array_map(
-            static fn ($v) => is_numeric($v) ? (int) $v : null,
-            $contactIds
-        ), static fn ($v) => $v !== null && $v > 0)));
-        if ($contactIds === []) {
-            return Response::json(['error' => 'contact_ids must be a non-empty array of integers'], 422);
-        }
-        if (count($contactIds) > self::MAX_BULK_CONTACTS) {
-            return Response::json(['error' => 'Too many contacts at once (max ' . self::MAX_BULK_CONTACTS . ') — split into smaller batches'], 422);
+        $contactIds = $this->readContactIds($request);
+        if ($contactIds instanceof Response) {
+            return $contactIds;
         }
 
         $placeholders = implode(',', array_fill(0, count($contactIds), '?'));
@@ -526,6 +674,12 @@ final class MailingLists extends BaseEndpoint
 
         $addedToList = $this->upsertMembers($listId, array_values(array_unique($resolvedIds)), 'csv_import');
 
+        $this->db->run(
+            'INSERT INTO list_import_history (list_id, filename, created_count, updated_count, added_to_list, skipped_count, errors_json, imported_by_user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [$listId, (string) ($file['name'] ?? ''), $created, $updated, $addedToList, count($errors), $errors ? json_encode($errors) : null, $this->userId()]
+        );
+
         return $this->ok([
             'created'       => $created,
             'updated'       => $updated,
@@ -567,6 +721,17 @@ final class MailingLists extends BaseEndpoint
             $params
         );
 
+        $listName = (string) ($this->db->one('SELECT name FROM mailing_lists WHERE id = ?', [$listId])['name'] ?? '');
+        $message = match ($addedVia) {
+            'csv_import' => 'Imported via CSV into list "' . $listName . '"',
+            'segment'    => 'Auto-added to smart list "' . $listName . '"',
+            'bulk'       => 'Added to list "' . $listName . '" (bulk)',
+            default      => 'Added to list "' . $listName . '"',
+        };
+        foreach ($contactIds as $contactId) {
+            log_contact_activity($this->db, $contactId, $this->userId(), 'list_joined', $message, ['list_id' => $listId, 'added_via' => $addedVia]);
+        }
+
         return count($contactIds);
     }
 
@@ -578,6 +743,76 @@ final class MailingLists extends BaseEndpoint
             static fn ($r) => (int) $r['id'],
             $this->db->all("SELECT id FROM contacts{$whereSql}", $params)
         );
+    }
+
+    /**
+     * GET /mailing-lists/{id}/export-members — CSV download of every member
+     * matching the same ?q=&status=&tag= filters as listMembers(), but
+     * unpaginated (the "Export Lists" toolbar button in ListMaster, run with
+     * whatever filter is currently applied to the table). Logs a row to
+     * list_export_history so it shows up in the Export History tool.
+     */
+    private function exportMembers(Request $request, int $listId): Response
+    {
+        $list = $this->db->one('SELECT id, name FROM mailing_lists WHERE id = ?', [$listId]);
+        if (!$list) {
+            return $this->notFound('Mailing list not found');
+        }
+
+        $where = ['lm.list_id = ?'];
+        $params = [$listId];
+
+        $q = trim((string) $request->query('q'));
+        if ($q !== '') {
+            $where[] = '(c.first_name LIKE ? OR c.last_name LIKE ? OR CONCAT(c.first_name, " ", c.last_name) LIKE ? OR c.email LIKE ?)';
+            $like = '%' . $q . '%';
+            array_push($params, $like, $like, $like, $like);
+        }
+        $status = (string) $request->query('status');
+        if (in_array($status, ['subscribed', 'unsubscribed', 'bounced'], true)) {
+            $where[] = 'lm.status = ?';
+            $params[] = $status;
+        }
+        $tagId = $request->query('tag');
+        if (is_numeric($tagId)) {
+            $where[] = 'lm.contact_id IN (SELECT contact_id FROM contact_tag_assignments WHERE tag_id = ?)';
+            $params[] = (int) $tagId;
+        }
+        $whereSql = ' WHERE ' . implode(' AND ', $where);
+
+        $members = $this->db->all(
+            "SELECT c.id AS contact_id, c.first_name, c.last_name, c.email, c.phone, c.marketing_opted_in,
+                    lm.status, lm.added_at
+             FROM list_membership lm
+             JOIN contacts c ON c.id = lm.contact_id
+             {$whereSql}
+             ORDER BY c.last_name ASC, c.first_name ASC",
+            $params
+        );
+        $members = $this->attachTags($members, 'contact_id');
+
+        $stream = fopen('php://temp', 'r+');
+        fputcsv($stream, ['First Name', 'Last Name', 'Email', 'Phone', 'Marketing Opted In', 'Status', 'Tags', 'Joined']);
+        foreach ($members as $m) {
+            fputcsv($stream, [
+                $m['first_name'], $m['last_name'], $m['email'], $m['phone'],
+                $m['marketing_opted_in'] ? 'yes' : 'no', $m['status'],
+                implode('; ', array_map(static fn ($t) => $t['name'], $m['tags'])),
+                $m['added_at'],
+            ]);
+        }
+        rewind($stream);
+        $csv = (string) stream_get_contents($stream);
+        fclose($stream);
+
+        $this->db->run(
+            'INSERT INTO list_export_history (list_id, list_name_snapshot, format, row_count, filters_json, exported_by_user_id) VALUES (?, ?, ?, ?, ?, ?)',
+            [$listId, $list['name'], 'csv', count($members), json_encode(['q' => $q ?: null, 'status' => $status ?: null, 'tag' => is_numeric($tagId) ? (int) $tagId : null]), $this->userId()]
+        );
+
+        $stamp = date('Y-m-d_His');
+        $safeName = preg_replace('/[^a-z0-9]+/i', '-', $list['name']) ?: 'list';
+        return Response::csv($csv, "{$safeName}-members-{$stamp}.csv");
     }
 
     // ---- Segment (smart) lists -----------------------------------------
@@ -654,12 +889,27 @@ final class MailingLists extends BaseEndpoint
     private function fetchListWithCount(int $id): ?array
     {
         return $this->db->one(
-            "SELECT ml.*,
-                    (SELECT COUNT(*) FROM list_membership lm WHERE lm.list_id = ml.id AND lm.status = 'subscribed') AS member_count
+            "SELECT ml.*, {$this->memberCountColumnsSql()}
              FROM mailing_lists ml
              WHERE ml.id = ?",
             [$id]
         );
+    }
+
+    /**
+     * Correlated-subquery columns shared by index()/show()/fetchListWithCount()
+     * — every place a mailing_lists row is returned to the client. member_count
+     * (subscribed) is the long-standing field campaigns.js/mailing-lists.js
+     * already depend on for audience size; the rest back the ListMaster stats
+     * cards (Total/Active/Unsubscribed/Bounced/Last updated).
+     */
+    private function memberCountColumnsSql(): string
+    {
+        return "(SELECT COUNT(*) FROM list_membership lm WHERE lm.list_id = ml.id AND lm.status = 'subscribed') AS member_count,
+                (SELECT COUNT(*) FROM list_membership lm WHERE lm.list_id = ml.id) AS total_count,
+                (SELECT COUNT(*) FROM list_membership lm WHERE lm.list_id = ml.id AND lm.status = 'unsubscribed') AS unsubscribed_count,
+                (SELECT COUNT(*) FROM list_membership lm WHERE lm.list_id = ml.id AND lm.status = 'bounced') AS bounced_count,
+                (SELECT MAX(lm.updated_at) FROM list_membership lm WHERE lm.list_id = ml.id) AS last_member_update";
     }
 
     /** Decode segment_rules from its stored JSON-text form for API responses. */
@@ -674,10 +924,14 @@ final class MailingLists extends BaseEndpoint
     private function updateMember(Request $request, int $listId, int $contactId): Response
     {
         $status = (string) $request->body('status', '');
-        if (!in_array($status, ['subscribed', 'unsubscribed'], true)) {
-            return Response::json(['error' => "status must be 'subscribed' or 'unsubscribed'"], 422);
+        if (!in_array($status, ['subscribed', 'unsubscribed', 'bounced'], true)) {
+            return Response::json(['error' => "status must be 'subscribed', 'unsubscribed', or 'bounced'"], 422);
         }
 
+        $list = $this->db->one('SELECT id, name FROM mailing_lists WHERE id = ?', [$listId]);
+        if (!$list) {
+            return $this->notFound('Mailing list not found');
+        }
         $existing = $this->db->one(
             'SELECT id FROM list_membership WHERE list_id = ? AND contact_id = ?',
             [$listId, $contactId]
@@ -690,6 +944,7 @@ final class MailingLists extends BaseEndpoint
             'UPDATE list_membership SET status = ? WHERE list_id = ? AND contact_id = ?',
             [$status, $listId, $contactId]
         );
+        log_contact_activity($this->db, $contactId, $this->userId(), 'status_changed', 'Marked ' . $status . ' on "' . $list['name'] . '"', ['list_id' => $listId, 'status' => $status]);
 
         $row = $this->db->one(
             'SELECT * FROM list_membership WHERE list_id = ? AND contact_id = ?',
@@ -700,6 +955,10 @@ final class MailingLists extends BaseEndpoint
 
     private function removeMember(int $listId, int $contactId): Response
     {
+        $list = $this->db->one('SELECT id, name FROM mailing_lists WHERE id = ?', [$listId]);
+        if (!$list) {
+            return $this->notFound('Mailing list not found');
+        }
         $existing = $this->db->one(
             'SELECT id FROM list_membership WHERE list_id = ? AND contact_id = ?',
             [$listId, $contactId]
@@ -709,7 +968,82 @@ final class MailingLists extends BaseEndpoint
         }
 
         $this->db->run('DELETE FROM list_membership WHERE list_id = ? AND contact_id = ?', [$listId, $contactId]);
+        log_contact_activity($this->db, $contactId, $this->userId(), 'list_left', 'Removed from list "' . $list['name'] . '"', ['list_id' => $listId]);
         return Response::noContent();
+    }
+
+    // ---- Import / export history ----------------------------------------
+
+    /** GET /mailing-lists/import-history — the Tools > Import History page (?list_id=&page=&limit=). */
+    private function importHistory(Request $request): Response
+    {
+        $where = [];
+        $params = [];
+        $listId = $request->query('list_id');
+        if (is_numeric($listId)) {
+            $where[] = 'h.list_id = ?';
+            $params[] = (int) $listId;
+        }
+        $whereSql = $where ? (' WHERE ' . implode(' AND ', $where)) : '';
+
+        $limit = max(1, min(200, (int) ($request->query('limit') ?: 25)));
+        $page = max(1, (int) ($request->query('page') ?: 1));
+        $offset = ($page - 1) * $limit;
+
+        $total = (int) ($this->db->one("SELECT COUNT(*) n FROM list_import_history h{$whereSql}", $params)['n'] ?? 0);
+        $rows = $this->db->all(
+            "SELECT h.*, ml.name AS list_name, u.name AS imported_by_name
+             FROM list_import_history h
+             LEFT JOIN mailing_lists ml ON ml.id = h.list_id
+             LEFT JOIN users u ON u.id = h.imported_by_user_id
+             {$whereSql}
+             ORDER BY h.created_at DESC, h.id DESC
+             LIMIT {$limit} OFFSET {$offset}",
+            $params
+        );
+        $rows = array_map(static function (array $r): array {
+            $r['errors'] = $r['errors_json'] !== null ? (json_decode((string) $r['errors_json'], true) ?: []) : [];
+            unset($r['errors_json']);
+            return $r;
+        }, $rows);
+
+        return $this->ok(['history' => $rows, 'total' => $total, 'page' => $page, 'limit' => $limit, 'pages' => (int) ceil($total / $limit)]);
+    }
+
+    /** GET /mailing-lists/export-history — the Tools > Export History page (?list_id=&page=&limit=). */
+    private function exportHistory(Request $request): Response
+    {
+        $where = [];
+        $params = [];
+        $listId = $request->query('list_id');
+        if (is_numeric($listId)) {
+            $where[] = 'h.list_id = ?';
+            $params[] = (int) $listId;
+        }
+        $whereSql = $where ? (' WHERE ' . implode(' AND ', $where)) : '';
+
+        $limit = max(1, min(200, (int) ($request->query('limit') ?: 25)));
+        $page = max(1, (int) ($request->query('page') ?: 1));
+        $offset = ($page - 1) * $limit;
+
+        $total = (int) ($this->db->one("SELECT COUNT(*) n FROM list_export_history h{$whereSql}", $params)['n'] ?? 0);
+        $rows = $this->db->all(
+            "SELECT h.*, COALESCE(ml.name, h.list_name_snapshot) AS list_name, u.name AS exported_by_name
+             FROM list_export_history h
+             LEFT JOIN mailing_lists ml ON ml.id = h.list_id
+             LEFT JOIN users u ON u.id = h.exported_by_user_id
+             {$whereSql}
+             ORDER BY h.created_at DESC, h.id DESC
+             LIMIT {$limit} OFFSET {$offset}",
+            $params
+        );
+        $rows = array_map(static function (array $r): array {
+            $r['filters'] = $r['filters_json'] !== null ? (json_decode((string) $r['filters_json'], true) ?: []) : [];
+            unset($r['filters_json']);
+            return $r;
+        }, $rows);
+
+        return $this->ok(['history' => $rows, 'total' => $total, 'page' => $page, 'limit' => $limit, 'pages' => (int) ceil($total / $limit)]);
     }
 
     // ---- Helpers -------------------------------------------------------

@@ -10,18 +10,24 @@ use function Panic\boolish;
  * emails. Seeded from the ticketing provider's "Fan View" export
  * (scripts/import-fanview.php) and manageable in-app.
  *
- *   GET    /api/contacts            list (?q= &opted=0|1 &sort= &dir= &page= &limit=)
- *   GET    /api/contacts/{id}       show one
- *   GET    /api/contacts/{id}/lists which mailing lists this contact belongs to
- *   POST   /api/contacts            create (manual)
- *   PATCH  /api/contacts/{id}       update editable fields
- *   DELETE /api/contacts/{id}       delete
+ *   GET    /api/contacts                 list (?q= &opted=0|1 &sort= &dir= &page= &limit=)
+ *   GET    /api/contacts/{id}            show one (includes assigned tags)
+ *   GET    /api/contacts/{id}/lists      which mailing lists this contact belongs to
+ *   GET    /api/contacts/{id}/activity   audit trail (list joins/leaves, tag changes, edits — see log_contact_activity())
+ *   GET    /api/contacts/{id}/tags       tags assigned to this contact
+ *   POST   /api/contacts/{id}/tags       assign a tag {tag_id} or {name} (creates the tag if `name` doesn't exist yet)
+ *   DELETE /api/contacts/{id}/tags/{tagId} unassign
+ *   POST   /api/contacts/bulk-tag        {contact_ids: int[], tag_id | name} assign one tag to many contacts at once
+ *   POST   /api/contacts                 create (manual)
+ *   PATCH  /api/contacts/{id}            update editable fields
+ *   DELETE /api/contacts/{id}            delete
  *
  * Gated by the manage_contacts global capability (venue_admin). Note: writes
  * to list membership (add/toggle/remove) are NOT duplicated here — the
  * contact-side "Mailing Lists" UI calls MailingLists' own member endpoints
  * directly (gated by manage_campaigns), so there is exactly one place that
- * writes list_membership rows.
+ * writes list_membership rows. Tag *definitions* (name/color) similarly live
+ * in ContactTags.php — this class only writes the per-contact assignment.
  */
 final class Contacts extends BaseEndpoint
 {
@@ -43,9 +49,24 @@ final class Contacts extends BaseEndpoint
         }
         $id     = $this->params['contactId'] ?? null;
         $action = $this->params['action'] ?? null;
+        $subId  = $this->params['subId'] ?? null;
 
+        if ($id === null && $action === 'bulk-tag' && $request->method() === 'POST') {
+            return $this->bulkTag($request);
+        }
         if ($id && $action === 'lists' && $request->method() === 'GET') {
             return $this->contactLists((int) $id);
+        }
+        if ($id && $action === 'activity' && $request->method() === 'GET') {
+            return $this->activity((int) $id);
+        }
+        if ($id && $action === 'tags') {
+            return match ($request->method()) {
+                'GET'    => $this->listTags((int) $id),
+                'POST'   => $this->assignTag($request, (int) $id),
+                'DELETE' => $subId ? $this->unassignTag((int) $id, (int) $subId) : Response::json(['error' => 'tagId is required'], 422),
+                default  => Response::methodNotAllowed(),
+            };
         }
 
         return match ($request->method()) {
@@ -109,7 +130,157 @@ final class Contacts extends BaseEndpoint
         if (!$row) {
             return $this->notFound('Contact not found');
         }
+        $row['tags'] = $this->db->all(
+            'SELECT ct.id, ct.name, ct.color FROM contact_tag_assignments cta
+             JOIN contact_tags ct ON ct.id = cta.tag_id
+             WHERE cta.contact_id = ? ORDER BY ct.name',
+            [$id]
+        );
         return $this->ok(['contact' => $row]);
+    }
+
+    /** GET /contacts/{id}/activity — the contact's audit trail (see log_contact_activity()). */
+    private function activity(int $id): Response
+    {
+        $contact = $this->db->one('SELECT id FROM contacts WHERE id = ?', [$id]);
+        if (!$contact) {
+            return $this->notFound('Contact not found');
+        }
+        $rows = $this->db->all(
+            'SELECT ca.*, u.name AS user_name
+             FROM contact_activity ca
+             LEFT JOIN users u ON u.id = ca.user_id
+             WHERE ca.contact_id = ?
+             ORDER BY ca.created_at DESC, ca.id DESC
+             LIMIT 200',
+            [$id]
+        );
+        $rows = array_map(static function (array $r): array {
+            $r['details'] = $r['details_json'] !== null ? (json_decode((string) $r['details_json'], true) ?: null) : null;
+            unset($r['details_json']);
+            return $r;
+        }, $rows);
+        return $this->ok(['activity' => $rows]);
+    }
+
+    private function listTags(int $id): Response
+    {
+        $contact = $this->db->one('SELECT id FROM contacts WHERE id = ?', [$id]);
+        if (!$contact) {
+            return $this->notFound('Contact not found');
+        }
+        $tags = $this->db->all(
+            'SELECT ct.id, ct.name, ct.color FROM contact_tag_assignments cta
+             JOIN contact_tags ct ON ct.id = cta.tag_id
+             WHERE cta.contact_id = ? ORDER BY ct.name',
+            [$id]
+        );
+        return $this->ok(['tags' => $tags]);
+    }
+
+    /** Assign a tag by {tag_id}, or by {name} (creating the tag definition on first use). */
+    private function assignTag(Request $request, int $id): Response
+    {
+        $contact = $this->db->one('SELECT id, first_name, last_name, email FROM contacts WHERE id = ?', [$id]);
+        if (!$contact) {
+            return $this->notFound('Contact not found');
+        }
+
+        $tag = $this->resolveOrCreateTag($request);
+        if ($tag instanceof Response) {
+            return $tag;
+        }
+
+        $this->db->run(
+            'INSERT IGNORE INTO contact_tag_assignments (contact_id, tag_id) VALUES (?, ?)',
+            [$id, $tag['id']]
+        );
+        log_contact_activity($this->db, $id, $this->userId(), 'tag_added', 'Tagged "' . $tag['name'] . '"', ['tag_id' => $tag['id']]);
+
+        return $this->listTags($id);
+    }
+
+    private function unassignTag(int $id, int $tagId): Response
+    {
+        $tag = $this->db->one('SELECT id, name FROM contact_tags WHERE id = ?', [$tagId]);
+        if (!$tag) {
+            return $this->notFound('Tag not found');
+        }
+        $this->db->run('DELETE FROM contact_tag_assignments WHERE contact_id = ? AND tag_id = ?', [$id, $tagId]);
+        log_contact_activity($this->db, $id, $this->userId(), 'tag_removed', 'Removed tag "' . $tag['name'] . '"', ['tag_id' => $tagId]);
+        return $this->listTags($id);
+    }
+
+    /**
+     * "Assign Tags" bulk action in the ListMaster member table — one tag onto
+     * many contacts in one request, same {tag_id}|{name} resolution as
+     * assignTag(). Skips (does not error on) contact ids that don't exist,
+     * matching MailingLists::addMembers()' tolerant style for bulk ops driven
+     * by a checkbox selection.
+     */
+    private function bulkTag(Request $request): Response
+    {
+        $contactIds = $request->body('contact_ids');
+        if (!is_array($contactIds) || $contactIds === []) {
+            return Response::json(['error' => 'contact_ids must be a non-empty array'], 422);
+        }
+        $contactIds = array_values(array_unique(array_filter(array_map(
+            static fn ($v) => is_numeric($v) ? (int) $v : null,
+            $contactIds
+        ), static fn ($v) => $v !== null && $v > 0)));
+        if ($contactIds === []) {
+            return Response::json(['error' => 'contact_ids must be a non-empty array of integers'], 422);
+        }
+
+        $tag = $this->resolveOrCreateTag($request);
+        if ($tag instanceof Response) {
+            return $tag;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($contactIds), '?'));
+        $validIds = array_map(
+            static fn ($r) => (int) $r['id'],
+            $this->db->all("SELECT id FROM contacts WHERE id IN ({$placeholders})", $contactIds)
+        );
+
+        $rowSql = [];
+        $params = [];
+        foreach ($validIds as $cid) {
+            $rowSql[] = '(?, ?)';
+            array_push($params, $cid, $tag['id']);
+        }
+        if ($rowSql !== []) {
+            $this->db->run('INSERT IGNORE INTO contact_tag_assignments (contact_id, tag_id) VALUES ' . implode(', ', $rowSql), $params);
+            foreach ($validIds as $cid) {
+                log_contact_activity($this->db, $cid, $this->userId(), 'tag_added', 'Tagged "' . $tag['name'] . '"', ['tag_id' => $tag['id']]);
+            }
+        }
+
+        return $this->ok(['tagged' => count($validIds), 'skipped' => count($contactIds) - count($validIds), 'tag' => $tag]);
+    }
+
+    /** @return array{id:int,name:string,color:string}|Response */
+    private function resolveOrCreateTag(Request $request): array|Response
+    {
+        $tagId = $request->body('tag_id');
+        if ($tagId !== null && is_numeric($tagId)) {
+            $tag = $this->db->one('SELECT id, name, color FROM contact_tags WHERE id = ?', [(int) $tagId]);
+            if (!$tag) {
+                return Response::json(['error' => 'Tag not found'], 422);
+            }
+            return $tag;
+        }
+
+        $name = trim((string) $request->body('name', ''));
+        if ($name === '') {
+            return Response::json(['error' => 'tag_id or name is required'], 422);
+        }
+        $existing = $this->db->one('SELECT id, name, color FROM contact_tags WHERE name = ?', [$name]);
+        if ($existing) {
+            return $existing;
+        }
+        $newId = $this->db->insert('INSERT INTO contact_tags (name, color) VALUES (?, ?)', [$name, '#2563eb']);
+        return ['id' => $newId, 'name' => $name, 'color' => '#2563eb'];
     }
 
     /**
@@ -155,6 +326,7 @@ final class Contacts extends BaseEndpoint
                 $payload['marketing_opted_in'] ? date('Y-m-d') : null, $payload['notes'],
             ]
         );
+        log_contact_activity($this->db, $id, $this->userId(), 'contact_created', 'Contact created');
         return $this->ok(['id' => $id]);
     }
 
@@ -178,6 +350,7 @@ final class Contacts extends BaseEndpoint
                 $payload['notes'], $id,
             ]
         );
+        log_contact_activity($this->db, $id, $this->userId(), 'contact_updated', 'Contact details updated');
         return $this->ok(['ok' => true]);
     }
 
