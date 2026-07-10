@@ -461,20 +461,11 @@
   }
 
   // ── Canvas drawing ─────────────────────────────────────────────────────────
+  let canvasSized = false;
+
   function setupCanvas() {
     canvas = document.getElementById('sigCanvas');
     ctx    = canvas.getContext('2d');
-
-    // Scale canvas for high-DPI displays.
-    const rect = canvas.getBoundingClientRect();
-    const dpr  = window.devicePixelRatio || 1;
-    canvas.width  = canvas.offsetWidth  * dpr || 680;
-    canvas.height = 140 * dpr;
-    ctx.scale(dpr, dpr);
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth   = 2;
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
 
     // Mouse events
     canvas.addEventListener('mousedown', startDraw);
@@ -488,11 +479,45 @@
     canvas.addEventListener('touchend',   e => { endDraw(); });
   }
 
+  // Sizes the canvas's backing store to match its on-screen CSS size at full
+  // device pixel ratio, so drawn strokes line up with the cursor/finger.
+  //
+  // This must run *after* the "Draw Signature" panel is actually visible:
+  // it starts as `display:none` (Type Signature is the default tab), and a
+  // hidden element's offsetWidth/clientWidth reads 0. Sizing the canvas at
+  // page load (while hidden) meant `canvas.width` fell back to a bare 680 —
+  // never multiplied by devicePixelRatio — while `canvas.height` still was,
+  // and the CSS box itself (which has no explicit width/height style) got
+  // stretched to match those raw attribute values. On any HiDPI screen that
+  // left the drawing coordinate space, the bitmap resolution, and the
+  // visible box all disagreeing with each other, so strokes tracked cursor
+  // movement proportionally but landed offset from the actual pointer.
+  function resizeCanvas() {
+    const dpr      = window.devicePixelRatio || 1;
+    const cssWidth = canvas.clientWidth || 680;
+
+    // Pin the on-screen box explicitly so setting the bitmap resolution
+    // below can't also resize the visible element.
+    canvas.style.width  = cssWidth + 'px';
+    canvas.style.height = '140px';
+
+    canvas.width  = cssWidth * dpr;
+    canvas.height = 140 * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth   = 2;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    canvasSized = true;
+  }
+
   function getPos(e) {
     const rect = canvas.getBoundingClientRect();
     return {
-      x: (e.clientX - rect.left),
-      y: (e.clientY - rect.top),
+      // Subtract the border (clientLeft/clientTop) so (0,0) lines up with
+      // the canvas's drawable content box, not its outer border edge.
+      x: (e.clientX - rect.left - canvas.clientLeft),
+      y: (e.clientY - rect.top  - canvas.clientTop),
     };
   }
 
@@ -527,6 +552,10 @@
     document.getElementById('panelDraw').style.display = mode === 'draw' ? '' : 'none';
     document.getElementById('tabType').classList.toggle('active', mode === 'type');
     document.getElementById('tabDraw').classList.toggle('active', mode === 'draw');
+    // The canvas can only be measured once its panel is actually on-screen
+    // (offsetWidth/clientWidth are 0 under display:none), so size it lazily
+    // the first time the user opens the Draw tab rather than at page load.
+    if (mode === 'draw' && !canvasSized) resizeCanvas();
     updateSignBtn();
   };
 
