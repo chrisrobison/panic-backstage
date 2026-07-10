@@ -438,7 +438,7 @@ final class Events extends BaseEndpoint
             if (in_array($blocker['status'], ['open', 'waiting'], true)) return 'Complete open items';
         }
         $hasContract = !empty($event['contract_url']) || $this->db->one(
-            "SELECT id FROM contracts WHERE event_id = ? AND status IN ('approved','sent','signed') LIMIT 1",
+            "SELECT id FROM contracts WHERE event_id = ? AND status IN ('approved','sent','signed','fully_executed') LIMIT 1",
             [(int) $event['id']]
         );
         $isPrivate = ($event['event_type'] ?? '') === 'private_event';
@@ -476,7 +476,7 @@ final class Events extends BaseEndpoint
         if ($isPrivate) {
             $hasClient = !empty($event['promoter_name']) && !empty($event['promoter_email']);
             $hasContract = !empty($event['contract_url']) || $this->db->one(
-                "SELECT id FROM contracts WHERE event_id = ? AND status IN ('approved','sent','signed') LIMIT 1",
+                "SELECT id FROM contracts WHERE event_id = ? AND status IN ('approved','sent','signed','fully_executed') LIMIT 1",
                 [(int) $event['id']]
             );
             return [

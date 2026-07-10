@@ -324,8 +324,15 @@ final class ContractSigningEndpoint extends BaseEndpoint
 
     private function advanceContractStatus(int $contractId, string $signerRole): void
     {
+        // Exclude 'voided' rows: those are dead placeholders left behind by a
+        // prior "send for signature" that got superseded by a resend (see
+        // Contracts::sendForSignature(), which voids the old pending signer
+        // row and inserts a fresh one). A voided row can never become
+        // 'signed', so counting it here would permanently block any
+        // resent contract from ever reaching 'fully_executed' even after
+        // every real, active signer has signed.
         $allSigners = $this->db->all(
-            'SELECT id, role, status FROM contract_signers WHERE contract_id = ?',
+            "SELECT id, role, status FROM contract_signers WHERE contract_id = ? AND status != 'voided'",
             [$contractId]
         );
 
