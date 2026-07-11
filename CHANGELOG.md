@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Add a dismiss control to the Next Recommended Action banner
 - **Documentation** — Regenerate help screenshots for current UI, add ListMaster capture
 - **Documentation** — Render public-calendar-api.md as a styled HTML reference page
 - **Documentation** — Add dedicated reference for the public calendar/events API

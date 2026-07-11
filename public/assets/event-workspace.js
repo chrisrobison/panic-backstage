@@ -125,12 +125,31 @@ class EventReadiness extends EventBusCard {
 
 // "Next Recommended Action" card. Its Refresh button re-broadcasts fresh data
 // (recomputing this card, readiness, and the summary) without a page reload.
+//
+// The recommendation itself (data.nextAction) is computed fresh server-side
+// on every load from live event state (see Events::nextAction()) — there's
+// no stored "task" behind it to delete, so dismissing it can't mean deleting
+// anything. Instead the close button collapses the banner down to a slim
+// strip for the rest of this visit to the event, tracked in memory on this
+// element instance (not persisted — a fresh page load always shows it again,
+// same as the onboarding-tip precedent of "you'll see it again next time",
+// just scoped to a page load rather than a day). If a save anywhere in the
+// event changes what the recommendation actually is, the new text no longer
+// matches what was dismissed and the full banner reappears automatically —
+// dismissing "Complete settlement" should never quietly suppress a
+// *different* blocker that shows up after.
 class EventNextAction extends EventBusCard {
   render() {
     const data = this._data;
     if (!data) return;
-    this.innerHTML = `<article class="next-action"><span class="icon-bubble amber">!</span><span><strong>Next Recommended Action</strong><p>${esc(data.nextAction)}</p></span><button class="secondary small" data-next-action>Refresh</button></article>`;
+    if (this._dismissedText && this._dismissedText === data.nextAction) {
+      this.innerHTML = `<article class="next-action next-action-collapsed"><span>Next Recommended Action dismissed for now</span><button class="linklike small" data-next-action-restore>Show</button></article>`;
+      $('[data-next-action-restore]', this).addEventListener('click', () => { this._dismissedText = null; this.render(); });
+      return;
+    }
+    this.innerHTML = `<article class="next-action"><span class="icon-bubble amber">!</span><span><strong>Next Recommended Action</strong><p>${esc(data.nextAction)}</p></span><span class="next-action-buttons"><button class="secondary small" data-next-action>Refresh</button><button class="icon-btn small" data-next-action-dismiss type="button" title="Dismiss for now" aria-label="Dismiss Next Recommended Action">&times;</button></span></article>`;
     $('[data-next-action]', this).addEventListener('click', () => this.refresh());
+    $('[data-next-action-dismiss]', this).addEventListener('click', () => { this._dismissedText = data.nextAction; this.render(); });
   }
 
   async refresh() {

@@ -956,6 +956,22 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
   align-items: center;
   margin-bottom: 18px;
 }
+.next-action-buttons { display: flex; align-items: center; gap: 8px; }
+/* Collapsed state after the close (×) button is used — a slim strip instead
+   of the full amber card, so dismissing doesn't fully vanish (still
+   reversible) and doesn't strand the Refresh control behind nothing. */
+.next-action-collapsed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 17px;
+  margin-bottom: 18px;
+  background: var(--soft);
+  border-color: var(--line);
+  font-size: 13px;
+  color: #6b7280;
+}
 /* Workspace summary/readiness/next-action cards are web components; make the
    custom-element hosts layout-transparent so their inner markup sits exactly
    where the old inline markup did (block flow or overview-grid grid items). */
@@ -2129,7 +2145,8 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   .next-action {
     grid-template-columns: 44px minmax(0, 1fr);
   }
-  .next-action button { grid-column: 1 / -1; justify-self: stretch; }
+  .next-action-buttons { grid-column: 1 / -1; justify-self: stretch; }
+  .next-action-buttons button { flex: 1; }
   .health-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .task-row, .schedule-row, .asset-row, .performer-row {
     grid-template-columns: 1fr;
