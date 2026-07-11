@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** — Render public-calendar-api.md as a styled HTML reference page
 - **Documentation** — Add dedicated reference for the public calendar/events API
 - **Fixed** `events` — Resolve widget API URL from its own script src, not domain root
 - **Added** `events` — Embeddable events carousel widget for themab.org
