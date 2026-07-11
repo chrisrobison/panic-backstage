@@ -294,10 +294,18 @@ class EventOverview extends EventBusCard {
       stats.push(ovStat('Potential Revenue', money(event.potential_revenue)));
     }
     if (!isPrivate) {
-      const ticketing = event.ticket_url
-        ? `<a href="${esc(event.ticket_url)}" target="_blank" rel="noopener noreferrer">On Sale <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>`
-        : '<span class="muted">Not listed</span>';
-      stats.push(ovStat('Tickets', ticketing));
+      const isInternalTicketing = event.ticketing_mode === 'internal';
+      stats.push(ovStat('Ticketing', isInternalTicketing
+        ? '<span class="chip chip-green">In-house</span>'
+        : '<span class="chip chip-gray">External</span>'));
+      if (isInternalTicketing) {
+        stats.push(ovStat('Tickets Sold', event.tickets_sold ?? 0));
+      } else {
+        const ticketing = event.ticket_url
+          ? `<a href="${esc(event.ticket_url)}" target="_blank" rel="noopener noreferrer">On Sale <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>`
+          : '<span class="muted">Not listed</span>';
+        stats.push(ovStat('Tickets', ticketing));
+      }
     }
     // The Settlement tab only exists for non-private events with the
     // capability — match that exact gate here so the footer link never
