@@ -471,7 +471,11 @@ final class Events extends BaseEndpoint
             $event['status'] === 'booked' && !$hasFlyer => 'Upload or approve flyer, then advance to Needs Assets',
             $event['status'] === 'needs_assets' => 'Collect all promo materials (flyer, photos, bio)',
             $event['status'] === 'ready_to_announce' && !(int) $event['public_visibility'] => 'Publish public event page',
-            $event['status'] === 'published' && !$event['ticket_url'] && (float) $event['ticket_price'] > 0 => 'Add ticketing link',
+            // Only nag for an external ticket link when we're *not* handling
+            // ticketing ourselves — an internal (in-house) event has no
+            // ticket_url by design, since sales happen through our own
+            // ticket types instead of an outbound link.
+            $event['status'] === 'published' && $event['ticketing_mode'] !== 'internal' && !$event['ticket_url'] && (float) $event['ticket_price'] > 0 => 'Add ticketing link',
             $event['status'] === 'completed' && !$settlement => 'Complete settlement',
             default => 'Review event details',
         };

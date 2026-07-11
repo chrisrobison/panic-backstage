@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** — Stop recommending "Add ticketing link" for in-house ticketing events
 - **Changed** — Show tickets sold in the compact event header for in-house ticketing
 - **Changed** — Move event header above tabs and make it compact
 - **Changed** — Redesign event workspace: real tabs + card-grid Overview dashboard
