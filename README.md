@@ -568,14 +568,20 @@ month filter pills are derived from the fetched data; tickets either link out
 event's public page (`ticketing_mode = internal`), the same pattern
 themab.org already hand-codes per-event for in-house-ticketed shows.
 
-Embed it with:
+Zero config to embed — the component reads its own `<script src>` (the same
+trick `public/assets/core.js`'s `apiUrl()`/`appUrl()` use) to find the API,
+so it works unmodified whether Backstage is mounted at the domain root or
+under a path prefix (e.g. this app's own `/backstage/`):
 
 ```html
 <section id="events" class="mab-hero-events" aria-label="Upcoming events">
-  <mab-events-carousel feed="https://panicbooking.com/backstage/api/feed/events.json"></mab-events-carousel>
+  <mab-events-carousel></mab-events-carousel>
 </section>
 <script src="https://panicbooking.com/backstage/assets/mab-events-carousel.js"></script>
 ```
+
+Pass a `feed="..."` attribute only to point a given instance at a different
+backend/venue than the one implied by the script's own URL.
 
 See `public/mab-events-demo.html` for a live, working demo page (also serves
 as the component's smoke test).

@@ -40,7 +40,19 @@
 (function () {
   'use strict';
 
-  const DEFAULT_FEED = 'https://panicbooking.com/backstage/api/feed/events.json';
+  // Auto-detect the app's own base URL from this <script>'s own src, the same
+  // way public/assets/core.js resolves apiUrl()/appUrl() — so the widget
+  // works unmodified whether Panic Backstage is mounted at the domain root
+  // or under a path prefix (e.g. https://panicbooking.com/backstage/), and
+  // whether the embedding page is same-origin (the demo page) or a totally
+  // different domain (themab.org). Captured at module-load time: outside a
+  // synchronously-executing top-level <script>, document.currentScript is
+  // null, which is exactly why this must run here and not inside a method.
+  const scriptEl = document.currentScript
+    || Array.from(document.querySelectorAll('script[src*="mab-events-carousel.js"]')).pop();
+  const scriptUrl = new URL((scriptEl && scriptEl.src) || location.href, location.href);
+  const appBaseUrl = new URL('..', scriptUrl); // assets/mab-events-carousel.js -> app root
+  const DEFAULT_FEED = new URL('api/feed/events.json', appBaseUrl).toString();
 
   const MONTH_NAMES = [
     'January', 'February', 'March', 'April', 'May', 'June',

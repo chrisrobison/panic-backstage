@@ -218,9 +218,9 @@
         <div class="node"><span class="k">03 · Rendered</span>&lt;mab-events-carousel&gt;<br>on themab.org</div>
       </div>
 
-      <p class="frame-label">The exact snippet themab.org would paste in:</p>
+      <p class="frame-label">The exact snippet themab.org would paste in — zero config, the component reads its own &lt;script src&gt; to find the API:</p>
       <div class="snippet">&lt;<span class="tg">section</span> <span class="at">id</span>=<span class="str">"events"</span> <span class="at">class</span>=<span class="str">"mab-hero-events"</span> <span class="at">aria-label</span>=<span class="str">"Upcoming events"</span>&gt;
-  &lt;<span class="tg">mab-events-carousel</span> <span class="at">feed</span>=<span class="str">"https://panicbooking.com/backstage/api/feed/events.json"</span>&gt;&lt;/<span class="tg">mab-events-carousel</span>&gt;
+  &lt;<span class="tg">mab-events-carousel</span>&gt;&lt;/<span class="tg">mab-events-carousel</span>&gt;
 &lt;/<span class="tg">section</span>&gt;
 
 &lt;<span class="tg">script</span> <span class="at">src</span>=<span class="str">"https://panicbooking.com/backstage/assets/mab-events-carousel.js"</span>&gt;&lt;/<span class="tg">script</span>&gt;</div>
@@ -234,7 +234,11 @@
       </div>
       <div class="stage">
         <section id="events" class="mab-hero-events" aria-label="Upcoming events">
-          <mab-events-carousel feed="/api/feed/events.json"></mab-events-carousel>
+          <!-- No feed= attribute here on purpose: the component auto-detects its
+               own API base from this <script src>, so it "just works" whether
+               Backstage is mounted at the domain root or under a path prefix
+               (e.g. this app's own /backstage/) — see mab-events-carousel.js. -->
+          <mab-events-carousel></mab-events-carousel>
         </section>
       </div>
     </div>
@@ -242,8 +246,8 @@
 
   <footer>
     <div class="wrap">
-      <a href="/api/feed/events.json" target="_blank" rel="noopener">Raw JSON feed ↗</a>
-      <a href="/api/feed" target="_blank" rel="noopener">Feed index ↗</a>
+      <a href="api/feed/events.json" target="_blank" rel="noopener">Raw JSON feed ↗</a>
+      <a href="api/feed" target="_blank" rel="noopener">Feed index ↗</a>
       <span>Component: public/assets/mab-events-carousel.js</span>
       <span>Endpoint: src/Feed.php</span>
     </div>
