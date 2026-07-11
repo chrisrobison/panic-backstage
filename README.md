@@ -64,6 +64,7 @@ POST   /api/signing/{token}/decline
 GET    /api/feed                             -> src/Feed.php  (discovery index)
 GET    /api/feed/events.ics                  -> src/Feed.php  (iCalendar)
 GET    /api/feed/events.rss                  -> src/Feed.php  (RSS 2.0)
+GET    /api/feed/events.json                 -> src/Feed.php  (structured JSON, CORS-open; powers mab-events-carousel)
 ```
 
 Each endpoint receives a `Request`, returns a `Response`, and uses shared services such as `Database` and `Auth`. Most endpoints extend `BaseEndpoint`, which centralises the current-user lookup and the role/capability checks.
@@ -541,13 +542,53 @@ Events with `public_visibility = 1` are exposed as machine-readable syndication
 feeds — no authentication required:
 
 ```text
-GET /api/feed                → JSON discovery index (lists ICS + RSS URLs)
+GET /api/feed                → JSON discovery index (lists ICS + RSS + JSON URLs)
 GET /api/feed/events.ics     → iCalendar (subscribe in Google / Apple Calendar)
 GET /api/feed/events.rss     → RSS 2.0 (news aggregators, "what's on" widgets)
+GET /api/feed/events.json    → structured JSON (embeddable widgets — see below)
 ```
 
-Optional query params for both formats: `?venue={slug}`, `?days={N}`, `?past=1`,
+Optional query params for all formats: `?venue={slug}`, `?days={N}`, `?past=1`,
 `?limit={N}` (default 500, max 1000). Canceled events are excluded.
+`events.json` additionally sends `Access-Control-Allow-Origin: *`, since it's
+meant to be `fetch()`ed by browser JS running on a different origin (the
+venue's own marketing site) rather than consumed server-side like the other
+two formats.
+
+See [`docs/public-calendar-api.md`](docs/public-calendar-api.md) for the full
+reference (response shapes, field-by-field notes, and how this relates to the
+single-event `/public/events/{idOrSlug}` endpoint and to ticket purchasing).
+
+### Embeddable events widget (`<mab-events-carousel>`)
+
+`public/assets/mab-events-carousel.js` is a dependency-free web component that
+fetches `GET /api/feed/events.json` and renders it as a drop-in replacement
+for themab.org's hand-authored "Upcoming events" carousel — same markup, same
+class names (`mab-hero-events`, `mab-cover-item`, `mab-date-block`,
+`mab-outline-btn`, …), so the site's own theme CSS styles it unchanged. It
+renders into light DOM (no shadow root) for exactly that reason. Category and
+month filter pills are derived from the fetched data; tickets either link out
+(`ticketing_mode = external`) or open a self-contained modal that iframes the
+event's public page (`ticketing_mode = internal`), the same pattern
+themab.org already hand-codes per-event for in-house-ticketed shows.
+
+Zero config to embed — the component reads its own `<script src>` (the same
+trick `public/assets/core.js`'s `apiUrl()`/`appUrl()` use) to find the API,
+so it works unmodified whether Backstage is mounted at the domain root or
+under a path prefix (e.g. this app's own `/backstage/`):
+
+```html
+<section id="events" class="mab-hero-events" aria-label="Upcoming events">
+  <mab-events-carousel></mab-events-carousel>
+</section>
+<script src="https://panicbooking.com/backstage/assets/mab-events-carousel.js"></script>
+```
+
+Pass a `feed="..."` attribute only to point a given instance at a different
+backend/venue than the one implied by the script's own URL.
+
+See `public/mab-events-demo.html` for a live, working demo page (also serves
+as the component's smoke test).
 
 ## Google Sheet Sync
 

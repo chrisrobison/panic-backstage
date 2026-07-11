@@ -1292,6 +1292,27 @@ components:
         description_public:
           type: string
           nullable: true
+        public_subtitle:
+          type: string
+          nullable: true
+          description: >-
+            Short line shown under the date badge on public event-listing widgets (e.g. the
+            <mab-events-carousel> component — see GET /api/feed/events.json) — either a
+            lineup/support-act line or a doors/show-time line.
+        public_tags:
+          type: string
+          nullable: true
+          description: >-
+            Comma-separated, venue-chosen marketing category slugs (e.g. "live-music,dance") used
+            for public widget filter pills. Independent of event_type, which is an operational
+            enum — one event can be both "dance" and "live-music" for marketing purposes.
+        public_schedule_pricing:
+          type: string
+          nullable: true
+          description: >-
+            JSON string ({"sections":[{"heading":str,"lines":[str]}]}) rendered as a collapsible
+            "Schedule & Pricing" panel on public widgets. Stored as data, not raw HTML, so it's
+            escaped rather than injected verbatim into a public page.
         description_internal:
           type: string
           nullable: true
@@ -8957,6 +8978,9 @@ components:
             rss:
               type: string
               format: uri
+            json:
+              type: string
+              format: uri
         params:
           type: object
           description: Documents the accepted query params and their types (fixed shape).
@@ -8976,6 +9000,131 @@ components:
         upcoming:
           type: integer
           description: Count of events matched by the current request's filters.
+    WidgetEventsFeed:
+      type: object
+      description: Response body of GET /api/feed/events.json.
+      properties:
+        venue:
+          type: object
+          properties:
+            name:
+              type: string
+              nullable: true
+            city:
+              type: string
+              nullable: true
+            state:
+              type: string
+              nullable: true
+        generated_at:
+          type: string
+          format: date-time
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WidgetEvent'
+    WidgetEvent:
+      type: object
+      description: >-
+        One event shaped for <mab-events-carousel>. `month`/`day`/`weekday` are pre-formatted
+        (e.g. "JUL"/"11"/"SAT") to match themab.org's <div class="mab-date-block"> spans exactly.
+        `tags` comes from events.public_tags (comma-separated in the DB, split here) and drives the
+        widget's category filter pills — values are free-form venue-chosen slugs like "live-music",
+        "comedy", "dance", not the operational event_type enum. `schedule_pricing`, when present,
+        renders as a collapsible "Schedule & Pricing" panel (only the recurring Cat's Corner series
+        uses this today).
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        subtitle:
+          type: string
+          nullable: true
+          description: events.public_subtitle — short line under the date badge.
+        description:
+          type: string
+          nullable: true
+          description: events.description_public.
+        date:
+          type: string
+          format: date
+        month:
+          type: string
+          nullable: true
+          example: JUL
+        day:
+          type: string
+          nullable: true
+          example: '11'
+        weekday:
+          type: string
+          nullable: true
+          example: SAT
+        doors_time:
+          type: string
+          nullable: true
+          example: 7:00 PM
+        show_time:
+          type: string
+          nullable: true
+          example: 8:00 PM
+        age_restriction:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+          example:
+            - live-music
+            - dance
+        image:
+          type: string
+          format: uri
+          nullable: true
+          description: Approved flyer asset URL (event_assets), absolute — may be hosted off-app (e.g. themab.org's own media library).
+        schedule_pricing:
+          type: object
+          nullable: true
+          description: Parsed events.public_schedule_pricing JSON.
+          properties:
+            sections:
+              type: array
+              items:
+                type: object
+                properties:
+                  heading:
+                    type: string
+                  lines:
+                    type: array
+                    items:
+                      type: string
+        url:
+          type: string
+          format: uri
+          description: Public event page (event.html?id=...).
+        ticket:
+          type: object
+          properties:
+            mode:
+              type: string
+              enum:
+                - external
+                - internal
+                - none
+            url:
+              type: string
+              format: uri
+              nullable: true
+              description: Set when mode=external (events.ticket_url).
+            checkout_url:
+              type: string
+              format: uri
+              nullable: true
+              description: Set when mode=internal — the public event page, embeddable in an iframe/modal for in-house ticket checkout.
     InviteAcceptPreview:
       type: object
       properties:
@@ -22652,6 +22801,52 @@ paths:
             application/rss+xml:
               schema:
                 type: string
+  /api/feed/events.json:
+    get:
+      operationId: feed_json
+      summary: Structured JSON feed for embeddable "upcoming events" widgets
+      description: >-
+        Public — no authentication. Same public_visibility/canceled gating and venue/days/past/limit
+        query params as GET /api/feed. Shaped for the <mab-events-carousel> web component
+        (public/assets/mab-events-carousel.js), which mirrors this straight into DOM cards that
+        reuse themab.org's own markup/class names — see docs on that component for the drop-in
+        embed snippet. Unlike the .ics/.rss formats, the response carries
+        `Access-Control-Allow-Origin: *` because it's fetched by browser JS running on the venue's
+        own marketing site (a different origin); the data is already fully public, so there is no
+        confidentiality reason to restrict the origin, and no cookie/credential is ever sent.
+        Response is cacheable (Cache-Control: public, max-age=300).
+      tags:
+        - Feeds
+      security: []
+      parameters:
+        - name: venue
+          in: query
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+        - name: past
+          in: query
+          schema:
+            type: string
+            enum:
+              - '0'
+              - '1'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 500
+            maximum: 1000
+      responses:
+        '200':
+          description: Structured event list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WidgetEventsFeed'
   /api/invite/{token}:
     parameters:
       - name: token

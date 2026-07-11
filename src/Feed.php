@@ -11,8 +11,12 @@ use function Panic\event_public_path;
  *   GET /api/feed                 → JSON index of available feeds
  *   GET /api/feed/events.ics      → iCalendar (subscribe in Google/Apple Calendar)
  *   GET /api/feed/events.rss      → RSS 2.0 (aggregators, "what's on" widgets)
+ *   GET /api/feed/events.json     → structured JSON for embeddable widgets (see
+ *                                   public/assets/mab-events-carousel.js), with
+ *                                   CORS enabled since it's fetched cross-origin
+ *                                   from the venue's own marketing site.
  *
- * Query params (both formats):
+ * Query params (all formats):
  *   ?venue={slug}   restrict to one venue
  *   ?days={N}       only events within the next N days (default: all upcoming)
  *   ?past=1         include past events too (default: upcoming only)
@@ -44,13 +48,17 @@ final class Feed extends BaseEndpoint
         if (str_contains($format, 'rss') || str_contains($format, 'xml')) {
             return $this->text($this->renderRss($events), 'application/rss+xml; charset=utf-8', 'events.rss');
         }
+        if (str_contains($format, 'json')) {
+            return $this->renderJson($events);
+        }
 
         // /api/feed → discovery index
         $base = $this->appUrl();
         return $this->ok([
             'feeds' => [
-                'ics' => $base . '/api/feed/events.ics',
-                'rss' => $base . '/api/feed/events.rss',
+                'ics'  => $base . '/api/feed/events.ics',
+                'rss'  => $base . '/api/feed/events.rss',
+                'json' => $base . '/api/feed/events.json',
             ],
             'params'   => ['venue' => 'slug', 'days' => 'int', 'past' => '0|1', 'limit' => 'int'],
             'upcoming' => count($events),
@@ -289,6 +297,93 @@ final class Feed extends BaseEndpoint
             $bits[] = '<p><a href="' . $t . '">Tickets</a></p>';
         }
         return implode("\n", $bits);
+    }
+
+    // ── JSON (widget feed) ──────────────────────────────────────────────────────
+
+    /**
+     * Structured JSON for embeddable "upcoming events" widgets — shaped for
+     * public/assets/mab-events-carousel.js, which mirrors this straight into
+     * DOM cards. CORS is wide open (`Access-Control-Allow-Origin: *`) because,
+     * unlike .ics/.rss, this is fetched from browser JS running on the
+     * venue's own marketing site (a different origin) — the data is already
+     * fully public (public_visibility = 1 only), so there's no confidentiality
+     * reason to restrict the origin, and no cookie/credential is ever sent.
+     *
+     * @param array<int, array<string, mixed>> $events
+     */
+    private function renderJson(array $events): Response
+    {
+        $venue = [
+            'name'  => $events[0]['venue_name']    ?? null,
+            'city'  => $events[0]['venue_city']    ?? null,
+            'state' => $events[0]['venue_state']   ?? null,
+        ];
+
+        return new Response(
+            [
+                'venue'        => $venue,
+                'generated_at' => gmdate('c'),
+                'events'       => array_map([$this, 'eventJson'], $events),
+            ],
+            200,
+            [
+                'Content-Type'                => 'application/json; charset=utf-8',
+                'Access-Control-Allow-Origin' => '*',
+                'Cache-Control'                => 'public, max-age=300',
+            ]
+        );
+    }
+
+    /** @param array<string, mixed> $event */
+    private function eventJson(array $event): array
+    {
+        $ts = strtotime((string) $event['date']) ?: null;
+
+        $tags = array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) ($event['public_tags'] ?? ''))
+        )));
+
+        $schedule = null;
+        $rawSchedule = (string) ($event['public_schedule_pricing'] ?? '');
+        if ($rawSchedule !== '') {
+            $decoded = json_decode($rawSchedule, true);
+            if (is_array($decoded)) {
+                $schedule = $decoded;
+            }
+        }
+
+        $mode = (string) ($event['ticketing_mode'] ?? 'external');
+        if ($mode === 'internal') {
+            $ticket = ['mode' => 'internal', 'url' => null, 'checkout_url' => $this->eventUrl($event)];
+        } elseif (!empty($event['ticket_url'])) {
+            $ticket = ['mode' => 'external', 'url' => (string) $event['ticket_url'], 'checkout_url' => null];
+        } else {
+            $ticket = ['mode' => 'none', 'url' => null, 'checkout_url' => null];
+        }
+
+        return [
+            'id'              => (int) $event['id'],
+            'slug'            => (string) $event['slug'],
+            'title'           => (string) $event['title'],
+            'subtitle'        => $event['public_subtitle'] !== null && $event['public_subtitle'] !== ''
+                ? (string) $event['public_subtitle'] : null,
+            'description'     => $event['description_public'] !== null && $event['description_public'] !== ''
+                ? (string) $event['description_public'] : null,
+            'date'            => (string) $event['date'],
+            'month'           => $ts ? strtoupper(gmdate('M', $ts)) : null,
+            'day'             => $ts ? gmdate('d', $ts) : null,
+            'weekday'         => $ts ? strtoupper(gmdate('D', $ts)) : null,
+            'doors_time'      => $this->fmtTime($event['doors_time'] ?? null) ?: null,
+            'show_time'       => $this->fmtTime($event['show_time'] ?? null) ?: null,
+            'age_restriction' => $event['age_restriction'] ?: null,
+            'tags'            => $tags,
+            'image'           => $this->flyerUrl($event) ?: null,
+            'schedule_pricing'=> $schedule,
+            'url'             => $this->eventUrl($event),
+            'ticket'          => $ticket,
+        ];
     }
 
     // ── Shared helpers ────────────────────────────────────────────────────────
