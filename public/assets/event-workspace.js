@@ -448,6 +448,47 @@ class EventWorkspace extends PanicElement {
       event.preventDefault();
       this.setActiveTab(a.dataset.tab);
     }));
+    // The set of visible tabs (and so whether the bar overflows at all) can
+    // change here — e.g. a Sections toggle hides a tab. Re-check the edge
+    // markers; this is just a recompute, not a re-wire (see _wireTabScrollEdges).
+    this._updateTabEdges?.();
+  }
+
+  /**
+   * Show/hide the "<<"/">>" edge markers on .workspace-tabs based on scroll
+   * position, and let clicking them scroll the bar. The tab bar's own text
+   * happens to wrap almost exactly at the visible width in common cases, so
+   * without this there's no visual hint at all that scrolling further reveals
+   * more tabs — it just looks like the last tab got cut off mid-word. Wired
+   * once (from connect(), after the first _renderTabNav()); _renderTabNav()
+   * re-runs on every tab-set change and just calls _updateTabEdges() above,
+   * since navEl itself (and so this listener) survives those re-renders.
+   */
+  _wireTabScrollEdges() {
+    const navEl = $('.workspace-tabs', this);
+    const wrap = navEl?.closest('.workspace-tabs-wrap');
+    const leftBtn = $('.tab-scroll-left', wrap);
+    const rightBtn = $('.tab-scroll-right', wrap);
+    if (!navEl || !wrap || !leftBtn || !rightBtn) return;
+
+    const update = () => {
+      // 1px slop: fractional scroll widths (browser zoom, device pixel ratio)
+      // can leave scrollLeft a hair short of the true max.
+      const maxScroll = navEl.scrollWidth - navEl.clientWidth;
+      leftBtn.hidden = navEl.scrollLeft <= 1;
+      rightBtn.hidden = navEl.scrollLeft >= maxScroll - 1;
+    };
+    this._updateTabEdges = update;
+
+    navEl.addEventListener('scroll', update, { passive: true });
+    new ResizeObserver(update).observe(navEl);
+    [[leftBtn, -1], [rightBtn, 1]].forEach(([btn, dir]) => {
+      btn.addEventListener('click', () => {
+        navEl.scrollBy({ left: dir * Math.round(navEl.clientWidth * 0.6), behavior: 'smooth' });
+      });
+    });
+
+    update();
   }
 
   /** Show only the active tab's section; every other tracked section is hidden. */
@@ -574,7 +615,11 @@ class EventWorkspace extends PanicElement {
     <pb-portal-panel id="portalPanel"></pb-portal-panel>
     <pb-qr-panel id="qrPanel"></pb-qr-panel>
     <pb-event-summary></pb-event-summary>
-    <nav class="workspace-tabs tabs"></nav>
+    <div class="workspace-tabs-wrap">
+      <button type="button" class="tab-scroll-edge tab-scroll-left" data-tab-scroll="-1" aria-label="Scroll tabs left" hidden>&laquo;</button>
+      <nav class="workspace-tabs tabs"></nav>
+      <button type="button" class="tab-scroll-edge tab-scroll-right" data-tab-scroll="1" aria-label="Scroll tabs right" hidden>&raquo;</button>
+    </div>
     <pb-event-next-action></pb-event-next-action>
     <section id="overview">
       <pb-event-readiness></pb-event-readiness>
@@ -647,6 +692,7 @@ class EventWorkspace extends PanicElement {
     this._renderTabNav();
     this._applySectionVisibility();
     this._bindSectionToggles(userId, event.id, prefs);
+    this._wireTabScrollEdges();
   }
 
   async togglePublic() {

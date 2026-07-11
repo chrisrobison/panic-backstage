@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Add scroll-edge markers to the workspace tab bar
 - **Added** `events` — Add a dismiss control to the Next Recommended Action banner
 - **Documentation** — Regenerate help screenshots for current UI, add ListMaster capture
 - **Documentation** — Render public-calendar-api.md as a styled HTML reference page

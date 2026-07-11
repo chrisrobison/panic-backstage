@@ -866,9 +866,9 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
 .guest-row .guest-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #555; min-width: 56px; }
 .guest-row .guest-check input { margin: 0; }
 .guest-add { background: #fafafa; border-top: 1px dashed var(--line); margin-top: 14px; padding-top: 12px; }
+.workspace-tabs-wrap { position: relative; margin-bottom: 18px; }
 .workspace-tabs {
   border-bottom: 1px solid var(--line);
-  margin-bottom: 18px;
   overflow-x: auto;
 }
 .workspace-tabs a {
@@ -878,6 +878,44 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
   white-space: nowrap;
 }
 .workspace-tabs a.active { color: #111; border-color: var(--red); font-weight: 900; }
+/* "<<"/">>" scroll-edge markers. The tab bar's own text tends to line-wrap
+   almost exactly at the visible width, so without these there's no visual
+   hint that scrolling reveals more tabs — the last one just looks cut off
+   mid-word (see event-workspace.js _wireTabScrollEdges). Each hides itself
+   (via the `hidden` attribute) once its direction has nothing left to
+   scroll to; clicking one also scrolls the bar. */
+.tab-scroll-edge {
+  position: absolute;
+  top: 0;
+  bottom: 1px; /* sit above the tab bar's own 1px border-bottom */
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  font-size: 12px;
+  color: #4b5360;
+  z-index: 1;
+}
+/* Without this, our own `display: flex` above (same specificity as the UA
+   stylesheet's `[hidden] { display: none }`, but declared later) would win
+   and the hidden attribute JS toggles would do nothing visually. */
+.tab-scroll-edge[hidden] { display: none; }
+.tab-scroll-edge:hover { color: #111; }
+.tab-scroll-left {
+  left: 0;
+  justify-content: flex-start;
+  background: linear-gradient(to right, var(--bg) 55%, transparent);
+}
+.tab-scroll-right {
+  right: 0;
+  justify-content: flex-end;
+  background: linear-gradient(to left, var(--bg) 55%, transparent);
+}
 /* Compact header strip — sits above the tab nav. A small flyer thumbnail,
    a single-row fact strip, and inline stat pills, all on one line so it
    doesn't compete with the tabs/content below for vertical space. */
