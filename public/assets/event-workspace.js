@@ -101,6 +101,7 @@ class EventSummary extends EventBusCard {
         ${factCell('Status', badge(event.status))}
         ${factCell('Owner', esc(event.owner_name || 'Unassigned'))}
         ${factCell('Public Page', Number(event.public_visibility) ? 'Live' : 'Hidden')}
+        ${event.ticketing_mode === 'internal' ? factCell('Tickets Sold', event.tickets_sold ?? 0) : ''}
       </div>
       <div class="event-stats">
         <div class="event-stat">Open Items<strong>${openItems}</strong><button type="button" data-goto-tab="open-items">View</button></div>

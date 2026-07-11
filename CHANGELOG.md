@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** — Show tickets sold in the compact event header for in-house ticketing
 - **Changed** — Move event header above tabs and make it compact
 - **Changed** — Redesign event workspace: real tabs + card-grid Overview dashboard
 - **Changed** — Add ListMaster: sidebar-of-lists list management UI

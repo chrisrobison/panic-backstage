@@ -136,6 +136,15 @@ final class Events extends BaseEndpoint
         if (!$event) {
             return $this->notFound('Event not found');
         }
+        // Live tickets-sold count for the compact header — only meaningful (and
+        // only queried) when we're the ones selling tickets in-house; external
+        // ticketing has no local sales data to total up.
+        if ($event['ticketing_mode'] === 'internal') {
+            $event['tickets_sold'] = (int) ($this->db->one(
+                'SELECT COALESCE(SUM(quantity_sold), 0) AS n FROM ticket_types WHERE event_id = ?',
+                [$id]
+            )['n'] ?? 0);
+        }
         $lineup = $this->db->all('SELECT el.*, b.name band_name FROM event_lineup el LEFT JOIN bands b ON b.id = el.band_id WHERE el.event_id = ? ORDER BY billing_order, set_time', [$id]);
         $tasks = $this->db->all('SELECT t.*, u.name assigned_name FROM event_tasks t LEFT JOIN users u ON u.id = t.assigned_user_id WHERE t.event_id = ? ORDER BY FIELD(t.status,"blocked","todo","in_progress","done","canceled"), due_date', [$id]);
         if ($this->hasEventCapability($id, 'view_assigned_tasks') && !$this->hasEventCapability($id, 'manage_tasks')) {
