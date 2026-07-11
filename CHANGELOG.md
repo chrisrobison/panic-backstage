@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** — Document ListMaster and the event Payments tab, fix stale financial docs
 - **Changed** — Show ticketing mode and tickets sold in the Overview Financial card
 - **Changed** — Stop recommending "Add ticketing link" for in-house ticketing events
 - **Changed** — Show tickets sold in the compact event header for in-house ticketing

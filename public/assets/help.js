@@ -65,6 +65,7 @@ export const HELP_SECTIONS = [
       { slug: 'invites',      title: 'Invites &amp; collaborators' },
       { slug: 'contracts',    title: 'Contracts &amp; deal builder' },
       { slug: 'deposit-gate', title: 'Deposit gate &amp; payments' },
+      { slug: 'payments',     title: 'The Payments tab' },
       { slug: 'e-signatures', title: 'Electronic signatures' },
       { slug: 'ticketing',    title: 'Ticketing &amp; door' },
       { slug: 'settlement',   title: 'Settlement' },
@@ -106,6 +107,7 @@ export const HELP_SECTIONS = [
     items: [
       { slug: 'msg-campaigns', title: 'Campaigns' },
       { slug: 'msg-lists',     title: 'Mailing Lists' },
+      { slug: 'listmaster',    title: 'ListMaster' },
     ],
   },
   {
@@ -525,16 +527,21 @@ const HELP_CONTENT = {
   overview: `
     <h2>Overview &amp; readiness</h2>
     <figure class="help-shot">
-      <img src="./assets/help/event.png" alt="An event workspace: the row of section tabs, the event header with flyer thumbnail and facts, the Next Recommended Action banner, and the Readiness panel" loading="lazy">
-      <figcaption>An event workspace — the tab row jumps between sections; below it sit the event facts, Next Recommended Action, and the Readiness checklist.</figcaption>
+      <img src="./assets/help/event.png" alt="An event workspace: the compact event header, the row of section tabs below it, and the Overview tab's card-grid dashboard" loading="lazy">
+      <figcaption>An event workspace — a compact header sits above the tab row; the Overview tab (the default landing tab) is a card-grid dashboard with a link out of every card to its full section.</figcaption>
     </figure>
-    <p>The top of every event workspace shows a flyer thumbnail, the event facts (date, doors, show, status, owner, public-page state), and two counters that link straight to the matching tabs:</p>
+    <p>Every event workspace opens with a compact header above the tab row: a small flyer panel, a facts grid (Date, Doors, Show, Status, Owner, Public Page state, and — for in-house ticketed events — Tickets Sold), and two counters that jump straight to the matching tab:</p>
     <ul>
       <li><strong>Open Items</strong> count — blockers that are still <em>open</em> or <em>waiting</em>.</li>
       <li><strong>Tasks Left</strong> count — tasks not yet marked <em>done</em> or <em>canceled</em>.</li>
     </ul>
-    <p>Below that is a <strong>Next Recommended Action</strong> banner suggesting the most important next step (sign the artist, approve the flyer, build the run sheet, etc.). It refreshes when you click <em>Refresh</em> or save something.</p>
-    <p>The <strong>Readiness</strong> panel lists the gates we check before a show is "ready" (lineup confirmed, flyer approved, public page on, run sheet built, settlement filed, and so on) with a clear OK / not-OK mark. The <strong>Internal Notes</strong> panel is the place for anything you do not want on the public page — green-room arrangements, transport, dietary notes, comp commitments.</p>
+    <p>Below the header sits a <strong>Next Recommended Action</strong> banner suggesting the most important next step (sign the artist, approve the flyer, build the run sheet, etc.). It refreshes when you click <em>Refresh</em> or save something anywhere in the event.</p>
+    <p>The <strong>Overview</strong> tab itself is a read-only, at-a-glance dashboard: a grid of cards for Schedule/Timeline, Promoter/Contacts, Band Lineup, Venue Ops/Logistics, Financial/Ticketing, Notes/Tasks, and Documents/Attachments. Each card summarizes that part of the event and links out (e.g. "Full Run Sheet", "Manage Lineup") to the matching tab for the full editable view.</p>
+    <ul>
+      <li>The <strong>Financial/Ticketing</strong> card shows ticket price, capacity, estimated guests, deposit amount and status, and — for in-house ticketed events — tickets sold so far; externally-ticketed events get a link out to the ticket URL instead. If you can view <a href="#help-settlement">Settlement</a>, a filed settlement's gross ticket sales, bar sales, and venue net are summarized here too.</li>
+      <li>The <strong>Notes/Tasks</strong> card shows the event's internal notes (the staff-only field on the <a href="#help-details">Details</a> tab — nothing here ever appears on the public page) and the first several open tasks.</li>
+    </ul>
+    <p>Also on the Overview tab, the <strong>Readiness</strong> panel lists the gates we check before a show is "ready" (lineup confirmed, flyer approved, public page on, run sheet built, settlement filed, and so on) with a clear OK / not-OK mark.</p>
   `,
 
   details: `
@@ -1240,6 +1247,41 @@ const HELP_CONTENT = {
     <h3>From the contact side</h3>
     <p>Open any contact's record and scroll to its <strong>Mailing Lists</strong> section to see every list they belong to, toggle their membership on individual lists, or add them to a new one — handy when you're already looking at one person rather than building a list from scratch.</p>
     <div class="tip"><strong>Tip:</strong> Removing someone from a list only affects that list. To stop <em>all</em> marketing email to a contact, turn off their <em>Opted in</em> flag on the <a href="#help-contacts">Contacts</a> page — campaigns never send to anyone who isn't opted in, regardless of list membership.</div>
+    <div class="tip"><strong>Prefer a denser, all-in-one view?</strong> <a href="#help-listmaster">ListMaster</a> is a newer sidebar-of-lists page that manages these same lists with a member table, bulk actions, tags, and an audit trail, alongside this classic page.</div>
+  `,
+
+  listmaster: `
+    <h2>ListMaster</h2>
+    <p><strong>Messages &rarr; ListMaster</strong> is a denser, all-in-one alternative to the classic <a href="#help-msg-lists">Mailing Lists</a> page — same lists, same underlying contacts, a different layout built for working a big list quickly: a sidebar of every list, stat cards, a filterable member table with bulk actions, a contact detail slide-over, and tools for tags, segments, and import/export history. It doesn't replace the classic Lists page; use whichever layout you prefer, or both.</p>
+
+    <h3>Layout</h3>
+    <ul>
+      <li><strong>Sidebar</strong> — every list (static and smart), with a live member count, plus a <strong>Tools</strong> section for Import History, Export History, Tags, and Segments. A storage meter at the bottom shows contacts used against your venue's contact cap, with an <em>Edit limit</em> control.</li>
+      <li><strong>Main pane</strong> — the selected list: stat cards (Total Members, Active, Unsubscribed, Bounced, Last Updated), a filter bar (status, tag, and a column-visibility picker for Tags / Joined / Lists columns), and the member table itself.</li>
+      <li><strong>Detail slide-over</strong> — click any member row to open their record without leaving the list: <strong>Details</strong> (tags and a checklist of every list they belong to, toggle-able right there), <strong>Activity</strong> (a per-contact audit trail — joined/left a list, status changes, tags added/removed), and <strong>Notes</strong>.</li>
+    </ul>
+
+    <h3>Member status</h3>
+    <p>Members are Active (subscribed), Unsubscribed, or <strong>Bounced</strong>. Bounced is set manually here — Backstage has no email-provider bounce-webhook feed, so if a delivery fails, mark the member Bounced yourself (individually from their detail panel, or in bulk from the member table).</p>
+
+    <h3>Bulk actions</h3>
+    <p>Check one or more rows in the member table (or "select all on this page") to reveal a bulk action bar:</p>
+    <ul>
+      <li><strong>Add Members</strong> — search and add contacts, or add everyone already opted in, in one click.</li>
+      <li><strong>Remove from List</strong> — deletes the selected members' membership in the current list only.</li>
+      <li><strong>Move</strong> — adds the selection to a different list and removes them from this one.</li>
+      <li><strong>Assign Tags</strong> — apply an existing tag or create and assign a new one on the fly.</li>
+      <li><strong>Mark Active / Unsubscribed / Bounced</strong> — bulk status change.</li>
+    </ul>
+    <p>Smart (segment) lists disable manual add/remove/tag actions here since their membership is computed from rules — a <strong>Refresh</strong> button re-runs those rules instead. Edit a segment's rules from the classic Lists page.</p>
+
+    <h3>Tags</h3>
+    <p>Free-form, color-coded labels you can put on any contact — open the <strong>Tags</strong> tool to create, rename their color, see how many contacts use each one, or delete one entirely (removing it from every contact). Filter the member table by tag, or assign tags in bulk from the member table.</p>
+
+    <h3>Import / Export</h3>
+    <p><strong>Import CSV</strong> works the same as the classic Lists page (an <code>email</code> column required, plus optional <code>first_name</code>, <code>last_name</code>, <code>phone</code>, <code>opted_in</code>) but only targets static lists — smart lists compute their own membership. <strong>Export List</strong> downloads the currently selected list (respecting any active search/status/tag filter) as a CSV. Every import and export run is logged with who ran it, when, and the row counts, browsable from the <strong>Import History</strong> / <strong>Export History</strong> tools in the sidebar.</p>
+
+    <div class="tip"><strong>Tip:</strong> <kbd>&#8984;/Ctrl</kbd>+<kbd>K</kbd> jumps to the search box from anywhere on the page — it searches both the list sidebar and, once a list is open, its members.</div>
   `,
 
   statuses: `
@@ -1542,20 +1584,13 @@ const HELP_CONTENT = {
       <li><strong>Deposit</strong> — must be in <em>received</em>, <em>waived</em>, or <em>not_required</em> state. A deposit that is requested but not yet received will block the transition.</li>
     </ul>
 
-    <h3>The Payments panel</h3>
-    <p>The Payments panel (inside the event workspace) tracks all deposits and balance payments for the event. Adding a payment requires:</p>
-    <ul>
-      <li><strong>Type</strong> — deposit, balance, refund, credit, or adjustment.</li>
-      <li><strong>Direction</strong> — inbound (received from the client) or outbound (paid to an artist or vendor).</li>
-      <li><strong>Amount</strong> — the payment amount.</li>
-      <li><strong>Due date</strong> — when the payment is due.</li>
-      <li><strong>Payment method</strong> — how the payment was or will be made.</li>
-    </ul>
+    <h3>The Payments tab</h3>
+    <p>The <a href="#help-payments">Payments tab</a> (inside the event workspace) lists every deposit, balance payment, refund, credit, and adjustment on file for the event, and can generate a Stripe invoice link for an outstanding one. See that page for the full rundown of what it shows and how "Send Invoice Link" works.</p>
     <p>When a deposit payment is marked <strong>received</strong>, the event's <code>deposit_status</code> updates automatically and the gate check is re-evaluated.</p>
 
     <h3>Waiving a deposit</h3>
-    <p>In some cases you may want to waive the deposit requirement — for example for a high-trust returning promoter. Waiving requires the <code>waive_deposit</code> capability (venue admin by default). A mandatory reason must be entered. All waivers are audited with the reason, the admin who waived it, and the timestamp.</p>
-    <div class="warn"><strong>Important:</strong> Waiving a deposit is a deliberate bypass of a financial control. Use it sparingly and always document the reason.</div>
+    <p>Some events don't need a deposit at all — a longtime promoter, a house-produced show, a venue-discretion booking. Backstage supports a <code>waived</code> deposit state (gated by the <code>waive_deposit</code> capability, venue admin by default, and always requiring an audited reason) that satisfies the gate the same way a received deposit does.</p>
+    <div class="tip"><strong>Note:</strong> As of this writing the Payments tab has no "Waive deposit" button yet — this state can currently only be set by whoever manages your Backstage deployment via the API. If your venue waives deposits often, ask a venue admin whether that control has been added to the UI, or request it.</div>
 
     <h3>Not required</h3>
     <p>If an event has no deposit amount set, the deposit status defaults to <code>not_required</code> and the gate passes automatically. This ensures backward compatibility with events created before the deposit gate was introduced.</p>
@@ -1568,6 +1603,31 @@ const HELP_CONTENT = {
       <li><em>"Deposit waived"</em> — the deposit was waived; this is informational, not an error.</li>
     </ul>
     <div class="tip"><strong>Tip:</strong> Use the <a href="#help-contracts">Contracts</a> tab's e-signature workflow to get the contract to <em>fully_executed</em> status. Both gates (contract + deposit) must pass before Booked is available.</div>
+  `,
+
+  payments: `
+    <h2>The Payments tab</h2>
+    <p>The <strong>Payments</strong> tab in the event workspace (visible with the <code>manage_payments</code> capability) is the money-movement record for a single event — deposits, balance payments, refunds, credits, and adjustments. It works alongside the <a href="#help-deposit-gate">deposit gate</a>: a deposit payment marked <em>received</em> here is what actually clears that gate.</p>
+
+    <h3>What the table shows</h3>
+    <p>Each row is one payment record: <strong>Type</strong> (Deposit, Balance Payment, Refund, Credit, Adjustment, Promoter Payment, Client Payment, or Other), <strong>Amount</strong> and currency, <strong>Status</strong>, <strong>Method</strong> (check, wire, ACH, cash, card, Stripe, Square, Venmo, Zelle, other), and <strong>Due date</strong>.</p>
+
+    <h3>Status chips</h3>
+    <ul>
+      <li><strong>Pending</strong> — expected but not yet paid.</li>
+      <li><strong>Invoiced</strong> — a Stripe payment link has been sent for it.</li>
+      <li><strong>Received</strong> — paid. For a deposit-type record, this is what advances <code>deposit_status</code>.</li>
+      <li><strong>Failed</strong> — a payment attempt didn't go through.</li>
+      <li><strong>Refunded</strong> / <strong>Voided</strong> — closed out; voided records stay visible for the audit trail but don't count toward totals.</li>
+    </ul>
+
+    <h3>Deposit summary bar</h3>
+    <p>When an event has a deposit amount set, a summary block above the table shows <strong>Deposit Required</strong>, <strong>Deposit Received</strong>, and <strong>Deposit Outstanding</strong> (highlighted when money is still owed) — a quick read on where the deposit stands without adding up rows yourself.</p>
+
+    <h3>Send Invoice Link</h3>
+    <p>For any <em>pending</em> or <em>invoiced</em> payment, click <strong>Send Invoice Link</strong> to generate a one-time Stripe Payment Link for that exact amount. Backstage creates the link, copies it to your clipboard, and marks the record <em>invoiced</em> — from there you paste it into an email, text, or however you reach the payer. This requires <code>STRIPE_SECRET_KEY</code> to be configured for the venue (see <a href="#help-admin-payments">Payment providers</a>); if it isn't, the button will show an error explaining Stripe isn't set up.</p>
+
+    <div class="tip"><strong>Note:</strong> The Payments tab is currently read-mostly — there's no "+ Add Payment" button in this tab to record a new payment (e.g. a cash or check deposit) or edit/void an existing one from the UI. New payment records and status changes are made via the API today. If your venue tracks a lot of cash/check activity, ask a venue admin whether an in-app "Add Payment" control has been added yet.</div>
   `,
 
   // ── Closeout &amp; Billing ───────────────────────────────────────────────────
@@ -1613,8 +1673,9 @@ const HELP_CONTENT = {
     </ul>
     <p><strong>Payment categories:</strong></p>
     <ul>
-      <li>Deposit Received, Balance Payment, Refund Issued, Credit Applied, Adjustment</li>
+      <li>Deposit Received, Invoice Payment, Credit, Outstanding Balance, Artist Payout, Promoter Payout, Vendor Payout, Staff Payout, Adjustment</li>
     </ul>
+    <div class="tip"><strong>Note:</strong> These are ledger line-item categories — manual entries in the Closeout P&amp;L — separate from the structured payment records (Deposit, Balance Payment, Refund, Credit, and more) tracked on the event's <a href="#help-payments">Payments tab</a>. The two aren't automatically reconciled with each other.</div>
 
     <h3>Adding a ledger entry</h3>
     <ol>

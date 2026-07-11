@@ -1148,6 +1148,7 @@
     <a href="#private-events" class="section">Private event rentals</a>
     <a href="#sheet-sync" class="section">Google Sheet sync</a>
     <a href="#deposit-gate" class="section">The deposit gate</a>
+    <a href="#event-payments" class="section">The Payments tab</a>
 
     <div class="nav-section">Part III — Night Of</div>
     <a href="#run-of-night" class="chapter">Chapter 3: Run of Night</a>
@@ -1210,6 +1211,7 @@
     <a href="#msg-campaigns" class="section">Email campaigns</a>
     <a href="#msg-lists" class="section">Mailing lists</a>
     <a href="#msg-segments" class="section">Smart (segment) lists</a>
+    <a href="#msg-listmaster" class="section">ListMaster</a>
 
     <div class="nav-section">Quick Reference</div>
     <a href="#roles" class="chapter">Roles &amp; Who Does What</a>
@@ -2298,52 +2300,25 @@
       <li><strong>Deposit received (or waived)</strong> — the deposit status must be <code>received</code>, <code>waived</code>, or <code>not_required</code>.</li>
     </ol>
 
-    <p>The <span class="ui-label tab">Payments</span> tab in the event workspace tracks all money movements: deposits, balance payments, refunds, credits, and adjustments.</p>
-
-    <h3>Adding a payment record</h3>
-
-    <p>Click <span class="ui-label button">+ Add Payment</span> to record a payment. Each payment record includes:</p>
-
-    <div class="field-ref">
-      <div class="field-ref-title">Payment Record Fields</div>
-      <div class="field-row">
-        <div class="field-name">Payment type</div>
-        <div class="field-desc">Deposit, Balance Payment, Refund, Credit, or Adjustment.</div>
-      </div>
-      <div class="field-row">
-        <div class="field-name">Direction</div>
-        <div class="field-desc">Inbound (money coming to the venue) or Outbound (money going out).</div>
-      </div>
-      <div class="field-row">
-        <div class="field-name">Amount</div>
-        <div class="field-desc">Dollar amount of the payment.</div>
-      </div>
-      <div class="field-row">
-        <div class="field-name">Due date</div>
-        <div class="field-desc">When the payment is expected. Overdue deposits appear on the dashboard.</div>
-      </div>
-      <div class="field-row">
-        <div class="field-name">Payment method</div>
-        <div class="field-desc">Check, wire transfer, ACH, cash, credit card, etc.</div>
-      </div>
-      <div class="field-row">
-        <div class="field-name">Notes</div>
-        <div class="field-desc">Any relevant details — check number, confirmation code, who delivered it, etc.</div>
-      </div>
-    </div>
+    <p>The <span class="ui-label tab">Payments</span> tab in the event workspace tracks all money movements: deposits, balance payments, refunds, credits, and adjustments. See <a href="#event-payments">The Payments tab</a> below for what it shows and how to send a payer an invoice link.</p>
 
     <p>When a deposit payment is marked received, the <code>deposit_status</code> updates automatically to <code>received</code> and the gate opens — the event can now be advanced to Booked (assuming the contract is also executed).</p>
 
     <h3>Waiving a deposit</h3>
 
-    <p>Some events don't require a deposit — longtime promoters, house-produced shows, or venue-discretion bookings. To waive the deposit requirement:</p>
+    <p>Some events don't require a deposit — longtime promoters, house-produced shows, or venue-discretion bookings. Backstage supports a <code>waived</code> deposit state that clears the gate the same way a received deposit does:</p>
 
     <ul>
-      <li>Requires the <code>waive_deposit</code> capability (venue admin by default)</li>
-      <li>A mandatory reason must be entered — it cannot be left blank</li>
+      <li>Gated by the <code>waive_deposit</code> capability (venue admin by default)</li>
+      <li>A mandatory reason must be recorded — it cannot be left blank</li>
       <li>The waiver is permanently audited: who, when, and why</li>
       <li>Once waived, the deposit gate is cleared and the event can proceed to Booked</li>
     </ul>
+
+    <div class="callout warn">
+      <span class="callout-title">No in-app "Waive deposit" button yet</span>
+      <p>As of this writing, waiving a deposit is only possible via a direct API call (<code>POST /events/{id}/payments/waive-deposit</code>) — there's no button for it in the Payments tab. If your venue waives deposits regularly, ask whoever maintains your Backstage deployment to wire this control into the UI, or waive it on their behalf.</p>
+    </div>
 
     <div class="callout note">
       <span class="callout-title">Legacy events</span>
@@ -2353,6 +2328,56 @@
     <div class="callout tip">
       <span class="callout-title">Deposits Overdue dashboard card</span>
       <p>The dashboard card <strong>Deposits Overdue</strong> highlights deposit payments that are past their due date. Check this weekly — an overdue deposit often means a follow-up call is needed before the event can be fully locked.</p>
+    </div>
+
+    <!-- EVENT PAYMENTS TAB ─────────────────────────────────────────────────── -->
+    <h2 id="event-payments">The Payments tab</h2>
+
+    <p>Open the <span class="ui-label tab">Payments</span> tab (visible with the <code>manage_payments</code> capability) to see every payment record on file for the event — deposits, balance payments, refunds, credits, adjustments, and more.</p>
+
+    <div class="field-ref">
+      <div class="field-ref-title">What each row shows</div>
+      <div class="field-row">
+        <div class="field-name">Type</div>
+        <div class="field-desc">Deposit, Balance Payment, Refund, Credit, Adjustment, Promoter Payment, Client Payment, or Other.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Amount</div>
+        <div class="field-desc">Dollar amount and currency.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Status</div>
+        <div class="field-desc">Pending, Invoiced, Received, Failed, Refunded, or Voided (see below).</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Method</div>
+        <div class="field-desc">Check, wire transfer, ACH, cash, credit card, Stripe, Square, Venmo, Zelle, or other.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Due date</div>
+        <div class="field-desc">When the payment is expected. Overdue deposits appear on the dashboard's Deposits Overdue card.</div>
+      </div>
+    </div>
+
+    <h3>Status meanings</h3>
+    <table>
+      <tr><th>Status</th><th>Meaning</th></tr>
+      <tr><td><strong>Pending</strong></td><td>Expected but not yet paid.</td></tr>
+      <tr><td><strong>Invoiced</strong></td><td>A Stripe payment link has been sent for it.</td></tr>
+      <tr><td><strong>Received</strong></td><td>Paid. For a Deposit-type record, this is what satisfies the deposit gate.</td></tr>
+      <tr><td><strong>Failed</strong></td><td>A payment attempt didn't go through.</td></tr>
+      <tr><td><strong>Refunded</strong> / <strong>Voided</strong></td><td>Closed out. Voided records stay visible (for the audit trail) but don't count toward totals.</td></tr>
+    </table>
+
+    <h3>Deposit summary</h3>
+    <p>When the event has a deposit amount set, a summary block above the table shows <strong>Deposit Required</strong>, <strong>Deposit Received</strong>, and <strong>Deposit Outstanding</strong> (highlighted when money is still owed) — a quick read on where the deposit stands without adding up rows by hand.</p>
+
+    <h3>Send Invoice Link</h3>
+    <p>For any <em>Pending</em> or <em>Invoiced</em> row, click <span class="ui-label button">Send Invoice Link</span> to generate a one-time Stripe Payment Link for that exact amount. Backstage creates the link, copies it to your clipboard, and marks the record <em>Invoiced</em> — from there, send it to the payer however you'd normally reach them (email, text). This needs <code>STRIPE_SECRET_KEY</code> configured for the venue — see <a href="#ticketing-payments">Payment provider setup</a> — and will show an error if Stripe isn't configured.</p>
+
+    <div class="callout warn">
+      <span class="callout-title">No "+ Add Payment" button yet</span>
+      <p>The Payments tab is currently view-mostly: there is no in-app control to record a new payment (for example, logging a check or cash deposit received in person), edit an existing one, or void one. The underlying API supports all of this (<code>POST</code>/<code>PATCH</code>/<code>DELETE</code> on <code>/events/{id}/payments</code>), so if your venue handles a lot of cash or check activity, either record it via the API or flag adding an in-app "Add Payment" control to whoever maintains your deployment.</p>
     </div>
 
   </div><!-- /book-content -->
@@ -2949,7 +2974,11 @@
     <p>Artist Guarantee · Promoter Settlement · Labor · Sound/Production · Security · Cleaning · Rentals · Catering · Vendor Cost · Processing Fees · Taxes · Refunds · Other Cost</p>
 
     <h3>Payment categories</h3>
-    <p>Deposit Received · Balance Payment · Refund Issued · Credit Applied · Adjustment</p>
+    <p>Deposit Received · Invoice Payment · Credit · Outstanding Balance · Artist Payout · Promoter Payout · Vendor Payout · Staff Payout · Adjustment</p>
+    <div class="callout note">
+      <span class="callout-title">📋 Not the same list as the Payments tab</span>
+      <p>These are ledger line-item categories — manual entries in the Closeout ledger's P&amp;L, separate from the structured payment records (Deposit, Balance Payment, Refund, Credit, Adjustment, and more) tracked on the event's <a href="#event-payments">Payments tab</a>. The two systems track money for different purposes and aren't automatically reconciled with each other.</p>
+    </div>
 
     <h3>P&amp;L Summary</h3>
 
@@ -3959,6 +3988,51 @@
     <div class="callout tip">
       <span class="callout-title">💡 A refresh only touches what it added</span>
       <p>Refreshing a segment list only adds or removes contacts that <em>the segment rules themselves</em> previously added — a member you (or a CSV import) added to that same list by hand is never evicted by a refresh, and vice versa. This is also why list type can't change after creation: a list is either fully computed or fully manual, never an ambiguous mix.</p>
+    </div>
+
+    <!-- LISTMASTER ──────────────────────────────────────────────────────── -->
+    <h2 id="msg-listmaster">ListMaster</h2>
+
+    <p><strong>Messages &rarr; ListMaster</strong> is a second, denser way to work with the same mailing lists and contacts described above — a sidebar-of-lists layout built for managing a large list quickly, rather than a replacement for the classic <strong>Messages &rarr; Lists</strong> page. Both read and write the same underlying lists and contacts; use whichever layout suits the task, or switch between them freely.</p>
+
+    <div class="callout tip">
+      <span class="callout-title">💡 When to reach for ListMaster instead</span>
+      <p>The classic Lists page is built around one list at a time. ListMaster adds a sidebar of every list at once, bulk selection with multi-action toolbar, contact-level tagging, a per-contact activity trail, and import/export history — reach for it when you're doing list hygiene (tagging, bulk status changes, bounced-address cleanup) across a lot of members at once.</p>
+    </div>
+
+    <h3>Layout</h3>
+    <ul>
+      <li><strong>Sidebar</strong> — every list (static and smart) with a live member count, a <strong>Create New List</strong> shortcut, and a <strong>Tools</strong> section: Import History, Export History, Tags, and Segments. A storage meter at the bottom of the sidebar shows contacts used against the venue's contact cap, with an <strong>Edit limit</strong> control.</li>
+      <li><strong>Main pane</strong> — the selected list's stat cards (Total Members, Active, Unsubscribed, Bounced, Last Updated), a filter bar (status, tag, and a column-visibility picker for the Tags / Joined / Lists&nbsp;&amp;&nbsp;Membership columns), and the member table.</li>
+      <li><strong>Detail slide-over</strong> — click any member row to open their record without leaving the list. Three tabs: <strong>Details</strong> (tag pills plus a checklist of every list they belong to — toggle membership right there), <strong>Activity</strong> (a per-contact audit trail: joined/left a list, status changes, tags added or removed), and <strong>Notes</strong>.</li>
+    </ul>
+
+    <h3>Member status, including Bounced</h3>
+    <p>A member's status is Active (subscribed), Unsubscribed, or <strong>Bounced</strong>. Unlike Active/Unsubscribed, Bounced is never set automatically — Backstage has no email-provider bounce-webhook feed — so mark a member Bounced by hand (from their detail panel, or in bulk from the member table) after a delivery failure you notice elsewhere.</p>
+
+    <h3>Bulk actions</h3>
+    <p>Check one or more rows (or the header checkbox to select the whole page) to reveal the bulk action bar:</p>
+
+    <table>
+      <tr><th>Action</th><th>What it does</th></tr>
+      <tr><td><strong>Add Members</strong></td><td>Search and add specific contacts, or add every already-opted-in contact in one click.</td></tr>
+      <tr><td><strong>Remove from List</strong></td><td>Deletes the selected members' membership in the current list only.</td></tr>
+      <tr><td><strong>Move</strong></td><td>Adds the selection to a different list and removes them from this one.</td></tr>
+      <tr><td><strong>Assign Tags</strong></td><td>Apply an existing tag, or type a new tag name to create and assign it in one step.</td></tr>
+      <tr><td><strong>Mark Active / Unsubscribed / Bounced</strong></td><td>Bulk status change.</td></tr>
+    </table>
+
+    <p>Smart (segment) lists disable manual add/remove/tag actions in ListMaster since their membership is computed from rules — a <strong>Refresh</strong> button on the list header re-runs those rules instead. Rules themselves are still edited from the classic Lists page; the <strong>Segments</strong> tool in ListMaster's sidebar is a read-only browser (member count, last-refreshed time, and an <strong>Open</strong> link) for every smart list.</p>
+
+    <h3>Tags</h3>
+    <p>Tags are free-form, color-coded labels that live on the contact, not the list — the same tag can be assigned across every list a contact belongs to. Open the <strong>Tags</strong> tool to create a tag (name + color), see how many contacts currently use it, or delete it outright (which removes it from every contact that had it). Filter the member table by tag, or assign tags to a selection from the bulk action bar.</p>
+
+    <h3>Import / export</h3>
+    <p><strong>Import CSV</strong> works the same as the classic Lists page — an <code>email</code> column is required, plus optional <code>first_name</code>, <code>last_name</code>, <code>phone</code>, and <code>opted_in</code> columns — but only targets static lists, since smart lists compute their own membership. <strong>Export List</strong> downloads the currently selected list as a CSV, respecting any active search/status/tag filter. Every import and export run is logged (who ran it, when, and the row counts) and browsable from the <strong>Import History</strong> / <strong>Export History</strong> tools in the sidebar — useful when reconciling "why did this list grow by 40 people last Tuesday."</p>
+
+    <div class="callout note">
+      <span class="callout-title">📋 Storage meter</span>
+      <p>The storage card in the sidebar tracks total contacts against your venue's configured cap, not membership in any one list. Venue admins can raise or lower the cap with <strong>Edit limit</strong>.</p>
     </div>
 
   </div><!-- /book-content -->
