@@ -555,6 +555,10 @@ meant to be `fetch()`ed by browser JS running on a different origin (the
 venue's own marketing site) rather than consumed server-side like the other
 two formats.
 
+See [`docs/public-calendar-api.md`](docs/public-calendar-api.md) for the full
+reference (response shapes, field-by-field notes, and how this relates to the
+single-event `/public/events/{idOrSlug}` endpoint and to ticket purchasing).
+
 ### Embeddable events widget (`<mab-events-carousel>`)
 
 `public/assets/mab-events-carousel.js` is a dependency-free web component that
