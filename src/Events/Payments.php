@@ -305,8 +305,18 @@ final class Payments extends BaseEndpoint
             return;
         }
 
-        // Don't overwrite waived/refunded/not_required if set externally.
-        if (in_array($event['deposit_status'], ['waived', 'not_required'], true)) {
+        // Don't overwrite a deliberately-set waived/refunded state. `not_required`
+        // is *not* included here even though it's also a deliberate state in some
+        // cases — it's the deposit_status column's DB default, so every event
+        // that has never had a deposit payment recorded sits at `not_required`
+        // whether or not a deposit is actually required. Treating it as sticky
+        // like `waived` would mean a real deposit's first payment could never
+        // move deposit_status off that default. Instead, "no deposit required"
+        // is derived straight from deposit_amount below.
+        if (in_array($event['deposit_status'], ['waived', 'refunded'], true)) {
+            return;
+        }
+        if ((float) ($event['deposit_amount'] ?? 0) <= 0) {
             return;
         }
 

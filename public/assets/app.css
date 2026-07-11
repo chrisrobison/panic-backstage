@@ -994,6 +994,23 @@ pb-event-overview { display: block; }
 .ov-stat strong { font-size: 15px; font-weight: 700; }
 .ov-stat strong a { color: var(--accent, #2563eb); }
 
+/* ── Payments tab: deposit summary bar (Payments tab, event workspace) ─────── */
+.summary-block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 32px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--soft);
+}
+.summary-row { display: flex; flex-direction: column; gap: 2px; }
+.summary-row .label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.summary-row .value { font-size: 15px; font-weight: 700; }
+.summary-row .value.value-warn { color: var(--danger); }
+.summary-block .summary-spacer { flex: 1 1 auto; }
+.row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
 .timeline-list { list-style: none; margin: 0; padding: 0; }
 .timeline-row { display: grid; grid-template-columns: 60px 14px 1fr; gap: 10px; align-items: start; padding: 6px 0; }
 .timeline-time { font-size: 12px; color: var(--muted); font-weight: 700; padding-top: 1px; white-space: nowrap; }

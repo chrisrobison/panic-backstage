@@ -1178,18 +1178,35 @@ customElements.define('pb-portal-panel', PortalPanel);
 customElements.define('pb-qr-panel', QrPanel);
 
 // ── Event Payments panel ─────────────────────────────────────────────────────
-// Lists event_payments rows and provides "Send Invoice Link" for pending or
-// invoiced payments — creates a Stripe Payment Link without an SDK.
+// Lists event_payments rows, and lets a manage_payments user add/edit/void a
+// payment record, generate a Stripe "Send Invoice Link" for a pending or
+// invoiced one, or (waive_deposit capability) waive the event's deposit.
+//
+// Fallback enum lists — overwritten from the live GET response's payment_types
+// / methods, but used as select-option sources before the first load resolves.
+const PAYMENT_TYPES_FALLBACK = ['deposit','balance_payment','refund','credit','adjustment','promoter_payment','client_payment','other'];
+const PAYMENT_METHODS_FALLBACK = ['cash','check','ach','wire','credit_card','stripe','square','venmo','zelle','other'];
+const PAYMENT_STATUS_TONE = { pending: 'amber', received: 'green', invoiced: 'gray', failed: 'red', refunded: 'gray', voided: 'gray' };
+const PAYMENT_METHOD_LABEL = { ach: 'ACH' };
+const paymentMethodLabel = (m) => PAYMENT_METHOD_LABEL[m] || titleCase(m);
 
 class EventPayments extends PanicElement {
   set eventId(id) { this._eventId = id; }
   set data(d)     { this._data = d; this._load(); }
+
+  // Lets the shared refreshSection() helper (which reads component.eventData
+  // .event.id, re-fetches /events/{id}, reassigns .data — retriggering _load()
+  // below — and broadcasts the fresh payload to sibling cards) work here too,
+  // same as it does for the record-list panels in event-panels.js.
+  get eventData() { return { event: { id: this._eventId } }; }
 
   async _load() {
     const id = this._eventId;
     if (!id) return;
     try {
       const res = await api(`/events/${id}/payments`);
+      this._paymentTypes = res.payment_types || PAYMENT_TYPES_FALLBACK;
+      this._methods      = res.methods       || PAYMENT_METHODS_FALLBACK;
       this._render(res);
     } catch (err) {
       this.innerHTML = `<section class="panel" id="payments"><div class="section-head padded"><h2>Payments</h2></div><p class="muted padded">Could not load payments.</p></section>`;
@@ -1197,35 +1214,46 @@ class EventPayments extends PanicElement {
   }
 
   _render(res) {
-    const id       = this._eventId;
-    const payments = res.payments || [];
-    const summary  = res.summary  || {};
-    const canSend  = can(this._data, 'manage_payments');
+    const id        = this._eventId;
+    const payments  = res.payments || [];
+    const summary   = res.summary  || {};
+    const canManage = can(this._data, 'manage_payments');
+    const canWaive  = can(this._data, 'waive_deposit');
 
     const statusChip = (s) => {
-      const tone = { pending: 'yellow', received: 'green', invoiced: 'blue',
-                     failed: 'red', refunded: 'gray', voided: 'gray' }[s] || '';
-      return `<span class="chip${tone ? ` chip-${esc(tone)}` : ''}">${esc(s)}</span>`;
+      const tone = PAYMENT_STATUS_TONE[s] || '';
+      return `<span class="chip${tone ? ` chip-${esc(tone)}` : ''}">${esc(titleCase(s))}</span>`;
     };
 
     const rows = payments.length
       ? payments.map(p => {
-          const sendBtn = canSend && ['pending','invoiced'].includes(p.status)
+          const sendBtn = canManage && ['pending','invoiced'].includes(p.status)
             ? `<button class="small secondary" data-send-link="${esc(String(p.id))}" title="Create or re-send a Stripe payment link">Send Invoice Link</button>`
+            : '';
+          const editBtn = canManage
+            ? `<button class="small secondary" data-edit-payment="${esc(String(p.id))}" title="Edit this payment record">Edit</button>`
+            : '';
+          const voidBtn = canManage
+            ? `<button class="small danger" data-void-payment="${esc(String(p.id))}" title="Void this payment record">Void</button>`
             : '';
           const linkCell = p.external_ref
             ? `<span class="muted small" title="${esc(p.external_ref)}">Link sent</span>`
             : '';
           return `<tr>
-            <td>${esc(p.payment_type)}</td>
+            <td>${esc(titleCase(p.payment_type))}</td>
             <td>${esc(money(p.amount))} ${esc(p.currency || 'USD')}</td>
             <td>${statusChip(p.status)}</td>
-            <td>${esc(p.method || '—')}</td>
+            <td>${p.method ? esc(paymentMethodLabel(p.method)) : '—'}</td>
             <td>${esc(p.due_date || '—')}</td>
-            <td>${linkCell}${sendBtn}</td>
+            <td class="row-actions">${linkCell}${sendBtn}${editBtn}${voidBtn}</td>
           </tr>`;
         }).join('')
       : `<tr><td colspan="6" class="muted">${emptyState('No payment records yet.')}</td></tr>`;
+
+    // Only offer waiving while the deposit is actually outstanding — once it's
+    // received or already waived, re-waiving has no meaningful effect.
+    const showWaive = canWaive && summary.deposit_required > 0
+      && !['received', 'waived'].includes(summary.deposit_status);
 
     const depositBar = summary.deposit_required > 0 ? `
       <div class="summary-row">
@@ -1239,12 +1267,16 @@ class EventPayments extends PanicElement {
       <div class="summary-row">
         <span class="label">Deposit Outstanding</span>
         <span class="value${summary.deposit_outstanding > 0 ? ' value-warn' : ''}">${esc(money(summary.deposit_outstanding))}</span>
-      </div>` : '';
+      </div>
+      ${showWaive ? `<span class="summary-spacer"></span><button type="button" class="small secondary" data-waive-deposit>Waive Deposit</button>` : ''}` : '';
 
     this.innerHTML = `
       <section class="panel" id="payments">
         <div class="section-head padded">
           <h2>Payments ${helpLink('payments', 'Payments')}</h2>
+          <div class="section-head-actions">
+            ${canManage ? `<button type="button" class="small" data-add-payment><i class="fa-solid fa-plus" aria-hidden="true"></i> Add Payment</button>` : ''}
+          </div>
         </div>
         ${depositBar ? `<div class="summary-block">${depositBar}</div>` : ''}
         <div class="table-scroll">
@@ -1257,7 +1289,7 @@ class EventPayments extends PanicElement {
         </div>
       </section>`;
 
-    this.querySelectorAll('[data-send-link]').forEach(btn => {
+    $$('[data-send-link]', this).forEach(btn => {
       btn.addEventListener('click', async () => {
         const pid = parseInt(btn.dataset.sendLink, 10);
         btn.disabled = true;
@@ -1276,6 +1308,148 @@ class EventPayments extends PanicElement {
         }
       });
     });
+
+    $('[data-add-payment]', this)?.addEventListener('click', () => this._openPaymentForm());
+    $$('[data-edit-payment]', this).forEach(btn => {
+      btn.addEventListener('click', () => {
+        const payment = payments.find(p => p.id === parseInt(btn.dataset.editPayment, 10));
+        if (payment) this._openPaymentForm(payment);
+      });
+    });
+    $$('[data-void-payment]', this).forEach(btn => {
+      btn.addEventListener('click', () => this._voidPayment(parseInt(btn.dataset.voidPayment, 10)));
+    });
+    $('[data-waive-deposit]', this)?.addEventListener('click', () => this._waiveDeposit());
+  }
+
+  // ── Add / Edit payment modal ─────────────────────────────────────────────
+  // Type and Direction are set at creation only — the update endpoint doesn't
+  // accept them, so an edit only ever touches amount/status/method/due/notes.
+  _openPaymentForm(existing) {
+    const isEdit  = Boolean(existing);
+    const id      = this._eventId;
+    const types   = this._paymentTypes || PAYMENT_TYPES_FALLBACK;
+    const methods = this._methods      || PAYMENT_METHODS_FALLBACK;
+
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-backdrop';
+    dialog.innerHTML = `<div class="modal-card">
+      <div class="section-head padded">
+        <h2>${isEdit ? 'Edit Payment' : 'Add Payment'}</h2>
+        <button type="button" class="small secondary" data-close>Close</button>
+      </div>
+      <form class="grid-form padded" data-payment-form>
+        ${isEdit ? `<p class="muted wide" style="margin:0 0 4px">${esc(titleCase(existing.payment_type))} &middot; ${esc(titleCase(existing.direction))}</p>` : `
+        <label>Type
+          <select name="payment_type">${types.map(t => `<option value="${esc(t)}" ${t === 'deposit' ? 'selected' : ''}>${esc(titleCase(t))}</option>`).join('')}</select>
+        </label>
+        <label>Direction
+          <select name="direction">
+            <option value="received" selected>Received (inbound)</option>
+            <option value="paid_out">Paid out (outbound)</option>
+          </select>
+        </label>`}
+        <label>Amount
+          <input type="number" name="amount" step="0.01" min="0.01" required value="${existing ? esc(existing.amount) : ''}">
+        </label>
+        <label>Status
+          <select name="status">
+            ${['pending','invoiced','received','failed','refunded','voided'].map(s => `<option value="${esc(s)}" ${(existing ? existing.status : 'received') === s ? 'selected' : ''}>${esc(titleCase(s))}</option>`).join('')}
+          </select>
+        </label>
+        <label>Method <span class="muted small">(optional)</span>
+          <select name="method">
+            <option value="">&mdash; none &mdash;</option>
+            ${methods.map(m => `<option value="${esc(m)}" ${existing?.method === m ? 'selected' : ''}>${esc(paymentMethodLabel(m))}</option>`).join('')}
+          </select>
+        </label>
+        <label>Due date <span class="muted small">(optional)</span>
+          <input type="date" name="due_date" value="${existing?.due_date ? esc(String(existing.due_date).slice(0, 10)) : ''}">
+        </label>
+        <label class="wide">Notes <span class="muted small">(optional)</span>
+          <textarea name="notes" rows="3">${existing?.notes ? esc(existing.notes) : ''}</textarea>
+        </label>
+        <div class="wide form-actions">
+          <button type="submit" class="primary">${isEdit ? 'Save changes' : 'Add payment'}</button>
+          <button type="button" class="secondary" data-close>Cancel</button>
+        </div>
+        <p class="error-text wide" data-error></p>
+      </form>
+    </div>`;
+    document.body.appendChild(dialog);
+    const close = () => dialog.remove();
+    $$('[data-close]', dialog).forEach(b => b.addEventListener('click', close));
+    dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
+    $('input[name="amount"]', dialog)?.focus();
+
+    $('[data-payment-form]', dialog).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form  = e.target;
+      const errEl = $('[data-error]', form);
+      errEl.textContent = '';
+      const fd = formData(form);
+      const body = {
+        amount:   Number(fd.amount),
+        status:   fd.status,
+        method:   fd.method || null,
+        due_date: fd.due_date || null,
+        notes:    fd.notes || null,
+      };
+      if (!isEdit) {
+        body.payment_type = fd.payment_type;
+        body.direction    = fd.direction;
+      }
+      const btn = $('button[type="submit"]', form);
+      btn.disabled = true;
+      try {
+        if (isEdit) {
+          await api(`/events/${id}/payments/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+          publish('toast.show', { message: 'Payment updated.' });
+        } else {
+          await api(`/events/${id}/payments`, { method: 'POST', body: JSON.stringify(body) });
+          publish('toast.show', { message: 'Payment added.' });
+        }
+        close();
+        await refreshSection(this);
+      } catch (err) {
+        errEl.textContent = err.message || 'Something went wrong.';
+        btn.disabled = false;
+      }
+    });
+  }
+
+  // ── Void ──────────────────────────────────────────────────────────────────
+  async _voidPayment(pid) {
+    if (!confirm('Void this payment record? Voided records drop off this list (they no longer count toward totals) but stay in the audit trail.')) return;
+    try {
+      await api(`/events/${this._eventId}/payments/${pid}`, { method: 'DELETE' });
+      publish('toast.show', { message: 'Payment voided.' });
+      await refreshSection(this);
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Failed to void payment.', tone: 'error' });
+    }
+  }
+
+  // ── Waive deposit ─────────────────────────────────────────────────────────
+  async _waiveDeposit() {
+    const reason = prompt('Reason for waiving the deposit (required):');
+    if (reason === null) return;
+    if (!reason.trim()) {
+      publish('toast.show', { message: 'A reason is required to waive the deposit.', tone: 'error' });
+      return;
+    }
+    try {
+      // The paymentId path segment is required by the router but unused by
+      // the handler — waiving is an event-level action, not tied to a row.
+      await api(`/events/${this._eventId}/payments/0/waive-deposit`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      publish('toast.show', { message: 'Deposit waived.' });
+      await refreshSection(this);
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Failed to waive deposit.', tone: 'error' });
+    }
   }
 }
 

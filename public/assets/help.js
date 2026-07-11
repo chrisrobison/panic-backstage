@@ -1589,8 +1589,7 @@ const HELP_CONTENT = {
     <p>When a deposit payment is marked <strong>received</strong>, the event's <code>deposit_status</code> updates automatically and the gate check is re-evaluated.</p>
 
     <h3>Waiving a deposit</h3>
-    <p>Some events don't need a deposit at all — a longtime promoter, a house-produced show, a venue-discretion booking. Backstage supports a <code>waived</code> deposit state (gated by the <code>waive_deposit</code> capability, venue admin by default, and always requiring an audited reason) that satisfies the gate the same way a received deposit does.</p>
-    <div class="tip"><strong>Note:</strong> As of this writing the Payments tab has no "Waive deposit" button yet — this state can currently only be set by whoever manages your Backstage deployment via the API. If your venue waives deposits often, ask a venue admin whether that control has been added to the UI, or request it.</div>
+    <p>Some events don't need a deposit at all — a longtime promoter, a house-produced show, a venue-discretion booking. Backstage supports a <code>waived</code> deposit state that satisfies the gate the same way a received deposit does. On the <a href="#help-payments">Payments tab</a>, click <strong>Waive Deposit</strong> in the deposit summary bar (only shown if the deposit is still outstanding and you have the <code>waive_deposit</code> capability, venue admin by default) and enter a reason — it's mandatory and permanently audited alongside who waived it and when.</p>
 
     <h3>Not required</h3>
     <p>If an event has no deposit amount set, the deposit status defaults to <code>not_required</code> and the gate passes automatically. This ensures backward compatibility with events created before the deposit gate was introduced.</p>
@@ -1612,22 +1611,26 @@ const HELP_CONTENT = {
     <h3>What the table shows</h3>
     <p>Each row is one payment record: <strong>Type</strong> (Deposit, Balance Payment, Refund, Credit, Adjustment, Promoter Payment, Client Payment, or Other), <strong>Amount</strong> and currency, <strong>Status</strong>, <strong>Method</strong> (check, wire, ACH, cash, card, Stripe, Square, Venmo, Zelle, other), and <strong>Due date</strong>.</p>
 
-    <h3>Status chips</h3>
+    <h3>Adding a payment</h3>
+    <p>Click <strong>+ Add Payment</strong> to log one — a check or cash deposit handed over in person, a wire that landed, a refund you issued, anything. Set the type and direction (money in vs. money out), the amount, a status (defaults to <em>Received</em>, since the most common case is logging money already in hand — switch it to <em>Pending</em> if you're recording something still owed), and optionally a method, due date, and notes. If the type is <strong>Deposit</strong> and status is <strong>Received</strong>, the event's deposit status updates immediately.</p>
+
+    <h3>Status meanings</h3>
     <ul>
       <li><strong>Pending</strong> — expected but not yet paid.</li>
       <li><strong>Invoiced</strong> — a Stripe payment link has been sent for it.</li>
       <li><strong>Received</strong> — paid. For a deposit-type record, this is what advances <code>deposit_status</code>.</li>
       <li><strong>Failed</strong> — a payment attempt didn't go through.</li>
-      <li><strong>Refunded</strong> / <strong>Voided</strong> — closed out; voided records stay visible for the audit trail but don't count toward totals.</li>
+      <li><strong>Refunded</strong> — closed out, but stays in the list.</li>
     </ul>
 
+    <h3>Editing and voiding</h3>
+    <p>Click <strong>Edit</strong> on any row to change its amount, status, method, due date, or notes (the type and direction are fixed once a record is created — void it and add a corrected one instead if those need to change). Click <strong>Void</strong> to retire a mistake entirely: the record drops off this list right away — so it stops counting toward totals and toward the deposit gate — but it isn't deleted, just excluded from view; the underlying row (and who voided it, and when) is preserved for the audit trail.</p>
+
     <h3>Deposit summary bar</h3>
-    <p>When an event has a deposit amount set, a summary block above the table shows <strong>Deposit Required</strong>, <strong>Deposit Received</strong>, and <strong>Deposit Outstanding</strong> (highlighted when money is still owed) — a quick read on where the deposit stands without adding up rows yourself.</p>
+    <p>When an event has a deposit amount set, a summary block above the table shows <strong>Deposit Required</strong>, <strong>Deposit Received</strong>, and <strong>Deposit Outstanding</strong> (highlighted when money is still owed) — a quick read on where the deposit stands without adding up rows yourself. If the deposit is still outstanding and you have the <code>waive_deposit</code> capability, a <strong>Waive Deposit</strong> button appears in this bar — see <a href="#help-deposit-gate">the deposit gate</a> for when and why you'd use it.</p>
 
     <h3>Send Invoice Link</h3>
     <p>For any <em>pending</em> or <em>invoiced</em> payment, click <strong>Send Invoice Link</strong> to generate a one-time Stripe Payment Link for that exact amount. Backstage creates the link, copies it to your clipboard, and marks the record <em>invoiced</em> — from there you paste it into an email, text, or however you reach the payer. This requires <code>STRIPE_SECRET_KEY</code> to be configured for the venue (see <a href="#help-admin-payments">Payment providers</a>); if it isn't, the button will show an error explaining Stripe isn't set up.</p>
-
-    <div class="tip"><strong>Note:</strong> The Payments tab is currently read-mostly — there's no "+ Add Payment" button in this tab to record a new payment (e.g. a cash or check deposit) or edit/void an existing one from the UI. New payment records and status changes are made via the API today. If your venue tracks a lot of cash/check activity, ask a venue admin whether an in-app "Add Payment" control has been added yet.</div>
   `,
 
   // ── Closeout &amp; Billing ───────────────────────────────────────────────────
