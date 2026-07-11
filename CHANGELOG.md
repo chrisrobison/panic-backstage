@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Embeddable events carousel widget for themab.org
 - **Added** `payments` — Add Add/Edit/Void payment and Waive Deposit controls
 - **Documentation** — Document ListMaster and the event Payments tab, fix stale financial docs
 - **Changed** — Show ticketing mode and tickets sold in the Overview Financial card
