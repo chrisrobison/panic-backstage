@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Regenerate the in-app help screenshots under public/assets/help/.
+// Regenerate the in-app help screenshots under public/assets/help/:
+// dashboard, contacts, listmaster, event, ticketing, contract.
 //
 // Self-contained: starts a local PHP dev server if one isn't already running,
 // mints a *non-destructive* magic-link token for an admin (no password is set
@@ -41,6 +42,12 @@ const BASE = (process.env.SHOT_BASE || `http://127.0.0.1:${PORT}${readBasePath(R
 
 const log = (...a) => console.log('[shots]', ...a);
 
+// Shared fake-person pool for redacting real customer PII out of any screenshot
+// that shows a table of contacts (contacts.png, listmaster.png). Real
+// names/emails/phones must never end up in a committed help screenshot —
+// aggregate KPIs and anonymous stats are fine to leave as-is.
+const FAKE_PEOPLE = ['Jordan Rivera', 'Sam Okafor', 'Alex Chen', 'Priya Nair', 'Mateo Cruz', 'Dana Brooks', 'Noah Kim', 'Lena Petrova', 'Omar Haddad', 'Grace Lin', 'Theo Walsh', 'Ruby Santos', 'Ivan Petrov', 'Maya Johnson', 'Eli Foster'];
+
 async function main() {
   mkdirSync(OUT, { recursive: true });
 
@@ -60,6 +67,11 @@ async function main() {
 
   try {
     await seedAuth(cdp, BASE, auth);
+    // Pre-accept the cookie/preference consent banner (public/assets/consent.js
+    // renders it on first visit, covering the bottom of the viewport) so it
+    // never appears in a help screenshot. "essential" is enough — these shots
+    // don't depend on any preference-storage behavior.
+    await cdp.eval(`try { localStorage.setItem('pb.cookieConsent', 'essential'); } catch (e) {}`);
 
     await cdp.send('Page.navigate', { url: BASE + '/#dashboard' });
     await cdp.onceEvent('Page.loadEventFired');
@@ -72,7 +84,7 @@ async function main() {
       // Redact real customer PII before capture — the help screenshot must not
       // ship real names/emails/phones. Aggregate KPIs + anonymous stats stay.
       await cdp.eval(`(()=>{
-        const F=['Jordan Rivera','Sam Okafor','Alex Chen','Priya Nair','Mateo Cruz','Dana Brooks','Noah Kim','Lena Petrova','Omar Haddad','Grace Lin','Theo Walsh','Ruby Santos','Ivan Petrov','Maya Johnson','Eli Foster'];
+        const F=${JSON.stringify(FAKE_PEOPLE)};
         document.querySelectorAll('.contacts-table tbody tr').forEach((tr,i)=>{
           const name=F[i%F.length], [f,l]=name.split(' ');
           const nm=tr.querySelector('[data-label="Name"] strong'); if(nm) nm.textContent=name;
@@ -86,17 +98,45 @@ async function main() {
       log('WARN: contacts page did not load — skipping contacts.png');
     }
 
+    await gotoHash('#listmaster');
+    if (await cdp.until(`document.querySelector('pb-listmaster') && document.querySelector('.lm-table tbody tr')`, 8000)) {
+      // Same PII redaction as the contacts shot, adapted to ListMaster's table
+      // markup (name lives in a .lm-row-name span alongside an avatar, email is
+      // its own plain <td>).
+      await cdp.eval(`(()=>{
+        const F=${JSON.stringify(FAKE_PEOPLE)};
+        document.querySelectorAll('.lm-table tbody tr').forEach((tr,i)=>{
+          const name=F[i%F.length], [f,l]=name.split(' ');
+          const nameEl=tr.querySelector('.lm-row-name span:not(.lm-avatar)'); if(nameEl) nameEl.textContent=name;
+          const avatar=tr.querySelector('.lm-avatar'); if(avatar) avatar.textContent=(f[0]+l[0]).toUpperCase();
+          const cells=tr.querySelectorAll('td');
+          if(cells[2]) cells[2].textContent=f.toLowerCase()+'.'+l.toLowerCase()+'@example.com';
+        });
+      })()`);
+      await sleep(400); await cdp.eval(`window.scrollTo(0,0)`); await sleep(200);
+      await shoot('listmaster');
+    } else {
+      log('WARN: ListMaster member table did not load — skipping listmaster.png');
+    }
+
     await gotoHash(`#event-${EVENT_ID}`);
     await cdp.until(`document.querySelector('pb-event-workspace .workspace-tabs')`);
     await sleep(1600); await cdp.eval(`window.scrollTo(0,0)`); await sleep(300);
     await shoot('event');
 
-    if (await cdp.until(`document.querySelector('#ticketing') && document.querySelector('#ticketing').children.length>0`, 8000)) {
-      await cdp.eval(`(document.querySelector('#ticketing')||document.body).scrollIntoView({block:'start'});window.scrollBy(0,-8);`);
-      await sleep(900);
+    // The workspace switched from scroll-to-anchor sections to a real tab
+    // system a while back (see event-workspace.js setActiveTab/_applySectionVisibility)
+    // — every section is mounted but hidden (display:none) except the active
+    // tab, so #ticketing exists in the DOM at 0 height until its tab is
+    // actually clicked. Scrolling to it (the old approach) silently did
+    // nothing once that landed.
+    if (await cdp.until(`document.querySelector('.workspace-tabs [data-tab="ticketing"]')`, 8000)) {
+      await cdp.eval(`document.querySelector('.workspace-tabs [data-tab="ticketing"]').click()`);
+      await cdp.until(`document.querySelector('#ticketing') && document.querySelector('#ticketing').children.length>0 && getComputedStyle(document.querySelector('#ticketing')).display!=='none'`, 8000);
+      await sleep(900); await cdp.eval(`window.scrollTo(0,0)`); await sleep(200);
       await shoot('ticketing');
     } else {
-      log('WARN: #ticketing panel not present on event ' + EVENT_ID + ' (in-house ticketing off?) — skipping ticketing.png');
+      log('WARN: Ticketing tab not present on event ' + EVENT_ID + ' (in-house ticketing off?) — skipping ticketing.png');
     }
 
     await gotoHash(`#contract-${CONTRACT_ID}`);

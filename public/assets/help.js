@@ -1253,6 +1253,10 @@ const HELP_CONTENT = {
   listmaster: `
     <h2>ListMaster</h2>
     <p><strong>Messages &rarr; ListMaster</strong> is a denser, all-in-one alternative to the classic <a href="#help-msg-lists">Mailing Lists</a> page — same lists, same underlying contacts, a different layout built for working a big list quickly: a sidebar of every list, stat cards, a filterable member table with bulk actions, a contact detail slide-over, and tools for tags, segments, and import/export history. It doesn't replace the classic Lists page; use whichever layout you prefer, or both.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/listmaster.png" alt="The ListMaster page: a sidebar of mailing lists and tools, stat cards for the selected list (Total Members, Active, Unsubscribed, Bounced), a filter bar, and a member table with name, email, status, tags, joined date, and list-membership columns" loading="lazy">
+      <figcaption>ListMaster — a sidebar of every list on the left, the selected list's stats and member table on the right.</figcaption>
+    </figure>
 
     <h3>Layout</h3>
     <ul>
