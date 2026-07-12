@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Show real room capacity on Overview, add Est. Guests to public form
 - **Added** `events` — Populate Run Sheet from event data, add standard presets
 - **Added** `events` — Add scroll-edge markers to the workspace tab bar
 - **Added** `events` — Add a dismiss control to the Next Recommended Action banner

@@ -129,8 +129,10 @@ final class Events extends BaseEndpoint
             return $denied;
         }
         $event = $this->db->one(
-            'SELECT e.*, v.name venue_name, v.address venue_address, v.city venue_city, v.state venue_state, u.name owner_name
-             FROM events e JOIN venues v ON v.id = e.venue_id LEFT JOIN users u ON u.id = e.owner_user_id WHERE e.id = ?',
+            'SELECT e.*, v.name venue_name, v.address venue_address, v.city venue_city, v.state venue_state, u.name owner_name,
+                    r.name room_name, r.capacity room_capacity
+             FROM events e JOIN venues v ON v.id = e.venue_id LEFT JOIN users u ON u.id = e.owner_user_id
+             LEFT JOIN resources r ON r.id = e.resource_id WHERE e.id = ?',
             [$id]
         );
         if (!$event) {

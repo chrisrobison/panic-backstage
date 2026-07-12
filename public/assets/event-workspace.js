@@ -303,7 +303,12 @@ class EventOverview extends EventBusCard {
     const event = data.event;
     const stats = [];
     if (!isPrivate) stats.push(ovStat('Ticket Price', money(event.ticket_price)));
-    stats.push(ovStat('Capacity', event.capacity || '—'));
+    // "Capacity" here is the room's physical/fire-code max (from the resource
+    // record on the venue), shown for reference only. The number actually
+    // enforced as a hard cap on ticketing/staffing is event.capacity, which
+    // staff can set lower than the room max — that stays editable on the
+    // Event Details form and isn't duplicated here to avoid confusion.
+    stats.push(ovStat('Capacity', event.room_capacity || '—'));
     stats.push(ovStat('Est. Guests', event.estimated_guests || '—'));
     if (event.deposit_amount != null && event.deposit_amount !== '') {
       const tone = DEPOSIT_STATUS_TONE[event.deposit_status] || 'gray';
@@ -837,7 +842,8 @@ class EventDetailsForm extends HTMLElement {
         <label>Ticket price <input type="number" step="0.01" name="ticket_price" value="${esc(event.ticket_price || 0)}"${disabled}></label>
         <label>Paid deposit <input type="number" step="0.01" min="0" name="deposit_amount" value="${esc(event.deposit_amount ?? '')}" placeholder="0.00"${disabled}></label>
         <label>Potential revenue <input type="number" step="0.01" min="0" name="potential_revenue" value="${esc(event.potential_revenue ?? '')}" placeholder="0.00"${disabled}></label>
-        <label>Capacity <input type="number" name="capacity" value="${esc(event.capacity || '')}"${disabled}></label>
+        <label>Estimated guests <input type="number" name="estimated_guests" value="${esc(event.estimated_guests || '')}" placeholder="Expected headcount"${disabled}></label>
+        <label>Capacity (max) <input type="number" name="capacity" value="${esc(event.capacity || '')}"${disabled}></label>
         <label class="check-label"><input type="checkbox" name="walkthrough_done" value="1" ${Number(event.walkthrough_done) ? 'checked' : ''}${disabled}> Walk-through happened</label>
         <p class="form-section-head wide">Producer / Artist <span class="form-section-note">Required for Hold and above</span></p>
         <label>Name <input name="promoter_name" value="${esc(event.promoter_name || '')}" placeholder="Full name"${disabled}></label>
