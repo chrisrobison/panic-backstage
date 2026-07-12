@@ -694,6 +694,8 @@ const HELP_CONTENT = {
     </ul>
     <h3>Adding items</h3>
     <p>Use the add form with title, type, start, end, and notes. Save and the row joins the schedule. Edit times inline; save each row when you change it.</p>
+    <p><strong>Populate from event data</strong> fills in items automatically from what's already entered elsewhere on the event: load-in, doors, and curfew from <a href="#help-details">Event details</a>, one set per band from the <a href="#help-lineup">Lineup</a>, and staff call times from <a href="#help-staffing">Staffing</a>. It only adds items that aren't already on the run sheet, so it's safe to click again later as those times change.</p>
+    <p>The <strong>Add preset</strong> dropdown stamps in a standard run-sheet shape (<em>3 Bands</em>, <em>4 Bands</em>, or <em>Staff Only</em>) timed relative to the doors time, as a starting point you can then edit. Unlike Populate, presets don't check for duplicates — use them on an empty run sheet or expect to clean up if the sheet already has items.</p>
     <h3>Printing</h3>
     <p>The run-of-show printout (see <a href="#help-print">Printable packets</a>) prints the schedule as a single-sheet timeline that staff and bands can keep on hand night of show.</p>
   `,

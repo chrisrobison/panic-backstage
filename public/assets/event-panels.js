@@ -203,7 +203,14 @@ class RunSheet extends HTMLElement {
     ];
     const editForm = (item) => `<form data-api="/events/${data.event.id}/schedule/${item.id}" data-method="PATCH" class="row-form record-form"><label>Item<input name="title" value="${esc(item.title)}"></label><label>Type${select('item_type', types, item.item_type)}</label><label>Start<input type="time" name="start_time" value="${esc(item.start_time || '')}"></label><label>End<input type="time" name="end_time" value="${esc(item.end_time || '')}"></label><label>Notes<input name="notes" value="${esc(item.notes || '')}"></label><button>Save</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
     const addForm = editable ? `<form data-api="/events/${data.event.id}/schedule" data-method="POST" class="row-form" data-add-form hidden><label>Item<input name="title" required placeholder="Schedule item"></label><label>Type${select('item_type', types, 'other')}</label><label>Start<input type="time" name="start_time"></label><label>End<input type="time" name="end_time"></label><label>Notes<input name="notes" placeholder="Notes"></label><button>Add item</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : '';
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Run Sheet ${helpLink('schedule', 'Schedule &amp; Run Sheet')}</h2><div class="section-head-actions">${addToggle('Add run sheet item', editable)}</div></div><div class="record-body">${addForm}${recordList(schedule, cols, editForm, editable, 'No run sheet items yet.')}</div></section>`;
+    const populateBtn = editable
+      ? `<button type="button" class="small secondary" data-populate-schedule title="Add items from load-in/doors/curfew, lineup set times, and staff call times already entered on this event">Populate from event data</button>`
+      : '';
+    const presets = [['3_bands', '3 Bands'], ['4_bands', '4 Bands'], ['staff_only', 'Staff Only']];
+    const presetDropdown = editable
+      ? `<details class="print-menu"><summary class="button secondary">Add preset &#9662;</summary><div class="print-menu-items">${presets.map(([id, label]) => `<button type="button" data-preset="${esc(id)}">${esc(label)}</button>`).join('')}</div></details>`
+      : '';
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Run Sheet ${helpLink('schedule', 'Schedule &amp; Run Sheet')}</h2><div class="section-head-actions">${populateBtn}${presetDropdown}${addToggle('Add run sheet item', editable)}</div></div><div class="record-body">${addForm}${recordList(schedule, cols, editForm, editable, 'No run sheet items yet.')}</div></section>`;
     if (!editable) return;
     this.bind();
   }
@@ -215,6 +222,38 @@ class RunSheet extends HTMLElement {
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
       await refreshSection(this);
       publish('toast.show', { message: 'Run sheet saved.' });
+    }));
+
+    // Populate from event data: synthesizes rows from load-in/doors/curfew,
+    // lineup set times, and staff call times. Non-destructive on the server —
+    // safe to click again after adding a band or staff shift.
+    $('[data-populate-schedule]', this)?.addEventListener('click', async () => {
+      if (!confirm('Populate the run sheet from load-in/doors/curfew times, lineup set times, and staff call times already entered on this event?\n\nExisting matching items are skipped — nothing is duplicated or removed.')) return;
+      try {
+        const result = await api(`/events/${this.eventData.event.id}/schedule/from-event-data`, { method: 'POST' });
+        await refreshSection(this);
+        const added = result?.added ?? 0;
+        publish('toast.show', { message: added ? `${added} run sheet item${added === 1 ? '' : 's'} added.` : 'Run sheet already reflects those times — nothing new to add.' });
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
+
+    // Standard presets: stamp in a canned run-sheet shape. Purely additive —
+    // does not check for duplicates, so it can be combined with manual edits.
+    const presetLabels = { '3_bands': '3 Bands', '4_bands': '4 Bands', 'staff_only': 'Staff Only' };
+    $$('[data-preset]', this).forEach((btn) => btn.addEventListener('click', async () => {
+      const preset = btn.dataset.preset;
+      btn.closest('details')?.removeAttribute('open');
+      if (!confirm(`Add the "${presetLabels[preset] || preset}" run sheet preset?\n\nThis adds a standard set of items on top of whatever is already there — it does not check for duplicates.`)) return;
+      try {
+        const result = await api(`/events/${this.eventData.event.id}/schedule/from-preset`, { method: 'POST', body: JSON.stringify({ preset }) });
+        await refreshSection(this);
+        const added = result?.added ?? 0;
+        publish('toast.show', { message: `${added} run sheet item${added === 1 ? '' : 's'} added.` });
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
     }));
   }
 }

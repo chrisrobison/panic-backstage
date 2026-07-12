@@ -493,6 +493,10 @@ final class Kernel
             if ($child === 'staffing' && in_array($segments[3] ?? '', ['from-capacity','preview','export'], true)) {
                 return [Events\Staffing::class, ['eventId' => $eventId, 'action' => $segments[3]]];
             }
+            // Populate the run sheet from other event data, or stamp in a standard preset
+            if ($child === 'schedule' && in_array($segments[3] ?? '', ['from-event-data', 'from-preset'], true)) {
+                return [Events\Schedule::class, ['eventId' => $eventId, 'action' => $segments[3]]];
+            }
             // Payments: /events/{id}/payments[/{pid}[/waive-deposit]]
             if ($child === 'payments') {
                 $payAction = ($segments[4] ?? '') !== '' ? $segments[4] : null;
