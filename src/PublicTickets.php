@@ -23,6 +23,16 @@ use function Panic\event_public_path;
  *           the active payment provider, persists the provider + provider_ref on
  *           the order, and returns { checkout_url, order_id }.
  *
+ *   GET  /api/public/tickets/{eventId}/orders/{orderId}?receipt=<token>
+ *        -> lets the public event page poll "how did my purchase turn out?"
+ *           after the provider bounces the buyer back from hosted checkout.
+ *           Requires the opaque receipt_token minted at checkout time (NOT
+ *           the sequential order id, which is guessable) so a stranger can't
+ *           enumerate other buyers' orders. Once the order is fulfilled,
+ *           returns each issued ticket's holder/type plus same-origin QR and
+ *           `/t/{token}` links so the ticket can be shown immediately instead
+ *           of waiting on the confirmation email.
+ *
  * No authentication: the event must have ticketing_mode='internal' and be
  * publicly visible. Inventory is verified against live availability (which
  * already accounts for other active holds) before the hold is written.
@@ -45,6 +55,12 @@ final class PublicTickets extends BaseEndpoint
         $event = $this->saleableEvent($eventId);
         if ($event === null) {
             return $this->notFound('Tickets are not available for this event');
+        }
+
+        if (($this->params['action'] ?? null) === 'orders') {
+            return $request->method() === 'GET'
+                ? $this->orderStatus($request, $event)
+                : Response::methodNotAllowed();
         }
 
         return match ($request->method()) {
@@ -163,6 +179,12 @@ final class PublicTickets extends BaseEndpoint
 
         $currency = $currency ?: 'USD';
 
+        // Opaque credential (distinct from any ticket's secret token) that lets
+        // the buyer's own browser poll this order's status after being bounced
+        // back from hosted checkout — see orderStatus(). Not derived from the
+        // order id, which is sequential and guessable.
+        $receiptToken = bin2hex(random_bytes(20));
+
         // Create the pending order + items inside a transaction so a partially
         // written hold can never reserve phantom inventory.
         $pdo = $this->db->pdo();
@@ -171,9 +193,9 @@ final class PublicTickets extends BaseEndpoint
             $orderId = $this->db->insert(
                 "INSERT INTO ticket_orders
                     (event_id, buyer_name, buyer_email, buyer_phone,
-                     amount_cents, currency, status, hold_expires_at)
-                 VALUES (?, ?, ?, ?, ?, ?, 'pending', DATE_ADD(NOW(), INTERVAL ? MINUTE))",
-                [$eventId, $name, $email, ($phone !== '' ? $phone : null), $amount, $currency, self::HOLD_MINUTES]
+                     amount_cents, currency, status, hold_expires_at, receipt_token)
+                 VALUES (?, ?, ?, ?, ?, ?, 'pending', DATE_ADD(NOW(), INTERVAL ? MINUTE), ?)",
+                [$eventId, $name, $email, ($phone !== '' ? $phone : null), $amount, $currency, self::HOLD_MINUTES, $receiptToken]
             );
 
             foreach ($lineItems as $li) {
@@ -196,7 +218,7 @@ final class PublicTickets extends BaseEndpoint
         $env      = new Env();
         $appUrl   = rtrim((string) (getenv('APP_URL') ?: ''), '/');
         $eventUrl = $appUrl . '/' . event_public_path($event);
-        $success  = $eventUrl . '&order=' . $orderId . '&checkout=success';
+        $success  = $eventUrl . '&order=' . $orderId . '&checkout=success&receipt=' . rawurlencode($receiptToken);
         $cancel   = $eventUrl . '&order=' . $orderId . '&checkout=cancel';
 
         try {
@@ -239,6 +261,70 @@ final class PublicTickets extends BaseEndpoint
         return $this->ok([
             'order_id'     => $orderId,
             'checkout_url' => $checkoutUrl,
+        ]);
+    }
+
+    /**
+     * GET /orders/{orderId}?receipt=<token> — poll a just-completed checkout.
+     *
+     * Gated by the opaque receipt_token minted at order creation, not the
+     * (guessable) sequential order id, so a stranger can't enumerate other
+     * buyers' purchases. While the order is still `pending`/`paid` (webhook
+     * hasn't fulfilled it yet) the caller is expected to poll again shortly;
+     * once `fulfilled`, every issued ticket's holder/type plus same-origin
+     * QR and `/t/{token}` links are returned so the buyer can be shown their
+     * ticket immediately instead of waiting on the confirmation email.
+     */
+    private function orderStatus(Request $request, array $event): Response
+    {
+        $orderId = $this->intParam('orderId');
+        $receipt = trim((string) $request->query('receipt', ''));
+        if ($orderId === null || $receipt === '') {
+            return $this->notFound('Order not found');
+        }
+
+        $order = $this->db->one(
+            'SELECT id, status, receipt_token FROM ticket_orders WHERE id = ? AND event_id = ?',
+            [$orderId, (int) $event['id']]
+        );
+        if ($order === null
+            || $order['receipt_token'] === null
+            || !hash_equals((string) $order['receipt_token'], $receipt)
+        ) {
+            return $this->notFound('Order not found');
+        }
+
+        $status = (string) $order['status'];
+        $tickets = [];
+
+        if ($status === 'fulfilled') {
+            $rows = $this->db->all(
+                "SELECT t.code, t.token, t.holder_name, tt.name AS ticket_type_name
+                   FROM tickets t
+                   JOIN ticket_types tt ON tt.id = t.ticket_type_id
+                  WHERE t.order_id = ? AND t.status != 'void'
+                  ORDER BY t.id ASC",
+                [$orderId]
+            );
+            foreach ($rows as $row) {
+                if ($row['token'] === null) {
+                    continue; // legacy row from before plaintext tokens were retained
+                }
+                $token = (string) $row['token'];
+                $tickets[] = [
+                    'code'             => (string) $row['code'],
+                    'ticket_type_name' => (string) $row['ticket_type_name'],
+                    'holder_name'      => $row['holder_name'] !== null ? (string) $row['holder_name'] : null,
+                    'ticket_url'       => '/t/' . rawurlencode($token),
+                    'qr_url'           => '/assets/qr.svg?text=' . rawurlencode($token) . '&size=320',
+                ];
+            }
+        }
+
+        return $this->ok([
+            'order_id' => $orderId,
+            'status'   => $status,
+            'tickets'  => $tickets,
         ]);
     }
 

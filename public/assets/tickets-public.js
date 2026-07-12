@@ -7,9 +7,20 @@
 // checkout (POST /api/public/tickets/{eventId}/checkout) and redirects the
 // browser to the returned provider checkout_url.
 //
+// When the provider bounces the buyer back here with ?checkout=success&
+// order=<id>&receipt=<token> in the URL, this component also polls
+// GET /api/public/tickets/{eventId}/orders/{orderId}?receipt=<token> until
+// the webhook has fulfilled the order, then renders the issued ticket(s) —
+// name, type, and a scannable QR — right on the page. Previously the buyer's
+// only copy was the confirmation email; this shows it immediately so a
+// walk-up/door sale doesn't leave them waiting on their inbox.
+//
 // Fully public: api() attaches a JWT only if one happens to exist; these
 // endpoints are unauthenticated and return 200, so no login redirect occurs.
 import { api, esc, PanicElement } from './core.js';
+
+const RECEIPT_POLL_INTERVAL_MS = 2000;
+const RECEIPT_POLL_MAX_ATTEMPTS = 15; // ~30s — generous for a webhook round trip
 
 function priceLabel(cents, currency) {
   const amount = (Number(cents || 0) / 100).toLocaleString(undefined, {
@@ -28,7 +39,34 @@ class TicketPurchase extends PanicElement {
       return;
     }
     this.qty = {};
+    this.receiptHtml = '';
+
+    const params = new URLSearchParams(window.location.search);
+    const checkout = params.get('checkout');
+    const orderId = params.get('order');
+    const receiptToken = params.get('receipt');
+    const isReceiptReturn = checkout === 'success' && orderId && receiptToken;
+
+    if (checkout) {
+      // Scrub these from the address bar immediately: they're single-use
+      // purchase state, not something worth bookmarking or re-sharing (the
+      // receipt token grants read access to the buyer's ticket).
+      params.delete('checkout');
+      params.delete('order');
+      params.delete('receipt');
+      const query = params.toString();
+      history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : ''));
+    }
+
+    if (isReceiptReturn) {
+      this.receiptHtml = this.receiptPendingHtml();
+    }
+
     await this.load();
+
+    if (isReceiptReturn) {
+      await this.pollReceipt(orderId, receiptToken);
+    }
   }
 
   async load() {
@@ -38,14 +76,123 @@ class TicketPurchase extends PanicElement {
       this.types = Array.isArray(data.ticket_types) ? data.ticket_types : [];
       this.render();
     } catch (error) {
-      // A 404 simply means this event does not sell tickets here — stay quiet.
-      this.replaceChildren();
+      // A 404 simply means this event does not sell tickets here — stay quiet,
+      // unless we still have a purchase receipt to show from before this call.
+      if (this.receiptHtml) {
+        this.innerHTML = this.receiptHtml;
+      } else {
+        this.replaceChildren();
+      }
     }
+  }
+
+  /** Poll the just-completed order until fulfilled, then render its ticket(s). */
+  async pollReceipt(orderId, receiptToken) {
+    for (let attempt = 0; attempt < RECEIPT_POLL_MAX_ATTEMPTS; attempt++) {
+      let data;
+      try {
+        data = await api(
+          `/public/tickets/${encodeURIComponent(this.eventId)}/orders/${encodeURIComponent(orderId)}`
+          + `?receipt=${encodeURIComponent(receiptToken)}`
+        );
+      } catch (error) {
+        // A 404 on the very first attempt means the order/receipt pair itself
+        // is invalid (bad or tampered link) — that will never resolve, so say
+        // so plainly rather than telling the visitor to wait on an email that
+        // isn't coming. A failure on a later attempt (after we'd already
+        // gotten at least one valid response) is more likely a transient
+        // network blip mid-poll, so fall through to the generic timeout
+        // message instead of a false "not found".
+        if (attempt === 0) {
+          this.receiptHtml = this.receiptNotFoundHtml();
+          this.render();
+          return;
+        }
+        break;
+      }
+
+      if (data && data.status === 'fulfilled') {
+        this.receiptHtml = this.receiptReadyHtml(data.tickets || []);
+        this.render();
+        return;
+      }
+      if (data && ['canceled', 'refunded', 'expired'].includes(data.status)) {
+        this.receiptHtml = this.receiptFailedHtml();
+        this.render();
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, RECEIPT_POLL_INTERVAL_MS));
+    }
+
+    // Timed out — payment succeeded (we only got here via the success
+    // redirect) but fulfillment is still pending, most likely a slow webhook.
+    // The confirmation email will still arrive once it lands.
+    this.receiptHtml = this.receiptTimeoutHtml();
+    this.render();
+  }
+
+  receiptPendingHtml() {
+    return `
+      <section class="tkp-receipt" aria-live="polite">
+        <h2 class="tkp-title">Payment received</h2>
+        <p>Issuing your ticket…</p>
+      </section>`;
+  }
+
+  receiptNotFoundHtml() {
+    return `
+      <section class="tkp-receipt" aria-live="polite">
+        <h2 class="tkp-title">We couldn't find that order</h2>
+        <p>This purchase link looks incomplete or expired. If you were charged, check your email for your ticket, or ask the venue to look up your order.</p>
+      </section>`;
+  }
+
+  receiptTimeoutHtml() {
+    return `
+      <section class="tkp-receipt" aria-live="polite">
+        <h2 class="tkp-title">Payment received</h2>
+        <p>Your ticket is still being issued — check your email in a moment for your QR code.</p>
+      </section>`;
+  }
+
+  receiptFailedHtml() {
+    return `
+      <section class="tkp-receipt" aria-live="polite">
+        <h2 class="tkp-title">Order not completed</h2>
+        <p>This order was canceled or refunded. If you were charged and don't see why, contact the venue.</p>
+      </section>`;
+  }
+
+  receiptReadyHtml(tickets) {
+    if (!tickets.length) {
+      return `
+        <section class="tkp-receipt" aria-live="polite">
+          <h2 class="tkp-title">Payment received</h2>
+          <p>Check your email for your ticket QR code.</p>
+        </section>`;
+    }
+    const cards = tickets.map((t) => `
+      <li class="tkp-ticket-card">
+        <img class="tkp-ticket-qr" src="${esc(t.qr_url)}" alt="Scannable QR code for ${esc(t.ticket_type_name)}" width="160" height="160">
+        <div class="tkp-ticket-meta">
+          <strong>${esc(t.ticket_type_name)}</strong>
+          ${t.holder_name ? `<span>${esc(t.holder_name)}</span>` : ''}
+          <span class="tkp-ticket-code">${esc(t.code)}</span>
+          <a href="${esc(t.ticket_url)}">Open full ticket</a>
+        </div>
+      </li>`).join('');
+    return `
+      <section class="tkp-receipt" aria-live="polite">
+        <h2 class="tkp-title">You're in! 🎟️</h2>
+        <p>Show this QR code at the door. A copy has also been emailed to you.</p>
+        <ul class="tkp-ticket-list">${cards}</ul>
+      </section>`;
   }
 
   render() {
     if (!this.types || this.types.length === 0) {
-      this.replaceChildren();
+      this.innerHTML = this.receiptHtml || '';
       return;
     }
 
@@ -67,6 +214,7 @@ class TicketPurchase extends PanicElement {
     }).join('');
 
     this.innerHTML = `
+      ${this.receiptHtml || ''}
       <section class="tkp">
         <h2 class="tkp-title">Tickets</h2>
         <form class="tkp-form" novalidate>

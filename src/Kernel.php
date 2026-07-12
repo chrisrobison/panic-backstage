@@ -242,12 +242,15 @@ final class Kernel
         }
 
         // Public ticket purchase (unauthenticated):
-        //   GET  /api/public/tickets/{eventId}           -> list on-sale tiers
-        //   POST /api/public/tickets/{eventId}/checkout  -> create checkout session
+        //   GET  /api/public/tickets/{eventId}                    -> list on-sale tiers
+        //   POST /api/public/tickets/{eventId}/checkout           -> create checkout session
+        //   GET  /api/public/tickets/{eventId}/orders/{orderId}   -> poll a checkout's fulfillment
+        //                                                             (requires ?receipt=<token>)
         if ($segments[0] === 'public' && ($segments[1] ?? '') === 'tickets') {
             return [PublicTickets::class, [
                 'eventId' => $this->intOrNull($segments[2] ?? null),
                 'action'  => $segments[3] ?? null,
+                'orderId' => $this->intOrNull($segments[4] ?? null),
             ]];
         }
 

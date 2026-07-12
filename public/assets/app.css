@@ -1875,6 +1875,32 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
 .tkp [data-buy]:hover:not(:disabled) { background: #d8c290; border-color: #d8c290; }
 .tkp [data-buy]:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 
+/* Post-checkout receipt (shown inline after the provider redirects the buyer
+   back here — see tickets-public.js pollReceipt()) */
+.tkp-receipt {
+  margin: 24px 0;
+  padding: 20px;
+  border-radius: 12px;
+  background: rgba(201, 178, 126, 0.12);
+  border: 1px solid rgba(201, 178, 126, 0.4);
+}
+.tkp-receipt .tkp-title { margin-bottom: 8px; }
+.tkp-ticket-list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 14px; }
+.tkp-ticket-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 14px;
+}
+.tkp-ticket-qr { width: 120px; height: 120px; border-radius: 6px; background: #fff; padding: 6px; }
+.tkp-ticket-meta { display: grid; gap: 4px; min-width: 0; }
+.tkp-ticket-meta strong { font-size: 16px; }
+.tkp-ticket-code { font-variant-numeric: tabular-nums; color: #cbd5e1; font-size: 13px; }
+.tkp-ticket-meta a { color: #d8c290; }
+
 /* Font Awesome icon sizing — nav, sidebar, topbar */
 .side-nav a i,
 .venue-switch i {

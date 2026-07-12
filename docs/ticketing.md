@@ -113,6 +113,7 @@ DELETE /api/events/{id}/scanner-links/{linkId}    revoke
 # Public (no JWT)
 GET    /api/public/tickets/{eventId}              on-sale tiers + live availability
 POST   /api/public/tickets/{eventId}/checkout     create held order + hosted-checkout URL
+GET    /api/public/tickets/{eventId}/orders/{id}  poll a just-completed checkout (?receipt=<token> required)
 GET    /t/{token}                                 holder ticket page (HTML)
 GET    /assets/qr.svg?text=<token>&size=<240-1024> scannable QR (SVG, same-origin)
 
@@ -155,6 +156,21 @@ PATCH  /api/payment-settings                      switch provider / currency
 
 **Refunds** (`/refund`) are the cancel-event path: refund via the provider and
 `void` all fulfilled tickets/orders for the event.
+
+**Instant on-page delivery.** Step 2 mints a random `receipt_token` on the
+order (distinct from any ticket's secret token — the sequential order id
+alone is guessable/enumerable) and embeds it in the provider's
+`success_url`. When the provider bounces the buyer back to the public event
+page, `pb-ticket-purchase` (`tickets-public.js`) sees `?checkout=success`,
+strips those params from the address bar, and polls
+`GET /api/public/tickets/{eventId}/orders/{orderId}?receipt=<token>` every
+~2s (up to ~30s) until the webhook has fulfilled the order, then renders
+each issued ticket's QR/holder/type inline — no reload. This exists
+alongside the confirmation email, not instead of it: useful for door/
+walk-up sales where the buyer wants their QR on-screen immediately rather
+than digging through their inbox. A first-attempt `404` (bad/tampered link)
+is shown as "we couldn't find that order" rather than the generic
+still-issuing message.
 
 ---
 
