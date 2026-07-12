@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Stop closeout Payment category dropdown from drifting off the server's list
 - **Fixed** `events` — Let open print-menu dropdowns overflow their panel
 - **Added** `tickets` — Show buyer's QR immediately after checkout, not just by email
 - **Added** `events` — Show real room capacity on Overview, add Est. Guests to public form

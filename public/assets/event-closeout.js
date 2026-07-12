@@ -5,24 +5,23 @@
 import { esc, titleCase, api, publish, money, PanicElement, $, $$ } from './core.js';
 
 // ── Category lists by line_type ───────────────────────────────────────────────
-const REVENUE_CATEGORIES = [
-  'tickets', 'ticket_fees', 'bar_sales', 'rental_fee', 'hosted_bar',
-  'merch_share', 'sponsorship', 'equipment_rental', 'overtime_charge', 'other_revenue',
-];
-const COST_CATEGORIES = [
-  'artist_guarantee', 'promoter_settlement', 'labor', 'sound_production',
-  'security', 'cleaning', 'rentals', 'catering', 'vendor_cost',
-  'processing_fees', 'taxes', 'refunds', 'other_cost',
-];
-const PAYMENT_CATEGORIES = [
-  'deposit_received', 'balance_payment', 'refund_issued', 'credit_applied', 'adjustment',
-];
-
-const CATEGORIES_BY_TYPE = {
-  revenue: REVENUE_CATEGORIES,
-  cost:    COST_CATEGORIES,
-  payment: PAYMENT_CATEGORIES,
-};
+// These are NOT hardcoded here: src/Events/Ledger.php is the single source of
+// truth (REVENUE_CATEGORIES / COST_CATEGORIES / PAYMENT_CATEGORIES consts) and
+// GET /api/events/{id}/ledger echoes them back on every load. A hardcoded copy
+// here previously drifted from the backend's PAYMENT_CATEGORIES list (backend
+// added invoice_payment/outstanding_balance/artist_payout/etc. and dropped
+// balance_payment/refund_issued/credit_applied; this file still offered the
+// old names), so picking most "Payment" categories in the UI submitted a
+// value the server didn't recognize and got a 422 "Invalid category" back.
+// Deriving the select's options from the server response instead of a second
+// hand-maintained list makes that class of drift impossible.
+function categoriesByType(ledger) {
+  return {
+    revenue: ledger?.revenue_categories || [],
+    cost:    ledger?.cost_categories    || [],
+    payment: ledger?.payment_categories || [],
+  };
+}
 
 // ── Checklist fields and their display labels ─────────────────────────────────
 const CHECKLIST_FIELDS = [
@@ -36,8 +35,8 @@ const CHECKLIST_FIELDS = [
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function categoryOptions(lineType, selected = '') {
-  const cats = CATEGORIES_BY_TYPE[lineType] || REVENUE_CATEGORIES;
+function categoryOptions(lineType, catsByType, selected = '') {
+  const cats = catsByType[lineType] || catsByType.revenue || [];
   return cats.map(c =>
     `<option value="${esc(c)}"${c === selected ? ' selected' : ''}>${esc(titleCase(c))}</option>`
   ).join('');
@@ -112,6 +111,10 @@ class EventCloseout extends PanicElement {
     const closeout  = this._ledger?.closeout  || {};
     const finalized = Boolean(closeout.finalized_at);
     const editable  = Boolean(this.canEdit) && !finalized;
+    // Stashed on the instance so _bind()'s line_type-change listener (which
+    // runs after this render but needs the same lists) doesn't need its own
+    // copy — see categoriesByType() above for why these come from the server.
+    this._categoriesByType = categoriesByType(this._ledger);
 
     // ── Partition entries by type ─────────────────────────────────────────────
     const revenue  = entries.filter(e => e.line_type === 'revenue');
@@ -170,7 +173,7 @@ class EventCloseout extends PanicElement {
           <div class="form-row">
             <label>Category
               <select name="category" id="entry-category">
-                ${categoryOptions('revenue')}
+                ${categoryOptions('revenue', this._categoriesByType)}
               </select>
             </label>
             <label>Amount
@@ -381,7 +384,7 @@ class EventCloseout extends PanicElement {
       $$('input[name="line_type"]', form).forEach(radio => {
         radio.addEventListener('change', () => {
           const catSel = $('#entry-category', form);
-          if (catSel) catSel.innerHTML = categoryOptions(radio.value);
+          if (catSel) catSel.innerHTML = categoryOptions(radio.value, this._categoriesByType);
         });
       });
 
