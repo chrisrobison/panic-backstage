@@ -395,6 +395,11 @@ pb-page-header { display: none; }
   box-shadow: var(--shadow);
 }
 .panel { margin-bottom: 18px; overflow: hidden; }
+/* Panels clip to their rounded corners by default, but that also clips any
+   open .print-menu dropdown (Add Tasks, Add preset, export/print, download
+   menus) that pops outside the panel's box. Let overflow go visible only
+   while one of those menus is actually open. */
+.panel:has(.print-menu[open]) { overflow: visible; }
 .panel-body { padding: 18px; }
 .padded { padding: 18px; }
 .metric-grid {
