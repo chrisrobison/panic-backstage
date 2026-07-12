@@ -267,6 +267,7 @@
       <a href="#feed-ics">GET events.ics</a>
       <a href="#feed-rss">GET events.rss</a>
       <a href="#feed-json">GET events.json</a>
+      <a href="#examples">Example requests</a>
       <div class="nav-section">Single event</div>
       <a href="#public-events">GET /public/events/{id}</a>
       <div class="nav-section">Reference</div>
@@ -384,6 +385,103 @@
         <li><code>ticket.mode</code> is <code>external</code> (→ <code>ticket.url</code> is set, link out), <code>internal</code> (→ <code>ticket.checkout_url</code> is set — the public event page, embeddable in an iframe/modal), or <code>none</code> (no ticket link at all — the event just isn't ticketed, e.g. a free karaoke night).</li>
         <li><code>image</code> is the latest <strong>approved</strong> flyer asset. It may point off-app (this app doesn't require flyers to be mirrored locally — a flyer already hosted on the venue's own site, e.g. themab.org's WordPress media library, is a valid <code>image</code> value as-is).</li>
       </ul>
+
+      <h2 id="examples">Example requests</h2>
+      <p>Every endpoint on this page is unauthenticated <code>GET</code> — no headers, no auth dance. Swap in your own venue slug / event id below.</p>
+
+      <h3>curl</h3>
+      <pre class="code-block"><code><span class="cm"># Discovery index — see what's available and get a live event count</span>
+curl 'https://panicbooking.com/backstage/api/feed'
+
+<span class="cm"># JSON feed, filtered to one venue, next 30 days, capped at 20 events</span>
+curl 'https://panicbooking.com/backstage/api/feed/events.json?venue=mabuhay-gardens&amp;days=30&amp;limit=20'
+
+<span class="cm"># iCalendar feed — save straight to a .ics file</span>
+curl 'https://panicbooking.com/backstage/api/feed/events.ics' -o events.ics
+
+<span class="cm"># RSS feed</span>
+curl 'https://panicbooking.com/backstage/api/feed/events.rss'
+
+<span class="cm"># Single event by numeric id</span>
+curl 'https://panicbooking.com/backstage/public/events/130'
+
+<span class="cm"># Single event by slug — same response shape</span>
+curl 'https://panicbooking.com/backstage/public/events/i-am-a-snail-2026-07-11'</code></pre>
+
+      <h3>JavaScript</h3>
+      <p>The JSON feed is the one to reach for from browser code — it's the only format served with <code>Access-Control-Allow-Origin: *</code>, so it's safe to call cross-origin from a venue's own marketing site (this is exactly what <code>&lt;mab-events-carousel&gt;</code> does under the hood):</p>
+
+      <div class="code-label">Browser (fetch) — cross-origin OK, no auth needed</div>
+      <pre class="code-block"><code>const res = await fetch(
+  'https://panicbooking.com/backstage/api/feed/events.json?venue=mabuhay-gardens&amp;limit=10'
+);
+const { venue, events } = await res.json();
+
+events.forEach(e => {
+  console.log(`${e.month} ${e.day} — ${e.title} @ ${venue.name}`);
+});</code></pre>
+
+      <div class="code-label">Node.js (18+, built-in fetch) — same call, server-side</div>
+      <pre class="code-block"><code>async function upcomingEvents(venueSlug) {
+  const url = new URL('https://panicbooking.com/backstage/api/feed/events.json');
+  url.searchParams.set('venue', venueSlug);
+  url.searchParams.set('days', '30');
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Feed request failed: ${res.status}`);
+  return (await res.json()).events;
+}
+
+upcomingEvents('mabuhay-gardens').then(events => console.log(events));</code></pre>
+
+      <div class="code-label">Single event detail, by id or slug</div>
+      <pre class="code-block"><code>const res = await fetch('https://panicbooking.com/backstage/public/events/130');
+if (res.status === 404) {
+  console.log('Event not found or not public');
+} else {
+  const { event, lineup, flyer } = await res.json();
+  console.log(event.title, lineup.map(a => a.artist_name));
+}</code></pre>
+
+      <h3>Python</h3>
+      <div class="code-label">JSON feed</div>
+      <pre class="code-block"><code>import requests
+
+BASE = "https://panicbooking.com/backstage"
+
+resp = requests.get(
+    f"{BASE}/api/feed/events.json",
+    params={"venue": "mabuhay-gardens", "days": 30, "limit": 20},
+    timeout=10,
+)
+resp.raise_for_status()
+data = resp.json()
+
+for event in data["events"]:
+    print(f"{event['date']}  {event['title']}  ({event['ticket']['mode']})")</code></pre>
+
+      <div class="code-label">iCalendar feed — write straight to disk</div>
+      <pre class="code-block"><code>import requests
+
+<span class="cm"># or hand resp.content to a library like `icalendar` for parsing</span>
+resp = requests.get(f"{BASE}/api/feed/events.ics", timeout=10)
+resp.raise_for_status()
+with open("events.ics", "wb") as f:
+    f.write(resp.content)</code></pre>
+
+      <div class="code-label">Single event — id or slug both work</div>
+      <pre class="code-block"><code>import requests
+
+def get_event(id_or_slug: str) -> dict | None:
+    resp = requests.get(f"{BASE}/public/events/{id_or_slug}", timeout=10)
+    if resp.status_code == 404:
+        return None  <span class="cm"># not public, canceled+hidden, or doesn't exist</span>
+    resp.raise_for_status()
+    return resp.json()
+
+detail = get_event("i-am-a-snail-2026-07-11")
+if detail:
+    print(detail["event"]["title"], "at", detail["event"]["venue_name"])</code></pre>
 
       <h2 id="public-events">GET /public/events/{idOrSlug} — single event detail</h2>
       <p>Backs an event's own public page (<code>event.html?id=…</code>). Returns the event row <strong>joined with venue name/address/city/state</strong>, its non-canceled lineup (ordered by <code>billing_order</code>/<code>set_time</code>), and its latest approved flyer asset. <code>idOrSlug</code> is looked up by numeric <code>id</code> when it's all digits, otherwise by <code>slug</code>.</p>
