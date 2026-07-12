@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Require Internal Notes to reach Intake Complete
 - **Documentation** `calendar-api` — Add curl, JavaScript, and Python example requests
 - **Fixed** `events` — Stop closeout Payment category dropdown from drifting off the server's list
 - **Fixed** `events` — Let open print-menu dropdowns overflow their panel

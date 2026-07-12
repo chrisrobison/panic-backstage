@@ -647,16 +647,18 @@ final class Events extends BaseEndpoint
         // ── Additional fields required at Intake Complete and beyond ─────────
         if ($isPrivate) {
             $intakeRequired = [
-                'age_restriction'   => 'Age restriction',
-                'estimated_guests'  => 'Estimated guest count',
-                'deposit_amount'    => 'Deposit amount (use 0 if none)',
+                'age_restriction'     => 'Age restriction',
+                'estimated_guests'    => 'Estimated guest count',
+                'deposit_amount'      => 'Deposit amount (use 0 if none)',
+                'description_internal' => 'Internal notes',
             ];
         } else {
             $intakeRequired = [
-                'age_restriction'   => 'Age restriction',
-                'ticket_price'      => 'Ticket price (use 0 for free events)',
-                'capacity'          => 'Capacity',
-                'deposit_amount'    => 'Deposit amount (use 0 if none)',
+                'age_restriction'     => 'Age restriction',
+                'ticket_price'        => 'Ticket price (use 0 for free events)',
+                'capacity'            => 'Capacity',
+                'deposit_amount'      => 'Deposit amount (use 0 if none)',
+                'description_internal' => 'Internal notes',
             ];
         }
 
