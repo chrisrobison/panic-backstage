@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Panic\Promote;
 
 use Panic\BaseEndpoint;
+use Panic\Database;
 use Panic\Request;
 use Panic\Response;
 use function Panic\log_activity;
@@ -107,8 +108,46 @@ final class Broadcasts extends BaseEndpoint
             [$eventId]
         ) ?? [];
 
+        $dispatch = self::dispatch($this->db, $eventId, $event, $postId, $post, $destinations, $sendMode, $scheduledAt, $this->userId());
+
+        log_activity($this->db, $eventId, $this->userId(), 'promote broadcast created', [
+            'broadcast_id' => $dispatch['broadcast_id'],
+            'post_id'      => $postId,
+            'destinations' => $destinations,
+        ]);
+
+        $broadcast = $this->db->one('SELECT * FROM promote_broadcasts WHERE id = ?', [$dispatch['broadcast_id']]);
+        $broadcast['results'] = $dispatch['results'];
+        return $this->ok(['broadcast' => $broadcast]);
+    }
+
+    // ── Shared dispatch core ────────────────────────────────────────────────────
+
+    /**
+     * Insert a promote_broadcasts row, dispatch it to each destination via
+     * BroadcastAdapters, record per-destination results, and settle the
+     * broadcast's overall status. Shared by the HTTP create() endpoint above
+     * and Events::maybeAutoPublish() so the two paths can't drift out of sync
+     * — auto-publish used to carry its own near-identical copy of this logic.
+     *
+     * @param array<string,mixed> $event Event row (with venue joined), as adapters expect.
+     * @param array<string,mixed> $post  Row from promote_posts.
+     * @param list<string> $destinations Destination keys to dispatch to.
+     * @return array{broadcast_id:int, status:string, results:list<array<string,mixed>>}
+     */
+    public static function dispatch(
+        Database $db,
+        int $eventId,
+        array $event,
+        int $postId,
+        array $post,
+        array $destinations,
+        string $sendMode,
+        ?string $scheduledAt,
+        ?int $createdByUserId
+    ): array {
         $placeholders = implode(',', array_fill(0, count($destinations), '?'));
-        $destRecords  = $this->db->all(
+        $destRecords  = $db->all(
             "SELECT * FROM promote_destinations WHERE destination_key IN ($placeholders)",
             array_values($destinations)
         );
@@ -117,16 +156,16 @@ final class Broadcasts extends BaseEndpoint
             $destMap[(string) $d['destination_key']] = $d;
         }
 
-        $pdo = $this->db->pdo();
+        $pdo = $db->pdo();
         $pdo->beginTransaction();
         try {
-            $broadcastId = $this->db->insert(
+            $broadcastId = $db->insert(
                 'INSERT INTO promote_broadcasts (event_id, post_id, created_by_user_id, send_mode, scheduled_at, status)
                  VALUES (?, ?, ?, ?, ?, ?)',
-                [$eventId, $postId, $this->userId(), $sendMode, $scheduledAt, 'queued']
+                [$eventId, $postId, $createdByUserId, $sendMode, $scheduledAt, 'queued']
             );
 
-            $adapter = new BroadcastAdapters($this->db);
+            $adapter = new BroadcastAdapters($db);
             $results = [];
             foreach ($destinations as $destKey) {
                 $dest       = $destMap[$destKey] ?? null;
@@ -135,7 +174,7 @@ final class Broadcasts extends BaseEndpoint
 
                 $dispatched = $adapter->dispatch($destKey, $destStatus, $sendMode, $event, $post);
 
-                $resultId = $this->db->insert(
+                $resultId = $db->insert(
                     'INSERT INTO promote_broadcast_results
                         (broadcast_id, destination_key, destination_group, status, external_url, error_message, response_json)
                      VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -171,7 +210,7 @@ final class Broadcasts extends BaseEndpoint
                 default     => 'completed',
             };
 
-            $this->db->run(
+            $db->run(
                 'UPDATE promote_broadcasts SET status = ? WHERE id = ?',
                 [$broadcastStatus, $broadcastId]
             );
@@ -182,14 +221,6 @@ final class Broadcasts extends BaseEndpoint
             throw $e;
         }
 
-        log_activity($this->db, $eventId, $this->userId(), 'promote broadcast created', [
-            'broadcast_id' => $broadcastId,
-            'post_id'      => $postId,
-            'destinations' => $destinations,
-        ]);
-
-        $broadcast = $this->db->one('SELECT * FROM promote_broadcasts WHERE id = ?', [$broadcastId]);
-        $broadcast['results'] = $results;
-        return $this->ok(['broadcast' => $broadcast]);
+        return ['broadcast_id' => $broadcastId, 'status' => $broadcastStatus, 'results' => $results];
     }
 }

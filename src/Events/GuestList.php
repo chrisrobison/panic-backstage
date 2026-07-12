@@ -57,7 +57,6 @@ final class GuestList extends BaseEndpoint
      */
     public static function attachCompTickets(\Panic\Database $db, array $guests): array
     {
-        $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
         foreach ($guests as &$g) {
             $g['comp_tickets'] = [];
             if (!empty($g['comp_order_id'])) {
@@ -69,7 +68,7 @@ final class GuestList extends BaseEndpoint
                     'id'     => (int) $t['id'],
                     'code'   => (string) $t['code'],
                     'status' => (string) $t['status'],
-                    'url'    => $t['token'] !== null ? $appUrl . '/t/' . rawurlencode((string) $t['token']) : null,
+                    'url'    => $t['token'] !== null ? \Panic\TicketEmailer::ticketUrl((string) $t['token']) : null,
                 ], $rows);
             }
         }

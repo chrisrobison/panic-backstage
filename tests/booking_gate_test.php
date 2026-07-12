@@ -2,13 +2,19 @@
 /**
  * Tests for the booking status gate (contract + deposit requirement).
  *
- * Tests the logic that blocks events from entering 'booked' status without
- * a fully executed contract and received/waived deposit.
+ * Exercises Events::bookingGateBlockers() directly — the pure helper
+ * extracted from Events::validateStatusTransition()'s "booked" gate — so
+ * this test can never silently drift from the real implementation the way a
+ * local reimplementation could.
  *
  * Run with: php tests/booking_gate_test.php
  */
 
 declare(strict_types=1);
+
+require dirname(__DIR__) . '/src/bootstrap.php';
+
+use Panic\Events;
 
 $passed = 0;
 $failed = 0;
@@ -19,101 +25,88 @@ function ok(bool $cond, string $label): void {
     else        { echo "  ✗ FAIL: $label\n"; $failed++; }
 }
 
-echo "\n=== Booking gate logic tests ===\n\n";
+echo "\n=== Booking gate logic tests (Events::bookingGateBlockers) ===\n\n";
 
-/**
- * Simulate the booking gate logic from Events::validateStatusTransition().
- * Returns array of blocking messages (empty = allowed).
- */
-function checkBookingGate(array $event, array $contracts): array
+/** True when $contracts contains a signed/fully_executed row. */
+function hasExecutedContract(array $contracts): bool
 {
-    $missing = [];
-
-    // Contract gate: must be signed/fully_executed
-    $hasContractUrl      = !empty($event['contract_url']);
-    $hasExecutedContract = false;
     foreach ($contracts as $c) {
-        if (in_array($c['status'], ['signed','fully_executed'], true)) {
-            $hasExecutedContract = true;
-            break;
+        if (in_array($c['status'], ['signed', 'fully_executed'], true)) {
+            return true;
         }
     }
-    if (!$hasContractUrl && !$hasExecutedContract) {
-        $missing[] = 'contract_missing';
-    }
-
-    // Deposit gate
-    $depositStatus   = $event['deposit_status'] ?? 'not_required';
-    $depositRequired = ($event['deposit_amount'] ?? 0) > 0;
-
-    if ($depositRequired && !in_array($depositStatus, ['received','waived','not_required'], true)) {
-        $missing[] = 'deposit_not_received';
-    }
-
-    return $missing;
+    return false;
 }
 
 // ── 1. No contract, no deposit → blocked ──────────────────────────────────────
 $event     = ['deposit_amount' => 500, 'deposit_status' => 'requested'];
 $contracts = [];
-$blocks    = checkBookingGate($event, $contracts);
-ok(in_array('contract_missing', $blocks),     "No contract: contract_missing block");
-ok(in_array('deposit_not_received', $blocks), "No deposit: deposit_not_received block");
+$blocks    = Events::bookingGateBlockers($event, hasExecutedContract($contracts));
+ok(count($blocks) === 2, "No contract, no deposit: two blockers (contract + deposit)");
 
 // ── 2. Signed contract, no deposit → still blocked ────────────────────────────
 $event     = ['deposit_amount' => 500, 'deposit_status' => 'requested'];
 $contracts = [['status' => 'signed']];
-$blocks    = checkBookingGate($event, $contracts);
-ok(!in_array('contract_missing', $blocks),    "Signed contract: contract gate passes");
-ok(in_array('deposit_not_received', $blocks), "Deposit requested: still blocked");
+$blocks    = Events::bookingGateBlockers($event, hasExecutedContract($contracts));
+ok(count($blocks) === 1, "Signed contract: contract gate passes");
+ok(str_contains($blocks[0] ?? '', 'Deposit'), "Deposit requested: still blocked on deposit");
 
 // ── 3. Sent contract (not signed) → blocked on contract ──────────────────────
 $event     = ['deposit_amount' => 0, 'deposit_status' => 'not_required'];
 $contracts = [['status' => 'sent']];
-$blocks    = checkBookingGate($event, $contracts);
-ok(in_array('contract_missing', $blocks), "Sent (not signed) contract: contract gate blocks");
+$blocks    = Events::bookingGateBlockers($event, hasExecutedContract($contracts));
+ok(count($blocks) === 1, "Sent (not signed) contract: contract gate blocks");
 
 // ── 4. Draft contract → blocked ───────────────────────────────────────────────
 $event     = ['deposit_amount' => 0, 'deposit_status' => 'not_required'];
 $contracts = [['status' => 'draft']];
-$blocks    = checkBookingGate($event, $contracts);
-ok(in_array('contract_missing', $blocks), "Draft contract: contract gate blocks");
+$blocks    = Events::bookingGateBlockers($event, hasExecutedContract($contracts));
+ok(count($blocks) === 1, "Draft contract: contract gate blocks");
 
 // ── 5. Signed contract + received deposit → allowed ──────────────────────────
 $event     = ['deposit_amount' => 500, 'deposit_status' => 'received'];
 $contracts = [['status' => 'signed']];
-$blocks    = checkBookingGate($event, $contracts);
+$blocks    = Events::bookingGateBlockers($event, hasExecutedContract($contracts));
 ok(empty($blocks), "Signed contract + received deposit: booking allowed");
 
 // ── 6. Signed contract + waived deposit → allowed ────────────────────────────
 $event     = ['deposit_amount' => 500, 'deposit_status' => 'waived'];
 $contracts = [['status' => 'signed']];
-$blocks    = checkBookingGate($event, $contracts);
+$blocks    = Events::bookingGateBlockers($event, hasExecutedContract($contracts));
 ok(empty($blocks), "Signed contract + waived deposit: booking allowed");
 
 // ── 7. Legacy event (contract_url set, no deposit required) → allowed ─────────
 $event     = ['contract_url' => 'https://example.com/contract.pdf', 'deposit_amount' => 0, 'deposit_status' => 'not_required'];
 $contracts = [];
-$blocks    = checkBookingGate($event, $contracts);
+$blocks    = Events::bookingGateBlockers($event, hasExecutedContract($contracts));
 ok(empty($blocks), "Legacy contract_url + no deposit: booking allowed (backward compat)");
 
 // ── 8. Partially received deposit → blocked ───────────────────────────────────
 $event     = ['deposit_amount' => 500, 'deposit_status' => 'partially_received'];
 $contracts = [['status' => 'signed']];
-$blocks    = checkBookingGate($event, $contracts);
-ok(in_array('deposit_not_received', $blocks), "Partial deposit: still blocked");
+$blocks    = Events::bookingGateBlockers($event, hasExecutedContract($contracts));
+ok(count($blocks) === 1 && str_contains($blocks[0], 'partially'), "Partial deposit: still blocked");
 
 // ── 9. fully_executed contract → allowed ─────────────────────────────────────
 $event     = ['deposit_amount' => 0, 'deposit_status' => 'not_required'];
 $contracts = [['status' => 'fully_executed']];
-$blocks    = checkBookingGate($event, $contracts);
+$blocks    = Events::bookingGateBlockers($event, hasExecutedContract($contracts));
 ok(empty($blocks), "fully_executed contract: booking allowed");
 
 // ── 10. Deposit not_required with no deposit amount → allowed ────────────────
 $event     = ['deposit_amount' => 0, 'deposit_status' => 'not_required'];
 $contracts = [['status' => 'signed']];
-$blocks    = checkBookingGate($event, $contracts);
+$blocks    = Events::bookingGateBlockers($event, hasExecutedContract($contracts));
 ok(empty($blocks), "No deposit required: deposit gate skipped");
+
+// ── 11. Private event: contract-missing message differs from public event ────
+$event  = ['event_type' => 'private_event', 'deposit_amount' => 0, 'deposit_status' => 'not_required'];
+$blocks = Events::bookingGateBlockers($event, false);
+ok(count($blocks) === 1 && str_contains($blocks[0], 'rental contract'), "Private event: private-specific contract message");
+
+$event  = ['event_type' => 'live_music', 'deposit_amount' => 0, 'deposit_status' => 'not_required'];
+$blocks = Events::bookingGateBlockers($event, false);
+ok(count($blocks) === 1 && str_contains($blocks[0], 'Fully executed'), "Public event: public-specific contract message");
 
 echo "\nBooking gate: $passed passed, $failed failed.\n";
 exit($failed > 0 ? 1 : 0);

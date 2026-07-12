@@ -35,5 +35,11 @@ test('Contacts search narrows the result set', async (page) => {
   // debounced 250ms + network; wait for the table to settle to the filtered set
   await page.until(`document.querySelectorAll('pb-contacts-page .contacts-table tbody tr').length > 0 && document.querySelectorAll('pb-contacts-page .contacts-table tbody tr').length <= ${before}`);
   const after = await page.count('.contacts-table tbody tr');
-  assert.ok(after > 0 && after <= before, `search("${term}") narrowed or held rows (${before} -> ${after})`);
+  // Every remaining row must actually match the term client-side-visibly —
+  // proves the table was filtered, not just left alone at <= its prior size.
+  const rowTexts = await page.eval(
+    "[...document.querySelectorAll('pb-contacts-page .contacts-table tbody tr')].map(tr => tr.textContent.toLowerCase())"
+  );
+  const allMatch = rowTexts.length > 0 && rowTexts.every((t) => t.includes(term.toLowerCase()));
+  assert.ok(after > 0 && after <= before && allMatch, `search("${term}") narrowed to matching rows (${before} -> ${after})`);
 });

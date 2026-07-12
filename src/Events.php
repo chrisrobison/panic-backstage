@@ -668,8 +668,6 @@ final class Events extends BaseEndpoint
         // Booked: requires BOTH an executed contract AND a received/waived deposit.
         // "Sent", "approved", or "draft" contract does NOT satisfy the contract requirement.
         if ($newStatus === 'booked') {
-            // ── Contract gate ───────────────────────────────────────────────
-            $hasContractUrl    = !empty($event['contract_url']);
             $hasExecutedContract = false;
             if (!empty($event['id'])) {
                 $contractRow = $this->db->one(
@@ -678,27 +676,7 @@ final class Events extends BaseEndpoint
                 );
                 $hasExecutedContract = (bool) $contractRow;
             }
-            // Also accept the legacy contract_url as a stand-in for small installs
-            if (!$hasContractUrl && !$hasExecutedContract) {
-                $missing[] = $isPrivate
-                    ? 'Signed rental contract (use the Contracts tab or paste a Contract URL; sent/approved contracts are not enough)'
-                    : 'Fully executed contract (use the Contracts tab; contract must be signed, not just sent or approved)';
-            }
-
-            // ── Deposit gate ────────────────────────────────────────────────
-            $depositStatus = (string) ($event['deposit_status'] ?? 'not_required');
-            if (!in_array($depositStatus, ['received', 'waived', 'not_required'], true)) {
-                // Check whether there's even a deposit required
-                $depositRequired = ($event['deposit_amount'] ?? 0) > 0;
-                if ($depositRequired) {
-                    $missing[] = match ($depositStatus) {
-                        'requested'           => 'Deposit requested but not yet received (use Payments tab to record receipt, or waive it)',
-                        'partially_received'  => 'Deposit only partially received (record full payment or waive the remainder)',
-                        'refunded'            => 'Deposit was refunded — a new deposit is required before booking',
-                        default               => 'Deposit required before booking (use Payments tab)',
-                    };
-                }
-            }
+            $missing = array_merge($missing, self::bookingGateBlockers($event, $hasExecutedContract));
         }
 
         if ($missing) {
@@ -712,6 +690,45 @@ final class Events extends BaseEndpoint
             ], 422);
         }
         return null;
+    }
+
+    /**
+     * Pure "booked" status gate: an executed contract AND a received/waived
+     * deposit. $hasExecutedContract reflects whether a signed/fully_executed
+     * contracts row exists for the event — resolved via DB by the caller and
+     * kept out of this function so it's testable without one (see
+     * tests/booking_gate_test.php, which exercises this directly instead of
+     * a local reimplementation).
+     *
+     * @return list<string> human-readable missing-requirement messages (empty = allowed)
+     */
+    public static function bookingGateBlockers(array $event, bool $hasExecutedContract): array
+    {
+        $isPrivate = ($event['event_type'] ?? '') === 'private_event';
+        $missing = [];
+
+        // Also accept the legacy contract_url as a stand-in for small installs.
+        $hasContractUrl = !empty($event['contract_url']);
+        if (!$hasContractUrl && !$hasExecutedContract) {
+            $missing[] = $isPrivate
+                ? 'Signed rental contract (use the Contracts tab or paste a Contract URL; sent/approved contracts are not enough)'
+                : 'Fully executed contract (use the Contracts tab; contract must be signed, not just sent or approved)';
+        }
+
+        $depositStatus = (string) ($event['deposit_status'] ?? 'not_required');
+        if (!in_array($depositStatus, ['received', 'waived', 'not_required'], true)) {
+            $depositRequired = ($event['deposit_amount'] ?? 0) > 0;
+            if ($depositRequired) {
+                $missing[] = match ($depositStatus) {
+                    'requested'           => 'Deposit requested but not yet received (use Payments tab to record receipt, or waive it)',
+                    'partially_received'  => 'Deposit only partially received (record full payment or waive the remainder)',
+                    'refunded'            => 'Deposit was refunded — a new deposit is required before booking',
+                    default               => 'Deposit required before booking (use Payments tab)',
+                };
+            }
+        }
+
+        return $missing;
     }
 
     /** Return the user ID configured as the private event handler (Colleen). */
@@ -776,164 +793,15 @@ final class Events extends BaseEndpoint
      */
     private function notifyStatusChange(int $eventId, string $oldStatus, string $newStatus): void
     {
-        try {
-            $event = $this->db->one(
-                'SELECT e.title, e.date, e.end_date, e.show_time, e.event_type,
-                        e.promoter_name, e.promoter_email,
-                        e.booker_name, e.booker_email, v.name AS venue_name
-                   FROM events e
-              LEFT JOIN venues v ON v.id = e.venue_id
-                  WHERE e.id = ? LIMIT 1',
-                [$eventId]
-            );
-            if (!$event) return;
-
-            $isPrivate = ($event['event_type'] ?? '') === 'private_event';
-            $link      = rtrim((string) (getenv('APP_URL') ?: ''), '/') . "/#event-{$eventId}";
-
-            $showTime = '';
-            if (!empty($event['show_time'])) {
-                $t = strtotime((string) $event['show_time']);
-                $showTime = $t ? date('g:i A', $t) : (string) $event['show_time'];
-            }
-
-            $mailer = new Mailer($this->root, $this->db);
-
-            // ── Human-readable status labels ─────────────────────────────────
-            $statusLabels = [
-                'empty'              => 'Empty',
-                'proposed'          => 'Hold',
-                'confirmed'         => 'Intake Complete',
-                'booked'            => 'Booked',
-                'needs_assets'      => 'Needs Assets',
-                'ready_to_announce' => 'Ready to Announce',
-                'published'         => 'Published',
-                'advanced'          => 'Advanced',
-                'completed'         => 'Completed',
-                'settled'           => 'Settled',
-                'canceled'          => 'Canceled',
-            ];
-            $statusColors = [
-                'empty'              => '#9ca3af',
-                'proposed'          => '#6b7280',
-                'confirmed'         => '#2563eb',
-                'booked'            => '#16a34a',
-                'needs_assets'      => '#d97706',
-                'ready_to_announce' => '#7c3aed',
-                'published'         => '#0891b2',
-                'advanced'          => '#0891b2',
-                'completed'         => '#16a34a',
-                'settled'           => '#16a34a',
-                'canceled'          => '#dc2626',
-            ];
-            $newLabel   = $statusLabels[$newStatus] ?? ucwords(str_replace('_', ' ', $newStatus));
-            $oldLabel   = $statusLabels[$oldStatus] ?? ucwords(str_replace('_', ' ', $oldStatus));
-            $statusColor = $statusColors[$newStatus] ?? '#6b7280';
-
-            // ── Always notify admins on any status change ─────────────────────
-            $admins = $this->db->all(
-                "SELECT name, email, notify_event_updates FROM users
-                  WHERE role = 'venue_admin'
-                    AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'"
-            );
-
-            // Include VENUE_MANAGER_EMAIL in the admin recipient list, deduped.
-            $adminRecipients = [];
-            foreach ($admins as $a) {
-                $adminRecipients[strtolower(trim((string) $a['email']))] = $a;
-            }
-            $mgEmail = trim((string) (getenv('VENUE_MANAGER_EMAIL') ?: ''));
-            $mgName  = trim((string) (getenv('VENUE_MANAGER_NAME') ?: 'Venue Manager'));
-            if ($mgEmail && filter_var($mgEmail, FILTER_VALIDATE_EMAIL)) {
-                $adminRecipients[strtolower($mgEmail)] ??= ['name' => $mgName, 'email' => $mgEmail];
-            }
-
-            if ($adminRecipients) {
-                $eventLabel  = $isPrivate ? "Private Event — {$newLabel}" : $newLabel;
-                $subject     = "[Backstage] Status changed to {$eventLabel}: {$event['title']}";
-                $adminVars   = [
-                    'event_name'      => htmlspecialchars((string) $event['title'],                                 ENT_QUOTES, 'UTF-8'),
-                    'old_status'      => htmlspecialchars($oldLabel,                                                ENT_QUOTES, 'UTF-8'),
-                    'new_status'      => htmlspecialchars($eventLabel,                                              ENT_QUOTES, 'UTF-8'),
-                    'status_color'    => $statusColor,
-                    'event_date'      => htmlspecialchars(!empty($event['end_date']) ? "{$event['date']} – {$event['end_date']}" : (string) $event['date'], ENT_QUOTES, 'UTF-8'),
-                    'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
-                    'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? getenv('VENUE_NAME') ?: 'Venue'),     ENT_QUOTES, 'UTF-8'),
-                    'promoter_name'   => htmlspecialchars((string) ($event['promoter_name'] ?? '—'),               ENT_QUOTES, 'UTF-8'),
-                    'booker_name'     => $isPrivate
-                        ? 'N/A (private event)'
-                        : htmlspecialchars((string) ($event['booker_name'] ?? '—'), ENT_QUOTES, 'UTF-8'),
-                    'event_admin_url' => htmlspecialchars($link,                                                    ENT_QUOTES, 'UTF-8'),
-                ];
-                foreach ($adminRecipients as $recipient) {
-                    if (!NotificationPreferences::wants($recipient, NotificationPreferences::EVENT_UPDATES)) {
-                        continue;
-                    }
-                    $mailer->sendTemplate($recipient['email'], $subject, 'status-changed', $adminVars);
-                }
-            }
-
-            // ── Booked: also notify the client for private events ─────────────
-            if ($newStatus === 'booked' && $isPrivate
-                && !empty($event['promoter_email'])
-                && filter_var($event['promoter_email'], FILTER_VALIDATE_EMAIL)
-            ) {
-                $clientVars = [
-                    'event_name'      => htmlspecialchars((string) $event['title'],                             ENT_QUOTES, 'UTF-8'),
-                    'old_status'      => 'Pending',
-                    'new_status'      => 'Confirmed & Booked',
-                    'status_color'    => '#16a34a',
-                    'event_date'      => htmlspecialchars(!empty($event['end_date']) ? "{$event['date']} – {$event['end_date']}" : (string) $event['date'], ENT_QUOTES, 'UTF-8'),
-                    'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
-                    'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? getenv('VENUE_NAME') ?: 'Venue'), ENT_QUOTES, 'UTF-8'),
-                    'promoter_name'   => htmlspecialchars((string) ($event['promoter_name'] ?? 'You'),         ENT_QUOTES, 'UTF-8'),
-                    'booker_name'     => getenv('VENUE_NAME') ?: 'Venue',
-                    'event_admin_url' => htmlspecialchars($link,                                                ENT_QUOTES, 'UTF-8'),
-                ];
-                $mailer->sendTemplate(
-                    $event['promoter_email'],
-                    '[' . (getenv('VENUE_NAME') ?: 'Backstage') . "] Your event is confirmed: {$event['title']}",
-                    'status-changed',
-                    $clientVars
-                );
-            }
-
-            // ── Needs Assets: notify producer/artist + booker (public events only) ──
-            if ($newStatus === 'needs_assets' && !$isPrivate) {
-                $assetsVars = [
-                    'event_name'      => htmlspecialchars((string) $event['title'],                             ENT_QUOTES, 'UTF-8'),
-                    'event_date'      => htmlspecialchars(!empty($event['end_date']) ? "{$event['date']} – {$event['end_date']}" : (string) $event['date'], ENT_QUOTES, 'UTF-8'),
-                    'event_time'      => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
-                    'event_venue'     => htmlspecialchars((string) ($event['venue_name'] ?? getenv('VENUE_NAME') ?: 'Venue'), ENT_QUOTES, 'UTF-8'),
-                    'event_admin_url' => htmlspecialchars($link,                                                ENT_QUOTES, 'UTF-8'),
-                ];
-                $externalRecipients = array_filter([
-                    $event['promoter_email'] ? ['name' => $event['promoter_name'] ?? 'Producer/Artist', 'email' => $event['promoter_email']] : null,
-                    $event['booker_email']   ? ['name' => $event['booker_name']   ?? 'Booker',          'email' => $event['booker_email']]   : null,
-                ]);
-                foreach ($externalRecipients as $recipient) {
-                    if (!filter_var($recipient['email'], FILTER_VALIDATE_EMAIL)) continue;
-                    $mailer->sendTemplate(
-                        $recipient['email'],
-                        '[' . (getenv('VENUE_NAME') ?: 'Backstage') . "] Promo materials needed: {$event['title']}",
-                        'needs-assets',
-                        $assetsVars + ['recipient_name' => htmlspecialchars((string) $recipient['name'], ENT_QUOTES, 'UTF-8')]
-                    );
-                }
-            }
-        } catch (\Throwable $e) {
-            @error_log("status-change notification failed for event {$eventId}: {$e->getMessage()}");
-        }
+        Events\Notifications::statusChanged($this->db, $this->root, $eventId, $oldStatus, $newStatus);
     }
 
     /**
-     * If auto-publish is enabled in promote_auto_publish_settings, create a
-     * broadcast for the event's most recent promote post and dispatch it to
-     * every configured destination.
-     *
-     * Mirrors the logic in Promote\Broadcasts::create() but runs internally
-     * (no HTTP round-trip) and is attributed as trigger_source=auto_publish
-     * in the activity log.  Best-effort — never throws.
+     * If auto-publish is enabled in promote_auto_publish_settings, dispatch
+     * the event's most recent promote post to every configured destination
+     * via the same core Promote\Broadcasts::dispatch() the HTTP broadcast
+     * endpoint uses, attributed as an internal (no user) broadcast. Best-effort
+     * — never throws.
      */
     private function maybeAutoPublish(int $eventId): void
     {
@@ -966,8 +834,6 @@ final class Events extends BaseEndpoint
                 return;
             }
 
-            $postId = (int) $post['id'];
-
             // Load the full event row (with venue join) as adapters expect it.
             $event = $this->db->one(
                 'SELECT e.*, v.name venue_name, v.city venue_city, v.state venue_state
@@ -975,75 +841,13 @@ final class Events extends BaseEndpoint
                 [$eventId]
             ) ?? [];
 
-            // Build destination map for group lookup.
-            $placeholders = implode(',', array_fill(0, count($destinations), '?'));
-            $destRecords  = $this->db->all(
-                "SELECT * FROM promote_destinations WHERE destination_key IN ($placeholders)",
-                array_values($destinations)
+            $dispatch = Promote\Broadcasts::dispatch(
+                $this->db, $eventId, $event, (int) $post['id'], $post, $destinations, 'now', null, null
             );
-            $destMap = [];
-            foreach ($destRecords as $d) {
-                $destMap[(string) $d['destination_key']] = $d;
-            }
-
-            $pdo = $this->db->pdo();
-            $pdo->beginTransaction();
-            try {
-                $broadcastId = $this->db->insert(
-                    'INSERT INTO promote_broadcasts (event_id, post_id, created_by_user_id, send_mode, status)
-                     VALUES (?, ?, NULL, ?, ?)',
-                    [$eventId, $postId, 'now', 'queued']
-                );
-
-                $adapter = new Promote\BroadcastAdapters($this->db);
-                $statuses = [];
-
-                foreach ($destinations as $destKey) {
-                    $dest      = $destMap[$destKey] ?? null;
-                    $destGroup = $dest ? (string) $dest['destination_group'] : 'unknown';
-                    $destStatus = $dest ? (string) $dest['status'] : 'manual_submission';
-
-                    $dispatched = $adapter->dispatch($destKey, $destStatus, 'now', $event, $post);
-
-                    $this->db->insert(
-                        'INSERT INTO promote_broadcast_results
-                            (broadcast_id, destination_key, destination_group, status, external_url, error_message, response_json)
-                         VALUES (?, ?, ?, ?, ?, ?, ?)',
-                        [
-                            $broadcastId,
-                            $destKey,
-                            $destGroup,
-                            $dispatched['status'],
-                            $dispatched['external_url'],
-                            $dispatched['error_message'],
-                            $dispatched['response_json'],
-                        ]
-                    );
-                    $statuses[] = $dispatched['status'];
-                }
-
-                $anyFailed = in_array('failed', $statuses, true);
-                $allFailed = count($statuses) > 0
-                    && count(array_filter($statuses, fn ($s) => $s === 'failed')) === count($statuses);
-                $broadcastStatus = match (true) {
-                    $allFailed  => 'failed',
-                    $anyFailed  => 'partial_failure',
-                    default     => 'completed',
-                };
-                $this->db->run(
-                    'UPDATE promote_broadcasts SET status = ? WHERE id = ?',
-                    [$broadcastStatus, $broadcastId]
-                );
-
-                $pdo->commit();
-            } catch (\Throwable $e) {
-                $pdo->rollBack();
-                throw $e;
-            }
 
             log_activity($this->db, $eventId, $this->userId(), 'auto-publish triggered', [
-                'broadcast_id' => $broadcastId,
-                'post_id'      => $postId,
+                'broadcast_id' => $dispatch['broadcast_id'],
+                'post_id'      => (int) $post['id'],
                 'destinations' => $destinations,
             ]);
         } catch (\Throwable $e) {
@@ -1051,62 +855,8 @@ final class Events extends BaseEndpoint
         }
     }
 
-    /**
-     * Notify all venue_admins immediately when a new private event inquiry is created.
-     * Best-effort — never throws.
-     */
     private function notifyPrivateEventCreated(int $eventId): void
     {
-        try {
-            $admins = $this->db->all("SELECT name, email, notify_event_updates FROM users WHERE role = 'venue_admin' AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'");
-            if (!$admins) return;
-
-            $event = $this->db->one(
-                'SELECT e.title, e.date, e.end_date, e.doors_time, e.show_time, e.end_time,
-                        e.promoter_name, e.promoter_email, e.promoter_phone,
-                        e.client_org, e.estimated_guests, e.capacity,
-                        e.av_requirements, e.catering_notes,
-                        v.name AS venue_name
-                   FROM events e
-              LEFT JOIN venues v ON v.id = e.venue_id
-                  WHERE e.id = ? LIMIT 1',
-                [$eventId]
-            );
-            if (!$event) return;
-
-            $link    = rtrim((string) (getenv('APP_URL') ?: ''), '/') . "/#event-{$eventId}";
-            $subject = "[Backstage] New private event inquiry: {$event['title']}";
-
-            $showTime = '';
-            if (!empty($event['doors_time'])) {
-                $t = strtotime((string) $event['doors_time']);
-                $showTime = $t ? date('g:i A', $t) : (string) $event['doors_time'];
-            }
-
-            $vars = [
-                'event_name'       => htmlspecialchars((string) $event['title'],                       ENT_QUOTES, 'UTF-8'),
-                'event_date'       => htmlspecialchars(!empty($event['end_date']) ? "{$event['date']} – {$event['end_date']}" : (string) $event['date'], ENT_QUOTES, 'UTF-8'),
-                'event_time'       => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
-                'event_venue'      => htmlspecialchars((string) ($event['venue_name'] ?? getenv('VENUE_NAME') ?: 'Venue'), ENT_QUOTES, 'UTF-8'),
-                'client_name'      => htmlspecialchars((string) ($event['promoter_name'] ?? '—'),     ENT_QUOTES, 'UTF-8'),
-                'client_email'     => htmlspecialchars((string) ($event['promoter_email'] ?? '—'),    ENT_QUOTES, 'UTF-8'),
-                'client_phone'     => htmlspecialchars((string) ($event['promoter_phone'] ?? '—'),    ENT_QUOTES, 'UTF-8'),
-                'client_org'       => htmlspecialchars((string) ($event['client_org'] ?? '—'),        ENT_QUOTES, 'UTF-8'),
-                'estimated_guests' => htmlspecialchars((string) ($event['estimated_guests'] ?? '—'),  ENT_QUOTES, 'UTF-8'),
-                'av_requirements'  => htmlspecialchars((string) ($event['av_requirements'] ?? 'None noted'), ENT_QUOTES, 'UTF-8'),
-                'catering_notes'   => htmlspecialchars((string) ($event['catering_notes'] ?? 'None noted'),  ENT_QUOTES, 'UTF-8'),
-                'event_admin_url'  => htmlspecialchars($link,                                         ENT_QUOTES, 'UTF-8'),
-            ];
-
-            $mailer = new Mailer($this->root, $this->db);
-            foreach ($admins as $admin) {
-                if (!NotificationPreferences::wants($admin, NotificationPreferences::EVENT_UPDATES)) {
-                    continue;
-                }
-                $mailer->sendTemplate($admin['email'], $subject, 'private-event-inquiry', $vars);
-            }
-        } catch (\Throwable $e) {
-            @error_log("private-event-created notification failed for event {$eventId}: {$e->getMessage()}");
-        }
+        Events\Notifications::privateEventCreated($this->db, $this->root, $eventId);
     }
 }
