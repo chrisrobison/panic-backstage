@@ -313,6 +313,11 @@ final class Kernel
             return [Dashboard::class, []];
         }
 
+        // Venue-wide reporting: /reports[/settlements]
+        if ($segments[0] === 'reports') {
+            return [Reports::class, ['action' => $segments[1] ?? null]];
+        }
+
         // Asset library — cross-event read-only asset browser
         if ($segments[0] === 'asset-library') {
             return [AssetLibrary::class, []];
@@ -554,6 +559,7 @@ final class Kernel
                 'sessions'   => [Events\Sessions::class, ['eventId' => $eventId, 'sessionId'  => $childId]],
                 'assets'     => [Events\Assets::class,   ['eventId' => $eventId, 'assetId'    => $childId]],
                 'settlement' => [Events\Settlement::class, ['eventId' => $eventId]],
+                'report'     => [Events\Report::class,     ['eventId' => $eventId]],
                 'invites'    => [Events\Invites::class,  ['eventId' => $eventId, 'inviteId'   => $childId]],
                 'guest-list' => [Events\GuestList::class, ['eventId' => $eventId, 'guestId'   => $childId]],
                 'staffing'   => [Events\Staffing::class,  ['eventId' => $eventId, 'staffingId' => $childId]],

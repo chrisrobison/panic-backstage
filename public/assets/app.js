@@ -22,6 +22,8 @@ import './events.js';
 import './event-wizard.js';
 import './leads.js';
 import './asset-library.js';
+import './reports.js';
+import './event-report.js';
 
 
 class AppShell extends PanicElement {
@@ -88,6 +90,7 @@ class AppShell extends PanicElement {
       <a class="brand" href="#dashboard" aria-label="Panic Backstage home"><span class="brand-mark" aria-hidden="true"></span><span>Panic Backstage</span></a>
       <nav class="side-nav" aria-label="Main navigation">
         <a data-nav="dashboard" href="#dashboard" title="Dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
+        <a data-nav="reports" href="#reports" title="Reports" data-nav-reports><i class="fa-solid fa-chart-line" aria-hidden="true"></i>Reports</a>
         <a data-nav="leads" href="#leads" title="Leads Inbox" data-nav-leads><i class="fa-solid fa-filter" aria-hidden="true"></i>Leads</a>
         <a data-nav="contacts" href="#contacts" title="Contacts" data-nav-contacts><i class="fa-solid fa-address-book" aria-hidden="true"></i>Contacts</a>
         <a data-nav="promote" href="#promote" title="Promote"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i>Promote</a>
@@ -284,6 +287,9 @@ class AppShell extends PanicElement {
     const leadsLinks = $$('[data-nav-leads]', this);
     const hasLeads = this.capabilities?.view_leads || this.capabilities?.manage_leads;
     leadsLinks.forEach((el) => { el.hidden = !hasLeads; });
+    if (!this.capabilities?.view_reports) {
+      $$('[data-nav-reports]', this).forEach((link) => link.remove());
+    }
     if (!this.capabilities?.manage_users && !this.capabilities?.manage_staff_roster && !this.capabilities?.manage_templates && !this.capabilities?.manage_db_history) {
       $$('[data-nav-admin]', this).forEach((el) => el.remove());
     }
@@ -372,6 +378,7 @@ class AppShell extends PanicElement {
     }
     if (route.startsWith('event-')) return this.mount(outlet, 'pb-event-workspace', { eventId: Number(route.slice(6)) });
     if (route.startsWith('contract-')) return this.mount(outlet, 'pb-contract-editor', { contractId: Number(route.slice(9)) });
+    if (route === 'reports')    return this.mount(outlet, 'pb-reports-page');
     if (route === 'calendar')    return this.mount(outlet, 'pb-event-calendar');
     if (route === 'pipeline')    return this.mount(outlet, 'pb-pipeline-board');
     if (route === 'events')      return this.mount(outlet, 'pb-events-list');

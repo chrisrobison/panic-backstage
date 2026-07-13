@@ -83,6 +83,7 @@ abstract class BaseEndpoint implements Endpoint
             'admin_credential_encryption',
             'reopen_settlement',
             'manage_db_history',
+            'view_reports',
         ],
         'event_owner' => ['view_leads'],
         'promoter' => [],
@@ -91,7 +92,7 @@ abstract class BaseEndpoint implements Endpoint
         'designer' => [],
         'staff' => ['view_leads'],
         'viewer' => [],
-        'global_viewer' => ['view_all_events', 'view_leads'],
+        'global_viewer' => ['view_all_events', 'view_leads', 'view_reports'],
     ];
 
     private array $eventAccessCache = [];

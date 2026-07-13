@@ -400,6 +400,7 @@ const SECTION_LABELS = {
   execution:    'Execution',
   payments:     'Payments',
   closeout:     'Closeout',
+  report:       'Report',
   activity:     'Activity',
 };
 
@@ -572,6 +573,7 @@ class EventWorkspace extends PanicElement {
     if (can(data, 'manage_payments')) tabs.splice(tabs.length - 1, 0, 'payments');
     if (can(data, 'view_settlement') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'settlement');
     if (can(data, 'manage_ledger') || can(data, 'finalize_closeout')) tabs.splice(tabs.length - 1, 0, 'closeout');
+    if (can(data, 'view_settlement') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'report');
     const user = getAppUser();
     const userId = user?.id ?? 'anon';
     const toggleableTabs = tabs.filter(t => t !== 'details');
@@ -655,6 +657,7 @@ class EventWorkspace extends PanicElement {
     ${(!isPrivate && can(data, 'manage_ticketing')) ? '<pb-ticketing-admin id="ticketing"></pb-ticketing-admin>' : ''}
     <pb-event-execution id="execution"></pb-event-execution>
     ${(can(data, 'manage_ledger') || can(data, 'finalize_closeout')) ? '<pb-event-closeout id="closeout"></pb-event-closeout>' : ''}
+    ${(!isPrivate && can(data, 'view_settlement')) ? '<pb-event-report id="report"></pb-event-report>' : ''}
     <section id="activity" class="panel"><div class="section-head padded"><h2>Activity ${helpLink('activity', 'Activity Log')}</h2></div><ul class="timeline">${data.activity.map(activityEntry).join('')}</ul></section>`;
     $('pb-event-summary', this).data = data;
     $('pb-event-next-action', this).data = data;
@@ -679,6 +682,8 @@ class EventWorkspace extends PanicElement {
     if ($('pb-ticketing-admin', this)) $('pb-ticketing-admin', this).data = data;
     const closeoutEl = $('pb-event-closeout', this);
     if (closeoutEl) { closeoutEl.eventId = data.event.id; closeoutEl.canEdit = can(data, 'manage_ledger'); closeoutEl.canFinalize = can(data, 'finalize_closeout'); }
+    const reportEl = $('pb-event-report', this);
+    if (reportEl) reportEl.eventId = data.event.id;
     const execEl = $('pb-event-execution', this);
     if (execEl) {
       execEl.eventId             = event.id;

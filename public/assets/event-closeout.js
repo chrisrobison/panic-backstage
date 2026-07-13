@@ -332,16 +332,22 @@ class EventCloseout extends PanicElement {
   }
 
   _summaryHTML() {
-    const s = this._summary || {};
-    const venueNet = Number(s.venueNet || 0);
+    // Ledger::calculateSummary() (see src/Events/Ledger.php) returns snake_case
+    // keys nested under a top-level "summary" key — GET .../ledger/summary
+    // responds { summary: { gross_revenue, total_costs, venue_net, ... } }.
+    // This previously read camelCase keys straight off the unwrapped response
+    // (s.grossRevenue, s.venueNet, ...), which never matched, so every figure
+    // in this card silently rendered as $0.00 / 0.0% regardless of real data.
+    const s = this._summary?.summary || {};
+    const venueNet = Number(s.venue_net || 0);
     const netColor = venueNet >= 0 ? 'var(--green, #0f8f46)' : 'var(--red, #ef4338)';
     return `<div class="summary-card">
       <h3 class="panel-subtitle">P&amp;L Summary</h3>
-      <div class="summary-row"><span class="label">Gross Revenue</span><span class="value">${esc(money(s.grossRevenue || 0))}</span></div>
-      <div class="summary-row"><span class="label">Total Costs</span><span class="value">${esc(money(s.totalCosts || 0))}</span></div>
+      <div class="summary-row"><span class="label">Gross Revenue</span><span class="value">${esc(money(s.gross_revenue || 0))}</span></div>
+      <div class="summary-row"><span class="label">Total Costs</span><span class="value">${esc(money(s.total_costs || 0))}</span></div>
       <div class="summary-row"><span class="label">Venue Net</span><span class="value" style="color:${netColor}">${esc(money(venueNet))}</span></div>
-      <div class="summary-row"><span class="label">Margin</span><span class="value">${esc(String(s.marginPct != null ? Number(s.marginPct).toFixed(1) : '0.0'))}%</span></div>
-      <div class="summary-row"><span class="label">Payments Received</span><span class="value">${esc(money(s.totalPayments || 0))}</span></div>
+      <div class="summary-row"><span class="label">Margin</span><span class="value">${esc(String(s.margin_pct != null ? Number(s.margin_pct).toFixed(1) : '0.0'))}%</span></div>
+      <div class="summary-row"><span class="label">Payments Received</span><span class="value">${esc(money(s.total_payments || 0))}</span></div>
       <div class="summary-actions">
         <button type="button" class="secondary small" id="btn-refresh-summary"><i class="fa-solid fa-rotate" aria-hidden="true"></i> Refresh</button>
       </div>
