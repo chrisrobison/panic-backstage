@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Open Share portal panel as a modal instead of inline card
 - **Added** `assets` — Add cross-event Asset Library
 - **Added** `events` — Add Scheduling tab, reorder Ticketing, rename Lineup card
 - **Added** `events` — Add per-day session blocks for multi-day events

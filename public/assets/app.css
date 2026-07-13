@@ -5480,17 +5480,7 @@ pb-admin-wizard-defaults { display: block; }
   margin-top: 4px;
 }
 
-/* ── Portal panel (pb-portal-panel) ─────────────────────────────────────── */
-.portal-panel {
-  max-width: 760px;
-  margin: 0 auto 20px;
-}
-.portal-panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
+/* ── Portal panel (pb-portal-panel) — renders into a .modal-card ─────────── */
 .portal-panel-blurb {
   font-size: .875rem;
   color: var(--ink-dim);

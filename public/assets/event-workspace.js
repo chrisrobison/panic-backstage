@@ -1052,25 +1052,45 @@ class EventRecurrencePanel extends PanicElement {
 // ── Portal link panel ─────────────────────────────────────────────────────────
 // Generates and lists time-limited read-only portal links for promoters/clients.
 // Staff-only — the panel is hidden when manage_contracts capability is absent.
+// Renders into a modal-backdrop appended to <body> (same pattern as
+// EventPayments._openPaymentForm below and the *.js openModal() helpers
+// elsewhere in the app), not inline in the workspace flow — this element
+// itself stays empty and just holds state/the dialog reference.
 class PortalPanel extends PanicElement {
   connect() {
     this._eventId = null;
     this._links   = [];
-    this._open    = false;
-    this.render();
+    this._dialog  = null;
+    this.innerHTML = '';
   }
 
   set eventId(id) {
     this._eventId = id;
   }
 
-  /** Toggle the panel open/closed and load links on first open. */
+  /** Open the Share modal (loading links on first open), or close it if already open. */
   async toggle() {
-    this._open = !this._open;
-    this.render();
-    if (this._open && this._links.length === 0) {
+    if (this._dialog) {
+      this.close();
+      return;
+    }
+    this.open();
+    if (this._links.length === 0) {
       await this.loadLinks();
     }
+  }
+
+  open() {
+    this._dialog = document.createElement('div');
+    this._dialog.className = 'modal-backdrop';
+    document.body.appendChild(this._dialog);
+    this._dialog.addEventListener('click', (e) => { if (e.target === this._dialog) this.close(); });
+    this.renderDialog();
+  }
+
+  close() {
+    this._dialog?.remove();
+    this._dialog = null;
   }
 
   async loadLinks() {
@@ -1080,7 +1100,7 @@ class PortalPanel extends PanicElement {
     } catch (_) {
       this._links = [];
     }
-    this.render();
+    if (this._dialog) this.renderDialog();
   }
 
   async createLink(label, ttlDays) {
@@ -1092,7 +1112,7 @@ class PortalPanel extends PanicElement {
       if (res.url) {
         await this.loadLinks();
         // Show the new URL in the copy box
-        const newInput = $(`[data-portal-url="${res.token}"]`, this);
+        const newInput = $(`[data-portal-url="${res.token}"]`, this._dialog);
         if (newInput) newInput.select();
       }
     } catch (err) {
@@ -1110,11 +1130,8 @@ class PortalPanel extends PanicElement {
     }
   }
 
-  render() {
-    if (!this._open) {
-      this.innerHTML = ''; // collapsed — nothing to show (button is in the workspace toolbar)
-      return;
-    }
+  renderDialog() {
+    if (!this._dialog) return;
 
     const active = (this._links || []).filter(l => !Number(l.is_revoked) && new Date(l.expires_at) > new Date());
     const revoked = (this._links || []).filter(l => Number(l.is_revoked) || new Date(l.expires_at) <= new Date());
@@ -1136,29 +1153,31 @@ class PortalPanel extends PanicElement {
       ? `<p class="portal-revoked-note">${revoked.length} revoked / expired link${revoked.length === 1 ? '' : 's'} not shown.</p>`
       : '';
 
-    this.innerHTML = `<div class="portal-panel card">
-      <div class="portal-panel-head">
-        <strong>Share Portal Link</strong>
-        <button class="secondary small" data-portal-close>Close</button>
+    this._dialog.innerHTML = `<div class="modal-card">
+      <div class="section-head padded">
+        <h2>Share Portal Link</h2>
+        <button type="button" class="small secondary" data-close>Close</button>
       </div>
-      <p class="portal-panel-blurb">Generate a read-only link for a promoter or client. The link shows event details, contract status, payments, and invoice — no login required.</p>
-      <form class="portal-create-form" data-create-form>
-        <input type="text" name="label" placeholder="Label, e.g. &quot;Sent to Jane Smith&quot;" class="portal-label-input">
-        <select name="ttl_days" class="portal-ttl-select">
-          <option value="7">Expires in 7 days</option>
-          <option value="14">Expires in 14 days</option>
-          <option value="30" selected>Expires in 30 days</option>
-          <option value="60">Expires in 60 days</option>
-          <option value="90">Expires in 90 days</option>
-        </select>
-        <button type="submit" class="primary small">Generate Link</button>
-      </form>
-      ${active.length ? `<div class="portal-links-list">${linkRows}</div>` : '<p class="portal-empty">No active links yet.</p>'}
-      ${revokedNote}
+      <div class="padded">
+        <p class="portal-panel-blurb">Generate a read-only link for a promoter or client. The link shows event details, contract status, payments, and invoice — no login required.</p>
+        <form class="portal-create-form" data-create-form>
+          <input type="text" name="label" placeholder="Label, e.g. &quot;Sent to Jane Smith&quot;" class="portal-label-input">
+          <select name="ttl_days" class="portal-ttl-select">
+            <option value="7">Expires in 7 days</option>
+            <option value="14">Expires in 14 days</option>
+            <option value="30" selected>Expires in 30 days</option>
+            <option value="60">Expires in 60 days</option>
+            <option value="90">Expires in 90 days</option>
+          </select>
+          <button type="submit" class="primary small">Generate Link</button>
+        </form>
+        ${active.length ? `<div class="portal-links-list">${linkRows}</div>` : '<p class="portal-empty">No active links yet.</p>'}
+        ${revokedNote}
+      </div>
     </div>`;
 
-    $('[data-portal-close]', this)?.addEventListener('click', () => this.toggle());
-    $('[data-create-form]', this)?.addEventListener('submit', async (e) => {
+    $('[data-close]', this._dialog)?.addEventListener('click', () => this.close());
+    $('[data-create-form]', this._dialog)?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const form    = e.target;
       const label   = form.label.value.trim();
@@ -1168,7 +1187,7 @@ class PortalPanel extends PanicElement {
       form.querySelector('[type="submit"]').disabled = false;
       form.label.value = '';
     });
-    $$('[data-revoke]', this).forEach(btn => btn.addEventListener('click', async () => {
+    $$('[data-revoke]', this._dialog).forEach(btn => btn.addEventListener('click', async () => {
       const id = parseInt(btn.dataset.revoke, 10);
       btn.disabled = true;
       await this.revokeLink(id);
