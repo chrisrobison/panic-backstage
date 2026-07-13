@@ -886,6 +886,23 @@ class TemplatePicker extends PanicElement {
   }
 }
 
+// Header price for the public page: when this event sells tickets here
+// (ticketing_mode='internal') and at least one tier is currently on sale,
+// reflect the tiers instead of the flat event.ticket_price — otherwise a VIP
+// tier or a cheaper advance-sale tier would never show up above the fold.
+// price_cents (tiers) vs ticket_price (dollars) — normalize both to dollars
+// before formatting with money().
+function publicTicketPriceLabel(event, ticketTypes) {
+  if (event.ticketing_mode === 'internal' && Array.isArray(ticketTypes) && ticketTypes.length) {
+    const prices = ticketTypes.map((t) => Number(t.price_cents || 0) / 100);
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    if (min <= 0 && max <= 0) return 'Free';
+    return min === max ? money(min) : `From ${money(min)}`;
+  }
+  return Number(event.ticket_price) > 0 ? money(event.ticket_price) : 'Free / door';
+}
+
 class PublicEventPage extends PanicElement {
   async connect() {
     this.setLoading('Loading public event');
@@ -906,7 +923,8 @@ class PublicEventPage extends PanicElement {
       const publicUrl = appUrl(`event.html?id=${encodeURIComponent(event.id)}`);
       // Requested at 2x the 84px CSS display size so it stays crisp on retina screens.
       const qrImage = appUrl(`assets/qr.svg?text=${encodeURIComponent(publicUrl)}&size=168`);
-      this.innerHTML = `<main class="public-container"><article class="public-event"><div class="public-media">${data.flyer ?`<img class="public-flyer" src="${esc(assetUrl(data.flyer.file_path))}" alt="">` : `<div class="public-flyer flyer">${esc(event.title)}</div>`}<div class="public-qr"><img class="public-qr-image" src="${esc(qrImage)}" width="84" height="84" alt="QR code linking to this event's public page"><span>Scan to share this page</span></div></div><div class="public-copy"><p class="eyebrow">${esc(eventDateRangeLabel(event))} - ${esc(event.venue_name)}</p><h1>${esc(event.title)}</h1><p><strong>Doors</strong> ${esc(timeLabel(event.doors_time))} - <strong>Show</strong> ${esc(timeLabel(event.show_time))}</p><p>${esc(event.age_restriction || 'All ages unless noted')} - ${Number(event.ticket_price) > 0 ? money(event.ticket_price) : 'Free / door'}</p>${event.ticket_url ? `<a class="button public-tickets-link" href="${esc(event.ticket_url)}">Tickets</a>` : ''}<pb-ticket-purchase event-id="${esc(String(event.id))}"></pb-ticket-purchase>${event.description_public ? `<div class="event-description">${mdToHtml(event.description_public)}</div>` : ''}<h2>Lineup</h2><ul class="plain-list">${data.lineup.map((item) => `<li>${esc(item.display_name)} ${item.set_time ? `<span>${esc(timeLabel(item.set_time))}</span>` : ''}</li>`).join('')}</ul><p class="muted">${esc(event.address)}, ${esc(event.city)}, ${esc(event.state)}</p></div></article></main>`;
+      const priceLabel = publicTicketPriceLabel(event, data.ticket_types);
+      this.innerHTML = `<main class="public-container"><article class="public-event"><div class="public-media">${data.flyer ?`<img class="public-flyer" src="${esc(assetUrl(data.flyer.file_path))}" alt="">` : `<div class="public-flyer flyer">${esc(event.title)}</div>`}<div class="public-qr"><img class="public-qr-image" src="${esc(qrImage)}" width="84" height="84" alt="QR code linking to this event's public page"><span>Scan to share this page</span></div></div><div class="public-copy"><p class="eyebrow">${esc(eventDateRangeLabel(event))} - ${esc(event.venue_name)}</p><h1>${esc(event.title)}</h1><p><strong>Doors</strong> ${esc(timeLabel(event.doors_time))} - <strong>Show</strong> ${esc(timeLabel(event.show_time))}</p><p>${esc(event.age_restriction || 'All ages unless noted')} - ${esc(priceLabel)}</p>${event.ticket_url ? `<a class="button public-tickets-link" href="${esc(event.ticket_url)}">Tickets</a>` : ''}<pb-ticket-purchase event-id="${esc(String(event.id))}"></pb-ticket-purchase>${event.description_public ? `<div class="event-description">${mdToHtml(event.description_public)}</div>` : ''}<h2>Lineup</h2><ul class="plain-list">${data.lineup.map((item) => `<li>${esc(item.display_name)} ${item.set_time ? `<span>${esc(timeLabel(item.set_time))}</span>` : ''}</li>`).join('')}</ul><p class="muted">${esc(event.address)}, ${esc(event.city)}, ${esc(event.state)}</p></div></article></main>`;
     } catch (error) {
       this.showError(error);
     }

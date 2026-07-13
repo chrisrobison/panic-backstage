@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Reflect ticket tiers in public page header price
 - **Fixed** `events` — Open Share portal panel as a modal instead of inline card
 - **Added** `assets` — Add cross-event Asset Library
 - **Added** `events` — Add Scheduling tab, reorder Ticketing, rename Lineup card
