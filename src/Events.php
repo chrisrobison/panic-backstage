@@ -273,6 +273,32 @@ final class Events extends BaseEndpoint
         return $this->ok(['id' => $id]);
     }
 
+    /** Statuses that lock the core event record once reached — see guardArchivedEdit(). */
+    private const LOCKED_EDIT_STATUSES = ['completed', 'settled'];
+
+    /**
+     * Once an event is auto-archived (status=completed, "Settlement Needed")
+     * or fully Settled, block further edits/deletes from everyone except a
+     * venue admin / event owner. Per issue #19 the nightly auto-complete flip
+     * should make the record read-only for ordinary collaborators; per #11
+     * (same reporter, filed an hour earlier) admins still need an escape
+     * hatch to fix mistakes on an archived event, so the gate is capability-
+     * based (edit_settlement) rather than an absolute lock.
+     */
+    private function guardArchivedEdit(int $id): ?Response
+    {
+        $row = $this->db->one('SELECT status FROM events WHERE id = ?', [$id]);
+        if (!$row || !in_array($row['status'], self::LOCKED_EDIT_STATUSES, true)) {
+            return null;
+        }
+        if ($this->hasEventCapability($id, 'edit_settlement')) {
+            return null;
+        }
+        return Response::json([
+            'error' => 'This event is archived and settlement is in progress — only a venue admin can make changes now.',
+        ], 403);
+    }
+
     private function update(Request $request, int $id): Response
     {
         if (!$id) {
@@ -280,6 +306,9 @@ final class Events extends BaseEndpoint
         }
         if ($denied = $this->requireEventCapability($id, 'edit_event')) {
             return $denied;
+        }
+        if ($lockError = $this->guardArchivedEdit($id)) {
+            return $lockError;
         }
         $body = $request->body();
         if (isset($body['status']) && !in_array($body['status'], self::STATUSES, true)) {
@@ -395,6 +424,9 @@ final class Events extends BaseEndpoint
     {
         if ($denied = $this->requireEventCapability($id, 'delete_event')) {
             return $denied;
+        }
+        if ($lockError = $this->guardArchivedEdit($id)) {
+            return $lockError;
         }
         $this->db->run('DELETE FROM events WHERE id = ?', [$id]);
         return Response::noContent();

@@ -777,7 +777,11 @@ class EventDetailsForm extends HTMLElement {
   set data(data) {
     this.eventData = data;
     const event    = data.event;
-    const editable = can(data, 'edit_event');
+    // Archived/Settled events are locked to everyone except a venue admin /
+    // event owner (edit_settlement) once the nightly auto-complete script or
+    // a manual settlement flips the status — see issue #19/#11.
+    const isArchivedLocked = ['completed', 'settled'].includes(event.status) && !can(data, 'edit_settlement');
+    const editable = can(data, 'edit_event') && !isArchivedLocked;
     const disabled = editable ? '' : ' disabled';
     const isPrivate = event.event_type === 'private_event';
 
