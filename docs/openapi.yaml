@@ -10410,6 +10410,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/users/{userId}/invite:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: User account id
+    post:
+      operationId: users_invite
+      summary: (Re)send a login invite to a user account
+      description: >-
+        Requires the `manage_users` global capability (venue_admin only). Mints a fresh 7-day magic
+        link and emails it via the `account-invite` template — no request body needed. Works for any
+        account regardless of `access_status`, so it covers both the "send a new Core Collaborator
+        their first invite" case (create the account with `POST /api/users`, then invite them) and
+        resending a forgotten/expired invite to an existing account.
+      tags:
+        - Users
+      responses:
+        '200':
+          description: Invite emailed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOkResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_users capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/users/{userId}/emails:
     parameters:
       - name: userId

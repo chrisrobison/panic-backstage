@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `users` — Add POST /api/users/{id}/invite to send account invites
 - **Added** `events` — Add Assets Approved status with linktree notification
 - **Added** `events` — Lock Archived/Settled events to venue admins only
 - **Added** `events` — Require Internal Notes to reach Intake Complete

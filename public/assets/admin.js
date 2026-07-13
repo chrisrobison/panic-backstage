@@ -101,6 +101,7 @@ class AdminUsers extends PanicElement {
               <td>${esc(u.owned_event_count || 0)} owned &middot; ${esc(u.collaborator_event_count || 0)} collab</td>
               <td class="row-actions">
                 <button class="small secondary" data-edit="${esc(u.id)}">Edit</button>
+                <button class="small secondary" data-invite="${esc(u.id)}" data-name="${esc(u.name)}" title="Email a fresh sign-in link">Invite</button>
                 <button class="small danger" data-delete="${esc(u.id)}" data-name="${esc(u.name)}">Delete</button>
               </td>
             </tr>`).join('') || '<tr><td colspan="6"><div class="empty-state">No users yet.</div></td></tr>'}
@@ -120,6 +121,7 @@ class AdminUsers extends PanicElement {
     `;
     $('[data-form="create"]', this).addEventListener('submit', (event) => this.create(event));
     $$('[data-edit]', this).forEach((b) => b.addEventListener('click', () => this.openEdit(Number(b.dataset.edit))));
+    $$('[data-invite]', this).forEach((b) => b.addEventListener('click', () => this.invite(Number(b.dataset.invite), b.dataset.name)));
     $$('[data-delete]', this).forEach((b) => b.addEventListener('click', () => this.delete(Number(b.dataset.delete), b.dataset.name)));
     $$('[data-approve]', this).forEach((b) => b.addEventListener('click', () => {
       const role = $(`[data-approve-role="${b.dataset.approve}"]`, this)?.value || 'viewer';
@@ -133,6 +135,15 @@ class AdminUsers extends PanicElement {
       await api(`/users/${id}/approve`, { method: 'POST', body: JSON.stringify({ role }) });
       publish('toast.show', { message: `${name} approved — a login link was emailed.`, tone: 'success' });
       this.connect();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
+  }
+
+  async invite(id, name) {
+    try {
+      await api(`/users/${id}/invite`, { method: 'POST' });
+      publish('toast.show', { message: `Invite emailed to ${name}.`, tone: 'success' });
     } catch (err) {
       publish('toast.show', { message: err.message, tone: 'error' });
     }

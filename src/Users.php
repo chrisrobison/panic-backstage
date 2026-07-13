@@ -30,6 +30,9 @@ final class Users extends BaseEndpoint
         if ($request->method() === 'POST' && $userId && $action === 'approve') {
             return $this->approve($request, (int) $userId);
         }
+        if ($request->method() === 'POST' && $userId && $action === 'invite') {
+            return $this->invite((int) $userId);
+        }
         return match ($request->method()) {
             'GET'    => $userId ? $this->show((int) $userId) : $this->index(),
             'POST'   => $this->create($request),
@@ -145,6 +148,45 @@ final class Users extends BaseEndpoint
             'access-approved',
             [
                 'name'      => htmlspecialchars($name, ENT_QUOTES, 'UTF-8'),
+                'login_url' => htmlspecialchars($link, ENT_QUOTES, 'UTF-8'),
+            ]
+        );
+
+        return $this->ok(['ok' => true]);
+    }
+
+    /**
+     * (Re)send a login invite to any user account. Mints a fresh 7-day magic
+     * link and emails it. This is the "send them an invite to Panic Booking"
+     * step once a Core Collaborator's account exists (issue #15) — create
+     * the account via POST /api/users (e.g. once Andres has set up their
+     * mab.org address), then invite them; also handy to resend a forgotten
+     * or expired invite to an existing account.
+     */
+    private function invite(int $id): Response
+    {
+        $user = $this->db->one('SELECT id, name, email FROM users WHERE id = ?', [$id]);
+        if (!$user) {
+            return $this->notFound('User not found');
+        }
+
+        $token = $this->auth->generateToken(24);
+        $hash  = $this->auth->hashToken($token);
+        $this->db->run(
+            'INSERT INTO magic_link_tokens (email, token_hash, expires_at)
+             VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))',
+            [$user['email'], $hash]
+        );
+
+        $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        $link   = "{$appUrl}/login.html?token={$token}";
+
+        (new Mailer($this->root, $this->db))->sendTemplate(
+            (string) $user['email'],
+            "You're invited to Panic Booking",
+            'account-invite',
+            [
+                'name'      => htmlspecialchars((string) $user['name'], ENT_QUOTES, 'UTF-8'),
                 'login_url' => htmlspecialchars($link, ENT_QUOTES, 'UTF-8'),
             ]
         );

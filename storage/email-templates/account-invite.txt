@@ -1,0 +1,17 @@
+You're Invited to Panic Booking
+
+Hi {{name}},
+
+An account has been set up for you on Panic Booking, Mabuhay Gardens' event
+management system.
+
+Click the link below to sign in. The link is good for 7 days — once you
+click it, you'll be signed in and can set a password or add a passkey from
+your account menu so you don't need a magic link next time.
+
+  {{login_url}}
+
+— Panic Booking
+
+---
+Mabuhay Gardens · 443 Broadway, San Francisco, CA
