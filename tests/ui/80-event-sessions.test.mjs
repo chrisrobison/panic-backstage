@@ -39,7 +39,7 @@ test('Day-by-Day Schedule: add/edit sessions syncs event date range', async (pag
 
   try {
     await page.openEvent(eventId);
-    await page.click('.workspace-tabs a[data-tab="details"]');
+    await page.click('.workspace-tabs a[data-tab="scheduling"]');
     await page.until(`document.querySelector('pb-event-sessions')`);
 
     assert.includes(

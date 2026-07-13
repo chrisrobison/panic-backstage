@@ -51,6 +51,7 @@ export const HELP_SECTIONS = [
       { slug: 'private-events',  title: 'Private events &amp; rentals' },
       { slug: 'overview',        title: 'Overview &amp; readiness' },
       { slug: 'details',         title: 'Event details' },
+      { slug: 'scheduling',      title: 'Scheduling (day-by-day &amp; recurrence)' },
       { slug: 'multi-day-events', title: 'Multi-day events' },
       { slug: 'recurring-events', title: 'Recurring events' },
       { slug: 'tasks',        title: 'Tasks' },
@@ -303,7 +304,7 @@ const HELP_CONTENT = {
     <p>An event with an <a href="#help-multi-day-events">End Date</a> set spans every day from its Date through its End Date as one continuous chip on the calendar and agenda views, instead of a single-day dot. The room is treated as booked for the entire range — a room-conflict check blocks any other booking that overlaps any day in that span, not just the start day.</p>
 
     <h3>Recurring events</h3>
-    <p>A <a href="#help-recurring-events">recurring series</a> is <em>not</em> one chip repeating — every occurrence is its own separate event with its own date, so each one shows up as its own normal chip on whatever day it falls on. Open any occurrence's Event Details tab to see the rest of the series and jump between them.</p>
+    <p>A <a href="#help-recurring-events">recurring series</a> is <em>not</em> one chip repeating — every occurrence is its own separate event with its own date, so each one shows up as its own normal chip on whatever day it falls on. Open any occurrence's Scheduling tab to see the rest of the series and jump between them.</p>
 
     <p>The dashboard, pipeline, and calendar all read from the same <code>/api/events</code> data, so adding or moving a show updates all three.</p>
   `,
@@ -536,7 +537,7 @@ const HELP_CONTENT = {
       <li><strong>Tasks Left</strong> count — tasks not yet marked <em>done</em> or <em>canceled</em>.</li>
     </ul>
     <p>Below the header sits a <strong>Next Recommended Action</strong> banner suggesting the most important next step (sign the artist, approve the flyer, build the run sheet, etc.). It refreshes when you click <em>Refresh</em> or save something anywhere in the event. The <strong>&times;</strong> button collapses it to a slim "dismissed for now" strip (click <em>Show</em> to bring it back) — this is per-visit, not permanent: reopening the event shows it again, and if the recommendation itself changes (a new, different next step) it reappears automatically even while collapsed, so dismissing today's task can't accidentally hide tomorrow's.</p>
-    <p>The <strong>Overview</strong> tab itself is a read-only, at-a-glance dashboard: a grid of cards for Schedule/Timeline, Promoter/Contacts, Band Lineup, Venue Ops/Logistics, Financial/Ticketing, Notes/Tasks, and Documents/Attachments. Each card summarizes that part of the event and links out (e.g. "Full Run Sheet", "Manage Lineup") to the matching tab for the full editable view.</p>
+    <p>The <strong>Overview</strong> tab itself is a read-only, at-a-glance dashboard: a grid of cards for Schedule/Timeline, Promoter/Contacts, Performer Lineup, Venue Ops/Logistics, Financial/Ticketing, Notes/Tasks, and Documents/Attachments. Each card summarizes that part of the event and links out (e.g. "Full Run Sheet", "Manage Lineup") to the matching tab for the full editable view.</p>
     <ul>
       <li>The <strong>Financial/Ticketing</strong> card shows ticket price, capacity, estimated guests, deposit amount and status, and — for in-house ticketed events — tickets sold so far; externally-ticketed events get a link out to the ticket URL instead. If you can view <a href="#help-settlement">Settlement</a>, a filed settlement's gross ticket sales, bar sales, and venue net are summarized here too.</li>
       <li>The <strong>Notes/Tasks</strong> card shows the event's internal notes (the staff-only field on the <a href="#help-details">Details</a> tab — nothing here ever appears on the public page) and the first several open tasks.</li>
@@ -593,8 +594,18 @@ const HELP_CONTENT = {
       <li><strong>Public page visible</strong> — toggles the publish state from inside the form. The <em>Publish Public Page</em> button at the top of the workspace does the same thing in one click.</li>
     </ul>
 
+    <p>Day-by-day session blocks and recurring-series setup have moved to their own <a href="#help-scheduling">Scheduling</a> tab.</p>
+  `,
+
+  scheduling: `
+    <h2>Scheduling</h2>
+    <p>The Scheduling tab holds the two things that reshape an event's dates: per-day session blocks for a multi-day event, and turning an event into a recurring series. Both are optional — most events use neither.</p>
+
+    <h3>Day-by-Day Schedule</h3>
+    <p>Optional — only needed for something like a multi-day workshop where each day has its own time block (e.g. Sat 1&ndash;5pm, Sun 1&ndash;4pm). Adding days here keeps the event's Date/End Date in sync automatically. Leave empty for a normal single- or continuous-multi-day event. See <a href="#help-multi-day-events">Multi-day events</a> for how a date range shows up elsewhere in the app.</p>
+
     <h3>Recurrence</h3>
-    <p>A "Recurrence" panel sits right below Event Details. If this event isn't part of a series yet, it shows a picker for turning it into one — see <a href="#help-recurring-events">Recurring events</a>. If it's already part of a series, the panel instead lists every sibling event with a link to jump to each one.</p>
+    <p>If this event isn't part of a series yet, the Recurrence panel shows a picker for turning it into one — see <a href="#help-recurring-events">Recurring events</a>. If it's already part of a series, the panel instead lists every sibling event with a link to jump to each one.</p>
   `,
 
   'multi-day-events': `
@@ -643,7 +654,7 @@ const HELP_CONTENT = {
     <p>Every generated date is checked against existing bookings at that venue, exactly like a normal event create. If <em>any</em> date in the pattern conflicts with an existing booking, nothing is created — you'll see an error listing which date(s) collided so you can adjust the pattern (a different day, a shorter range, or fewer occurrences) and try again.</p>
 
     <h3>Managing an existing series</h3>
-    <p>Open any occurrence's Event Details tab — the Recurrence panel lists every sibling in the series with its date and status, and links to jump straight to any of them. If one occurrence needs to drop out of the series (it was cancelled, moved to a different venue, whatever), use <strong>Remove this event from the series</strong> on that occurrence — it becomes a fully standalone event again and the rest of the series is unaffected.</p>
+    <p>Open any occurrence's <a href="#help-scheduling">Scheduling</a> tab — the Recurrence panel lists every sibling in the series with its date and status, and links to jump straight to any of them. If one occurrence needs to drop out of the series (it was cancelled, moved to a different venue, whatever), use <strong>Remove this event from the series</strong> on that occurrence — it becomes a fully standalone event again and the rest of the series is unaffected.</p>
     <p class="help-tip">💡 There's no bulk edit across a series (no "change this and all future occurrences"). Each occurrence is a completely normal event once created — update its time, venue, staffing, or anything else the same way you would for any other show.</p>
   `,
 

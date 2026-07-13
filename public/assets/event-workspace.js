@@ -273,7 +273,7 @@ class EventOverview extends EventBusCard {
           ${item.set_length_minutes ? `<span class="ov-time muted">${esc(item.set_length_minutes)} min</span>` : ''}
         </li>`).join('')}</ul>`
       : emptyState('No lineup yet.');
-    return ovCard({ icon: 'music', title: 'Band Lineup', help: 'lineup', body, footerLabel: 'Manage Lineup', footerTab: 'lineup' });
+    return ovCard({ icon: 'music', title: 'Performer Lineup', help: 'lineup', body, footerLabel: 'Manage Lineup', footerTab: 'lineup' });
   }
 
   _logisticsCard(event) {
@@ -384,6 +384,7 @@ class EventOverview extends EventBusCard {
 // Human-readable labels for each section in the visibility dropdown.
 const SECTION_LABELS = {
   overview:     'Overview',
+  scheduling:   'Scheduling',
   assets:       'Assets',
   tasks:        'Tasks',
   lineup:       'Lineup',
@@ -562,12 +563,14 @@ class EventWorkspace extends PanicElement {
     const data = this.data;
     const event = data.event;
     const isPrivate = event.event_type === 'private_event';
-    const tabs = ['overview', 'details', 'assets', 'tasks', ...(isPrivate ? [] : ['lineup']), 'schedule', 'staffing', 'vendors', 'guest-list', 'open-items', 'execution', 'activity'];
+    const tabs = ['overview', 'details', 'scheduling', 'assets', 'tasks', ...(isPrivate ? [] : ['lineup']), 'schedule', 'staffing', 'vendors', 'guest-list', 'open-items', 'execution', 'activity'];
+    // Ticketing is pinned right after Details (before Assets/Scheduling/etc.)
+    // rather than grouped with the other trailing conditional tabs below.
+    if (can(data, 'manage_ticketing') && !isPrivate) tabs.splice(2, 0, 'ticketing');
     if (can(data, 'view_contracts')) tabs.splice(tabs.length - 1, 0, 'contracts');
     if (can(data, 'manage_invites')) tabs.splice(tabs.length - 1, 0, 'invites');
     if (can(data, 'manage_payments')) tabs.splice(tabs.length - 1, 0, 'payments');
     if (can(data, 'view_settlement') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'settlement');
-    if (can(data, 'manage_ticketing') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'ticketing');
     if (can(data, 'manage_ledger') || can(data, 'finalize_closeout')) tabs.splice(tabs.length - 1, 0, 'closeout');
     const user = getAppUser();
     const userId = user?.id ?? 'anon';
@@ -632,6 +635,8 @@ class EventWorkspace extends PanicElement {
     </section>
     <section id="details">
       <pb-event-details-form></pb-event-details-form>
+    </section>
+    <section id="scheduling">
       <pb-event-sessions></pb-event-sessions>
       <pb-event-recurrence></pb-event-recurrence>
     </section>
