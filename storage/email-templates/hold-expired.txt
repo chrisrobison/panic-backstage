@@ -1,0 +1,21 @@
+Mabuhay Gardens — Hold Expired
+
+Hi {{recipient_name}},
+
+Your hold on "{{event_name}}" sat on the calendar for two weeks without
+moving to Intake Complete, so it has been automatically canceled and the
+date released.
+
+Event details:
+  Date:  {{event_date}}
+  Venue: {{event_venue}}
+
+Still want this date? Reach out to Colleen and a new hold can be started.
+
+View in Backstage:
+  {{event_admin_url}}
+
+Questions? Contact Colleen: this.that.comedy@gmail.com
+
+---
+Mabuhay Gardens · 443 Broadway, San Francisco, CA

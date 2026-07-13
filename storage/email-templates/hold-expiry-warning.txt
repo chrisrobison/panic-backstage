@@ -1,0 +1,22 @@
+Mabuhay Gardens — Hold Expires in 48 Hours
+
+Hi {{recipient_name}},
+
+Your hold on "{{event_name}}" has been on the calendar for two weeks
+without moving to Intake Complete. Unless it advances, it will be
+automatically removed from the calendar in 48 hours, freeing the date.
+
+Event details:
+  Date:  {{event_date}}
+  Venue: {{event_venue}}
+
+If you still want this date, reach out or update the booking so it can
+move to Intake Complete.
+
+View in Backstage:
+  {{event_admin_url}}
+
+Questions? Contact Colleen: this.that.comedy@gmail.com
+
+---
+Mabuhay Gardens · 443 Broadway, San Francisco, CA
