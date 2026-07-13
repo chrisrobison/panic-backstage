@@ -444,6 +444,27 @@ class ToastStack extends PanicElement {
 }
 
 
+// Full-size image viewer modal. Shared by any panel that shows image
+// thumbnails (event Assets tab, the cross-event Asset Library) — click/Enter
+// on a thumbnail opens the full image over a dark backdrop; click the
+// backdrop, the close button, or Escape to dismiss.
+function openImageLightbox(src, alt = '') {
+  if (!src) return;
+  const dialog = document.createElement('div');
+  dialog.className = 'lightbox-backdrop';
+  dialog.innerHTML = `<button class="lightbox-close" type="button" aria-label="Close">&times;</button><img class="lightbox-img" src="${esc(src)}" alt="${esc(alt)}">`;
+  document.body.appendChild(dialog);
+  document.body.classList.add('lightbox-open');
+  const close = () => {
+    dialog.remove();
+    document.body.classList.remove('lightbox-open');
+    document.removeEventListener('keydown', onEsc);
+  };
+  function onEsc(e) { if (e.key === 'Escape') close(); }
+  dialog.addEventListener('click', close);
+  document.addEventListener('keydown', onEsc);
+}
+
 // The "+" reveal button shown in a panel header (only when the user can edit).
 function addToggle(label, editable) {
   return editable ? `<button type="button" class="add-toggle" data-add aria-label="${esc(label)}" title="${esc(label)}"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>` : '';
@@ -531,4 +552,4 @@ function mdToHtml(text) {
   }).join('\n');
 }
 
-export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml };
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox };

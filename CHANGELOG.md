@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `assets` — Add cross-event Asset Library
 - **Added** `events` — Add Scheduling tab, reorder Ticketing, rename Lineup card
 - **Added** `events` — Add per-day session blocks for multi-day events
 - **Added** `events` — Add Hold auto-expiration, gated off by default

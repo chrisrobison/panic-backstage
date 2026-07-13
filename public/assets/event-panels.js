@@ -22,7 +22,7 @@ function staffingTierFor(capacity) {
   for (const tier of STAFFING_TIERS) { if (cap <= tier.max) return tier.roles; }
   return STAFFING_TIERS[STAFFING_TIERS.length - 1].roles;
 }
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, apiUrl, getToken, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, apiUrl, getToken, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, openImageLightbox, $, $$ } from './core.js';
 
 // ---- Editable record lists: read-only review tables with hover-to-edit ----
 // These power the Tasks / Lineup / Run Sheet / Staffing / Guest / Open Items
@@ -701,26 +701,6 @@ class GuestListManager extends HTMLElement {
       }
     }));
   }
-}
-
-
-// Full-page image viewer. Shows the image contained at the largest size that
-// preserves its aspect ratio; tap/click anywhere or press Escape to dismiss.
-function openImageLightbox(src, alt = '') {
-  if (!src) return;
-  const dialog = document.createElement('div');
-  dialog.className = 'lightbox-backdrop';
-  dialog.innerHTML = `<button class="lightbox-close" type="button" aria-label="Close">&times;</button><img class="lightbox-img" src="${esc(src)}" alt="${esc(alt)}">`;
-  document.body.appendChild(dialog);
-  document.body.classList.add('lightbox-open');
-  const close = () => {
-    dialog.remove();
-    document.body.classList.remove('lightbox-open');
-    document.removeEventListener('keydown', onEsc);
-  };
-  function onEsc(e) { if (e.key === 'Escape') close(); }
-  dialog.addEventListener('click', close);
-  document.addEventListener('keydown', onEsc);
 }
 
 

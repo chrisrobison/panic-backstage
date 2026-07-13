@@ -38,6 +38,7 @@ export const HELP_SECTIONS = [
       { slug: 'calendar',     title: 'Calendar' },
       { slug: 'pipeline',     title: 'Pipeline board' },
       { slug: 'events-list',  title: 'Events list &amp; search' },
+      { slug: 'asset-library', title: 'Asset library' },
       { slug: 'templates',    title: 'Templates' },
     ],
   },
@@ -322,6 +323,20 @@ const HELP_CONTENT = {
   'events-list': `
     <h2>Events list &amp; search</h2>
     <p>The Events page shows every event you have access to. Use the topbar search to filter by title. Click any row to open the workspace. Admins see a <em>Create Event</em> button that links to <a href="#help-templates">Templates</a>.</p>
+  `,
+
+  'asset-library': `
+    <h2>Asset library</h2>
+    <p>The Asset Library is a single, cross-event gallery of every file that has been uploaded to any event's <a href="#help-assets">Assets tab</a> — flyers, band photos, contracts, whatever. It's the fastest way to find a specific file without remembering which event it was uploaded to.</p>
+    <p>You see the same events here as everywhere else in the app: venue admins and global viewers see assets from every event, everyone else sees assets only from events they own or collaborate on.</p>
+    <h3>Browsing</h3>
+    <ul>
+      <li><strong>Images</strong> (jpg, png, gif, webp, svg) show as thumbnails. Click one to view it full-size in a modal.</li>
+      <li><strong>Everything else</strong> (PDFs, etc.) shows as a plain document icon. Click it to open the file in a new browser tab.</li>
+      <li>Each card names the event it belongs to — click the event name to jump straight into that event's workspace.</li>
+    </ul>
+    <h3>Filtering</h3>
+    <p>Use the search box to match an asset's title/filename or its event's title. The Type and Status dropdowns narrow by <code>asset_type</code> (flyer, poster, band photo, etc.) and <code>approval_status</code> (draft, needs review, approved, rejected). This page is read-only — to upload, approve, or delete an asset, do it from that event's own <a href="#help-assets">Assets tab</a>.</p>
   `,
 
   templates: `

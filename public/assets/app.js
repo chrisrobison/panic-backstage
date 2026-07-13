@@ -21,6 +21,7 @@ import './listmaster.js';
 import './events.js';
 import './event-wizard.js';
 import './leads.js';
+import './asset-library.js';
 
 
 class AppShell extends PanicElement {
@@ -107,6 +108,7 @@ class AppShell extends PanicElement {
             <a data-nav="events" href="#events" title="Event list"><i class="fa-solid fa-list" aria-hidden="true"></i>List</a>
             <a data-nav="calendar" href="#calendar" title="Calendar"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Calendar</a>
             <a data-nav="pipeline" href="#pipeline" title="Pipeline"><i class="fa-solid fa-table-columns" aria-hidden="true"></i>Pipeline</a>
+            <a data-nav="asset-library" href="#asset-library" title="Asset Library"><i class="fa-solid fa-images" aria-hidden="true"></i>Assets</a>
           </div>
         </div>
         <div class="nav-group" data-group="settings">
@@ -373,6 +375,7 @@ class AppShell extends PanicElement {
     if (route === 'calendar')    return this.mount(outlet, 'pb-event-calendar');
     if (route === 'pipeline')    return this.mount(outlet, 'pb-pipeline-board');
     if (route === 'events')      return this.mount(outlet, 'pb-events-list');
+    if (route === 'asset-library') return this.mount(outlet, 'pb-asset-library');
     if (route === 'leads')       return this.mount(outlet, 'pb-leads-page');
     if (route === 'contacts')    return this.mount(outlet, 'pb-contacts-page');
     if (route === 'templates')   return this.mount(outlet, 'pb-template-picker');

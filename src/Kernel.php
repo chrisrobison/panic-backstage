@@ -313,6 +313,11 @@ final class Kernel
             return [Dashboard::class, []];
         }
 
+        // Asset library — cross-event read-only asset browser
+        if ($segments[0] === 'asset-library') {
+            return [AssetLibrary::class, []];
+        }
+
         // Leads pipeline
         if ($segments[0] === 'leads') {
             $leadId  = $this->intOrNull($segments[1] ?? null);
