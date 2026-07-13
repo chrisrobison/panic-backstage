@@ -1,0 +1,25 @@
+Mabuhay Gardens — Ready for Linktree / Instagram
+
+Hi {{recipient_name}},
+
+{{event_name}} has been approved and is ready to add to the linktree and
+promote on Instagram.
+
+Event details:
+  Date:   {{event_date}}
+  Time:   {{event_time}}
+  Venue:  {{event_venue}}
+  Tickets: {{ticket_url}}
+
+Poster: {{poster_url}}
+
+Description:
+{{event_description}}
+
+View the event in Backstage:
+  {{event_admin_url}}
+
+Questions? Contact Colleen: this.that.comedy@gmail.com
+
+---
+Mabuhay Gardens · 443 Broadway, San Francisco, CA

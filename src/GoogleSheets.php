@@ -122,6 +122,7 @@ final class GoogleSheets
         'hold'              => 'Hold',
         'confirmed'         => 'Booked',
         'needs_assets'      => 'Needs Assets',
+        'assets_approved'   => 'Assets Approved',
         'ready_to_announce' => 'Ready to Announce',
         'published'         => 'Published',
         'advanced'          => 'Advanced',

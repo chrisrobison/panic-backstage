@@ -1301,6 +1301,7 @@ const HELP_CONTENT = {
       <li><strong>Intake Complete</strong> — deal structure is agreed and a contract is being built. Age restriction, ticket price, capacity, and a deposit amount must be set. When this status is set, venue admins and management are automatically emailed with next steps for the contract.</li>
       <li><strong>Booked</strong> — a signed contract (or approved contract in the contract builder) plus a confirmed deposit. The show is locked.</li>
       <li><strong>Needs Assets</strong> — booked but blocked on flyer, artist photos, bio, or social content. An automatic email is sent to the producer/artist when this status is set.</li>
+      <li><strong>Assets Approved</strong> — public description, ticket link, and an approved poster/flyer are all in. Andres and Colleen are notified to add the show to the website and newsletter; Molly gets a dedicated email with the full promo packet for the linktree and Instagram.</li>
       <li><strong>Ready To Announce</strong> — the approved flyer is in, ticketing is set up, and the event is ready to flip public.</li>
       <li><strong>Published</strong> — the public event page is live and the show is announced.</li>
       <li><strong>Advanced</strong> — production has been advanced with the bands; final logistics are locked for night of show.</li>
@@ -1319,7 +1320,7 @@ const HELP_CONTENT = {
       <li><strong>Settled</strong> — settlement filed.</li>
       <li><strong>Cancelled</strong> — rental cancelled.</li>
     </ol>
-    <p>Private events are automatically blocked from reaching Needs Assets, Ready To Announce, Published, and Advanced — those stages exist only for publicly promoted shows.</p>
+    <p>Private events are automatically blocked from reaching Needs Assets, Assets Approved, Ready To Announce, Published, and Advanced — those stages exist only for publicly promoted shows.</p>
 
     <h3>Notes</h3>
     <p>Status transitions are validated by the server — some forward moves require certain fields to be filled (e.g. you cannot advance to Booked without a contract). The pipeline and calendar display the current status for every event.</p>
@@ -1336,6 +1337,7 @@ const HELP_CONTENT = {
       <li><strong>Intake complete</strong> — set age restriction, ticket price, capacity, and deposit amount. Build the contract and walk it through approval. Status advances to <em>Intake Complete</em>.</li>
       <li><strong>Book it</strong> — once the contract is approved and a deposit is confirmed, status advances to <em>Booked</em>.</li>
       <li><strong>Collect assets</strong> — status advances to <em>Needs Assets</em>; an automatic email is sent to the producer/artist requesting the flyer, photos, bio, and social handles. Upload and approve the primary flyer.</li>
+      <li><strong>Mark assets approved</strong> — once the public description, ticket link, and approved poster/flyer are all set, advance to <em>Assets Approved</em>. Andres/Colleen get the standard status email; Molly gets a dedicated linktree/Instagram packet.</li>
       <li><strong>Get ready to announce</strong> — flyer approved, ticket URL or in-house ticketing set up. Status becomes <em>Ready to Announce</em>.</li>
       <li><strong>Announce</strong> — flip the public page on. Status becomes <em>Published</em>.</li>
       <li><strong>Advance</strong> — close out open items, confirm hospitality, share the run sheet with bands. Status becomes <em>Advanced</em>.</li>

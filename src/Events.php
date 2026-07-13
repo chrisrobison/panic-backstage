@@ -12,10 +12,10 @@ final class Events extends BaseEndpoint
 {
     use Events\EventRowHelpers;
 
-    private const STATUSES = ['empty','proposed','confirmed','booked','needs_assets','ready_to_announce','published','advanced','completed','settled','canceled'];
+    private const STATUSES = ['empty','proposed','confirmed','booked','needs_assets','assets_approved','ready_to_announce','published','advanced','completed','settled','canceled'];
 
     /** Statuses that represent a committed booking (conflict + transition checks apply). */
-    private const BOOKING_CONFIRMED_STATUSES = ['confirmed','booked','needs_assets','ready_to_announce','published','advanced','completed','settled'];
+    private const BOOKING_CONFIRMED_STATUSES = ['confirmed','booked','needs_assets','assets_approved','ready_to_announce','published','advanced','completed','settled'];
     private const TYPES = ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'];
 
     /** Human-readable labels for event fields — used in activity-log diff entries. */
@@ -639,7 +639,7 @@ final class Events extends BaseEndpoint
         $isPrivate = ($event['event_type'] ?? '') === 'private_event';
 
         // Statuses that private events may never use
-        $privateDisallowed = ['needs_assets', 'ready_to_announce', 'published', 'advanced'];
+        $privateDisallowed = ['needs_assets', 'assets_approved', 'ready_to_announce', 'published', 'advanced'];
         if ($isPrivate && in_array($newStatus, $privateDisallowed, true)) {
             return Response::json([
                 'error' => 'Private events do not use the "' . ucwords(str_replace('_', ' ', $newStatus)) . '" status. Use: Hold → Intake Complete → Booked → Archived → Settled.',
@@ -750,6 +750,29 @@ final class Events extends BaseEndpoint
             }
         }
 
+        // Assets Approved: promo materials (poster/flyer, public description,
+        // ticket link) must actually be gathered and approved before the team
+        // gets fanned out to add the event to the website/linktree/newsletter.
+        if ($newStatus === 'assets_approved' && !$isPrivate) {
+            if (empty($event['description_public'])) {
+                $missing[] = 'Public description';
+            }
+            if (empty($event['ticket_url'])) {
+                $missing[] = 'Ticket link';
+            }
+            $hasApprovedPoster = false;
+            if (!empty($event['id'])) {
+                $posterRow = $this->db->one(
+                    "SELECT id FROM event_assets WHERE event_id = ? AND asset_type IN ('poster','flyer') AND approval_status = 'approved' LIMIT 1",
+                    [(int) $event['id']]
+                );
+                $hasApprovedPoster = (bool) $posterRow;
+            }
+            if (!$hasApprovedPoster) {
+                $missing[] = 'Approved poster/flyer (upload and approve it in the Assets tab)';
+            }
+        }
+
         if ($missing) {
             $label = match ($newStatus) {
                 'proposed'  => 'Hold',
@@ -827,9 +850,10 @@ final class Events extends BaseEndpoint
     {
         try {
             $event = $this->db->one(
-                'SELECT e.title, e.date, e.end_date, e.show_time, e.event_type,
+                'SELECT e.id, e.title, e.date, e.end_date, e.show_time, e.event_type,
                         e.promoter_name, e.promoter_email,
-                        e.booker_name, e.booker_email, v.name AS venue_name
+                        e.booker_name, e.booker_email, e.description_public, e.ticket_url,
+                        v.name AS venue_name
                    FROM events e
               LEFT JOIN venues v ON v.id = e.venue_id
                   WHERE e.id = ? LIMIT 1',
@@ -855,6 +879,7 @@ final class Events extends BaseEndpoint
                 'confirmed'         => 'Intake Complete',
                 'booked'            => 'Booked',
                 'needs_assets'      => 'Needs Assets',
+                'assets_approved'   => 'Assets Approved',
                 'ready_to_announce' => 'Ready to Announce',
                 'published'         => 'Published',
                 'advanced'          => 'Advanced',
@@ -868,6 +893,7 @@ final class Events extends BaseEndpoint
                 'confirmed'         => '#2563eb',
                 'booked'            => '#16a34a',
                 'needs_assets'      => '#d97706',
+                'assets_approved'   => '#16a34a',
                 'ready_to_announce' => '#7c3aed',
                 'published'         => '#0891b2',
                 'advanced'          => '#0891b2',
@@ -967,6 +993,46 @@ final class Events extends BaseEndpoint
                         '[' . (getenv('VENUE_NAME') ?: 'Backstage') . "] Promo materials needed: {$event['title']}",
                         'needs-assets',
                         $assetsVars + ['recipient_name' => htmlspecialchars((string) $recipient['name'], ENT_QUOTES, 'UTF-8')]
+                    );
+                }
+            }
+
+            // ── Assets Approved: send Molly a ready-to-post linktree packet ───
+            // Andres and Colleen are venue_admins and already got the generic
+            // "always notify admins" email above; Molly (global_viewer) is not
+            // a venue admin, so she needs her own dedicated notification with
+            // the full promo packet — poster, description, ticket link — per #14.
+            if ($newStatus === 'assets_approved' && !$isPrivate) {
+                $linktreeEmail = trim((string) (getenv('LINKTREE_MANAGER_EMAIL') ?: 'molly.graton@gmail.com'));
+                $linktreeName  = trim((string) (getenv('LINKTREE_MANAGER_NAME') ?: 'Molly'));
+                if ($linktreeEmail && filter_var($linktreeEmail, FILTER_VALIDATE_EMAIL)) {
+                    $posterUrl = '';
+                    $posterRow = $this->db->one(
+                        "SELECT file_path FROM event_assets WHERE event_id = ? AND asset_type IN ('poster','flyer') AND approval_status = 'approved' ORDER BY updated_at DESC LIMIT 1",
+                        [$eventId]
+                    );
+                    if ($posterRow && !empty($posterRow['file_path'])) {
+                        $posterUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/') . '/' . ltrim((string) $posterRow['file_path'], '/');
+                    }
+                    $linktreeVars = [
+                        'event_name'        => htmlspecialchars((string) $event['title'], ENT_QUOTES, 'UTF-8'),
+                        'event_date'        => htmlspecialchars(!empty($event['end_date']) ? "{$event['date']} – {$event['end_date']}" : (string) $event['date'], ENT_QUOTES, 'UTF-8'),
+                        'event_time'        => $showTime !== '' ? htmlspecialchars($showTime, ENT_QUOTES, 'UTF-8') : '—',
+                        'event_venue'       => htmlspecialchars((string) ($event['venue_name'] ?? getenv('VENUE_NAME') ?: 'Venue'), ENT_QUOTES, 'UTF-8'),
+                        'event_description'      => (string) ($event['description_public'] ?? ''),
+                        'event_description_html' => nl2br(htmlspecialchars((string) ($event['description_public'] ?? ''), ENT_QUOTES, 'UTF-8')),
+                        'ticket_url'        => (string) ($event['ticket_url'] ?? ''),
+                        'ticket_url_html'   => htmlspecialchars((string) ($event['ticket_url'] ?? ''), ENT_QUOTES, 'UTF-8'),
+                        'poster_url'        => $posterUrl,
+                        'poster_url_html'   => htmlspecialchars($posterUrl, ENT_QUOTES, 'UTF-8'),
+                        'event_admin_url'   => htmlspecialchars($link, ENT_QUOTES, 'UTF-8'),
+                        'recipient_name'    => htmlspecialchars($linktreeName, ENT_QUOTES, 'UTF-8'),
+                    ];
+                    $mailer->sendTemplate(
+                        $linktreeEmail,
+                        '[' . (getenv('VENUE_NAME') ?: 'Backstage') . "] Ready for linktree/Instagram: {$event['title']}",
+                        'assets-approved-linktree',
+                        $linktreeVars
                     );
                 }
             }

@@ -1283,6 +1283,7 @@ components:
             - confirmed
             - booked
             - needs_assets
+            - assets_approved
             - ready_to_announce
             - published
             - advanced
@@ -1539,6 +1540,7 @@ components:
             - confirmed
             - booked
             - needs_assets
+            - assets_approved
             - ready_to_announce
             - published
             - advanced
@@ -1688,6 +1690,7 @@ components:
             - confirmed
             - booked
             - needs_assets
+            - assets_approved
             - ready_to_announce
             - published
             - advanced
@@ -10794,7 +10797,7 @@ paths:
         when omitted. Private events (`event_type=private_event`) are forced non-public and
         auto-assigned to the configured private-event handler when no `owner_user_id` is given. If
         `status` is set to a booking-confirmed status
-        (confirmed/booked/needs_assets/ready_to_announce/published/advanced/completed/settled), a
+        (confirmed/booked/needs_assets/assets_approved/ready_to_announce/published/advanced/completed/settled), a
         409 room-conflict check runs against the venue/date/time window. A sequential `EVT-N`
         external_id is assigned and the event is pushed to the linked Google Sheet (best-effort,
         non-blocking).

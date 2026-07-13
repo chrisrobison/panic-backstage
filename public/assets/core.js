@@ -30,7 +30,7 @@ const scriptUrl = new URL((document.currentScript || $$('script[src*="assets/app
 
 const appBaseUrl = /\/public\/assets\/app\.js$/i.test(scriptUrl.pathname) ? new URL('../..', scriptUrl) : new URL('..', scriptUrl);
 
-const statuses = ['empty', 'proposed', 'confirmed', 'booked', 'needs_assets', 'ready_to_announce', 'published', 'advanced', 'completed', 'settled', 'canceled'];
+const statuses = ['empty', 'proposed', 'confirmed', 'booked', 'needs_assets', 'assets_approved', 'ready_to_announce', 'published', 'advanced', 'completed', 'settled', 'canceled'];
 
 
 function appUrl(path = '') {
@@ -234,7 +234,7 @@ function money(value) {
 
 function statusTone(status) {
   if (status === 'published') return 'blue';
-  if (['confirmed', 'booked', 'advanced', 'ready_to_announce', 'settled'].includes(status)) return 'green';
+  if (['confirmed', 'booked', 'advanced', 'assets_approved', 'ready_to_announce', 'settled'].includes(status)) return 'green';
   if (['needs_assets', 'completed'].includes(status)) return 'amber';
   if (['hold', 'canceled'].includes(status)) return 'red';
   return 'gray';
@@ -259,6 +259,7 @@ const STATUS_LABELS = {
   confirmed:         'Intake Complete',
   booked:            'Booked',
   needs_assets:      'Needs Assets',
+  assets_approved:   'Assets Approved',
   ready_to_announce: 'Ready to Announce',
   published:         'Published',
   advanced:          'Advanced',

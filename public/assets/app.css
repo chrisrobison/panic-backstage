@@ -605,6 +605,7 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
 .status-confirmed { background: #d3f1df; color: #0c7a3c; }
 .status-booked    { background: #bbf7d0; color: #065f46; }
 .status-needs_assets { background: #ffedc2; color: #a06400; }
+.status-assets_approved { background: #bbf7d0; color: #065f46; }
 .status-ready_to_announce { background: #d9f3ef; color: #0b766b; }
 .status-published { background: #d9ebff; color: #1466bd; }
 .status-advanced { background: #d8f0e1; color: #0f7c3f; }
