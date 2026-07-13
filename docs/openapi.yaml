@@ -11595,6 +11595,154 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/events/{id}/sessions:
+    get:
+      operationId: eventSessions_list
+      summary: List an event's day-by-day session blocks
+      description: >-
+        Requires the `read_event` event capability. Per issue #8: purely optional per-day time
+        blocks for events that don't fit the standard continuous [date, end_date] range model
+        (e.g. a two-day workshop with a different time block each day). An event with zero
+        sessions is unaffected by this feature.
+      tags:
+        - Event Sessions
+      parameters:
+        - $ref: '#/components/parameters/EventIdPath'
+      responses:
+        '200':
+          description: Session list, ordered by date.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        event_id: { type: integer }
+                        session_date: { type: string, format: date }
+                        start_time: { type: string, nullable: true }
+                        end_time: { type: string, nullable: true }
+                        label: { type: string, nullable: true }
+                        sort_order: { type: integer }
+        '403':
+          description: Missing read_event capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: eventSessions_create
+      summary: Add a day-by-day session block
+      description: >-
+        Requires the `edit_event` event capability. Adding/editing/removing a session
+        recomputes events.date/end_date as MIN/MAX(session_date), so the room-conflict check,
+        calendar range, and sheet sync automatically see the widened or narrowed span.
+      tags:
+        - Event Sessions
+      parameters:
+        - $ref: '#/components/parameters/EventIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_date]
+              properties:
+                session_date: { type: string, format: date }
+                start_time: { type: string, nullable: true }
+                end_time: { type: string, nullable: true }
+                label: { type: string, nullable: true }
+                sort_order: { type: integer }
+      responses:
+        '200':
+          description: Session created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+        '403':
+          description: Missing edit_event capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: session_date missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/events/{id}/sessions/{sessionId}:
+    patch:
+      operationId: eventSessions_update
+      summary: Update a session block
+      description: Requires the `edit_event` event capability.
+      tags:
+        - Event Sessions
+      parameters:
+        - $ref: '#/components/parameters/EventIdPath'
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_date]
+              properties:
+                session_date: { type: string, format: date }
+                start_time: { type: string, nullable: true }
+                end_time: { type: string, nullable: true }
+                label: { type: string, nullable: true }
+                sort_order: { type: integer }
+      responses:
+        '200':
+          description: Session updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        '403':
+          description: Missing edit_event capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: eventSessions_delete
+      summary: Delete a session block
+      description: Requires the `edit_event` event capability.
+      tags:
+        - Event Sessions
+      parameters:
+        - $ref: '#/components/parameters/EventIdPath'
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Deleted.
+        '403':
+          description: Missing edit_event capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/events/{id}/assets:
     get:
       operationId: eventAssets_list

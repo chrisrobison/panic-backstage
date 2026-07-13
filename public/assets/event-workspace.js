@@ -632,6 +632,7 @@ class EventWorkspace extends PanicElement {
     </section>
     <section id="details">
       <pb-event-details-form></pb-event-details-form>
+      <pb-event-sessions></pb-event-sessions>
       <pb-event-recurrence></pb-event-recurrence>
     </section>
     <pb-asset-manager id="assets"></pb-asset-manager>
@@ -655,6 +656,7 @@ class EventWorkspace extends PanicElement {
     $('pb-event-readiness', this).data = data;
     $('pb-event-overview', this).data = data;
     $('pb-event-details-form', this).data = data;
+    $('pb-event-sessions', this).data = data;
     $('pb-event-recurrence', this).data = data;
     $('pb-task-list', this).data = data;
     if ($('pb-lineup-editor', this)) $('pb-lineup-editor', this).data = data;

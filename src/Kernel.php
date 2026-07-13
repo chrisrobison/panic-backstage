@@ -546,6 +546,7 @@ final class Kernel
                 'open-items' => [Events\Blockers::class, ['eventId' => $eventId, 'blockerId'  => $childId]],
                 'lineup'     => [Events\Lineup::class,   ['eventId' => $eventId, 'lineupId'   => $childId]],
                 'schedule'   => [Events\Schedule::class, ['eventId' => $eventId, 'scheduleId' => $childId]],
+                'sessions'   => [Events\Sessions::class, ['eventId' => $eventId, 'sessionId'  => $childId]],
                 'assets'     => [Events\Assets::class,   ['eventId' => $eventId, 'assetId'    => $childId]],
                 'settlement' => [Events\Settlement::class, ['eventId' => $eventId]],
                 'invites'    => [Events\Invites::class,  ['eventId' => $eventId, 'inviteId'   => $childId]],

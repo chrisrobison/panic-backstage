@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Add per-day session blocks for multi-day events
 - **Added** `events` — Add Hold auto-expiration, gated off by default
 - **Added** `users` — Add POST /api/users/{id}/invite to send account invites
 - **Added** `events` — Add Assets Approved status with linktree notification

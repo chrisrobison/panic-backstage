@@ -170,6 +170,7 @@ final class Events extends BaseEndpoint
             'tasks' => $tasks,
             'blockers' => $blockers,
             'schedule' => $this->db->all('SELECT * FROM event_schedule_items WHERE event_id = ? ORDER BY start_time, id', [$id]),
+            'sessions' => $this->db->all('SELECT * FROM event_sessions WHERE event_id = ? ORDER BY session_date, start_time, sort_order, id', [$id]),
             'assets' => $assets,
             'collaborators' => $this->db->all(
                 'SELECT ec.id, ec.user_id, ec.role event_role, u.name, u.email

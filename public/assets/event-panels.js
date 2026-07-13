@@ -259,6 +259,46 @@ class RunSheet extends HTMLElement {
 }
 
 
+// Per-day time blocks for events that don't fit the standard "one continuous
+// date range" model — e.g. a two-day workshop with a different time block
+// each day (issue #8). Purely optional: an event with zero sessions behaves
+// exactly as it always has. Adding sessions here keeps events.date/end_date
+// in sync server-side (see Events/Sessions.php), so the rest of the app
+// (calendar range, room-conflict check, sheet sync) automatically sees the
+// widened/narrowed span with no separate wiring needed.
+class EventSessions extends HTMLElement {
+  set data(data) {
+    this.eventData = data;
+    const sessions = data.sessions || [];
+    const editable = can(data, 'edit_event');
+    const cols = [
+      { label: 'Date', grid: 'minmax(120px, 1fr)', cell: (s) => dateLabel(s.session_date) },
+      { label: 'Start', grid: 'minmax(80px, 0.8fr)', cell: (s) => s.start_time ? esc(timeLabel(s.start_time)) : '' },
+      { label: 'End', grid: 'minmax(80px, 0.8fr)', cell: (s) => s.end_time ? esc(timeLabel(s.end_time)) : '' },
+      { label: 'Label', grid: 'minmax(120px, 1.4fr)', cell: (s) => esc(s.label || '') },
+    ];
+    const editForm = (item) => `<form data-api="/events/${data.event.id}/sessions/${item.id}" data-method="PATCH" class="row-form record-form"><label>Date<input type="date" name="session_date" required value="${esc(item.session_date)}"></label><label>Start<input type="time" name="start_time" value="${esc(item.start_time || '')}"></label><label>End<input type="time" name="end_time" value="${esc(item.end_time || '')}"></label><label>Label<input name="label" value="${esc(item.label || '')}" placeholder="e.g. Day 2"></label><button>Save</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
+    const addForm = editable ? `<form data-api="/events/${data.event.id}/sessions" data-method="POST" class="row-form" data-add-form hidden><label>Date<input type="date" name="session_date" required></label><label>Start<input type="time" name="start_time"></label><label>End<input type="time" name="end_time"></label><label>Label<input name="label" placeholder="e.g. Day 1"></label><button>Add day</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : '';
+    this.innerHTML = `<section class="panel">
+      <div class="section-head padded">
+        <h2>Day-by-Day Schedule</h2>
+        <div class="section-head-actions">${addToggle('Add a day', editable)}</div>
+      </div>
+      <p class="form-section-note padded" style="padding-top:0">Optional — only needed for something like a multi-day workshop where each day has its own time block (e.g. Sat 1&ndash;5pm, Sun 1&ndash;4pm). Adding days here keeps the event's Date/End Date in sync automatically. Leave empty for a normal single- or continuous-multi-day event.</p>
+      <div class="record-body">${addForm}${recordList(sessions, cols, editForm, editable, 'No day-by-day blocks — this event uses a single continuous date range.')}</div>
+    </section>`;
+    if (!editable) return;
+    bindRecords(this);
+    $$('form[data-api]', this).forEach((form) => form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
+      await refreshSection(this);
+      publish('toast.show', { message: 'Schedule saved.' });
+    }));
+  }
+}
+
+
 class StaffingManager extends HTMLElement {
   set data(data) {
     this.eventData = data;
@@ -952,6 +992,7 @@ class SettlementForm extends HTMLElement {
 customElements.define('pb-task-list', TaskList);
 customElements.define('pb-lineup-editor', LineupEditor);
 customElements.define('pb-run-sheet', RunSheet);
+customElements.define('pb-event-sessions', EventSessions);
 customElements.define('pb-staffing-manager', StaffingManager);
 customElements.define('pb-open-items', OpenItems);
 customElements.define('pb-guest-list-manager', GuestListManager);
