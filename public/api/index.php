@@ -40,6 +40,17 @@ if ($superDbName !== '') {
     $ctx = Panic\Tenant\TenantContext::resolve();
     Panic\Tenant\TenantContext::setCurrent($ctx);   // make slug available app-wide
 
+    // Inject the tenant PDO into Database so all endpoint code is unchanged.
+    // Kernel::boot() loads the global .env as its first step — every
+    // per-tenant override below MUST happen strictly *after* this call
+    // returns, or boot()'s reload silently clobbers it back to the global
+    // default. (This bit us: tenant overrides were being applied before
+    // boot(), so every one of them — the client .env overlay and the
+    // per-tenant APP_URL — was reset the instant boot() ran, and every
+    // tenant's emails/WebAuthn origin quietly pointed at the global default
+    // host instead of its own domain.)
+    $kernel = Panic\Kernel::boot($root, new Panic\Database($ctx->db));
+
     // ── Per-client .env overlay ──────────────────────────────────────────────
     // Load clients/{slug}/.env on top of the global .env so each tenant can
     // override VENUE_NAME, MAIL_FROM_*, social credentials, etc. without
@@ -64,8 +75,7 @@ if ($superDbName !== '') {
     putenv('APP_URL=' . $proto . '://' . $tenantDomain);
     // ────────────────────────────────────────────────────────────────────────
 
-    // Inject the tenant PDO into Database so all endpoint code is unchanged.
-    Panic\Kernel::boot($root, new Panic\Database($ctx->db))->handle()->send();
+    $kernel->handle()->send();
     exit;
 }
 
