@@ -15,7 +15,14 @@ test('Reports Overview renders KPI cards and a trend chart', async (page) => {
   );
   assert.atLeast(await page.count('pb-reports-page .metric-card'), 3, 'at least a few KPI cards render');
   assert.ok(await page.exists('pb-reports-page .rpt-chart'), 'monthly trend chart (SVG) renders');
-  assert.ok(await page.exists('pb-reports-page .rpt-cat-list'), 'category breakdown list renders');
+  // The category breakdown renders either a bar list (when there are
+  // categorized ledger entries in range) or an empty-state message — the
+  // seeded CI demo data has events but zero event_ledger_entries rows, so
+  // this must not hard-require the populated case.
+  assert.ok(
+    await page.exists('pb-reports-page .rpt-cat-grid .rpt-cat-list') || await page.exists('pb-reports-page .rpt-cat-grid .empty-state'),
+    'category breakdown renders either bars or an empty state',
+  );
 });
 
 test('Reports Settlements tab lists events with an export button', async (page) => {

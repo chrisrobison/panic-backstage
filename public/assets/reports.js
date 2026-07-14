@@ -345,7 +345,20 @@ class ReportsPage extends PanicElement {
       .rpt-filter-bar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin: 0 0 1rem; }
       .rpt-filter-bar label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; color: var(--muted, #6f7582); font-weight: 600; }
       .rpt-filter-bar select, .rpt-filter-bar input { font: inherit; padding: 6px 8px; border: 1px solid var(--line, #dfe3e8); border-radius: 6px; }
-      .rpt-metric-grid { margin-bottom: 1.25rem; }
+      /* Large dollar totals (e.g. "$1,040,392.50") have no natural break point,
+         and CSS Grid items default to a min-width based on their content's
+         intrinsic size — so without the overrides below, one big number
+         forces its whole column wider than the grid, overflowing every card
+         in the row. minmax(0, 1fr) lets the track shrink below content size;
+         overflow-wrap/word-break give the browser somewhere to break a long
+         unbroken number as a last resort. .metric-card's own inner grid
+         (icon column + content column) needs the same minmax(0, 1fr) fix. */
+      .rpt-metric-grid { margin-bottom: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+      .rpt-metric-grid .metric-card { grid-template-columns: 60px minmax(0, 1fr); min-width: 0; }
+      .rpt-metric-grid .metric-card strong,
+      .rpt-metric-grid .metric-card h3,
+      .rpt-metric-grid .metric-card p { overflow-wrap: anywhere; word-break: break-word; }
+      .rpt-metric-grid .metric-card strong { font-size: clamp(20px, 2.4vw, 38px); display: block; }
       .rpt-legend { font-size: 0.8rem; color: var(--muted, #6f7582); display: inline-flex; align-items: center; gap: 0.3rem; }
       .rpt-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-left: 0.6rem; }
       .rpt-swatch:first-child { margin-left: 0; }
@@ -354,16 +367,20 @@ class ReportsPage extends PanicElement {
       .rpt-axis-label { font-size: 9px; fill: var(--muted, #6f7582); }
       .rpt-table-toggle { padding: 0 1rem 1rem; }
       .rpt-table-toggle summary { cursor: pointer; font-size: 0.85rem; color: var(--blue, #1268c7); font-weight: 600; }
-      .rpt-cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+      .rpt-cat-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; margin-bottom: 1rem; }
       .rpt-cat-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
-      .rpt-cat-list li { display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 0.6rem; font-size: 0.85rem; }
+      .rpt-cat-list li { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; align-items: center; gap: 0.6rem; font-size: 0.85rem; }
       .rpt-cat-label { color: var(--muted, #6f7582); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .rpt-cat-track { background: var(--soft, #eef0f3); border-radius: 4px; height: 10px; overflow: hidden; }
       .rpt-cat-fill { display: block; height: 100%; border-radius: 4px; }
-      .rpt-cat-value { font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; }
-      .data-table .amount { text-align: right; font-variant-numeric: tabular-nums; }
-      .data-table .amount.green { color: var(--green, #0f8f46); }
-      .data-table .amount.red { color: var(--red, #ef4338); }
+      .rpt-cat-value { font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; overflow-wrap: anywhere; }
+      /* .data-table and .amount are shared, global classes (used by ~40 other
+         panels app-wide) — scope every override to pb-reports-page so this
+         can't change table layout anywhere else. */
+      pb-reports-page .data-table .amount { text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+      pb-reports-page .data-table .amount.green { color: var(--green, #0f8f46); }
+      pb-reports-page .data-table .amount.red { color: var(--red, #ef4338); }
+      pb-reports-page .data-table td, pb-reports-page .data-table th { overflow-wrap: anywhere; }
       @media (max-width: 860px) {
         .rpt-cat-grid { grid-template-columns: 1fr; }
       }

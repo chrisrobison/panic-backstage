@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `reports` — Stop KPI cards from overflowing, fix flaky ui-tests assertion
 - **Added** `reports` — Add venue-wide and per-event P&L/settlement reporting
 - **Added** `events` — Reflect ticket tiers in public page header price
 - **Fixed** `events` — Open Share portal panel as a modal instead of inline card
