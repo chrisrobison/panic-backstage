@@ -46,6 +46,21 @@ function presetRange(preset) {
   }
 }
 
+// Compact currency for the Overview KPI cards' headline numbers — a real
+// venue's Gross Revenue/Total Costs can run into 6+ figures, and at the
+// card's 52px value size a full "$1,040,392.50" has no natural break point
+// and wraps awkwardly (see the .rpt-metric-grid overflow fix below). "$1.04K"
+// / "$2.3M" fits on one line; the exact figure is still one hover away via
+// the <strong title="..."> set by card() below, and every table on this page
+// (Settlements, trend "View as table", category breakdown) shows full
+// precision — this only shortens the stat-tile headline, nothing else.
+const compactMoneyFormatter = new Intl.NumberFormat(undefined, {
+  style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2,
+});
+function compactMoney(value) {
+  return compactMoneyFormatter.format(Number(value || 0));
+}
+
 function monthLabel(ym) {
   const [y, m] = String(ym).split('-').map(Number);
   if (!y || !m) return esc(ym);
@@ -221,15 +236,17 @@ class ReportsPage extends PanicElement {
     const d = this.overviewData || {};
     const t = d.totals || {};
     const netTone = (t.venue_net ?? 0) >= 0 ? 'green' : 'red';
-    const card = (icon, label, value, note, tone = '') => `<article class="metric-card ${tone}"><span class="icon-bubble ${tone}"><i class="fa-solid ${icon}" aria-hidden="true"></i></span><h3>${esc(label)}</h3><strong>${esc(value)}</strong><p>${esc(note)}</p></article>`;
+    // `exact`, when given, is the full-precision value shown as a title
+    // tooltip on the headline number — see compactMoney() above.
+    const card = (icon, label, value, note, tone = '', exact = '') => `<article class="metric-card ${tone}"><span class="icon-bubble ${tone}"><i class="fa-solid ${icon}" aria-hidden="true"></i></span><h3>${esc(label)}</h3><strong${exact ? ` title="${esc(exact)}"` : ''}>${esc(value)}</strong><p>${esc(note)}</p></article>`;
 
     return `
       <section class="metric-grid rpt-metric-grid">
-        ${card('fa-sack-dollar', 'Gross Revenue', money(t.gross_revenue), `${t.events_count ?? 0} events in range`, 'green')}
-        ${card('fa-file-invoice-dollar', 'Total Costs', money(t.total_costs), 'Labor, vendors, artists & more', 'red')}
-        ${card('fa-scale-balanced', 'Venue Net', money(t.venue_net), `${t.margin_pct ?? 0}% margin`, netTone)}
-        ${card('fa-ticket', 'Tickets Sold', t.tickets_sold ?? 0, money(t.gross_ticket_sales ?? 0) + ' gross')}
-        ${card('fa-chart-line', 'Avg Net / Event', money(t.avg_net_per_event), 'Per event in range')}
+        ${card('fa-sack-dollar', 'Gross Revenue', compactMoney(t.gross_revenue), `${t.events_count ?? 0} events in range`, 'green', money(t.gross_revenue))}
+        ${card('fa-file-invoice-dollar', 'Total Costs', compactMoney(t.total_costs), 'Labor, vendors, artists & more', 'red', money(t.total_costs))}
+        ${card('fa-scale-balanced', 'Venue Net', compactMoney(t.venue_net), `${t.margin_pct ?? 0}% margin`, netTone, money(t.venue_net))}
+        ${card('fa-ticket', 'Tickets Sold', t.tickets_sold ?? 0, compactMoney(t.gross_ticket_sales ?? 0) + ' gross')}
+        ${card('fa-chart-line', 'Avg Net / Event', compactMoney(t.avg_net_per_event), 'Per event in range', '', money(t.avg_net_per_event))}
         ${card('fa-clipboard-check', 'Awaiting Closeout', t.unsettled_count ?? 0, 'Completed, not finalized', (t.unsettled_count ?? 0) > 0 ? 'amber' : '')}
       </section>
 
