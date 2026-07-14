@@ -25,6 +25,33 @@ test('Reports Overview renders KPI cards and a trend chart', async (page) => {
   );
 });
 
+test('Reports KPI card values never wrap onto a second line, even for large/negative totals', async (page) => {
+  await page.goto('#reports');
+  await page.until(`document.querySelector('pb-reports-page [data-rpt-tab="overview"]')`);
+  await page.click('pb-reports-page [data-rpt-tab="overview"]');
+  await page.until(`document.querySelector('pb-reports-page .metric-grid')`);
+  // Simulate a bigger venue with a losing month. This previously wrapped
+  // mid-token (e.g. "$812.35" / "K") because the KPI value's font-size was a
+  // vw-relative clamp() sized off the *whole viewport*, not this grid's
+  // actual per-card column width — six narrow cards fit on a wide viewport,
+  // but the vw unit didn't know that.
+  await page.eval(`
+    const el = document.querySelector('pb-reports-page');
+    el.overviewData.totals = Object.assign({}, el.overviewData.totals, {
+      gross_revenue: 1040392.55, total_costs: 812345.10, venue_net: -228047.45,
+      margin_pct: -21.9, avg_net_per_event: -6584.32,
+    });
+    el.render();
+  `);
+  const wrapped = await page.eval(`
+    Array.from(document.querySelectorAll('pb-reports-page .metric-card strong')).some((s) => {
+      const lineHeight = parseFloat(getComputedStyle(s).lineHeight) || 1;
+      return s.getBoundingClientRect().height > lineHeight * 1.5;
+    })
+  `);
+  assert.notOk(wrapped, 'no KPI card value wraps onto a second line for a large/negative total');
+});
+
 test('Reports Settlements tab lists events with an export button', async (page) => {
   await page.goto('#reports');
   await page.until(`document.querySelector('pb-reports-page [data-rpt-tab="overview"]')`);

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `reports` — Fix real KPI card wrapping the previous fix missed
 - **Added** `reports` — Shorten Overview KPI card values to compact currency
 - **Fixed** `reports` — Stop KPI cards from overflowing, fix flaky ui-tests assertion
 - **Added** `reports` — Add venue-wide and per-event P&L/settlement reporting

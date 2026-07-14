@@ -364,18 +364,39 @@ class ReportsPage extends PanicElement {
       .rpt-filter-bar select, .rpt-filter-bar input { font: inherit; padding: 6px 8px; border: 1px solid var(--line, #dfe3e8); border-radius: 6px; }
       /* Large dollar totals (e.g. "$1,040,392.50") have no natural break point,
          and CSS Grid items default to a min-width based on their content's
-         intrinsic size — so without the overrides below, one big number
-         forces its whole column wider than the grid, overflowing every card
-         in the row. minmax(0, 1fr) lets the track shrink below content size;
-         overflow-wrap/word-break give the browser somewhere to break a long
-         unbroken number as a last resort. .metric-card's own inner grid
-         (icon column + content column) needs the same minmax(0, 1fr) fix. */
-      .rpt-metric-grid { margin-bottom: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-      .rpt-metric-grid .metric-card { grid-template-columns: 60px minmax(0, 1fr); min-width: 0; }
+         intrinsic size. app.css already guards its own responsive breakpoints
+         for .metric-card (<=860px and <=560px) with minmax(0, ...) tracks —
+         the *unguarded* case is the plain desktop rule (grid-template-columns:
+         60px 1fr, no minmax), which is what a 6-narrow-card row like this
+         grid can produce. That override — plus the icon/padding shrink that
+         claws back content width for the money values below — is scoped to
+         min-width:861px (app.css's own "not mobile" breakpoint, reused here
+         for consistency) so it can't collide with app.css's mobile-specific
+         .metric-card layout (which un-spans the icon and adds a third grid
+         column below 560px — overriding grid-template-columns unconditionally
+         here previously fought that and made a "146" wrap onto two lines). */
+      .rpt-metric-grid { margin-bottom: 1.25rem; }
+      @media (min-width: 861px) {
+        .rpt-metric-grid { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+        .rpt-metric-grid .metric-card { grid-template-columns: 44px minmax(0, 1fr); min-width: 0; padding: 14px; gap: 12px; }
+        .rpt-metric-grid .metric-card .icon-bubble { width: 44px; height: 44px; }
+        .rpt-metric-grid .metric-card .icon-bubble i { font-size: 16px; }
+      }
       .rpt-metric-grid .metric-card strong,
       .rpt-metric-grid .metric-card h3,
       .rpt-metric-grid .metric-card p { overflow-wrap: anywhere; word-break: break-word; }
-      .rpt-metric-grid .metric-card strong { font-size: clamp(20px, 2.4vw, 38px); display: block; }
+      /* Fixed (not vw-based) on purpose: this grid can render as many as 6
+         narrow columns side by side, but a vw-relative size scales with the
+         *whole viewport*, not the individual card's width — at a wide
+         viewport that landed near 34px, too big for the content column, and
+         even a short compact string like "$1.04K" wrapped mid-token
+         ("$1.04" / "K"). 1.35rem (~21.6px) is sized to fit compactMoney()'s
+         worst realistic case — a signed value like "-$228.05K" — within the
+         narrowest column this grid produces, at every breakpoint; verified
+         with a headless-browser measurement at a wide desktop viewport
+         (6 columns), a mid-width viewport (app.css's 2-column breakpoint),
+         and a 375px mobile viewport (app.css's 3-column/no-span breakpoint). */
+      .rpt-metric-grid .metric-card strong { font-size: 1.35rem; display: block; }
       .rpt-legend { font-size: 0.8rem; color: var(--muted, #6f7582); display: inline-flex; align-items: center; gap: 0.3rem; }
       .rpt-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-left: 0.6rem; }
       .rpt-swatch:first-child { margin-left: 0; }
