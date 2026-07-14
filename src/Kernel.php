@@ -478,6 +478,17 @@ final class Kernel
             return [Feed::class, ['format' => $segments[1] ?? '']];
         }
 
+        // Friendlier public alias for the same syndication feed, for calendar
+        // subscription links / marketing copy that reads better than /api/feed/*:
+        //   GET /feeds/public-events.ics   GET /feeds/public-events.rss   GET /feeds/public-events.json
+        // Not under /api, so it reaches here with segments[0] === 'feeds' directly
+        // (mirrors the /t/{token} pretty-URL pattern above). Root .htaccess,
+        // public/.htaccess, and public/router.php all forward this exact path
+        // to the API front controller instead of falling through to the SPA.
+        if ($segments[0] === 'feeds' && preg_match('/^public-events\.(ics|rss|json)$/', $segments[1] ?? '')) {
+            return [Feed::class, ['format' => $segments[1]]];
+        }
+
         // Venues + resources listing (lightweight; used by the calendar zone map and sidebar)
         // PATCH  /api/venues/{id}                      — update venue details (venue_admin only)
         // GET/POST/PATCH/DELETE /api/venues/{id}/resources[/{rid}] — manage rooms (venue_admin)

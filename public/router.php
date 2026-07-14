@@ -64,7 +64,7 @@ if ($path !== '/' && is_file($file)) {
     return false;
 }
 
-if (str_starts_with($path, '/api/') || $path === '/t' || str_starts_with($path, '/t/') || $path === '/assets/qr.svg' || $path === '/assets/qr.png') {
+if (str_starts_with($path, '/api/') || $path === '/t' || str_starts_with($path, '/t/') || $path === '/assets/qr.svg' || $path === '/assets/qr.png' || preg_match('#^/feeds/public-events\.(ics|rss|json)$#', $path)) {
     require __DIR__ . '/api/index.php';
     return true;
 }

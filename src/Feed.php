@@ -366,6 +366,7 @@ final class Feed extends BaseEndpoint
         return [
             'id'              => (int) $event['id'],
             'slug'            => (string) $event['slug'],
+            'venue'           => (string) ($event['venue_name'] ?? ''),
             'title'           => (string) $event['title'],
             'subtitle'        => $event['public_subtitle'] !== null && $event['public_subtitle'] !== ''
                 ? (string) $event['public_subtitle'] : null,

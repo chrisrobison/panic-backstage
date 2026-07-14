@@ -311,11 +311,18 @@
       </div>
 
       <div class="endpoint-group">
+        <div class="endpoint-group-label">Same feeds, friendlier URL (no /api prefix — for calendar-subscription links / marketing copy)</div>
+        <div class="endpoint"><span class="method">GET</span><code class="path">/feeds/public-events.ics</code><span class="desc">identical to /api/feed/events.ics</span></div>
+        <div class="endpoint"><span class="method">GET</span><code class="path">/feeds/public-events.rss</code><span class="desc">identical to /api/feed/events.rss</span></div>
+        <div class="endpoint"><span class="method">GET</span><code class="path">/feeds/public-events.json</code><span class="desc">identical to /api/feed/events.json</span></div>
+      </div>
+
+      <div class="endpoint-group">
         <div class="endpoint-group-label">Single event — full detail for one event's public page (no JWT)</div>
         <div class="endpoint"><span class="method">GET</span><code class="path">/public/events/{idOrSlug}</code><span class="desc">event + venue + lineup + latest approved flyer</span></div>
       </div>
 
-      <p>All four feed formats accept the same query params and apply the same <code>public_visibility</code>/canceled gating — they're different <em>renderings</em> of one underlying query (<code>Feed::fetchEvents()</code>), not different data sets.</p>
+      <p>All feed formats accept the same query params and apply the same <code>public_visibility</code>/canceled gating — they're different <em>renderings</em> of one underlying query (<code>Feed::fetchEvents()</code>), not different data sets. <code>public/upcoming.html</code> renders the JSON feed as a standalone, browsable "upcoming shows" page hosted directly on Backstage.</p>
 
       <h3 id="query-params">Query params (feed endpoints only)</h3>
       <table>

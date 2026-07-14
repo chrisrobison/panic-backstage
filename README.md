@@ -65,6 +65,12 @@ GET    /api/feed                             -> src/Feed.php  (discovery index)
 GET    /api/feed/events.ics                  -> src/Feed.php  (iCalendar)
 GET    /api/feed/events.rss                  -> src/Feed.php  (RSS 2.0)
 GET    /api/feed/events.json                 -> src/Feed.php  (structured JSON, CORS-open; powers mab-events-carousel)
+# Friendlier alias for the same feeds (calendar-subscription links, marketing
+# copy) — routed via root .htaccess / public/.htaccess / public/router.php,
+# not under /api:
+GET    /feeds/public-events.ics              -> src/Feed.php
+GET    /feeds/public-events.rss              -> src/Feed.php
+GET    /feeds/public-events.json             -> src/Feed.php
 ```
 
 Each endpoint receives a `Request`, returns a `Response`, and uses shared services such as `Database` and `Auth`. Most endpoints extend `BaseEndpoint`, which centralises the current-user lookup and the role/capability checks.
@@ -78,6 +84,7 @@ public/
   index.html              Main staff UI
   login.html              Login page
   event.html              Public event page shell
+  upcoming.html           Public "upcoming shows" listing page (public_visibility events)
   invite.html             Invite acceptance shell
   router.php              Local dev router for PHP built-in server
   .htaccess               Apache rewrite for /api
@@ -555,9 +562,26 @@ meant to be `fetch()`ed by browser JS running on a different origin (the
 venue's own marketing site) rather than consumed server-side like the other
 two formats.
 
+The same three formats are also reachable at `/feeds/public-events.{ics,rss,json}`
+— a friendlier URL (no `/api` prefix) for calendar-subscription links and
+marketing copy. Both paths hit the exact same `Feed::fetchEvents()` query;
+pick whichever reads better in context.
+
 See [`docs/public-calendar-api.md`](docs/public-calendar-api.md) for the full
 reference (response shapes, field-by-field notes, and how this relates to the
 single-event `/public/events/{idOrSlug}` endpoint and to ticket purchasing).
+
+### Upcoming shows page (`public/upcoming.html`)
+
+A standalone, publicly-accessible "what's on" page hosted directly on
+Backstage itself (`/upcoming.html`) — distinct from the embeddable
+`<mab-events-carousel>` widget below, which is meant for the venue's *other*
+marketing site. Fetches `GET /api/feed/events.json` client-side and renders
+every `public_visibility = 1`, non-canceled upcoming event (the same gate as
+the feeds above), grouped by month, with room and date-range filters, a
+"Details"/"Tickets" link per show, and links to subscribe via the ICS/RSS
+feeds. No build step, no dependency on the internal app bundle — self-contained
+HTML/CSS/JS so it stays fast and stylistically independent of the staff UI.
 
 ### Embeddable events widget (`<mab-events-carousel>`)
 

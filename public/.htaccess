@@ -9,6 +9,10 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^t/ api/index.php [L]
 
+# Friendly public calendar-feed alias (see src/Kernel.php routing comment):
+#   /feeds/public-events.ics|.rss|.json -> same Feed endpoint as /api/feed/*
+RewriteRule ^feeds/public-events\.(ics|rss|json)$ api/index.php [L]
+
 # /assets/qr.svg and /assets/qr.png are dynamically generated QR images.
 # SVG is used on ticket view pages; PNG is used in HTML emails (Gmail/Outlook
 # do not support SVG in <img> tags).

@@ -42,7 +42,11 @@ RewriteRule ^api(?:/(.*))?$ public/api/index.php [L,QSA]
 # the SPA catch-all below. Mirror the rule in public/.htaccess here so the
 # root-level rewrite engine sees it before falling through to index.html.
 RewriteRule ^t(?:/(.*))?$ public/api/index.php [L,QSA]
-RewriteRule ^(login|event|invite|scanner|sign)\.html$ public/$1.html [L]
+RewriteRule ^(login|event|upcoming|invite|scanner|sign)\.html$ public/$1.html [L]
+
+# Friendly public calendar-feed alias — see the matching rule in
+# public/.htaccess and the routing comment in src/Kernel.php.
+RewriteRule ^feeds/public-events\.(ics|rss|json)$ public/api/index.php [L,QSA]
 
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

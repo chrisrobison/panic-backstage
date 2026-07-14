@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `public` — Add upcoming-shows page and fix public-events.ics routing
 - **Fixed** `reports` — Fix real KPI card wrapping the previous fix missed
 - **Added** `reports` — Shorten Overview KPI card values to compact currency
 - **Fixed** `reports` — Stop KPI cards from overflowing, fix flaky ui-tests assertion

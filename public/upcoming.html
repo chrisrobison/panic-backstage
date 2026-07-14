@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Upcoming Shows — Mabuhay Gardens</title>
+  <meta name="description" content="Every show currently booked at Mabuhay Gardens, San Francisco — dates, doors, and tickets, updated as we lock them in.">
+  <meta name="robots" content="index, follow">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Upcoming Shows — Mabuhay Gardens">
+  <meta property="og:description" content="Every show currently booked at Mabuhay Gardens, San Francisco — dates, doors, and tickets, updated as we lock them in.">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/favicon/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/favicon/favicon-16x16.png">
+  <link rel="icon" href="./assets/favicon/favicon.ico" sizes="any">
+  <link rel="manifest" href="./assets/favicon/site.webmanifest">
+  <link rel="alternate" type="text/calendar" title="Mabuhay Gardens — upcoming shows" href="./feeds/public-events.ics">
+  <link rel="alternate" type="application/rss+xml" title="Mabuhay Gardens — upcoming shows" href="./feeds/public-events.rss">
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --raised: #15181d;
+      --stamp: #1c2027;
+      --ink: #f4f1e8;
+      --muted: #a39c92;
+      --accent: #c9b27e;
+      --hot: #e2432f;
+      --line: rgba(244, 241, 232, .14);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; }
+    .wrap { width: min(880px, calc(100% - 32px)); margin: 0 auto; }
+
+    /* ── Header / marquee ─────────────────────────────────────────────── */
+    header.hero { padding: 56px 0 36px; border-bottom: 1px solid var(--line); }
+    .eyebrow {
+      display: flex; align-items: center; gap: 10px;
+      font: 800 12px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      letter-spacing: .14em; text-transform: uppercase; color: var(--accent);
+      margin: 0 0 18px;
+    }
+    .eyebrow a { text-decoration: none; opacity: .75; }
+    .eyebrow a:hover { opacity: 1; text-decoration: underline; }
+    h1.marquee {
+      margin: 0;
+      font-family: "Arial Narrow", Arial, "Helvetica Neue", sans-serif;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+      font-size: clamp(40px, 8vw, 76px);
+      line-height: .96;
+    }
+    .bulbs { display: flex; gap: 9px; margin: 18px 0 6px; }
+    .bulbs span {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent); opacity: .35;
+      animation: bulb 2.6s ease-in-out infinite;
+    }
+    .bulbs span:nth-child(3n+1) { animation-delay: 0s; }
+    .bulbs span:nth-child(3n+2) { animation-delay: .3s; }
+    .bulbs span:nth-child(3n) { animation-delay: .6s; }
+    @keyframes bulb { 0%, 60%, 100% { opacity: .3; } 30% { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .bulbs span { animation: none; opacity: .75; } }
+    .dek { margin: 6px 0 0; max-width: 46ch; color: var(--muted); font-size: 17px; line-height: 1.5; }
+
+    /* ── Controls ─────────────────────────────────────────────────────── */
+    .controls {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px;
+      margin-top: 28px;
+    }
+    .pillset { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pill {
+      appearance: none; border: 1px solid var(--line); background: transparent; color: var(--muted);
+      font: 700 12.5px/1 Inter, sans-serif; letter-spacing: .02em;
+      padding: 8px 13px; border-radius: 999px; cursor: pointer;
+    }
+    .pill:hover { border-color: var(--accent); color: var(--ink); }
+    .pill[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #16130a; }
+    .pill:focus-visible, a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .subscribe { margin-left: auto; display: flex; gap: 14px; font-size: 13px; }
+    .subscribe a { color: var(--muted); text-decoration: none; border-bottom: 1px dotted currentColor; }
+    .subscribe a:hover { color: var(--accent); }
+
+    /* ── Perforated divider (signature) ──────────────────────────────── */
+    .perf {
+      height: 14px; margin: 0;
+      background-image: radial-gradient(circle, var(--bg) 3px, transparent 3.5px);
+      background-size: 18px 14px; background-position: left center; background-repeat: repeat-x;
+      border-top: 1px dashed var(--line);
+    }
+
+    /* ── Month groups ─────────────────────────────────────────────────── */
+    .month-group { margin-top: 8px; }
+    .month-stamp {
+      display: inline-block; margin: 30px 0 14px;
+      background: var(--stamp); color: var(--accent);
+      font-family: "Arial Narrow", Arial, "Helvetica Neue", sans-serif;
+      font-weight: 900; text-transform: uppercase; letter-spacing: .06em;
+      font-size: 14px; padding: 6px 12px; border-radius: 3px;
+      transform: rotate(-1deg);
+      box-shadow: 0 1px 0 rgba(0,0,0,.4);
+    }
+    ul.bill { list-style: none; margin: 0; padding: 0; }
+    li.show {
+      display: grid; grid-template-columns: 64px 18px 1fr auto;
+      align-items: center; gap: 4px 16px;
+      padding: 18px 0; border-bottom: 1px solid var(--line);
+    }
+    li.show:first-child { border-top: 1px solid var(--line); }
+    .datebox { text-align: center; }
+    .datebox .dow { display: block; font: 800 11px/1 ui-monospace, monospace; letter-spacing: .08em; color: var(--muted); margin-bottom: 4px; }
+    .datebox .dom { display: block; font-family: "Arial Narrow", Arial, sans-serif; font-weight: 900; font-size: 27px; line-height: 1; }
+    .tear {
+      align-self: stretch; width: 1px; margin: 0 auto;
+      background-image: linear-gradient(var(--line) 60%, transparent 0%);
+      background-size: 1px 8px; background-repeat: repeat-y;
+    }
+    .details h2 { margin: 0 0 4px; font-size: 19px; font-weight: 800; line-height: 1.25; }
+    .details h2 a { text-decoration: none; }
+    .details h2 a:hover { color: var(--accent); }
+    .meta { margin: 0; color: var(--muted); font-size: 13.5px; }
+    .meta .sep { margin: 0 6px; opacity: .5; }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .tag {
+      font: 700 10.5px/1 ui-monospace, monospace; letter-spacing: .04em; text-transform: uppercase;
+      color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px;
+    }
+    .cta {
+      justify-self: end; white-space: nowrap;
+      display: inline-block; text-decoration: none;
+      font: 800 12.5px/1 Inter, sans-serif; letter-spacing: .02em;
+      padding: 10px 16px; border-radius: 6px;
+      background: var(--accent); color: #16130a;
+      box-shadow: 0 2px 10px rgba(0,0,0,.35);
+    }
+    .cta:hover { background: #d8c290; }
+    .cta.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); box-shadow: none; }
+    .cta.ghost:hover { color: var(--ink); border-color: var(--accent); }
+
+    /* ── States ───────────────────────────────────────────────────────── */
+    .state { padding: 60px 0; text-align: center; color: var(--muted); }
+    .state strong { display: block; color: var(--ink); font-size: 20px; margin-bottom: 8px; }
+    .state button { margin-top: 14px; }
+    .skeleton { padding: 18px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 64px 18px 1fr auto; gap: 4px 16px; }
+    .skeleton .bar { height: 14px; border-radius: 4px; background: linear-gradient(90deg, var(--raised), #21262f, var(--raised)); background-size: 200% 100%; animation: shimmer 1.6s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) { .skeleton .bar { animation: none; } }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    footer {
+      margin-top: 48px; padding: 28px 0 60px; border-top: 1px solid var(--line);
+      display: flex; flex-wrap: wrap; gap: 10px 22px; justify-content: space-between; align-items: baseline;
+      color: var(--muted); font-size: 13px;
+    }
+    footer a { color: var(--muted); text-decoration: underline dotted; }
+    footer a:hover { color: var(--accent); }
+
+    @media (max-width: 680px) {
+      li.show { grid-template-columns: 50px 14px 1fr; }
+      .cta { grid-column: 2 / -1; justify-self: start; margin-top: 6px; }
+      .subscribe { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="hero">
+      <p class="eyebrow"><a href="https://panicbooking.com/">Mabuhay Gardens</a> <span aria-hidden="true">·</span> San Francisco, CA</p>
+      <h1 class="marquee">On the marquee</h1>
+      <div class="bulbs" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <p class="dek">Every show that's locked in and going up in lights — updated as we book them.</p>
+      <div class="controls">
+        <div class="pillset" id="room-filter" role="group" aria-label="Filter by room"></div>
+        <div class="pillset" id="range-filter" role="group" aria-label="Filter by date range"></div>
+        <nav class="subscribe" aria-label="Subscribe to this calendar">
+          <a href="./feeds/public-events.ics">＋ Add to calendar</a>
+          <a href="./feeds/public-events.rss">RSS</a>
+        </nav>
+      </div>
+    </header>
+
+    <div id="listing" aria-live="polite"></div>
+
+    <footer>
+      <span>© <span id="year"></span> Mabuhay Gardens. Times shown in venue local time.</span>
+      <span>Calendar feeds: <a href="./feeds/public-events.ics">iCal</a> · <a href="./feeds/public-events.rss">RSS</a> · <a href="./feeds/public-events.json">JSON</a></span>
+    </footer>
+  </main>
+
+  <script>
+  (function () {
+    'use strict';
+
+    var FEED_URL = './api/feed/events.json?limit=300';
+    var listingEl = document.getElementById('listing');
+    var roomFilterEl = document.getElementById('room-filter');
+    var rangeFilterEl = document.getElementById('range-filter');
+    var yearEl = document.getElementById('year');
+    if (yearEl) yearEl.textContent = new Date().getFullYear();
+
+    var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var RANGES = [
+      { key: 'all', label: 'All upcoming', days: null },
+      { key: 'week', label: 'This week', days: 7 },
+      { key: 'month', label: 'This month', days: 31 },
+    ];
+
+    var state = { events: [], room: 'all', range: 'all' };
+
+    function safeUrl(url) {
+      if (typeof url !== 'string' || !url) return '';
+      try {
+        var parsed = new URL(url, window.location.href);
+        return (parsed.protocol === 'http:' || parsed.protocol === 'https:') ? parsed.href : '';
+      } catch (e) { return ''; }
+    }
+
+    function esc(value) {
+      var div = document.createElement('div');
+      div.textContent = value == null ? '' : String(value);
+      return div.innerHTML;
+    }
+
+    // Shortens the venue's own long room names into something that reads
+    // well as a filter pill, without hardcoding an exhaustive list — any
+    // room name we don't recognize just passes through unchanged.
+    function roomLabel(name) {
+      if (!name) return 'Mabuhay Gardens';
+      if (/both rooms/i.test(name)) return 'Both Rooms';
+      if (/upstairs/i.test(name)) return 'Upstairs';
+      if (/^mabuhay gardens$/i.test(name)) return 'Main Room';
+      return name;
+    }
+
+    function monthKey(dateStr) { return dateStr.slice(0, 7); }
+    function monthLabel(dateStr) {
+      var parts = dateStr.split('-');
+      return MONTHS[parseInt(parts[1], 10) - 1] + " '" + parts[0].slice(2);
+    }
+
+    function fmtTime(value) {
+      if (!value) return '';
+      // Feed already formats times as "7:00 PM"; pass through as-is.
+      return value;
+    }
+
+    function metaLine(event) {
+      var bits = [];
+      if (event.doors_time || event.show_time) {
+        var t = [];
+        if (event.doors_time) t.push('Doors ' + fmtTime(event.doors_time));
+        if (event.show_time) t.push('Show ' + fmtTime(event.show_time));
+        bits.push(t.join(' · '));
+      }
+      if (event.age_restriction) bits.push(event.age_restriction);
+      bits.push(roomLabel(event.venue));
+      return bits;
+    }
+
+    function ctaFor(event) {
+      var detailUrl = './event.html?id=' + encodeURIComponent(event.id);
+      var ticket = event.ticket || { mode: 'none' };
+      if (ticket.mode === 'external' && safeUrl(ticket.url)) {
+        return '<a class="cta" href="' + esc(safeUrl(ticket.url)) + '" target="_blank" rel="noopener">Tickets ↗</a>';
+      }
+      if (ticket.mode === 'internal') {
+        return '<a class="cta" href="' + esc(detailUrl) + '">Tickets</a>';
+      }
+      return '<a class="cta ghost" href="' + esc(detailUrl) + '">Details</a>';
+    }
+
+    function renderSkeleton() {
+      var html = '';
+      for (var i = 0; i < 5; i++) {
+        html += '<div class="skeleton"><div class="bar" style="height:34px"></div><div></div>' +
+          '<div><div class="bar" style="width:60%;margin-bottom:8px"></div><div class="bar" style="width:40%;height:11px"></div></div>' +
+          '<div class="bar" style="width:70px;height:34px;border-radius:6px"></div></div>';
+      }
+      listingEl.innerHTML = html;
+    }
+
+    function renderError() {
+      listingEl.innerHTML = '<div class="state"><strong>Couldn’t load the marquee.</strong>' +
+        'Something interrupted the feed on our end. <button type="button" class="cta ghost" id="retry-btn">Try again</button></div>';
+      var btn = document.getElementById('retry-btn');
+      if (btn) btn.addEventListener('click', refresh);
+    }
+
+    function renderEmpty() {
+      listingEl.innerHTML = '<div class="state"><strong>Nothing’s booked for this view yet.</strong>' +
+        'We’re always adding to the bill — check back soon, or widen the filter above.</div>';
+    }
+
+    function filteredEvents() {
+      var now = new Date();
+      var cutoff = null;
+      var range = RANGES.filter(function (r) { return r.key === state.range; })[0];
+      if (range && range.days) {
+        cutoff = new Date(now.getTime() + range.days * 86400000);
+      }
+      return state.events.filter(function (event) {
+        if (state.room !== 'all' && event.venue !== state.room) return false;
+        if (cutoff) {
+          var d = new Date(event.date + 'T23:59:59');
+          if (d > cutoff) return false;
+        }
+        return true;
+      });
+    }
+
+    function render() {
+      var events = filteredEvents();
+      if (!events.length) { renderEmpty(); return; }
+
+      var html = '';
+      var lastMonth = null;
+      events.forEach(function (event) {
+        var mKey = monthKey(event.date);
+        if (mKey !== lastMonth) {
+          if (lastMonth !== null) html += '</ul>';
+          html += '<div class="month-group"><div class="month-stamp">' + esc(monthLabel(event.date)) + '</div><div class="perf" aria-hidden="true"></div><ul class="bill">';
+          lastMonth = mKey;
+        }
+        var meta = metaLine(event);
+        html += '<li class="show">' +
+          '<div class="datebox"><span class="dow">' + esc(event.weekday) + '</span><span class="dom">' + esc(event.day) + '</span></div>' +
+          '<div class="tear" aria-hidden="true"></div>' +
+          '<div class="details">' +
+            '<h2><a href="./event.html?id=' + encodeURIComponent(event.id) + '">' + esc(event.title) + '</a></h2>' +
+            '<p class="meta">' + meta.map(esc).join(' <span class="sep">·</span> ') + '</p>' +
+            (event.tags && event.tags.length ? '<div class="tags">' + event.tags.map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') + '</div>' : '') +
+          '</div>' +
+          ctaFor(event) +
+          '</li>';
+      });
+      html += '</ul></div>';
+      listingEl.innerHTML = html;
+    }
+
+    function renderFilters() {
+      var rooms = ['all'].concat(
+        Array.from(new Set(state.events.map(function (e) { return e.venue; }).filter(Boolean)))
+      );
+      roomFilterEl.innerHTML = rooms.map(function (room) {
+        var label = room === 'all' ? 'All rooms' : roomLabel(room);
+        var pressed = state.room === room;
+        return '<button type="button" class="pill" data-room="' + esc(room) + '" aria-pressed="' + pressed + '">' + esc(label) + '</button>';
+      }).join('');
+      rangeFilterEl.innerHTML = RANGES.map(function (r) {
+        var pressed = state.range === r.key;
+        return '<button type="button" class="pill" data-range="' + esc(r.key) + '" aria-pressed="' + pressed + '">' + esc(r.label) + '</button>';
+      }).join('');
+
+      Array.prototype.forEach.call(roomFilterEl.querySelectorAll('[data-room]'), function (btn) {
+        btn.addEventListener('click', function () { state.room = btn.getAttribute('data-room'); renderFilters(); render(); });
+      });
+      Array.prototype.forEach.call(rangeFilterEl.querySelectorAll('[data-range]'), function (btn) {
+        btn.addEventListener('click', function () { state.range = btn.getAttribute('data-range'); renderFilters(); render(); });
+      });
+    }
+
+    function injectStructuredData(events) {
+      var items = events.slice(0, 30).map(function (event) {
+        var ld = {
+          '@type': 'Event',
+          'name': event.title,
+          'url': event.url,
+          'eventStatus': 'https://schema.org/EventScheduled',
+          'location': {
+            '@type': 'MusicVenue',
+            'name': roomLabel(event.venue),
+            'address': { '@type': 'PostalAddress', 'addressLocality': 'San Francisco', 'addressRegion': 'CA' },
+          },
+        };
+        if (event.show_time) {
+          ld.startDate = event.date;
+        } else {
+          ld.startDate = event.date;
+        }
+        if (event.image) ld.image = event.image;
+        if (event.ticket && event.ticket.mode === 'external' && event.ticket.url) {
+          ld.offers = { '@type': 'Offer', 'url': event.ticket.url, 'availability': 'https://schema.org/InStock' };
+        }
+        return ld;
+      });
+      var script = document.createElement('script');
+      script.type = 'application/ld+json';
+      script.textContent = JSON.stringify({ '@context': 'https://schema.org', '@graph': items });
+      document.head.appendChild(script);
+    }
+
+    function refresh() {
+      renderSkeleton();
+      fetch(FEED_URL, { headers: { Accept: 'application/json' } })
+        .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+        .then(function (payload) {
+          state.events = Array.isArray(payload.events) ? payload.events : [];
+          renderFilters();
+          render();
+          if (state.events.length) injectStructuredData(state.events);
+        })
+        .catch(renderError);
+    }
+
+    refresh();
+  })();
+  </script>
+</body>
+</html>

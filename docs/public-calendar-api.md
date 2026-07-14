@@ -36,13 +36,26 @@ GET  /api/feed/events.ics      iCalendar (Google/Apple Calendar subscription)
 GET  /api/feed/events.rss      RSS 2.0 (news aggregators, "what's on" widgets)
 GET  /api/feed/events.json     structured JSON (embeddable widgets; CORS-open)
 
+# Same three formats, friendlier URL (no /api prefix) — for calendar
+# subscription links / marketing copy. Identical data + gating; just a nicer
+# path, routed to the same Feed endpoint (see src/Kernel.php).
+GET  /feeds/public-events.ics
+GET  /feeds/public-events.rss
+GET  /feeds/public-events.json
+
 # Single event — full detail for one event's public page (no JWT)
 GET  /public/events/{idOrSlug} event + venue + lineup + latest approved flyer
 ```
 
-All four feed formats accept the same query params and apply the same
+All feed formats accept the same query params and apply the same
 `public_visibility`/canceled gating — they're different *renderings* of one
 underlying query (`Feed::fetchEvents()`), not different data sets.
+
+**`public/upcoming.html`** is a standalone public page (no auth, no build
+step) that renders this same `events.json` feed as a browsable "upcoming
+shows" listing hosted directly on Backstage, grouped by month with room/date
+filters — distinct from `<mab-events-carousel>` below, which is meant to be
+embedded on a *different* site.
 
 ### Query params (feed endpoints only)
 

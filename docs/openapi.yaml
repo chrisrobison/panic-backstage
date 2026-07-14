@@ -9041,6 +9041,9 @@ components:
           type: integer
         slug:
           type: string
+        venue:
+          type: string
+          description: Room/venue name (venues.name) this event belongs to — lets a multi-room feed consumer group or filter by room.
         title:
           type: string
         subtitle:
@@ -22874,7 +22877,10 @@ paths:
         Public — no authentication. Only events with public_visibility = 1 are ever exposed (the
         same gate PublicEvents uses); canceled events are excluded. `upcoming` is the count of
         events matching the current query params (venue/days/past/limit) — the same filter set
-        accepted by the .ics/.rss formats below.
+        accepted by the .ics/.rss formats below. Each of the three feed formats is also reachable
+        under a friendlier, non-/api path — /feeds/public-events.ics, /feeds/public-events.rss,
+        /feeds/public-events.json — routed to this same Feed endpoint (see src/Kernel.php); use
+        whichever URL reads better in context, the data and gating are identical.
       tags:
         - Feeds
       security: []
