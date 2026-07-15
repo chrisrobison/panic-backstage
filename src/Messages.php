@@ -320,14 +320,14 @@ final class Messages extends BaseEndpoint
 
         if ($this->isVenueAdmin()) {
             $rows = $this->db->all(
-                "SELECT id, name, email, role FROM users WHERE id <> ? AND access_status = 'active' ORDER BY name",
+                "SELECT id, name, email, role FROM users WHERE id <> ? AND access_status = 'active' AND is_hidden = 0 ORDER BY name",
                 [$me]
             );
             return array_map([$this, 'normalizeRecipient'], $rows);
         }
 
         $byId  = [];
-        $admins = $this->db->all("SELECT id, name, email, role FROM users WHERE role = 'venue_admin' AND access_status = 'active'");
+        $admins = $this->db->all("SELECT id, name, email, role FROM users WHERE role = 'venue_admin' AND access_status = 'active' AND is_hidden = 0");
         foreach (array_merge($this->accessibleUsers(), $admins) as $u) {
             $uid = (int) $u['id'];
             if ($uid === $me) {

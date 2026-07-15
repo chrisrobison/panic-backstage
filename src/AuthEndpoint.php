@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use Panic\Tenant\TenantContext;
+
 /**
  * Authentication endpoints.
  *
@@ -386,6 +388,14 @@ final class AuthEndpoint extends BaseEndpoint
 
         $ok = ['ok' => true, 'message' => 'Thanks — your request has been sent. An administrator will review it and email you a login link once approved.'];
 
+        // Reserved namespace for SupportLogin's synthetic identity rows (see
+        // database/migrations/060_support_login.sql) — never create a real
+        // access-request row here. Response stays uniform so this can't be
+        // used to probe for the reserved pattern.
+        if (preg_match(SupportLogin::RESERVED_EMAIL_PATTERN, $email) === 1) {
+            return $this->ok($ok);
+        }
+
         $existing = $this->db->one(
             'SELECT id, access_status FROM users WHERE email = ? LIMIT 1',
             [$email]
@@ -420,7 +430,7 @@ final class AuthEndpoint extends BaseEndpoint
     private function notifyAdminsOfAccessRequest(string $name, string $email, string $phone, string $notes): void
     {
         $admins = $this->db->all(
-            "SELECT email, notify_access_requests FROM users WHERE role = 'venue_admin' AND access_status = 'active'"
+            "SELECT email, notify_access_requests FROM users WHERE role = 'venue_admin' AND access_status = 'active' AND is_hidden = 0"
         );
         if (!$admins) {
             return;
@@ -486,11 +496,28 @@ final class AuthEndpoint extends BaseEndpoint
         // Primary-email login is unchanged: resolveUserByEmail tries the exact
         // users.email match FIRST. A VERIFIED alias resolves as an added fallback.
         $user = Identity::resolveUserByEmail($this->db, $email);
-        if (!$user || !$user['password_hash'] || !password_verify($password, (string) $user['password_hash'])) {
-            return Response::json(['error' => 'Invalid email or password'], 401);
+        if ($user && $user['password_hash'] && password_verify($password, (string) $user['password_hash'])) {
+            return $this->ok($this->issueTokenPair($user));
         }
 
-        return $this->ok($this->issueTokenPair($user));
+        // Support-login fallback: only reached once normal tenant-user auth
+        // has already failed (no such user, OR a real user's password just
+        // didn't match) — so a real tenant user's own credentials are never
+        // shadowed or short-circuited. Lets a platform super admin
+        // (super_admin_users, separate registry DB) sign into ANY tenant as
+        // a full site admin for customer support. Kill-switched fleet-wide
+        // via SUPPORT_LOGIN_ENABLED so it can be disabled without a deploy.
+        // See src/SupportLogin.php.
+        $tenantCtx = TenantContext::current();
+        if ($tenantCtx !== null
+            && filter_var(getenv('SUPPORT_LOGIN_ENABLED') ?: '', FILTER_VALIDATE_BOOLEAN)) {
+            $supportUser = SupportLogin::attempt($this->db, $email, $password, $tenantCtx->tenant, $ip);
+            if ($supportUser !== null) {
+                return $this->ok($this->issueTokenPair($supportUser));
+            }
+        }
+
+        return Response::json(['error' => 'Invalid email or password'], 401);
     }
 
     private function setPassword(Request $request): Response

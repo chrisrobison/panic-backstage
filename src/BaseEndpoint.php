@@ -242,7 +242,7 @@ abstract class BaseEndpoint implements Endpoint
     protected function assignmentUsersForEvent(int $eventId): array
     {
         if ($this->isVenueAdmin()) {
-            return $this->db->all('SELECT id, name, email, role FROM users ORDER BY name');
+            return $this->db->all('SELECT id, name, email, role FROM users WHERE is_hidden = 0 ORDER BY name');
         }
 
         return $this->db->all(
@@ -259,7 +259,7 @@ abstract class BaseEndpoint implements Endpoint
     protected function accessibleUsers(): array
     {
         if ($this->isVenueAdmin()) {
-            return $this->db->all('SELECT id, name, email, role FROM users ORDER BY name');
+            return $this->db->all('SELECT id, name, email, role FROM users WHERE is_hidden = 0 ORDER BY name');
         }
 
         return $this->db->all(

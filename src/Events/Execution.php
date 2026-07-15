@@ -275,7 +275,7 @@ final class Execution extends BaseEndpoint
     {
         // Get venue admins who have notify_event_updates = 1
         $admins = $this->db->all(
-            "SELECT email, name FROM users WHERE role='venue_admin' AND notify_event_updates=1 AND access_status='active'"
+            "SELECT email, name FROM users WHERE role='venue_admin' AND notify_event_updates=1 AND access_status='active' AND is_hidden=0"
         );
         $event = $this->db->one('SELECT title FROM events WHERE id=?', [$eventId]);
         $eventTitle = $event['title'] ?? 'Event #' . $eventId;

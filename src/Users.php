@@ -52,6 +52,7 @@ final class Users extends BaseEndpoint
                     (SELECT COUNT(*) FROM events e WHERE e.owner_user_id = u.id) AS owned_event_count,
                     (SELECT COUNT(*) FROM event_collaborators c WHERE c.user_id = u.id) AS collaborator_event_count
              FROM users u
+             WHERE u.is_hidden = 0
              ORDER BY (u.access_status = 'requested') DESC, u.name"
         );
         return $this->ok([

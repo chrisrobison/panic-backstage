@@ -302,7 +302,7 @@ final class CrmProfiles extends BaseEndpoint
         // Send summary notification email to venue admins (requires $root for Mailer)
         if ($root !== null) {
             $admins = $db->all(
-                "SELECT email, name FROM users WHERE role='venue_admin' AND notify_event_updates=1 AND access_status='active'"
+                "SELECT email, name FROM users WHERE role='venue_admin' AND notify_event_updates=1 AND access_status='active' AND is_hidden=0"
             );
             $profileRow = $db->one('SELECT name FROM client_profiles WHERE id=?', [$profileId]);
             $profileName = $profileRow['name'] ?? 'client';
@@ -335,7 +335,7 @@ final class CrmProfiles extends BaseEndpoint
                     u.email assignee_email, u.name assignee_name
              FROM client_notes cn
              JOIN client_profiles cp ON cp.id = cn.profile_id
-             LEFT JOIN users u ON u.role = 'venue_admin' AND u.access_status = 'active'
+             LEFT JOIN users u ON u.role = 'venue_admin' AND u.access_status = 'active' AND u.is_hidden = 0
              WHERE cn.is_done = 0
                AND cn.type IN ('task','followup')
                AND cn.due_date BETWEEN DATE_SUB(CURDATE(), INTERVAL 7 DAY) AND CURDATE()
