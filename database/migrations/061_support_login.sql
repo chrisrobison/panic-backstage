@@ -1,4 +1,4 @@
--- 060_support_login.sql
+-- 061_support_login.sql
 --
 -- Lets a platform super admin (super_admin_users, in the separate super-admin
 -- registry DB) log into any tenant as a full site admin for customer
