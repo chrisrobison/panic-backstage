@@ -11,7 +11,6 @@ a new empty [Unreleased] block above it.
 
 ## [Unreleased]
 - **Added** `contracts` — Allow attaching an already-signed contract as an asset
-- **Added** `contracts` — Allow attaching an already-signed contract as an asset
 - **Added** `public` — Add upcoming-shows page and fix public-events.ics routing
 - **Fixed** `reports` — Fix real KPI card wrapping the previous fix missed
 - **Added** `reports` — Shorten Overview KPI card values to compact currency
