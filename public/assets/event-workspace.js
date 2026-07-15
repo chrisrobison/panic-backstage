@@ -565,10 +565,15 @@ class EventWorkspace extends PanicElement {
     const event = data.event;
     const isPrivate = event.event_type === 'private_event';
     const tabs = ['overview', 'details', 'scheduling', 'assets', 'tasks', ...(isPrivate ? [] : ['lineup']), 'schedule', 'staffing', 'vendors', 'guest-list', 'open-items', 'execution', 'activity'];
-    // Ticketing is pinned right after Details (before Assets/Scheduling/etc.)
-    // rather than grouped with the other trailing conditional tabs below.
-    if (can(data, 'manage_ticketing') && !isPrivate) tabs.splice(2, 0, 'ticketing');
-    if (can(data, 'view_contracts')) tabs.splice(tabs.length - 1, 0, 'contracts');
+    // Contracts and Ticketing are pinned right after Details (before
+    // Assets/Scheduling/etc.) rather than grouped with the other trailing
+    // conditional tabs below. Contracts goes first, immediately after
+    // Details; Ticketing (if present) follows it. Tracking the insertion
+    // point in a variable (rather than a fixed index) keeps this correct
+    // regardless of which of the two tabs the current user can see.
+    let afterDetails = tabs.indexOf('details') + 1;
+    if (can(data, 'view_contracts')) tabs.splice(afterDetails++, 0, 'contracts');
+    if (can(data, 'manage_ticketing') && !isPrivate) tabs.splice(afterDetails++, 0, 'ticketing');
     if (can(data, 'manage_invites')) tabs.splice(tabs.length - 1, 0, 'invites');
     if (can(data, 'manage_payments')) tabs.splice(tabs.length - 1, 0, 'payments');
     if (can(data, 'view_settlement') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'settlement');
