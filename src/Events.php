@@ -98,18 +98,24 @@ final class Events extends BaseEndpoint
             $where[] = 'e.date <= ?';
             $params[] = $request->query('end_date');
         }
-        $sql = "SELECT e.*, u.name owner_name,
+        $sql = "SELECT e.*, u.name owner_name, v.name venue_name, v.city venue_city, v.state venue_state, r.capacity resource_capacity,
                   (SELECT title FROM event_blockers b WHERE b.event_id = e.id AND b.status IN ('open','waiting') ORDER BY due_date, id LIMIT 1) primary_blocker,
                   (SELECT COUNT(*) FROM event_tasks t WHERE t.event_id = e.id AND t.status NOT IN ('done','canceled')) incomplete_tasks,
                   (SELECT COUNT(*) FROM event_blockers b WHERE b.event_id = e.id AND b.status IN ('open','waiting')) open_items,
-                  (SELECT COUNT(*) FROM event_assets a WHERE a.event_id = e.id AND a.asset_type = 'flyer' AND a.approval_status = 'approved') approved_flyers
-                FROM events e LEFT JOIN users u ON u.id = e.owner_user_id";
+                  (SELECT COUNT(*) FROM event_assets a WHERE a.event_id = e.id AND a.asset_type = 'flyer' AND a.approval_status = 'approved') approved_flyers,
+                  (SELECT file_path FROM event_assets a WHERE a.event_id = e.id AND a.asset_type IN ('flyer','poster') AND a.approval_status = 'approved' ORDER BY created_at DESC LIMIT 1) flyer_path
+                FROM events e
+                LEFT JOIN users u ON u.id = e.owner_user_id
+                LEFT JOIN venues v ON v.id = e.venue_id
+                LEFT JOIN resources r ON r.id = e.resource_id";
         if ($where) {
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
         $sql .= ' ORDER BY e.date DESC, e.show_time DESC LIMIT 250';
-        $events = array_map(fn ($event) => $event + ['capabilities' => $this->eventCapabilities((int) $event['id'])], $this->db->all($sql, $params));
-        return $this->ok([
+        $events = $this->db->all($sql, $params);
+        $events = $this->attachListExtras($events);
+
+        $result = [
             'events' => $events,
             'users' => $this->accessibleUsers(),
             'venues' => $this->db->all('SELECT * FROM venues ORDER BY name'),
@@ -120,7 +126,145 @@ final class Events extends BaseEndpoint
                 'end_date' => $request->query('end_date'),
             ],
             'capabilities' => $this->globalCapabilities(),
-        ]);
+        ];
+
+        // Opt-in: the "Upcoming" card view needs a stats summary of the
+        // currently-filtered set (tickets sold, est. gross revenue, avg
+        // capacity); the plain List/Dashboard/Calendar callers of this same
+        // endpoint don't, so skip the extra work for them.
+        if ($request->query('with_stats') === '1') {
+            $result['stats'] = $this->upcomingStats($events);
+        }
+
+        return $this->ok($result);
+    }
+
+    /**
+     * Enrich raw event rows with the per-event fields the card-based
+     * "Upcoming" view needs (and that other list consumers simply ignore):
+     * support-act names (from the lineup, batched to avoid N+1 queries),
+     * ticket sales figures, and a derived on-sale/low/sold-out/free state.
+     *
+     * @param array<int,array<string,mixed>> $events
+     * @return array<int,array<string,mixed>>
+     */
+    private function attachListExtras(array $events): array
+    {
+        $ids = array_column($events, 'id');
+        $lineupByEvent = [];
+        $ticketsByEvent = [];
+        if ($ids) {
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            foreach ($this->db->all(
+                "SELECT event_id, display_name FROM event_lineup WHERE event_id IN ($placeholders) AND status != 'canceled' ORDER BY event_id, billing_order, set_time",
+                $ids
+            ) as $row) {
+                $lineupByEvent[(int) $row['event_id']][] = $row['display_name'];
+            }
+            foreach ($this->db->all(
+                "SELECT event_id, price_cents, quantity_sold FROM ticket_types WHERE event_id IN ($placeholders)",
+                $ids
+            ) as $row) {
+                $ticketsByEvent[(int) $row['event_id']][] = $row;
+            }
+        }
+
+        return array_map(function ($event) use ($lineupByEvent, $ticketsByEvent) {
+            $id = (int) $event['id'];
+            $event['capabilities'] = $this->eventCapabilities($id);
+
+            // events.capacity is the source of truth when set (e.g. a private
+            // buyout smaller than the room); fall back to the booked room's
+            // capacity otherwise.
+            $capacity = $event['capacity'] !== null && $event['capacity'] !== ''
+                ? (int) $event['capacity']
+                : (isset($event['resource_capacity']) && $event['resource_capacity'] !== null ? (int) $event['resource_capacity'] : null);
+            $event['capacity'] = $capacity;
+            unset($event['resource_capacity']);
+
+            $tiers = $ticketsByEvent[$id] ?? [];
+            $ticketsSoldRaw = array_sum(array_column($tiers, 'quantity_sold'));
+            $revenueCents = array_sum(array_map(fn ($t) => (int) $t['price_cents'] * (int) $t['quantity_sold'], $tiers));
+            $priceCents = array_column($tiers, 'price_cents');
+
+            // Tickets-sold is only meaningful when we're the ones selling —
+            // external ticketing (Eventbrite, etc.) has no local sales count.
+            $event['tickets_sold'] = $event['ticketing_mode'] === 'internal' ? (int) $ticketsSoldRaw : null;
+            $event['ticket_revenue'] = $event['ticketing_mode'] === 'internal' ? round($revenueCents / 100, 2) : null;
+            $event['price_min'] = $priceCents ? round(min($priceCents) / 100, 2) : null;
+            $event['price_max'] = $priceCents ? round(max($priceCents) / 100, 2) : null;
+
+            // Support-act line for the list subtitle ("with X, Y") — the
+            // headliner (lowest billing_order) is dropped since the event
+            // title already carries that name.
+            $names = $lineupByEvent[$id] ?? [];
+            $event['support_acts'] = count($names) > 1 ? array_slice($names, 1) : [];
+
+            $event['sales_state'] = $this->salesState($event, count($tiers));
+            return $event;
+        }, $events);
+    }
+
+    /** Statuses public/announced enough to show a ticket sales state badge. */
+    private const SALES_STATE_STATUSES = ['ready_to_announce', 'published', 'advanced', 'completed', 'settled'];
+
+    /**
+     * Derive the ticket-sales badge for the Upcoming list: 'free', 'on_sale',
+     * 'low_tickets', 'sold_out', or null (no badge — event isn't announced
+     * yet, or "canceled" is shown via event.status directly instead).
+     */
+    private function salesState(array $event, int $ticketTierCount): ?string
+    {
+        if (!in_array($event['status'], self::SALES_STATE_STATUSES, true)) {
+            return null;
+        }
+        $isFree = ($ticketTierCount > 0 && $event['price_max'] !== null && (float) $event['price_max'] === 0.0)
+            || ($ticketTierCount === 0 && $event['ticketing_mode'] === 'external' && empty($event['ticket_url']) && (float) ($event['ticket_price'] ?? 0) === 0.0);
+        if ($isFree) {
+            return 'free';
+        }
+        $sold = $event['tickets_sold'];
+        $capacity = $event['capacity'];
+        if ($sold !== null && $capacity) {
+            if ($sold >= $capacity) {
+                return 'sold_out';
+            }
+            if ($sold / $capacity >= 0.75) {
+                return 'low_tickets';
+            }
+        }
+        return 'on_sale';
+    }
+
+    /**
+     * Summary stats for the Upcoming view's footer bar, computed over the
+     * (already date/status/type-filtered) event set: how many shows, tickets
+     * sold, an estimated gross (from ticket sales, not the full settlement
+     * ledger — hence "Est."), and average capacity utilization.
+     *
+     * @param array<int,array<string,mixed>> $events
+     */
+    private function upcomingStats(array $events): array
+    {
+        $active = array_values(array_filter($events, fn ($e) => $e['status'] !== 'canceled'));
+        $ticketsSold = 0;
+        $revenue = 0.0;
+        $capacityPcts = [];
+        foreach ($active as $event) {
+            if ($event['tickets_sold'] !== null) {
+                $ticketsSold += $event['tickets_sold'];
+                $revenue += (float) ($event['ticket_revenue'] ?? 0);
+                if ($event['capacity']) {
+                    $capacityPcts[] = min(100, ($event['tickets_sold'] / $event['capacity']) * 100);
+                }
+            }
+        }
+        return [
+            'upcoming_count' => count($active),
+            'tickets_sold' => $ticketsSold,
+            'gross_revenue' => round($revenue, 2),
+            'avg_capacity_pct' => $capacityPcts ? (int) round(array_sum($capacityPcts) / count($capacityPcts)) : 0,
+        ];
     }
 
     private function show(int $id): Response

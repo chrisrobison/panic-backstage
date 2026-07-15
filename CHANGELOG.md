@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Add Events ▸ Upcoming card view with ticket-sales filters
 - **Fixed** `portal` — Stop Copy button's onclick JS leaking into the DOM
 - **Fixed** `contracts` — Stop legacy contract_url junk text from faking "on file"
 - **Fixed** `contracts` — Stop nextAction claiming a merely-sent contract is "on file"

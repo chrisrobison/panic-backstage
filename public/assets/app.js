@@ -19,6 +19,7 @@ import './campaigns.js';
 import './mailing-lists.js';
 import './listmaster.js';
 import './events.js';
+import './event-upcoming.js';
 import './event-wizard.js';
 import './leads.js';
 import './asset-library.js';
@@ -109,6 +110,7 @@ class AppShell extends PanicElement {
           <button class="nav-parent" type="button" data-group-toggle="events" aria-expanded="false" title="Events"><i class="fa-solid fa-ticket" aria-hidden="true"></i><span class="nav-parent-label">Events</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
           <div class="nav-children">
             <a data-nav="events" href="#events" title="Event list"><i class="fa-solid fa-list" aria-hidden="true"></i>List</a>
+            <a data-nav="upcoming" href="#upcoming" title="Upcoming Events"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i>Upcoming</a>
             <a data-nav="calendar" href="#calendar" title="Calendar"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Calendar</a>
             <a data-nav="pipeline" href="#pipeline" title="Pipeline"><i class="fa-solid fa-table-columns" aria-hidden="true"></i>Pipeline</a>
             <a data-nav="asset-library" href="#asset-library" title="Asset Library"><i class="fa-solid fa-images" aria-hidden="true"></i>Assets</a>
@@ -382,6 +384,7 @@ class AppShell extends PanicElement {
     if (route === 'calendar')    return this.mount(outlet, 'pb-event-calendar');
     if (route === 'pipeline')    return this.mount(outlet, 'pb-pipeline-board');
     if (route === 'events')      return this.mount(outlet, 'pb-events-list');
+    if (route === 'upcoming')    return this.mount(outlet, 'pb-events-upcoming');
     if (route === 'asset-library') return this.mount(outlet, 'pb-asset-library');
     if (route === 'leads')       return this.mount(outlet, 'pb-leads-page');
     if (route === 'contacts')    return this.mount(outlet, 'pb-contacts-page');
