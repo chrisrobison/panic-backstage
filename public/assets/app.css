@@ -1340,6 +1340,29 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
 .asset-icon-tile:focus-visible { outline: 2px solid var(--accent, #4c6fff); outline-offset: 2px; }
 .asset-card-event { font-size: 12px; }
 .asset-card-event a { text-decoration: none; }
+
+/* Contracts tab: "which asset is the signed contract?" picker — one
+   selectable row per event asset (thumbnail, title, type), scrollable list
+   modeled on .mlist-add-contacts-results. */
+.contract-asset-picker {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 2px;
+}
+.contract-asset-row { width: 100%; padding: 7px 8px; border-radius: 6px; gap: 10px; }
+.contract-asset-row:hover { background: var(--bg); }
+.contract-asset-row input[type="radio"] { flex-shrink: 0; }
+.contract-asset-thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 5px; flex-shrink: 0; }
+.contract-asset-thumb.asset-thumb { width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+.contract-asset-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.contract-asset-info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contract-uploaded-row td { background: color-mix(in srgb, var(--accent, #2563eb) 4%, transparent); }
 .list-controls { display: flex; align-items: center; gap: 14px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
 .checkbox-inline { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; user-select: none; }
 .checkbox-inline input { width: 16px; height: 16px; cursor: pointer; }

@@ -1,4 +1,4 @@
-import { esc, titleCase, publish, api, apiUrl, getToken, formData, badge, option, select, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
+import { esc, titleCase, publish, api, apiUrl, getToken, formData, badge, option, select, helpLink, can, table, PanicElement, addToggle, bindAddToggle, assetUrl, $, $$ } from './core.js';
 
 
 // ── Contracts (admin) ─────────────────────────────────────────────────────────
@@ -167,13 +167,29 @@ async function downloadContractPdf(contractId, title) {
 }
 
 
+// One selectable row in the "which asset is the signed contract?" picker.
+function contractAssetPickerRow(asset) {
+  const isImage = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename || '');
+  return `<label class="checkbox-row contract-asset-row">
+    <input type="radio" name="asset_id" value="${esc(asset.id)}" required>
+    ${isImage ? `<img class="contract-asset-thumb" src="${esc(assetUrl(asset.file_path))}" alt="">` : '<span class="contract-asset-thumb asset-thumb">PDF</span>'}
+    <span class="contract-asset-info"><strong>${esc(asset.title)}</strong><span class="muted small">${esc(titleCase(asset.asset_type))}</span></span>
+  </label>`;
+}
+
 // Event workspace tab: list + create contracts for one event.
 class EventContracts extends HTMLElement {
   set data(value) { this.eventData = value; this.load(); }
 
   async load() {
     try {
-      this.list = await api(`/events/${this.eventData.event.id}/contracts`);
+      const manage = can(this.eventData, 'manage_contracts');
+      const [list, assets] = await Promise.all([
+        api(`/events/${this.eventData.event.id}/contracts`),
+        manage ? api(`/events/${this.eventData.event.id}/assets`) : Promise.resolve({ assets: [] }),
+      ]);
+      this.list = list;
+      this.assets = assets.assets || [];
       this.render();
     } catch (error) {
       this.innerHTML = `<section class="panel padded"><p class="error-text">${esc(error.message)}</p></section>`;
@@ -184,41 +200,99 @@ class EventContracts extends HTMLElement {
     const manage = can(this.eventData, 'manage_contracts');
     const contracts = this.list.contracts || [];
     const templates = this.list.templates || [];
-    this.innerHTML = `<section class="panel">
-      <div class="section-head padded"><h2>Contracts ${helpLink('contracts', 'Contracts')}</h2><div class="section-head-actions"><span class="muted">${contracts.length} total</span>${addToggle('Create contract', manage)}</div></div>
-      <table class="data-table contracts-table">
-        <thead><tr><th>Title</th><th>Type</th><th>Counterparty</th><th>Status</th><th>Updated</th><th></th></tr></thead>
-        <tbody>${contracts.map((c) => `<tr class="clickable-row" data-contract-href="#contract-${esc(c.id)}">
-          <td><strong>${esc(c.title)}</strong></td>
+    // Signed-contract assets first (the expected pick), then everything else —
+    // a user may have uploaded the signed PDF under an older asset type before
+    // this picker existed.
+    const assetOptions = [...this.assets].sort((a, b) => (a.asset_type === 'contract' ? -1 : 0) - (b.asset_type === 'contract' ? -1 : 0));
+
+    const contractRow = (c) => {
+      if (c.provider === 'manual_upload') {
+        return `<tr class="contract-uploaded-row">
+          <td><strong>${esc(c.title)}</strong> <span class="badge status-blue">Uploaded</span></td>
           <td>${esc(titleCase(c.contract_type))}</td>
           <td>${esc(c.counterparty_name || '—')}</td>
           <td>${contractStatusBadge(c.status)}</td>
           <td class="muted">${esc((c.updated_at || '').slice(0, 10))}</td>
-          <td class="row-action-cell"><a class="button small secondary" href="#contract-${esc(c.id)}">Open →</a></td>
-        </tr>`).join('') || '<tr><td colspan="6"><div class="empty-state">No contracts yet for this event.</div></td></tr>'}</tbody>
+          <td class="row-action-cell">
+            ${c.asset_file_path ? `<a class="button small secondary" href="${esc(assetUrl(c.asset_file_path))}" target="_blank" rel="noopener">View file</a>` : ''}
+            ${manage ? `<button class="small danger" data-remove-uploaded="${esc(c.id)}" data-name="${esc(c.title)}">Remove</button>` : ''}
+          </td>
+        </tr>`;
+      }
+      return `<tr class="clickable-row" data-contract-href="#contract-${esc(c.id)}">
+        <td><strong>${esc(c.title)}</strong></td>
+        <td>${esc(titleCase(c.contract_type))}</td>
+        <td>${esc(c.counterparty_name || '—')}</td>
+        <td>${contractStatusBadge(c.status)}</td>
+        <td class="muted">${esc((c.updated_at || '').slice(0, 10))}</td>
+        <td class="row-action-cell"><a class="button small secondary" href="#contract-${esc(c.id)}">Open →</a></td>
+      </tr>`;
+    };
+
+    this.innerHTML = `<section class="panel">
+      <div class="section-head padded"><h2>Contracts ${helpLink('contracts', 'Contracts')}</h2><div class="section-head-actions"><span class="muted">${contracts.length} total</span>${addToggle('Create contract', manage)}</div></div>
+      <table class="data-table contracts-table">
+        <thead><tr><th>Title</th><th>Type</th><th>Counterparty</th><th>Status</th><th>Updated</th><th></th></tr></thead>
+        <tbody>${contracts.map(contractRow).join('') || '<tr><td colspan="6"><div class="empty-state">No contracts yet for this event.</div></td></tr>'}</tbody>
       </table>
       ${manage ? `<form class="row-form" data-form="new" data-add-form hidden>
-        <label>Deal type <select name="template_id" required><option value="">Choose a template…</option>${templates.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
-        <label>Counterparty <input name="counterparty_name" placeholder="Artist / promoter / client"></label>
-        <button>Create contract</button>
+        <label class="checkbox-row"><input type="checkbox" data-uploaded-toggle> Contract signed and attached (uploaded elsewhere, not generated here)</label>
+        <div data-generate-fields>
+          <label>Deal type <select name="template_id" required><option value="">Choose a template…</option>${templates.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
+          <label>Counterparty <input name="counterparty_name" placeholder="Artist / promoter / client"></label>
+        </div>
+        <div data-asset-fields hidden>
+          <label>Title <input name="title" placeholder="e.g. Signed rental agreement"></label>
+          <div class="contract-asset-picker">${assetOptions.map(contractAssetPickerRow).join('') || '<p class="muted small">No assets uploaded yet — upload the signed contract (PDF or photo) from the Assets tab first, then come back here.</p>'}</div>
+        </div>
+        <button>Save</button>
         <button type="button" class="secondary small" data-cancel-add>Cancel</button>
       </form>` : ''}
     </section>`;
     if (manage) {
       bindAddToggle(this);
-      $('[data-form="new"]', this).addEventListener('submit', async (event) => {
+      const form = $('[data-form="new"]', this);
+      const toggle = $('[data-uploaded-toggle]', form);
+      const genFields = $('[data-generate-fields]', form);
+      const assetFields = $('[data-asset-fields]', form);
+      const templateSelect = $('select[name="template_id"]', genFields);
+      toggle.addEventListener('change', () => {
+        genFields.hidden = toggle.checked;
+        assetFields.hidden = !toggle.checked;
+        templateSelect.required = !toggle.checked;
+        $$('input[name="asset_id"]', assetFields).forEach((r) => { r.required = toggle.checked; });
+      });
+      form.addEventListener('submit', async (event) => {
         event.preventDefault();
+        const data = formData(event.target);
         try {
-          const result = await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify(formData(event.target)) });
-          publish('toast.show', { message: 'Contract created.' });
-          location.hash = `#contract-${result.id}`;
+          let result;
+          if (toggle.checked) {
+            result = await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify({ asset_id: data.asset_id, title: data.title }) });
+            publish('toast.show', { message: 'Contract attached.' });
+            this.load();
+          } else {
+            result = await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify({ template_id: data.template_id, counterparty_name: data.counterparty_name }) });
+            publish('toast.show', { message: 'Contract created.' });
+            location.hash = `#contract-${result.id}`;
+          }
         } catch (error) {
           publish('toast.show', { message: error.message, tone: 'error' });
         }
       });
+      $$('[data-remove-uploaded]', this).forEach((btn) => btn.addEventListener('click', async () => {
+        if (!confirm(`Remove attached contract "${btn.dataset.name}"? The uploaded asset itself is not deleted.`)) return;
+        try {
+          await api(`/contracts/${btn.dataset.removeUploaded}`, { method: 'DELETE' });
+          publish('toast.show', { message: 'Removed.' });
+          this.load();
+        } catch (error) {
+          publish('toast.show', { message: error.message, tone: 'error' });
+        }
+      }));
     }
     // Make the entire row clickable — clicking anywhere except a button/link
-    // navigates to the contract editor.
+    // navigates to the contract editor. Uploaded rows have no editor to open.
     $$('tr[data-contract-href]', this).forEach((row) => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('a, button')) return;

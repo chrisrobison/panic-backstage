@@ -42,6 +42,36 @@ final class ContractService
         return $id;
     }
 
+    /**
+     * Record that a contract was signed outside the system and the signed
+     * document was uploaded as an event asset, instead of being generated
+     * and signed through the in-app deal builder.
+     *
+     * Deliberately creates a normal `contracts` row (status='signed',
+     * provider='manual_upload') rather than a separate flag: the "booked"
+     * status gate in Events::validateStatusTransition() already accepts any
+     * contracts row with status signed/fully_executed, so this satisfies
+     * that check with no changes to the gate itself. No template/sections
+     * are built — there is nothing to render, the asset *is* the document.
+     */
+    public static function attachUploaded(Database $db, array $d, ?int $userId): int
+    {
+        return $db->insert(
+            'INSERT INTO contracts (event_id, venue_id, asset_id, contract_type, title, status, provider, signed_at, created_by_user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?)',
+            [
+                $d['event_id'] ?? null,
+                $d['venue_id'] ?? null,
+                $d['asset_id'],
+                'other',
+                trim((string) ($d['title'] ?? '')) ?: 'Uploaded Contract',
+                'signed',
+                'manual_upload',
+                $userId,
+            ]
+        );
+    }
+
     /** Resolve the linked event (with venue_name) and venue rows for a contract. */
     public static function eventVenueFor(Database $db, array $contract): array
     {

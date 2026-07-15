@@ -722,6 +722,12 @@ final class Events extends BaseEndpoint
             $hasContractUrl    = !empty($event['contract_url']);
             $hasExecutedContract = false;
             if (!empty($event['id'])) {
+                // Also matches a contract that was signed outside the system and
+                // attached as an event asset via the Contracts tab's "Contract
+                // signed and attached" picker — that flow deliberately writes a
+                // normal contracts row (provider='manual_upload', status='signed',
+                // asset_id set) rather than a separate flag, so it satisfies this
+                // same query. See ContractService::attachUploaded().
                 $contractRow = $this->db->one(
                     "SELECT id, status FROM contracts WHERE event_id = ? AND status IN ('signed','fully_executed') LIMIT 1",
                     [(int) $event['id']]

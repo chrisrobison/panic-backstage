@@ -2199,6 +2199,7 @@ components:
             - social_story
             - press_photo
             - qr_code
+            - contract
             - other
         title:
           type: string
@@ -3610,6 +3611,28 @@ components:
             - declined
             - expired
             - error
+        provider:
+          type: string
+          description: >-
+            'internal' (default) for contracts generated/signed through this app's deal builder;
+            'manual_upload' for a contract that was signed outside the system and linked to an
+            event_assets row via asset_id instead (see attachUploaded create path below). Also
+            'mock'/'dropbox_sign'/'docusign' for e-signature providers.
+        asset_id:
+          type: integer
+          nullable: true
+          description: Set only for provider='manual_upload' — the event_assets row holding the signed document.
+        asset_title:
+          type: string
+          nullable: true
+          description: Joined from event_assets.title when asset_id is set.
+        asset_file_path:
+          type: string
+          nullable: true
+          description: Joined from event_assets.file_path when asset_id is set — resolve with assetUrl() client-side.
+        asset_filename:
+          type: string
+          nullable: true
         counterparty_name:
           type: string
           nullable: true
@@ -3621,7 +3644,20 @@ components:
           nullable: true
     EventContractLinkCreateRequest:
       type: object
+      description: >-
+        Either the "generate in system" fields (template_id/contract_type/counterparty_*) OR
+        asset_id (the "contract signed and attached" path — links an already-uploaded
+        event_assets row as a manually-attached, already-signed contract via
+        ContractService::attachUploaded; title falls back to "{event title} — Uploaded Contract").
+        Sending asset_id ignores template_id/contract_type/counterparty_*.
       properties:
+        asset_id:
+          type: integer
+          nullable: true
+          description: >-
+            ID of an event_assets row belonging to this event (any asset_type, typically 'contract').
+            When set, creates a status='signed', provider='manual_upload' contract row instead of
+            generating one — this alone is enough to satisfy the "booked" status contract gate.
         template_id:
           type: integer
           nullable: true
@@ -3638,7 +3674,9 @@ components:
           default: other
         title:
           type: string
-          description: Falls back to "{event title} — Contract" if blank/omitted.
+          description: >-
+            Falls back to "{event title} — Contract" (generate path) or
+            "{event title} — Uploaded Contract" (asset_id path) if blank/omitted.
         counterparty_name:
           type: string
           nullable: true
@@ -14301,10 +14339,14 @@ paths:
       operationId: eventContractsLink_create
       summary: Create a contract bound to this event
       description: >-
-        Requires `manage_contracts`. Delegates to ContractService::create; title falls back to
-        "{event title} — Contract" if omitted. contract_type defaults to `other` if not a recognized
-        value. Further editing of the created contract happens via the top-level
-        `/api/contracts/{id}` endpoint (different agent's resource), not here.
+        Requires `manage_contracts`. Two modes, selected by whether asset_id is present:
+        with asset_id, delegates to ContractService::attachUploaded (links an already-uploaded
+        event asset as a manually-attached, already-signed contract — the "contract signed and
+        attached" flow); otherwise delegates to ContractService::create (generate in-app) with
+        title falling back to "{event title} — Contract" if omitted and contract_type defaulting
+        to `other` if not a recognized value. Further editing of a generated contract happens via
+        the top-level `/api/contracts/{id}` endpoint (different agent's resource), not here —
+        manually-attached contracts have no sections/deal terms to edit there.
       tags:
         - Event Contracts (Link)
       requestBody:
