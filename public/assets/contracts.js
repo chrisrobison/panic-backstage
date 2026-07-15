@@ -1,4 +1,4 @@
-import { esc, titleCase, publish, api, apiUrl, getToken, formData, badge, option, select, helpLink, can, table, PanicElement, addToggle, bindAddToggle, assetUrl, $, $$ } from './core.js';
+import { esc, titleCase, publish, api, apiUrl, getToken, formData, badge, option, select, helpLink, can, table, PanicElement, addToggle, openModal, assetUrl, $, $$ } from './core.js';
 
 
 // ── Contracts (admin) ─────────────────────────────────────────────────────────
@@ -235,51 +235,9 @@ class EventContracts extends HTMLElement {
         <thead><tr><th>Title</th><th>Type</th><th>Counterparty</th><th>Status</th><th>Updated</th><th></th></tr></thead>
         <tbody>${contracts.map(contractRow).join('') || '<tr><td colspan="6"><div class="empty-state">No contracts yet for this event.</div></td></tr>'}</tbody>
       </table>
-      ${manage ? `<form class="row-form" data-form="new" data-add-form hidden>
-        <label class="checkbox-row"><input type="checkbox" data-uploaded-toggle> Contract signed and attached (uploaded elsewhere, not generated here)</label>
-        <div data-generate-fields>
-          <label>Deal type <select name="template_id" required><option value="">Choose a template…</option>${templates.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
-          <label>Counterparty <input name="counterparty_name" placeholder="Artist / promoter / client"></label>
-        </div>
-        <div data-asset-fields hidden>
-          <label>Title <input name="title" placeholder="e.g. Signed rental agreement"></label>
-          <div class="contract-asset-picker">${assetOptions.map(contractAssetPickerRow).join('') || '<p class="muted small">No assets uploaded yet — upload the signed contract (PDF or photo) from the Assets tab first, then come back here.</p>'}</div>
-        </div>
-        <button>Save</button>
-        <button type="button" class="secondary small" data-cancel-add>Cancel</button>
-      </form>` : ''}
     </section>`;
     if (manage) {
-      bindAddToggle(this);
-      const form = $('[data-form="new"]', this);
-      const toggle = $('[data-uploaded-toggle]', form);
-      const genFields = $('[data-generate-fields]', form);
-      const assetFields = $('[data-asset-fields]', form);
-      const templateSelect = $('select[name="template_id"]', genFields);
-      toggle.addEventListener('change', () => {
-        genFields.hidden = toggle.checked;
-        assetFields.hidden = !toggle.checked;
-        templateSelect.required = !toggle.checked;
-        $$('input[name="asset_id"]', assetFields).forEach((r) => { r.required = toggle.checked; });
-      });
-      form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const data = formData(event.target);
-        try {
-          let result;
-          if (toggle.checked) {
-            result = await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify({ asset_id: data.asset_id, title: data.title }) });
-            publish('toast.show', { message: 'Contract attached.' });
-            this.load();
-          } else {
-            result = await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify({ template_id: data.template_id, counterparty_name: data.counterparty_name }) });
-            publish('toast.show', { message: 'Contract created.' });
-            location.hash = `#contract-${result.id}`;
-          }
-        } catch (error) {
-          publish('toast.show', { message: error.message, tone: 'error' });
-        }
-      });
+      $('[data-add]', this)?.addEventListener('click', () => this.openCreateModal());
       $$('[data-remove-uploaded]', this).forEach((btn) => btn.addEventListener('click', async () => {
         if (!confirm(`Remove attached contract "${btn.dataset.name}"? The uploaded asset itself is not deleted.`)) return;
         try {
@@ -298,6 +256,65 @@ class EventContracts extends HTMLElement {
         if (e.target.closest('a, button')) return;
         location.hash = row.dataset.contractHref;
       });
+    });
+  }
+
+  // "Create contract" modal — one shared body whether the user is generating
+  // a new deal-builder contract (template + counterparty) or recording one
+  // signed outside the system and attached as an uploaded asset, toggled by
+  // the checkbox at the top. Per the site-wide convention, a table's
+  // add/edit form always opens as a modal rather than an inline panel.
+  openCreateModal() {
+    const templates = this.list.templates || [];
+    // Signed-contract assets first (the expected pick), then everything else —
+    // a user may have uploaded the signed PDF under an older asset type before
+    // this picker existed.
+    const assetOptions = [...this.assets].sort((a, b) => (a.asset_type === 'contract' ? -1 : 0) - (b.asset_type === 'contract' ? -1 : 0));
+    const { dialog, close } = openModal({
+      title: 'Create contract',
+      bodyHtml: `<form class="grid-form padded" data-form="new">
+        <label class="checkbox-row wide"><input type="checkbox" data-uploaded-toggle> Contract signed and attached (uploaded elsewhere, not generated here)</label>
+        <div data-generate-fields class="wide">
+          <label>Deal type <select name="template_id" required><option value="">Choose a template…</option>${templates.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
+          <label>Counterparty <input name="counterparty_name" placeholder="Artist / promoter / client"></label>
+        </div>
+        <div data-asset-fields class="wide" hidden>
+          <label>Title <input name="title" placeholder="e.g. Signed rental agreement"></label>
+          <div class="contract-asset-picker">${assetOptions.map(contractAssetPickerRow).join('') || '<p class="muted small">No assets uploaded yet — upload the signed contract (PDF or photo) from the Assets tab first, then come back here.</p>'}</div>
+        </div>
+        <button>Save</button>
+      </form>`,
+    });
+    const form = $('[data-form="new"]', dialog);
+    const toggle = $('[data-uploaded-toggle]', form);
+    const genFields = $('[data-generate-fields]', form);
+    const assetFields = $('[data-asset-fields]', form);
+    const templateSelect = $('select[name="template_id"]', genFields);
+    toggle.addEventListener('change', () => {
+      genFields.hidden = toggle.checked;
+      assetFields.hidden = !toggle.checked;
+      templateSelect.required = !toggle.checked;
+      $$('input[name="asset_id"]', assetFields).forEach((r) => { r.required = toggle.checked; });
+    });
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const data = formData(event.target);
+      try {
+        let result;
+        if (toggle.checked) {
+          result = await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify({ asset_id: data.asset_id, title: data.title }) });
+          publish('toast.show', { message: 'Contract attached.' });
+          close();
+          this.load();
+        } else {
+          result = await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify({ template_id: data.template_id, counterparty_name: data.counterparty_name }) });
+          publish('toast.show', { message: 'Contract created.' });
+          close();
+          location.hash = `#contract-${result.id}`;
+        }
+      } catch (error) {
+        publish('toast.show', { message: error.message, tone: 'error' });
+      }
     });
   }
 }

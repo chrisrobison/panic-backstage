@@ -481,8 +481,16 @@ final class Events extends BaseEndpoint
         foreach ($blockers as $blocker) {
             if (in_array($blocker['status'], ['open', 'waiting'], true)) return 'Complete open items';
         }
+        // Must match the actual "Booked" gate in validateStatusTransition()
+        // (status IN ('signed','fully_executed') there) — a contract that's
+        // merely 'approved' or 'sent' has NOT been signed yet and does not
+        // satisfy that gate, so it must not be reported here as "on file"
+        // either. Using a looser list caused this banner to tell users a
+        // contract was on file (ready to advance) when advancing would
+        // actually fail with "contract must be signed, not just sent or
+        // approved."
         $hasContract = !empty($event['contract_url']) || $this->db->one(
-            "SELECT id FROM contracts WHERE event_id = ? AND status IN ('approved','sent','signed','fully_executed') LIMIT 1",
+            "SELECT id FROM contracts WHERE event_id = ? AND status IN ('signed','fully_executed') LIMIT 1",
             [(int) $event['id']]
         );
         $isPrivate = ($event['event_type'] ?? '') === 'private_event';
@@ -523,8 +531,11 @@ final class Events extends BaseEndpoint
 
         if ($isPrivate) {
             $hasClient = !empty($event['promoter_name']) && !empty($event['promoter_email']);
+            // Same "signed/fully_executed only" list as nextAction() and the
+            // Booked-transition gate — see the comment there for why
+            // 'approved'/'sent' must not count as "on file".
             $hasContract = !empty($event['contract_url']) || $this->db->one(
-                "SELECT id FROM contracts WHERE event_id = ? AND status IN ('approved','sent','signed','fully_executed') LIMIT 1",
+                "SELECT id FROM contracts WHERE event_id = ? AND status IN ('signed','fully_executed') LIMIT 1",
                 [(int) $event['id']]
             );
             return [

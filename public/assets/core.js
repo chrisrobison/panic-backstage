@@ -465,6 +465,35 @@ function openImageLightbox(src, alt = '') {
   document.addEventListener('keydown', onEsc);
 }
 
+// Shared modal dialog shell (`.modal-backdrop` > `.modal-card`) — the default
+// way any table's add/view/edit form should present itself (see the
+// ui-conventions note in project memory). Renders a header with `title` and a
+// Close button, then `bodyHtml` below it. Wires Escape, click-on-backdrop, and
+// the header's Close button to dismiss. The caller queries into the returned
+// `dialog` for its form/fields, wires its own submit handler, and calls
+// `close()` once an action completes (e.g. after a successful save).
+//
+// Precedent this generalizes: admin.js's openStaffModal(), campaigns.js's
+// recipients/new-campaign/generate-from-events dialogs — all hand-rolled the
+// same backdrop/card/Escape/close-button wiring before this existed.
+function openModal({ title = '', bodyHtml = '', wide = false, focus } = {}) {
+  const dialog = document.createElement('div');
+  dialog.className = 'modal-backdrop';
+  dialog.innerHTML = `<div class="modal-card${wide ? ' wide' : ''}">
+    <div class="section-head padded"><h2>${esc(title)}</h2><button type="button" class="small secondary" data-close>Close</button></div>
+    ${bodyHtml}
+  </div>`;
+  document.body.appendChild(dialog);
+  const close = () => { dialog.remove(); document.removeEventListener('keydown', onEsc); };
+  function onEsc(event) { if (event.key === 'Escape') close(); }
+  document.addEventListener('keydown', onEsc);
+  $('[data-close]', dialog).addEventListener('click', close);
+  dialog.addEventListener('click', (event) => { if (event.target === dialog) close(); });
+  const focusEl = focus ? $(focus, dialog) : $$('input, select, textarea', dialog).find((el) => !el.disabled && el.type !== 'hidden');
+  focusEl?.focus();
+  return { dialog, close };
+}
+
 // The "+" reveal button shown in a panel header (only when the user can edit).
 function addToggle(label, editable) {
   return editable ? `<button type="button" class="add-toggle" data-add aria-label="${esc(label)}" title="${esc(label)}"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>` : '';
@@ -552,4 +581,4 @@ function mdToHtml(text) {
   }).join('\n');
 }
 
-export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox };
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox, openModal };
