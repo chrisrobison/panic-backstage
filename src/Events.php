@@ -489,7 +489,7 @@ final class Events extends BaseEndpoint
         // contract was on file (ready to advance) when advancing would
         // actually fail with "contract must be signed, not just sent or
         // approved."
-        $hasContract = !empty($event['contract_url']) || $this->db->one(
+        $hasContract = self::hasContractUrl($event) || $this->db->one(
             "SELECT id FROM contracts WHERE event_id = ? AND status IN ('signed','fully_executed') LIMIT 1",
             [(int) $event['id']]
         );
@@ -534,7 +534,7 @@ final class Events extends BaseEndpoint
             // Same "signed/fully_executed only" list as nextAction() and the
             // Booked-transition gate — see the comment there for why
             // 'approved'/'sent' must not count as "on file".
-            $hasContract = !empty($event['contract_url']) || $this->db->one(
+            $hasContract = self::hasContractUrl($event) || $this->db->one(
                 "SELECT id FROM contracts WHERE event_id = ? AND status IN ('signed','fully_executed') LIMIT 1",
                 [(int) $event['id']]
             );
@@ -565,6 +565,26 @@ final class Events extends BaseEndpoint
     {
         $data = json_decode($json ?: '[]', true);
         return is_array($data) ? $data : [];
+    }
+
+    /**
+     * True only when the legacy `contract_url` field actually looks like a
+     * link (http/https), not some unrelated note typed into that field.
+     *
+     * In production this field turned out to hold values like "TIXR",
+     * "Door", "Venmo & Door", "Eventbrite", "Internal" — apparently a
+     * leftover ticketing/payment-method note from before the Contracts
+     * table existed — for every single non-empty row currently in the
+     * database (zero of them are actual URLs). Treating any non-empty value
+     * as "a contract is on file" made the "Contract on file" next-action
+     * banner (and the Booked-status contract gate) fire for events that
+     * have neither a contract row nor an uploaded/signed document — just
+     * stray text in this field.
+     */
+    private static function hasContractUrl(array $event): bool
+    {
+        $value = $event['contract_url'] ?? null;
+        return is_string($value) && preg_match('#^https?://#i', trim($value)) === 1;
     }
 
     /**
@@ -730,7 +750,7 @@ final class Events extends BaseEndpoint
         // "Sent", "approved", or "draft" contract does NOT satisfy the contract requirement.
         if ($newStatus === 'booked') {
             // ── Contract gate ───────────────────────────────────────────────
-            $hasContractUrl    = !empty($event['contract_url']);
+            $hasContractUrl    = self::hasContractUrl($event);
             $hasExecutedContract = false;
             if (!empty($event['id'])) {
                 // Also matches a contract that was signed outside the system and
