@@ -1116,7 +1116,7 @@ HTML;
     private function notifyAdminsOfSend(array $contract): void
     {
         try {
-            $admins = $this->db->all("SELECT email, name, notify_contracts FROM users WHERE role = 'venue_admin'", []);
+            $admins = $this->db->all("SELECT email, name, notify_contracts FROM users WHERE role = 'venue_admin' AND is_hidden = 0", []);
             $mailer = new Mailer($this->root, $this->db);
             $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
             foreach ($admins as $admin) {
@@ -1146,7 +1146,7 @@ HTML;
     private function notifyAdminsOfVoid(array $contract, string $reason): void
     {
         try {
-            $admins = $this->db->all("SELECT email, name, notify_contracts FROM users WHERE role = 'venue_admin'", []);
+            $admins = $this->db->all("SELECT email, name, notify_contracts FROM users WHERE role = 'venue_admin' AND is_hidden = 0", []);
             $mailer = new Mailer($this->root, $this->db);
             $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
             foreach ($admins as $admin) {

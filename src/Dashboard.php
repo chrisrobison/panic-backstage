@@ -129,7 +129,7 @@ final class Dashboard extends BaseEndpoint
                 'key'   => 'staff_member',
                 'label' => 'Invite a staff member',
                 'note'  => 'Add a booker, manager or door person to your team.',
-                'done'  => $this->count('SELECT COUNT(*) c FROM users WHERE access_status = \'active\'') > 1,
+                'done'  => $this->count('SELECT COUNT(*) c FROM users WHERE access_status = \'active\' AND is_hidden = 0') > 1,
                 'href'  => '#admin-staff',
             ],
             [

@@ -116,7 +116,7 @@ final class Leads extends BaseEndpoint
             'leads'        => $leads,
             'statuses'     => self::STATUSES,
             'sources'      => self::SOURCES,
-            'users'        => $this->db->all('SELECT id, name FROM users ORDER BY name'),
+            'users'        => $this->db->all('SELECT id, name FROM users WHERE is_hidden = 0 ORDER BY name'),
             'capabilities' => $this->globalCapabilities(),
         ]);
     }

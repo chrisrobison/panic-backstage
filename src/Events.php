@@ -793,7 +793,7 @@ final class Events extends BaseEndpoint
         $envId = (int) (getenv('PRIVATE_EVENT_HANDLER_USER_ID') ?: 0);
         if ($envId > 0) return $envId;
         // Fallback: first venue_admin with a real email
-        $row = $this->db->one("SELECT id FROM users WHERE role = 'venue_admin' AND email NOT LIKE '%.local' ORDER BY id LIMIT 1");
+        $row = $this->db->one("SELECT id FROM users WHERE role = 'venue_admin' AND email NOT LIKE '%.local' AND is_hidden = 0 ORDER BY id LIMIT 1");
         return $row ? (int) $row['id'] : $this->userId();
     }
 
@@ -910,7 +910,8 @@ final class Events extends BaseEndpoint
             $admins = $this->db->all(
                 "SELECT name, email, notify_event_updates FROM users
                   WHERE role = 'venue_admin'
-                    AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'"
+                    AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'
+                    AND is_hidden = 0"
             );
 
             // Include VENUE_MANAGER_EMAIL in the admin recipient list, deduped.
@@ -1174,7 +1175,7 @@ final class Events extends BaseEndpoint
     private function notifyPrivateEventCreated(int $eventId): void
     {
         try {
-            $admins = $this->db->all("SELECT name, email, notify_event_updates FROM users WHERE role = 'venue_admin' AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local'");
+            $admins = $this->db->all("SELECT name, email, notify_event_updates FROM users WHERE role = 'venue_admin' AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local' AND is_hidden = 0");
             if (!$admins) return;
 
             $event = $this->db->one(

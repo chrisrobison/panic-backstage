@@ -85,7 +85,7 @@ final class UserMerge
     public function findDuplicates(): array
     {
         $users = $this->db->all(
-            'SELECT id, name, email, phone, role FROM users ORDER BY id'
+            'SELECT id, name, email, phone, role FROM users WHERE is_hidden = 0 ORDER BY id'
         );
 
         // Bucket by each signal; any bucket with >1 member yields candidate pairs.

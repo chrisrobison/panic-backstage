@@ -53,7 +53,7 @@ final class StaffMembers extends BaseEndpoint
         return $this->ok([
             'staff' => $this->db->all($sql, $params),
             'roles' => self::ROLES,
-            'users' => $this->db->all('SELECT id, name, email FROM users ORDER BY name'),
+            'users' => $this->db->all('SELECT id, name, email FROM users WHERE is_hidden = 0 ORDER BY name'),
         ]);
     }
 
