@@ -1154,7 +1154,7 @@ class PortalPanel extends PanicElement {
         </div>
         <input class="portal-link-url" type="text" readonly value="${esc(l.url)}" data-portal-url="${esc(l.token)}" onclick="this.select()">
         <div class="portal-link-actions">
-          <button class="secondary small" onclick="navigator.clipboard.writeText(${JSON.stringify(l.url)}).then(()=>publish('toast.show',{message:'Link copied!'}))">Copy</button>
+          <button class="secondary small" data-copy-url="${esc(l.url)}">Copy</button>
           <button class="danger small" data-revoke="${esc(String(l.id))}">Revoke</button>
         </div>
       </div>`).join('');
@@ -1201,6 +1201,9 @@ class PortalPanel extends PanicElement {
       const id = parseInt(btn.dataset.revoke, 10);
       btn.disabled = true;
       await this.revokeLink(id);
+    }));
+    $$('[data-copy-url]', this._dialog).forEach(btn => btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(btn.dataset.copyUrl).then(() => publish('toast.show', { message: 'Link copied!' }));
     }));
   }
 }
