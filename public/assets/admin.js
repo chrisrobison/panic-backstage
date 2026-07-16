@@ -2,13 +2,19 @@ import { esc, titleCase, publish, api, formData, badge, option, select, can, tab
 
 
 // ── Admin page ───────────────────────────────────────────────────────────────
-// Three tabs: Users (login accounts), Staff (employee roster), Templates
-// (run-sheet / checklist event templates). Admin-only — sidebar entry is
-// hidden by AppShell.applyCapabilities() when the user lacks admin caps.
+// Login accounts, venue/rooms, staff roster, event templates, contracts,
+// payments, wizard defaults, the DB browser/history tools, and the nav
+// manager — see docs/ops-manual.html's Admin chapter for the full writeup
+// of each tab. Admin-only — sidebar entry is hidden by
+// AppShell.applyCapabilities() when the user lacks admin caps.
+//
+// 'duplicates' (pb-user-duplicates) is intentionally left out of this list —
+// the one-time duplicate-account cleanup it was built for is done and it's
+// not a tab anyone needs day to day. The component itself is untouched, so
+// it's a one-line change to bring back if it's ever needed again.
 
 const ADMIN_TABS = [
   { key: 'users',     title: 'Users',     icon: 'fa-user-gear' },
-  { key: 'duplicates', title: 'Duplicates', icon: 'fa-clone' },
   { key: 'staff',     title: 'Staff',     icon: 'fa-people-group' },
   { key: 'templates', title: 'Templates', icon: 'fa-layer-group' },
   { key: 'contracts', title: 'Contracts', icon: 'fa-file-signature' },

@@ -1204,8 +1204,10 @@
     <a href="#admin-staff" class="section">Staff roster</a>
     <a href="#admin-templates" class="section">Event templates</a>
     <a href="#venue-policy" class="section">Venue policy</a>
+    <a href="#admin-wizard-defaults" class="section">Wizard defaults</a>
     <a href="#admin-db" class="section">Database browser</a>
     <a href="#admin-db-history" class="section">Database history &amp; undo</a>
+    <a href="#admin-navigation" class="section">Navigation manager</a>
 
     <div class="nav-section">Part IX — Messages</div>
     <a href="#campaigns-lists" class="chapter">Chapter 9: Campaigns &amp; Mailing Lists</a>
@@ -3612,12 +3614,20 @@
       <tr><th>Tab</th><th>What you manage here</th></tr>
       <tr><td><strong>Users</strong></td><td>Login accounts — the people who sign into Backstage</td></tr>
       <tr><td><strong>Venue</strong></td><td>The venue's own profile (name, address, timezone) and its rooms</td></tr>
-      <tr><td><strong>Duplicates</strong></td><td>Detect and merge duplicate user accounts or contacts</td></tr>
       <tr><td><strong>Staff</strong></td><td>The employee roster — the people who work your shows (separate from login accounts)</td></tr>
       <tr><td><strong>Templates</strong></td><td>Event templates with pre-built task checklists and run sheet schedules</td></tr>
       <tr><td><strong>Contracts</strong></td><td>The contract clause library and template manager</td></tr>
       <tr><td><strong>Payments</strong></td><td>Payment provider configuration (Stripe or Square)</td></tr>
+      <tr><td><strong>Wizard</strong></td><td>Default values that pre-fill the event creation wizard</td></tr>
+      <tr><td><strong>DB Browser</strong></td><td>Read-only SQL browser over the app's own database</td></tr>
+      <tr><td><strong>DB History</strong></td><td>Row-level change history across every table, with one-click undo</td></tr>
+      <tr><td><strong>Navigation</strong></td><td>Editor for the app shell's own sidebar</td></tr>
     </table>
+
+    <div class="callout note">
+      <span class="callout-title">🧹 Duplicates tab retired</span>
+      <p>A "Duplicates" tool for detecting and merging duplicate user accounts previously lived here. The one-time cleanup it was built for is done, so it's been removed from the tab bar — not documented further in this manual.</p>
+    </div>
 
     <div class="callout note">
       <span class="callout-title">🔐 Admin-only area</span>
@@ -3881,6 +3891,13 @@
       <p>After any changes to rates, room capacities, or house rules, update the Venue Policy and mark it as <code>is_verified</code>. Unverified policy values show a warning label in the booking workflow — this is intentional, to prompt staff to confirm the numbers rather than assume they're current.</p>
     </div>
 
+    <!-- WIZARD DEFAULTS ──────────────────────────────────────────────────────── -->
+    <h2 id="admin-wizard-defaults">Wizard defaults</h2>
+
+    <p>Admin → Wizard sets the values that pre-fill every new event in the <a href="#create-event">event creation wizard</a>: Venue, Event type, Age restriction, Capacity, Doors/Show/End times, default Deal type, Deposit, Bar minimum, Venue merch cut, and whether sound/lighting tech and security are typically included. Restricted to venue admins.</p>
+
+    <p>Leave a field set to <em>"— no default —"</em> to leave it blank in the wizard rather than pre-filling it. Staff can always override any default while filling out the wizard for a specific show — these are starting points to save repetitive typing on the common case, not requirements.</p>
+
     <!-- DATABASE BROWSER ─────────────────────────────────────────────────────── -->
     <h2 id="admin-db">Database browser</h2>
 
@@ -3941,6 +3958,18 @@
     <h3>What it can't do</h3>
 
     <p>Database history only covers the database itself. Writes to disk — uploaded files, generated PDFs, sent email — aren't touched by an undo, so reverting a database change doesn't un-send an email or restore a deleted file. History entries older than 30 days are pruned automatically by a nightly job to keep the table from growing without bound. For recovery beyond that window, or a whole-database point-in-time restore rather than a single row, ask whoever runs the server about the separate 5-minute database snapshot backups kept outside the app.</p>
+
+    <!-- NAVIGATION MANAGER ───────────────────────────────────────────────────── -->
+    <h2 id="admin-navigation">Navigation manager</h2>
+
+    <p>Admin → Navigation edits the app shell's own sidebar — the same nav used to get around Backstage. Restricted to venue admins.</p>
+
+    <p>The editor has three panes: a draggable, nestable list of nav items on the left; an edit form for whichever item is selected in the middle; and a live preview on the right, built from the exact same rendering code the real sidebar uses — so the preview can never drift from what actually ships once you save. Each item has a label, an icon (pick from a curated list, or supply a custom FontAwesome class), a link target, and a visibility toggle. Drag items to reorder them, or nest one under another to create a submenu.</p>
+
+    <div class="callout danger">
+      <span class="callout-title">Saves are immediate and global</span>
+      <p>There's no separate "publish" step — a saved change takes effect for every user right away. Double-check the live preview before saving anything that changes how staff find their way around the app.</p>
+    </div>
 
   </div><!-- /book-content -->
 </div><!-- /chapter 6 -->

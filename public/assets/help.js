@@ -100,8 +100,10 @@ export const HELP_SECTIONS = [
       { slug: 'admin-templates', title: 'Editing event templates' },
       { slug: 'admin-contracts', title: 'Contract library &amp; templates' },
       { slug: 'admin-payments', title: 'Payment providers' },
+      { slug: 'admin-wizard-defaults', title: 'Wizard defaults' },
       { slug: 'admin-db',       title: 'Database browser' },
       { slug: 'admin-db-history', title: 'Database history &amp; undo' },
+      { slug: 'admin-navigation', title: 'Navigation manager' },
     ],
   },
   {
@@ -1111,8 +1113,13 @@ const HELP_CONTENT = {
       <li><a href="#help-admin-templates">Templates</a> — edit run-sheet and checklist templates used to create new events.</li>
       <li><a href="#help-admin-contracts">Contracts</a> — the contract clause library, contract templates, and a venue-wide list of all contracts.</li>
       <li><a href="#help-admin-payments">Payments</a> — choose the payment processor and currency used for in-house ticket sales.</li>
+      <li><a href="#help-admin-wizard-defaults">Wizard defaults</a> — pre-fill values for the event creation wizard.</li>
+      <li><a href="#help-admin-db">Database browser</a> — read-only SQL browser over the app's own database.</li>
+      <li><a href="#help-admin-db-history">Database history</a> — row-level change history and one-click undo.</li>
+      <li><a href="#help-admin-navigation">Navigation manager</a> — edit the app shell's own sidebar.</li>
     </ul>
-    <p>Each tab has a stable deep link: <code>#admin-users</code>, <code>#admin-venue</code>, <code>#admin-staff</code>, <code>#admin-templates</code>, <code>#admin-contracts</code>, <code>#admin-payments</code>.</p>
+    <p>Each tab has a stable deep link: <code>#admin-users</code>, <code>#admin-venue</code>, <code>#admin-staff</code>, <code>#admin-templates</code>, <code>#admin-contracts</code>, <code>#admin-payments</code>, <code>#admin-wizard-defaults</code>, <code>#admin-db</code>, <code>#admin-db-history</code>, <code>#admin-navigation</code>.</p>
+    <p class="muted small">A "Duplicates" tool for merging duplicate user accounts also exists but is currently hidden from the tab bar — the one-time cleanup it was for is done.</p>
   `,
 
   'admin-venue': `
@@ -1254,6 +1261,22 @@ const HELP_CONTENT = {
       <li>The webhook URL is registered in the processor's dashboard.</li>
       <li>On an event, switch <a href="#help-ticketing">Ticketing</a> to in-house mode, add an <em>on sale</em> tier, and publish the page.</li>
     </ol>
+  `,
+
+  'admin-wizard-defaults': `
+    <h2>Wizard defaults</h2>
+    <p>Admin &rarr; Wizard (<code>#admin-wizard-defaults</code>) sets the values that pre-fill every new event in the <a href="#help-event-wizard">event creation wizard</a> — Venue, Event type, Age restriction, Capacity, Doors/Show/End times, default Deal type, Deposit, Bar minimum, Venue merch cut, and whether sound/lighting tech and security are typically included. Restricted to venue admins.</p>
+    <p>Leave any field set to <em>"— no default —"</em> to leave it blank in the wizard instead of pre-filling it. Staff can always override any default while filling out the wizard for a specific show — these are starting points, not requirements.</p>
+  `,
+
+  'admin-navigation': `
+    <h2>Navigation manager</h2>
+    <p>Admin &rarr; Navigation (<code>#admin-navigation</code>) edits the app shell's own sidebar — the same nav you're using right now. Restricted to venue admins.</p>
+    <h3>Layout</h3>
+    <p>Three panes: a draggable, nestable list of nav items on the left, an edit form for whichever item is selected in the middle, and a live preview on the right built from the exact same rendering code the real sidebar uses — so the preview can never drift from what actually ships once you save.</p>
+    <h3>Editing an item</h3>
+    <p>Each item has a label, an icon (pick from a curated FontAwesome list, or supply any class string via "Custom…"), a link target, and a visibility toggle. Drag items to reorder them or nest one under another to create a submenu.</p>
+    <p class="help-tip">💡 Changes take effect immediately for everyone once saved — there's no separate "publish" step, so double-check the live preview before saving anything that affects how staff navigate the app.</p>
   `,
 
   'admin-db': `
