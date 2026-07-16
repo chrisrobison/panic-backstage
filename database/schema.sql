@@ -3,7 +3,7 @@
 --
 -- This file is the single source of truth for a fresh database install.
 -- It is regenerated from the live database whenever migrations are squashed.
--- Last squash: 2026-07-06  (through migration 049_event_series)
+-- Last squash: 2026-07-16  (through migration 063_admin_nav_navigation_item)
 --
 -- Fresh install:
 --   mysql -u <user> -p <dbname> < database/schema.sql
@@ -13,8 +13,14 @@
 --
 -- To squash again in the future:
 --   mysqldump --no-data --single-transaction --add-drop-table --routines \
---     --triggers --set-charset <dbname> > database/schema.sql
+--     --skip-triggers --set-charset <dbname> > database/schema.sql
 --   Delete migration files, clear schema_migrations table, commit.
+--
+-- Note: --skip-triggers is deliberate. The per-table audit triggers
+-- (trg_<table>_ai/_au/_ad -> db_history) are DEFINER-bound and generated
+-- out-of-band by scripts/generate-audit-triggers.php; they are not part of
+-- the portable baseline. Run that script separately after a fresh install
+-- if you want them.
 -- =============================================================================
 
 SET NAMES utf8mb4;
@@ -72,7 +78,7 @@ CREATE TABLE `bands` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=31 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `client_events`;
@@ -154,6 +160,64 @@ CREATE TABLE `client_profiles` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
+DROP TABLE IF EXISTS `contact_activity`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `contact_activity` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `contact_id` bigint(20) NOT NULL,
+  `user_id` int(11) DEFAULT NULL,
+  `type` varchar(60) NOT NULL,
+  `message` varchar(500) NOT NULL,
+  `details_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`details_json`)),
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `contact_id` (`contact_id`),
+  KEY `user_id` (`user_id`),
+  CONSTRAINT `contact_activity_ibfk_1` FOREIGN KEY (`contact_id`) REFERENCES `contacts` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `contact_activity_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=2099 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `contact_storage_settings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `contact_storage_settings` (
+  `id` tinyint(4) NOT NULL DEFAULT 1,
+  `contact_limit` int(11) NOT NULL DEFAULT 250000,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  CONSTRAINT `chk_contact_storage_singleton` CHECK (`id` = 1)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `contact_tag_assignments`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `contact_tag_assignments` (
+  `contact_id` bigint(20) NOT NULL,
+  `tag_id` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`contact_id`,`tag_id`),
+  KEY `tag_id` (`tag_id`),
+  CONSTRAINT `contact_tag_assignments_ibfk_1` FOREIGN KEY (`contact_id`) REFERENCES `contacts` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `contact_tag_assignments_ibfk_2` FOREIGN KEY (`tag_id`) REFERENCES `contact_tags` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `contact_tags`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `contact_tags` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(60) NOT NULL,
+  `color` varchar(20) NOT NULL DEFAULT '#2563eb',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_contact_tag_name` (`name`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
 DROP TABLE IF EXISTS `contacts`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -184,7 +248,7 @@ CREATE TABLE `contacts` (
   KEY `idx_email` (`email`),
   KEY `idx_last_name` (`last_name`),
   KEY `idx_marketing` (`marketing_opted_in`)
-) ENGINE=InnoDB AUTO_INCREMENT=873 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=874 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `contract_audit_log`;
@@ -205,7 +269,7 @@ CREATE TABLE `contract_audit_log` (
   KEY `idx_audit_action` (`action`),
   KEY `idx_audit_created` (`created_at`),
   CONSTRAINT `contract_audit_log_ibfk_1` FOREIGN KEY (`contract_id`) REFERENCES `contracts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=63 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `contract_modules`;
@@ -226,7 +290,7 @@ CREATE TABLE `contract_modules` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `module_key` (`module_key`)
-) ENGINE=InnoDB AUTO_INCREMENT=48 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=75 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `contract_sections`;
@@ -252,7 +316,7 @@ CREATE TABLE `contract_sections` (
   KEY `module_id` (`module_id`),
   CONSTRAINT `contract_sections_ibfk_1` FOREIGN KEY (`contract_id`) REFERENCES `contracts` (`id`) ON DELETE CASCADE,
   CONSTRAINT `contract_sections_ibfk_2` FOREIGN KEY (`module_id`) REFERENCES `contract_modules` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=556 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=677 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `contract_signers`;
@@ -285,7 +349,7 @@ CREATE TABLE `contract_signers` (
   KEY `idx_signers_token_hash` (`signing_token_hash`),
   KEY `idx_signers_status` (`status`),
   CONSTRAINT `contract_signers_ibfk_1` FOREIGN KEY (`contract_id`) REFERENCES `contracts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=36 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `contract_template_modules`;
@@ -304,7 +368,7 @@ CREATE TABLE `contract_template_modules` (
   KEY `module_id` (`module_id`),
   CONSTRAINT `contract_template_modules_ibfk_1` FOREIGN KEY (`template_id`) REFERENCES `contract_templates` (`id`) ON DELETE CASCADE,
   CONSTRAINT `contract_template_modules_ibfk_2` FOREIGN KEY (`module_id`) REFERENCES `contract_modules` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=157 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=266 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `contract_templates`;
@@ -341,7 +405,7 @@ CREATE TABLE `contract_versions` (
   KEY `created_by_user_id` (`created_by_user_id`),
   CONSTRAINT `contract_versions_ibfk_1` FOREIGN KEY (`contract_id`) REFERENCES `contracts` (`id`) ON DELETE CASCADE,
   CONSTRAINT `contract_versions_ibfk_2` FOREIGN KEY (`created_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=31 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `contracts`;
@@ -352,6 +416,7 @@ CREATE TABLE `contracts` (
   `event_id` int(11) DEFAULT NULL,
   `venue_id` int(11) DEFAULT NULL,
   `template_id` int(11) DEFAULT NULL,
+  `asset_id` int(11) DEFAULT NULL,
   `contract_type` enum('private_event','promoter_show','artist_performance','recurring_night','fundraiser','house_show','other') NOT NULL DEFAULT 'other',
   `title` varchar(255) NOT NULL,
   `status` enum('draft','needs_review','approved','sent','signed','canceled','superseded','ready_to_send','viewed','partially_signed','signed_by_client','countersigned','fully_executed','voided','declined','expired','error') NOT NULL DEFAULT 'draft',
@@ -407,12 +472,37 @@ CREATE TABLE `contracts` (
   KEY `template_id` (`template_id`),
   KEY `created_by_user_id` (`created_by_user_id`),
   KEY `approved_by_user_id` (`approved_by_user_id`),
+  KEY `idx_contracts_asset` (`asset_id`),
   CONSTRAINT `contracts_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE SET NULL,
   CONSTRAINT `contracts_ibfk_2` FOREIGN KEY (`venue_id`) REFERENCES `venues` (`id`) ON DELETE SET NULL,
   CONSTRAINT `contracts_ibfk_3` FOREIGN KEY (`template_id`) REFERENCES `contract_templates` (`id`) ON DELETE SET NULL,
   CONSTRAINT `contracts_ibfk_4` FOREIGN KEY (`created_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `contracts_ibfk_5` FOREIGN KEY (`approved_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=47 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=65 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `db_history`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `db_history` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `table_name` varchar(64) NOT NULL,
+  `pk_column` varchar(64) NOT NULL,
+  `pk_value` varchar(255) NOT NULL,
+  `action` enum('INSERT','UPDATE','DELETE') NOT NULL,
+  `actor` varchar(128) DEFAULT NULL,
+  `old_row` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`old_row`)),
+  `new_row` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`new_row`)),
+  `undo_sql` mediumtext NOT NULL,
+  `undone_at` timestamp(6) NULL DEFAULT NULL,
+  `undone_by_actor` varchar(128) DEFAULT NULL,
+  `undo_of_id` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp(6) NOT NULL DEFAULT current_timestamp(6),
+  PRIMARY KEY (`id`),
+  KEY `idx_table_pk` (`table_name`,`pk_value`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_undo_of` (`undo_of_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=11967 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `email_campaign_events`;
@@ -514,7 +604,7 @@ CREATE TABLE `event_activity_log` (
   KEY `user_id` (`user_id`),
   CONSTRAINT `event_activity_log_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
   CONSTRAINT `event_activity_log_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1631 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2810 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_assets`;
@@ -523,7 +613,7 @@ DROP TABLE IF EXISTS `event_assets`;
 CREATE TABLE `event_assets` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `event_id` int(11) NOT NULL,
-  `asset_type` enum('flyer','poster','band_photo','logo','social_square','social_story','press_photo','qr_code','other') NOT NULL DEFAULT 'other',
+  `asset_type` enum('flyer','poster','band_photo','logo','social_square','social_story','press_photo','qr_code','contract','other') NOT NULL DEFAULT 'other',
   `title` varchar(255) NOT NULL,
   `filename` varchar(255) NOT NULL,
   `original_filename` varchar(255) NOT NULL,
@@ -540,7 +630,7 @@ CREATE TABLE `event_assets` (
   KEY `uploaded_by_user_id` (`uploaded_by_user_id`),
   CONSTRAINT `event_assets_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
   CONSTRAINT `event_assets_ibfk_2` FOREIGN KEY (`uploaded_by_user_id`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=41 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=94 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_blockers`;
@@ -593,7 +683,7 @@ CREATE TABLE `event_closeout_state` (
   CONSTRAINT `closeout_ibfk_event` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
   CONSTRAINT `closeout_ibfk_finalizer` FOREIGN KEY (`finalized_by_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `closeout_ibfk_reopener` FOREIGN KEY (`reopened_by_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_collaborators`;
@@ -610,7 +700,7 @@ CREATE TABLE `event_collaborators` (
   KEY `user_id` (`user_id`),
   CONSTRAINT `event_collaborators_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
   CONSTRAINT `event_collaborators_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_execution_records`;
@@ -668,7 +758,7 @@ CREATE TABLE `event_guest_list` (
   KEY `created_by_user_id` (`created_by_user_id`),
   CONSTRAINT `event_guest_list_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
   CONSTRAINT `event_guest_list_ibfk_2` FOREIGN KEY (`created_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_invites`;
@@ -720,7 +810,7 @@ CREATE TABLE `event_ledger_entries` (
   CONSTRAINT `ledger_ibfk_creator` FOREIGN KEY (`created_by_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `ledger_ibfk_event` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
   CONSTRAINT `ledger_ibfk_reconciler` FOREIGN KEY (`reconciler_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_lineup`;
@@ -744,7 +834,7 @@ CREATE TABLE `event_lineup` (
   KEY `band_id` (`band_id`),
   CONSTRAINT `event_lineup_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
   CONSTRAINT `event_lineup_ibfk_2` FOREIGN KEY (`band_id`) REFERENCES `bands` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=33 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=133 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_payment_audit`;
@@ -764,7 +854,7 @@ CREATE TABLE `event_payment_audit` (
   KEY `payment_id` (`payment_id`),
   KEY `event_id` (`event_id`),
   CONSTRAINT `pay_audit_ibfk_payment` FOREIGN KEY (`payment_id`) REFERENCES `event_payments` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_payments`;
@@ -796,7 +886,7 @@ CREATE TABLE `event_payments` (
   KEY `created_by_id` (`created_by_id`),
   CONSTRAINT `event_payments_ibfk_creator` FOREIGN KEY (`created_by_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `event_payments_ibfk_event` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_scanner_links`;
@@ -818,7 +908,7 @@ CREATE TABLE `event_scanner_links` (
   UNIQUE KEY `uq_event_scanner_token` (`token_hash`),
   KEY `idx_event_scanner_links_event` (`event_id`),
   CONSTRAINT `event_scanner_links_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_schedule_items`;
@@ -837,7 +927,7 @@ CREATE TABLE `event_schedule_items` (
   PRIMARY KEY (`id`),
   KEY `event_id` (`event_id`),
   CONSTRAINT `event_schedule_items_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=130448 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=131452 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_series`;
@@ -859,7 +949,26 @@ CREATE TABLE `event_series` (
   KEY `created_by_user_id` (`created_by_user_id`),
   CONSTRAINT `event_series_ibfk_1` FOREIGN KEY (`venue_id`) REFERENCES `venues` (`id`),
   CONSTRAINT `event_series_ibfk_2` FOREIGN KEY (`created_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `event_sessions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `event_sessions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `event_id` int(11) NOT NULL,
+  `session_date` date NOT NULL,
+  `start_time` time DEFAULT NULL,
+  `end_time` time DEFAULT NULL,
+  `label` varchar(120) DEFAULT NULL,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `event_id` (`event_id`),
+  CONSTRAINT `event_sessions_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=89 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_settlements`;
@@ -926,7 +1035,7 @@ CREATE TABLE `event_staffing` (
   KEY `staff_member_id` (`staff_member_id`),
   CONSTRAINT `event_staffing_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
   CONSTRAINT `event_staffing_ibfk_2` FOREIGN KEY (`staff_member_id`) REFERENCES `staff_members` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=77 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=274 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_tasks`;
@@ -948,7 +1057,7 @@ CREATE TABLE `event_tasks` (
   KEY `assigned_user_id` (`assigned_user_id`),
   CONSTRAINT `event_tasks_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
   CONSTRAINT `event_tasks_ibfk_2` FOREIGN KEY (`assigned_user_id`) REFERENCES `users` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=325 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=421 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `event_templates`;
@@ -1025,8 +1134,11 @@ CREATE TABLE `events` (
   `title` varchar(255) NOT NULL,
   `slug` varchar(255) NOT NULL,
   `event_type` enum('live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event') NOT NULL,
-  `status` enum('empty','proposed','confirmed','booked','needs_assets','ready_to_announce','published','advanced','completed','settled','canceled') NOT NULL DEFAULT 'proposed',
+  `status` enum('empty','proposed','confirmed','booked','needs_assets','assets_approved','ready_to_announce','published','advanced','completed','settled','canceled') NOT NULL DEFAULT 'proposed',
   `description_public` text DEFAULT NULL,
+  `public_subtitle` varchar(255) DEFAULT NULL,
+  `public_tags` varchar(255) DEFAULT NULL,
+  `public_schedule_pricing` text DEFAULT NULL,
   `description_internal` text DEFAULT NULL,
   `av_requirements` text DEFAULT NULL,
   `catering_notes` text DEFAULT NULL,
@@ -1081,7 +1193,7 @@ CREATE TABLE `events` (
   CONSTRAINT `events_ibfk_2` FOREIGN KEY (`owner_user_id`) REFERENCES `users` (`id`),
   CONSTRAINT `events_resource_fk` FOREIGN KEY (`resource_id`) REFERENCES `resources` (`id`) ON DELETE SET NULL,
   CONSTRAINT `events_series_fk` FOREIGN KEY (`series_id`) REFERENCES `event_series` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=671377 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=671531 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `lead_deal_evaluations`;
@@ -1127,7 +1239,7 @@ CREATE TABLE `lead_deal_evaluations` (
   CONSTRAINT `lead_eval_ibfk_creator` FOREIGN KEY (`created_by_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `lead_eval_ibfk_event` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE SET NULL,
   CONSTRAINT `lead_eval_ibfk_lead` FOREIGN KEY (`lead_id`) REFERENCES `leads` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `lead_intake_emails`;
@@ -1155,7 +1267,7 @@ CREATE TABLE `lead_intake_emails` (
   KEY `idx_intake_lead` (`lead_id`),
   KEY `idx_intake_status` (`status`),
   CONSTRAINT `lead_intake_ibfk_lead` FOREIGN KEY (`lead_id`) REFERENCES `leads` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=39 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=169 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `lead_notes`;
@@ -1176,7 +1288,7 @@ CREATE TABLE `lead_notes` (
   KEY `user_id` (`user_id`),
   CONSTRAINT `lead_notes_ibfk_1` FOREIGN KEY (`lead_id`) REFERENCES `leads` (`id`) ON DELETE CASCADE,
   CONSTRAINT `lead_notes_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=43 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=174 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `leads`;
@@ -1223,7 +1335,49 @@ CREATE TABLE `leads` (
   CONSTRAINT `leads_ibfk_decision` FOREIGN KEY (`decision_by_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `leads_ibfk_event` FOREIGN KEY (`converted_event_id`) REFERENCES `events` (`id`) ON DELETE SET NULL,
   CONSTRAINT `leads_ibfk_point` FOREIGN KEY (`point_person_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=40 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=171 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `list_export_history`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `list_export_history` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `list_id` int(11) DEFAULT NULL,
+  `list_name_snapshot` varchar(160) DEFAULT NULL,
+  `format` varchar(10) NOT NULL DEFAULT 'csv',
+  `row_count` int(11) NOT NULL DEFAULT 0,
+  `filters_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (`filters_json` is null or json_valid(`filters_json`)),
+  `exported_by_user_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `list_id` (`list_id`),
+  KEY `exported_by_user_id` (`exported_by_user_id`),
+  CONSTRAINT `list_export_history_ibfk_1` FOREIGN KEY (`list_id`) REFERENCES `mailing_lists` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `list_export_history_ibfk_2` FOREIGN KEY (`exported_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `list_import_history`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `list_import_history` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `list_id` int(11) NOT NULL,
+  `filename` varchar(255) DEFAULT NULL,
+  `created_count` int(11) NOT NULL DEFAULT 0,
+  `updated_count` int(11) NOT NULL DEFAULT 0,
+  `added_to_list` int(11) NOT NULL DEFAULT 0,
+  `skipped_count` int(11) NOT NULL DEFAULT 0,
+  `errors_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (`errors_json` is null or json_valid(`errors_json`)),
+  `imported_by_user_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `list_id` (`list_id`),
+  KEY `imported_by_user_id` (`imported_by_user_id`),
+  CONSTRAINT `list_import_history_ibfk_1` FOREIGN KEY (`list_id`) REFERENCES `mailing_lists` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `list_import_history_ibfk_2` FOREIGN KEY (`imported_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `list_membership`;
@@ -1233,7 +1387,7 @@ CREATE TABLE `list_membership` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `list_id` int(11) NOT NULL,
   `contact_id` bigint(20) NOT NULL,
-  `status` enum('subscribed','unsubscribed') NOT NULL DEFAULT 'subscribed',
+  `status` enum('subscribed','unsubscribed','bounced') NOT NULL DEFAULT 'subscribed',
   `added_via` enum('manual','bulk','csv_import','segment') NOT NULL DEFAULT 'manual',
   `added_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -1242,7 +1396,7 @@ CREATE TABLE `list_membership` (
   KEY `contact_id` (`contact_id`),
   CONSTRAINT `list_membership_ibfk_1` FOREIGN KEY (`list_id`) REFERENCES `mailing_lists` (`id`) ON DELETE CASCADE,
   CONSTRAINT `list_membership_ibfk_2` FOREIGN KEY (`contact_id`) REFERENCES `contacts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3654 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6261 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `magic_link_tokens`;
@@ -1259,7 +1413,7 @@ CREATE TABLE `magic_link_tokens` (
   UNIQUE KEY `token_hash` (`token_hash`),
   KEY `idx_mlt_hash` (`token_hash`),
   KEY `idx_mlt_email` (`email`)
-) ENGINE=InnoDB AUTO_INCREMENT=147 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=347 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `mailing_lists`;
@@ -1279,7 +1433,7 @@ CREATE TABLE `mailing_lists` (
   UNIQUE KEY `uniq_mailing_list_name` (`name`),
   KEY `created_by_user_id` (`created_by_user_id`),
   CONSTRAINT `mailing_lists_ibfk_1` FOREIGN KEY (`created_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `messages`;
@@ -1303,7 +1457,29 @@ CREATE TABLE `messages` (
   KEY `idx_inbox` (`recipient_user_id`,`archived_at`,`created_at`),
   KEY `idx_sent` (`sender_user_id`,`created_at`),
   KEY `idx_unread` (`recipient_user_id`,`read_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=326 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=968 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `nav_items`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `nav_items` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `parent_id` int(11) DEFAULT NULL,
+  `label` varchar(80) NOT NULL,
+  `icon` varchar(60) NOT NULL DEFAULT 'fa-solid fa-circle',
+  `link` varchar(255) DEFAULT NULL,
+  `capability` varchar(60) DEFAULT NULL,
+  `open_in_new_window` tinyint(1) NOT NULL DEFAULT 0,
+  `visible` tinyint(1) NOT NULL DEFAULT 1,
+  `is_home` tinyint(1) NOT NULL DEFAULT 0,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `parent_id` (`parent_id`),
+  CONSTRAINT `nav_items_parent_fk` FOREIGN KEY (`parent_id`) REFERENCES `nav_items` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=56 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `outbox`;
@@ -1320,7 +1496,7 @@ CREATE TABLE `outbox` (
   PRIMARY KEY (`id`),
   KEY `idx_sent_at` (`sent_at`),
   KEY `idx_to` (`to_address`(64))
-) ENGINE=InnoDB AUTO_INCREMENT=314 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=999 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `passkeys`;
@@ -1340,7 +1516,7 @@ CREATE TABLE `passkeys` (
   UNIQUE KEY `credential_id` (`credential_id`) USING HASH,
   KEY `idx_passkeys_user` (`user_id`),
   CONSTRAINT `passkeys_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `payment_settings`;
@@ -1377,7 +1553,7 @@ CREATE TABLE `portal_tokens` (
   KEY `created_by_id` (`created_by_id`),
   CONSTRAINT `portal_tokens_ibfk_creator` FOREIGN KEY (`created_by_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `portal_tokens_ibfk_event` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=49 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `pos_location_map`;
@@ -1532,7 +1708,7 @@ CREATE TABLE `promote_post_variants` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_post_channel` (`post_id`,`channel`),
   CONSTRAINT `promote_post_variants_ibfk_1` FOREIGN KEY (`post_id`) REFERENCES `promote_posts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=228 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=249 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `promote_posts`;
@@ -1580,6 +1756,17 @@ CREATE TABLE `promote_settings` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
+DROP TABLE IF EXISTS `rate_limits`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `rate_limits` (
+  `bucket` varchar(191) NOT NULL,
+  `count` int(10) unsigned NOT NULL DEFAULT 1,
+  `window_started_at` timestamp(6) NOT NULL DEFAULT current_timestamp(6),
+  PRIMARY KEY (`bucket`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
 DROP TABLE IF EXISTS `refresh_tokens`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -1595,7 +1782,7 @@ CREATE TABLE `refresh_tokens` (
   KEY `idx_rt_hash` (`token_hash`),
   KEY `user_id` (`user_id`),
   CONSTRAINT `refresh_tokens_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=171 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=384 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `resources`;
@@ -1617,7 +1804,7 @@ CREATE TABLE `resources` (
   UNIQUE KEY `venue_slug` (`venue_id`,`slug`),
   KEY `venue_id` (`venue_id`),
   CONSTRAINT `resources_ibfk_1` FOREIGN KEY (`venue_id`) REFERENCES `venues` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `schema_migrations`;
@@ -1662,7 +1849,7 @@ CREATE TABLE `sheet_sync_queue` (
   UNIQUE KEY `uniq_event` (`event_id`),
   KEY `idx_status` (`status`),
   CONSTRAINT `sheet_sync_queue_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=867 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1316 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `staff_members`;
@@ -1689,7 +1876,7 @@ CREATE TABLE `staff_members` (
   KEY `idx_staff_default_role` (`default_role`),
   KEY `user_id` (`user_id`),
   CONSTRAINT `staff_members_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=39 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `systems_inventory`;
@@ -1736,7 +1923,7 @@ CREATE TABLE `ticket_order_items` (
   KEY `idx_ticket_order_items_order` (`order_id`),
   CONSTRAINT `ticket_order_items_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `ticket_orders` (`id`) ON DELETE CASCADE,
   CONSTRAINT `ticket_order_items_ibfk_2` FOREIGN KEY (`ticket_type_id`) REFERENCES `ticket_types` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=69 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `ticket_orders`;
@@ -1752,6 +1939,7 @@ CREATE TABLE `ticket_orders` (
   `provider` varchar(40) DEFAULT NULL,
   `provider_ref` varchar(191) DEFAULT NULL,
   `provider_payment_ref` varchar(191) DEFAULT NULL,
+  `receipt_token` varchar(64) DEFAULT NULL,
   `amount_cents` int(11) NOT NULL DEFAULT 0,
   `currency` char(3) NOT NULL DEFAULT 'USD',
   `status` enum('pending','paid','fulfilled','canceled','refunded','expired') NOT NULL DEFAULT 'pending',
@@ -1763,13 +1951,14 @@ CREATE TABLE `ticket_orders` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_ticket_orders_receipt_token` (`receipt_token`),
   KEY `buyer_user_id` (`buyer_user_id`),
   KEY `idx_ticket_orders_event` (`event_id`),
   KEY `idx_ticket_orders_provider_ref` (`provider`,`provider_ref`),
   KEY `idx_ticket_orders_status` (`status`),
   CONSTRAINT `ticket_orders_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
   CONSTRAINT `ticket_orders_ibfk_2` FOREIGN KEY (`buyer_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=68 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `ticket_scans`;
@@ -1790,7 +1979,7 @@ CREATE TABLE `ticket_scans` (
   KEY `idx_ticket_scans_event` (`event_id`),
   CONSTRAINT `fk_ticket_scans_event` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_ticket_scans_ticket` FOREIGN KEY (`ticket_id`) REFERENCES `tickets` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=41 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `ticket_types`;
@@ -1814,7 +2003,7 @@ CREATE TABLE `ticket_types` (
   PRIMARY KEY (`id`),
   KEY `idx_ticket_types_event` (`event_id`),
   CONSTRAINT `ticket_types_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=38 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=56 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `tickets`;
@@ -1846,7 +2035,7 @@ CREATE TABLE `tickets` (
   CONSTRAINT `tickets_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tickets_ibfk_2` FOREIGN KEY (`ticket_type_id`) REFERENCES `ticket_types` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tickets_ibfk_3` FOREIGN KEY (`order_id`) REFERENCES `ticket_orders` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=51 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=93 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `user_merges`;
@@ -1874,7 +2063,10 @@ CREATE TABLE `users` (
   `email` varchar(255) NOT NULL,
   `phone` varchar(64) DEFAULT NULL,
   `password_hash` varchar(255) DEFAULT NULL,
+  `token_version` int(10) unsigned NOT NULL DEFAULT 0,
   `role` enum('venue_admin','event_owner','promoter','band','artist','designer','staff','viewer','global_viewer') NOT NULL DEFAULT 'viewer',
+  `is_hidden` tinyint(1) NOT NULL DEFAULT 0,
+  `support_super_admin_id` int(10) unsigned DEFAULT NULL,
   `access_status` enum('active','requested') NOT NULL DEFAULT 'active',
   `request_notes` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -1892,8 +2084,9 @@ CREATE TABLE `users` (
   `privacy_policy_accepted_at` datetime DEFAULT NULL COMMENT 'When the user agreed to the privacy policy',
   `privacy_policy_version` varchar(32) DEFAULT NULL COMMENT 'Version of the privacy policy the user agreed to',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `email` (`email`)
-) ENGINE=InnoDB AUTO_INCREMENT=123261 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  UNIQUE KEY `email` (`email`),
+  UNIQUE KEY `uq_support_super_admin` (`support_super_admin_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=123849 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `venue_policies`;
@@ -1969,7 +2162,7 @@ CREATE TABLE `webauthn_challenges` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `challenge` (`challenge`),
   KEY `idx_wc_challenge` (`challenge`)
-) ENGINE=InnoDB AUTO_INCREMENT=240 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=445 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `wizard_defaults`;

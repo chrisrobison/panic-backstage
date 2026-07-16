@@ -271,8 +271,14 @@ fully-migrated database's structure over `database/schema.sql` and clear
 
 ```bash
 mysqldump --no-data --single-transaction --add-drop-table --routines \
-  --triggers --set-charset panic_backstage > database/schema.sql
+  --skip-triggers --set-charset panic_backstage > database/schema.sql
 ```
+
+`--skip-triggers` is deliberate: the per-table audit triggers
+(`trg_<table>_ai`/`_au`/`_ad` → `db_history`) are DEFINER-bound and generated
+out-of-band by `scripts/generate-audit-triggers.php`, not part of the
+portable baseline — run that script separately after a fresh install if you
+want them.
 
 Then trim the mysqldump header/footer boilerplate and per-table
 `-- Table structure for table` comments so the file matches the existing
