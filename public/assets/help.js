@@ -38,6 +38,7 @@ export const HELP_SECTIONS = [
       { slug: 'calendar',     title: 'Calendar' },
       { slug: 'pipeline',     title: 'Pipeline board' },
       { slug: 'events-list',  title: 'Events list &amp; search' },
+      { slug: 'events-upcoming', title: 'Upcoming events (card view)' },
       { slug: 'asset-library', title: 'Asset library' },
       { slug: 'templates',    title: 'Templates' },
     ],
@@ -323,6 +324,38 @@ const HELP_CONTENT = {
   'events-list': `
     <h2>Events list &amp; search</h2>
     <p>The Events page shows every event you have access to. Use the topbar search to filter by title. Click any row to open the workspace. Admins see a <em>Create Event</em> button that links to <a href="#help-templates">Templates</a>.</p>
+  `,
+
+  'events-upcoming': `
+    <h2>Upcoming events (card view)</h2>
+    <p><strong>Events &rarr; Upcoming</strong> is a card-based, ticketing-aware alternative to the plain <a href="#help-events-list">Events list</a> — built for scanning what's coming up and how ticket sales are trending, rather than searching for a specific show. It reads the same event data as the List, Dashboard, and Calendar views, so anything you see here is always in sync with the rest of the app.</p>
+
+    <h3>The card list</h3>
+    <p>Each card shows the event's date, poster thumbnail, support-act line (or a short description if there's no lineup), venue, and a ticket-sales badge:</p>
+    <ul>
+      <li><strong>On Sale</strong> — tickets are available and moving normally.</li>
+      <li><strong>Low Tickets</strong> — 75% or more of capacity is sold.</li>
+      <li><strong>Sold Out</strong> — sold count has reached capacity.</li>
+      <li><strong>Free Event</strong> — every ticket tier is $0, or it's externally ticketed with no price/link set.</li>
+      <li><strong>Canceled</strong> — shown only if the Canceled filter is checked (unchecked by default).</li>
+    </ul>
+    <p>Sales badges only appear once an event has been announced or later in its lifecycle — early-pipeline holds and drafts show their ordinary status badge instead.</p>
+    <p>Click anywhere on a card to open that event's workspace, or use the <strong>&hellip;</strong> menu at the right of a card for <em>Open event</em> or <em>Promote</em> without leaving the list.</p>
+
+    <h3>Filters sidebar</h3>
+    <ul>
+      <li><strong>Search</strong> — narrows the visible cards by title, support act, or venue name as you type.</li>
+      <li><strong>Date Range</strong> — Next 7/30/90 Days, This Month, All Upcoming, or a Custom Range picked from the mini calendar below it (click a start day, then an end day).</li>
+      <li><strong>Event Type</strong> — filter to one event type.</li>
+      <li><strong>Status</strong> — checkboxes for On Sale, Low Tickets, Sold Out, Free Events, and Canceled; uncheck any bucket to hide it. <em>Clear all</em> resets every filter back to its default.</li>
+    </ul>
+    <p>Search and Status filter the already-loaded cards instantly with no network round-trip; changing the Date Range or Event Type reloads from the server.</p>
+
+    <h3>Stats footer</h3>
+    <p>Below the cards, four tiles summarize the currently selected date range: Upcoming Events, Tickets Sold, Est. Gross Revenue, and Avg. Capacity. These reflect the date-range/event-type filter only, not the client-side search or status checkboxes.</p>
+
+    <h3>Export</h3>
+    <p><em>Export Events</em> downloads a CSV of whatever's currently visible (after search and status filters are applied) — date, time, title, venue, status, tickets sold, capacity, and price range.</p>
   `,
 
   'asset-library': `

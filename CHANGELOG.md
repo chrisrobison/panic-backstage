@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** `events` — Document the Upcoming card view in help and the ops manual
 - **Added** `events` — Make Upcoming cards clickable to open the event
 - **Added** `events` — Add Events ▸ Upcoming card view with ticket-sales filters
 - **Fixed** `portal` — Stop Copy button's onclick JS leaking into the DOM
