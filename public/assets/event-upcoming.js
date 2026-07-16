@@ -257,6 +257,19 @@ class EventsUpcoming extends PanicElement {
         menu.hidden = !willOpen;
       });
     });
+    // Whole card opens the event, matching the calendar grid's day-cell
+    // pattern — but not when the click landed on a link/button (title link,
+    // the "..." menu toggle, or a menu item), which handle their own action.
+    $$('[data-event-card]', cardsEl).forEach((card) => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('a, button')) return;
+        location.hash = `event-${card.dataset.eventCard}`;
+      });
+      card.addEventListener('keydown', (e) => {
+        if (e.target.closest('a, button')) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); location.hash = `event-${card.dataset.eventCard}`; }
+      });
+    });
   }
 
   card(event) {
@@ -282,7 +295,7 @@ class EventsUpcoming extends PanicElement {
       : '';
     const venueLine = [event.venue_name, [event.venue_city, event.venue_state].filter(Boolean).join(', ')].filter(Boolean).join(' • ');
 
-    return `<article class="upcoming-card">
+    return `<article class="upcoming-card" data-event-card="${esc(event.id)}" tabindex="0" role="link" aria-label="Open ${esc(event.title)}">
       <div class="upcoming-date" title="${esc(longDate(d))}"><span class="upcoming-dow">${esc(dow)}</span><span class="upcoming-mon">${esc(mon)}</span><span class="upcoming-day">${esc(day)}</span></div>
       <div class="upcoming-thumb">${thumb}</div>
       <div class="upcoming-body">

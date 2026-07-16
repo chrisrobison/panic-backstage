@@ -6314,7 +6314,11 @@ pb-listmaster { --lm-accent: var(--blue); background: var(--bg); }
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
+.upcoming-card:hover { border-color: var(--blue); }
+.upcoming-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .upcoming-date { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
 .upcoming-dow { font-size: 11px; font-weight: 760; color: var(--muted); letter-spacing: .04em; }
 .upcoming-mon { font-size: 12px; font-weight: 760; color: var(--blue); }

@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Make Upcoming cards clickable to open the event
+- **Added** `events` — Make Upcoming cards clickable to open the event
 - **Added** `events` — Add Events ▸ Upcoming card view with ticket-sales filters
 - **Fixed** `portal` — Stop Copy button's onclick JS leaking into the DOM
 - **Fixed** `contracts` — Stop legacy contract_url junk text from faking "on file"

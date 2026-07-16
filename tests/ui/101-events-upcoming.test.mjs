@@ -52,6 +52,24 @@ test('Status checkboxes and Clear all reactively filter without a network round-
   assert.ok(await page.exists('.upcoming-sidebar [data-filter-status="on_sale"]:checked'), 'Clear all restores the default-checked status filters');
 });
 
+test('Clicking a card opens the event; clicking its "..." menu does not', async (page) => {
+  await page.goto('#upcoming');
+  await page.cdp.until(`document.querySelector('pb-events-upcoming .upcoming-page')`);
+  const before = await page.count('.upcoming-card');
+  if (before === 0) return page.skip('no upcoming events in range to click');
+  const id = await page.attr('.upcoming-card', 'data-event-card');
+
+  // The "..." menu toggle sits inside the card but must not navigate away.
+  await page.click('.upcoming-card [data-menu-toggle]');
+  assert.ok(await page.exists('.upcoming-menu:not([hidden])'), 'menu opens without navigating');
+  assert.ok(!(await page.eval('location.hash')).includes('event-'), 'hash unchanged after opening the menu');
+
+  await page.click('.upcoming-card');
+  const mounted = await page.cdp.until(`document.querySelector('pb-event-workspace .workspace-tabs')`);
+  assert.ok(mounted, 'clicking the card body opens the event workspace');
+  assert.equal(await page.eval('location.hash'), `#event-${id}`, "hash points at the clicked card's event");
+});
+
 test('Date range preset switches trigger a reload and update the range label', async (page) => {
   await page.goto('#upcoming');
   await page.cdp.until(`document.querySelector('pb-events-upcoming .upcoming-page')`);
