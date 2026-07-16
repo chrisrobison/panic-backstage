@@ -183,12 +183,19 @@ final class PosWebhook extends BaseEndpoint
         }
 
         // ── 2. Date-match fallback ────────────────────────────────────────────
+        // Pre-existing bug fixed here: this previously referenced a column
+        // (`event_date`) that doesn't exist on `events` (the date column is
+        // just `date`) — the fallback query errored every time it ran, so it
+        // never actually matched anything unless the explicit override (#1
+        // above) was set. Also now multi-day-aware, matching the same
+        // COALESCE(end_date, date) pattern used elsewhere for "is today
+        // within this event's date range."
         return $this->db->one(
             "SELECT id, title FROM events
               WHERE venue_id = ?
-                AND DATE(COALESCE(show_time, event_date)) = CURDATE()
+                AND date <= CURDATE() AND COALESCE(end_date, date) >= CURDATE()
                 AND status IN ('booked', 'advanced', 'published', 'completed')
-              ORDER BY COALESCE(show_time, event_date) DESC
+              ORDER BY show_time DESC
               LIMIT 1",
             [$venueId]
         );

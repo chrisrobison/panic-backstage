@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `pos` — Repair PosWebhook's broken date-match fallback query
 - **Added** `events` — Split the Location field into Venue + Room pickers
 - **Added** `venues` — Consolidate Mabuhay's 3 venue rows into 1 venue + rooms
 - **Added** `venues` — Consolidate Mabuhay's 3 venue rows into 1 venue + rooms
