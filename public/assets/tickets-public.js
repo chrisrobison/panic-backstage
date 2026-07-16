@@ -5,7 +5,11 @@
 // Lists currently-buyable ticket types (GET /api/public/tickets/{eventId}),
 // lets a visitor pick quantities + enter contact details, then starts a hosted
 // checkout (POST /api/public/tickets/{eventId}/checkout) and redirects the
-// browser to the returned provider checkout_url.
+// browser to the returned provider checkout_url. If every selected ticket is
+// free (order total $0), the server skips payment entirely and fulfills the
+// order synchronously, returning { free: true, order_id, receipt_token }
+// instead of a checkout_url — in that case we jump straight into the same
+// receipt polling used for the post-payment return (see below), no redirect.
 //
 // When the provider bounces the buyer back here with ?checkout=success&
 // order=<id>&receipt=<token> in the URL, this component also polls
@@ -303,6 +307,16 @@ class TicketPurchase extends PanicElement {
       });
       if (result && result.checkout_url) {
         window.location.href = result.checkout_url;
+        return;
+      }
+      if (result && result.free && result.order_id && result.receipt_token) {
+        // Free order: already fulfilled server-side, no payment step and no
+        // redirect to bounce through. Reuse the same receipt UI/poll as a
+        // post-checkout return — it will resolve on the very first poll since
+        // fulfillment already happened synchronously.
+        this.receiptHtml = this.receiptPendingHtml();
+        this.render();
+        await this.pollReceipt(result.order_id, result.receipt_token);
         return;
       }
       this.showError('Could not start checkout. Please try again.');

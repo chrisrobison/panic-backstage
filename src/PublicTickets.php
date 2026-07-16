@@ -18,11 +18,19 @@ use function Panic\event_public_path;
  *   POST /api/public/tickets/{eventId}/checkout
  *        body: { buyer_name, buyer_email, buyer_phone?,
  *                items: [ { ticket_type_id, quantity }, ... ] }
+
  *        -> creates a pending ticket_orders row + ticket_order_items with a
- *           15-minute hold (reserving inventory), starts a hosted checkout with
- *           the active payment provider, persists the provider + provider_ref on
- *           the order, and returns { checkout_url, order_id }.
+ *           15-minute hold (reserving inventory). If the order total is > 0,
+ *           starts a hosted checkout with the active payment provider,
+ *           persists the provider + provider_ref on the order, and returns
+ *           { checkout_url, order_id }. If the order total is exactly 0 (every
+ *           selected ticket type is free), skips payment entirely: fulfills
+ *           the order immediately (TicketingService::fulfillOrder), emails
+ *           the tickets, and returns { order_id, receipt_token, free: true }
+ *           instead of a checkout_url — there is no hosted checkout to bounce
+ *           through, so no webhook will ever arrive to trigger fulfillment.
  *
+
  *   GET  /api/public/tickets/{eventId}/orders/{orderId}?receipt=<token>
  *        -> lets the public event page poll "how did my purchase turn out?"
  *           after the provider bounces the buyer back from hosted checkout.
@@ -212,6 +220,39 @@ final class PublicTickets extends BaseEndpoint
             }
             error_log('PublicTickets order create failed: ' . $e->getMessage());
             return Response::json(['error' => 'Could not start checkout. Please try again.'], 500);
+        }
+
+        // A fully-free order (every selected ticket type priced at 0) has
+        // nothing for a payment provider to collect — Stripe/Square checkout
+        // sessions require a positive total and would just reject it. Fulfill
+        // immediately instead of ever starting hosted checkout, and email the
+        // tickets right away since there's no webhook coming to trigger it.
+        if ($amount === 0) {
+            try {
+                $tickets = $ticketing->fulfillOrder($this->db, $orderId);
+            } catch (\Throwable $e) {
+                error_log('PublicTickets free-order fulfillment failed: ' . $e->getMessage());
+                return Response::json(['error' => 'Could not issue your ticket(s). Please try again.'], 500);
+            }
+
+            $this->db->run(
+                "UPDATE ticket_orders SET provider = 'free' WHERE id = ?",
+                [$orderId]
+            );
+
+            $deliverable = array_values(array_filter(
+                $tickets,
+                static fn(array $t): bool => !empty($t['token'])
+            ));
+            if ($deliverable !== []) {
+                $ticketing->emailTickets($this->db, $this->root, $orderId, $deliverable);
+            }
+
+            return $this->ok([
+                'order_id'      => $orderId,
+                'receipt_token' => $receiptToken,
+                'free'          => true,
+            ]);
         }
 
         // Start a hosted checkout with whichever provider is currently active.
