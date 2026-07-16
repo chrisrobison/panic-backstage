@@ -1199,6 +1199,7 @@
     <div class="nav-section">Part VIII — Admin</div>
     <a href="#admin" class="chapter">Chapter 8: Admin &amp; Users</a>
     <a href="#admin-overview" class="section">The Admin section</a>
+    <a href="#admin-venue" class="section">Venue &amp; rooms</a>
     <a href="#admin-users" class="section">Login accounts</a>
     <a href="#admin-staff" class="section">Staff roster</a>
     <a href="#admin-templates" class="section">Event templates</a>
@@ -1631,8 +1632,8 @@
       </div>
       <div class="form-row">
         <div class="mock-field">
-          <label>Location <span class="required-star">*</span></label>
-          <div class="mock-input">Your Venue — Downstairs</div>
+          <label>Room</label>
+          <div class="mock-input">Downstairs (21+)</div>
         </div>
         <div class="mock-field">
           <label>Event Type <span class="required-star">*</span></label>
@@ -1654,6 +1655,11 @@
     <div class="callout tip">
       <span class="callout-title">⏰ Time auto-fill</span>
       <p>If you set <strong>Doors</strong>, the system will automatically suggest Show time (1 hour after doors) and End time (5 hours after doors) if you leave those blank. You can always override. This saves time on common show formats.</p>
+    </div>
+
+    <div class="callout note">
+      <span class="callout-title">🏛️ Venue vs. Room</span>
+      <p>Every event has a <strong>Room</strong> (optional — which space within the venue, e.g. Downstairs, Upstairs, or Both Rooms) and a <strong>Venue</strong> (which venue itself). The Venue picker only appears once your account manages more than one venue — on a single-venue setup like this one, it's skipped entirely and every event is implicitly at the one venue. Rooms are configured under <span class="ui-label tab">Admin</span> → <span class="ui-label tab">Venue</span>; see <a href="#admin-venue">Venue &amp; Rooms</a> in the Admin chapter.</p>
     </div>
 
     <!-- MULTI-DAY EVENTS ────────────────────────────────────────────────── -->
@@ -1880,7 +1886,7 @@
           <li>Event name</li>
           <li>Date</li>
           <li>Event type</li>
-          <li>Location / Venue</li>
+          <li>Venue (Room is optional)</li>
           <li>Doors time</li>
           <li>End time</li>
         </ul>
@@ -3600,11 +3606,12 @@
 
     <h2 id="admin-overview">The Admin section</h2>
 
-    <p>Navigate to <strong>Admin</strong> in the left sidebar. You'll see six tabs:</p>
+    <p>Navigate to <strong>Admin</strong> in the left sidebar. Among its tabs:</p>
 
     <table>
       <tr><th>Tab</th><th>What you manage here</th></tr>
       <tr><td><strong>Users</strong></td><td>Login accounts — the people who sign into Backstage</td></tr>
+      <tr><td><strong>Venue</strong></td><td>The venue's own profile (name, address, timezone) and its rooms</td></tr>
       <tr><td><strong>Duplicates</strong></td><td>Detect and merge duplicate user accounts or contacts</td></tr>
       <tr><td><strong>Staff</strong></td><td>The employee roster — the people who work your shows (separate from login accounts)</td></tr>
       <tr><td><strong>Templates</strong></td><td>Event templates with pre-built task checklists and run sheet schedules</td></tr>
@@ -3615,6 +3622,48 @@
     <div class="callout note">
       <span class="callout-title">🔐 Admin-only area</span>
       <p>The Admin section is only visible to users with the <code>venue_admin</code> role. If you don't see it in the sidebar, your account doesn't have admin access. Ask a venue admin to grant it.</p>
+    </div>
+
+    <!-- VENUE & ROOMS ──────────────────────────────────────────────────────── -->
+    <h2 id="admin-venue">Venue &amp; rooms</h2>
+
+    <p>The <strong>Venue</strong> tab has two parts: the venue's own profile, and the bookable rooms within it.</p>
+
+    <h3>Venue details</h3>
+
+    <p>Name, address, city/state, timezone, phone, and website. These fields appear on contracts, automated emails, and the public event page — fill them in early. The onboarding checklist links directly here for that reason.</p>
+
+    <h3>Rooms</h3>
+
+    <p>Rooms are the actual bookable spaces within the venue — a room per stage, floor, or sub-space. An event's <strong>Room</strong> field (see <a href="#create-event">Creating the event</a>) picks one of these.</p>
+
+    <div class="field-ref">
+      <div class="field-ref-title">Room Fields</div>
+      <div class="field-row">
+        <div class="field-name">Name</div>
+        <div class="field-desc">Shown on the event's Room field, the calendar legend, and room-conflict messages.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Capacity</div>
+        <div class="field-desc">Optional. Falls back to the event's own Capacity field when set.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Zone</div>
+        <div class="field-desc"><strong>Primary</strong> — a standalone room with no special relationship to others. <strong>Up</strong> / <strong>Down</strong> — one of two paired halves of a building. <strong>Both</strong> — a whole-building booking spanning the Up/Down pair. Zone drives the calendar's colour-coded split and room-conflict detection: a <em>Both</em> booking blocks every other room in the venue for that date range, and a specific room is blocked by any existing <em>Both</em> booking.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Sort order</div>
+        <div class="field-desc">Display order in the Room dropdown and the rooms table.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Active / Archived</div>
+        <div class="field-desc">Archiving a room (instead of deleting it) hides it from the Room picker on new bookings while preserving it on any past event that already used it. Archived rooms can be restored at any time.</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">💡 Single-venue installs skip the Venue picker</span>
+      <p>Every event has both a Venue and a Room, but the Venue picker (Details tab, Quick Create, and the event wizard) is only shown once your account manages more than one venue. On a single-venue setup — the default, and what this manual assumes throughout — the Venue field never appears; only Room does, and it's optional. Add a second venue under this tab and the Venue picker reappears automatically everywhere an event's location is set.</p>
     </div>
 
     <!-- USERS ──────────────────────────────────────────────────────────────── -->
@@ -3771,16 +3820,17 @@
     <!-- VENUE POLICY ─────────────────────────────────────────────────────────── -->
     <h2 id="venue-policy">Venue policy configuration</h2>
 
-    <p>Venue Policy (Admin → Venue Policy) is the authoritative record of house rules, room configurations, and default booking terms. It's the first place to check when staff have questions about what the venue's default position is on any booking detail.</p>
+    <p>Venue Policy is the authoritative record of house rules and default booking terms. It's the first place to check when staff have questions about what the venue's default position is on any booking detail.</p>
 
     <h3>Rooms</h3>
 
-    <p>Each room has a name, capacity, and age rule:</p>
+    <p>Room name and capacity are managed under <a href="#admin-venue">Admin → Venue</a>, not here — Venue Policy covers the house-rule defaults below. For reference, the current rooms:</p>
 
     <table>
-      <tr><th>Room</th><th>Capacity</th><th>Default age rule</th></tr>
-      <tr><td>Upstairs Mabuhay Gardens</td><td>450</td><td>All ages</td></tr>
-      <tr><td>Downstairs Mabuhay Gardens</td><td>350</td><td>21+</td></tr>
+      <tr><th>Room</th><th>Capacity</th><th>Typical age rule</th></tr>
+      <tr><td>Upstairs (All Ages)</td><td>450</td><td>All ages</td></tr>
+      <tr><td>Downstairs (21+)</td><td>350</td><td>21+</td></tr>
+      <tr><td>Both Rooms</td><td>750</td><td>Depends on the booking</td></tr>
     </table>
 
     <h3>Policy fields</h3>

@@ -93,6 +93,7 @@ export const HELP_SECTIONS = [
     icon: 'fa-solid fa-user-shield',
     items: [
       { slug: 'admin',        title: 'Admin overview' },
+      { slug: 'admin-venue',  title: 'Venue &amp; rooms' },
       { slug: 'admin-users',  title: 'Managing login accounts' },
       { slug: 'contacts',     title: 'Contacts (CRM)' },
       { slug: 'admin-staff',  title: 'Staff roster' },
@@ -281,17 +282,17 @@ const HELP_CONTENT = {
     <h2>Calendar</h2>
     <p>The calendar shows a six-week window. Use the <code>&lt;</code> and <code>&gt;</code> buttons to move months, or <em>Today</em> to snap back. Dates without an event show an <em>Available</em> chip; dates with events show a colored status dot and the event title. Click any event chip to open the workspace.</p>
 
-    <h3>Venue floor colour code</h3>
-    <p>The coloured dot on each chip indicates which part of the venue is booked:</p>
+    <h3>Room colour code</h3>
+    <p>The coloured dot on each chip indicates which room the event is booked into. Rooms are configured under <a href="#help-admin-venue">Admin &rarr; Venue &amp; rooms</a> — for the current venue, that's:</p>
     <ul>
       <li><strong>Blue dot</strong> — Upstairs</li>
       <li><strong>Red dot</strong> — Downstairs (21+)</li>
       <li><strong>Green dot</strong> — Both Rooms</li>
     </ul>
-    <p>The legend below the calendar toolbar shows the colour key at a glance.</p>
+    <p>The legend below the calendar toolbar always reflects whatever rooms are actually configured, so it updates automatically if a room is renamed, added, or archived. An event with no room selected shows in the default (red/"down") slot.</p>
 
     <h3>Times on chips</h3>
-    <p>Each calendar chip shows the Doors time (or Show time if no Doors time is set) as a small badge on the right. Hovering the chip shows a tooltip with Status · Venue floor · Doors time · Load-In time.</p>
+    <p>Each calendar chip shows the Doors time (or Show time if no Doors time is set) as a small badge on the right. Hovering the chip shows a tooltip with Status · Room · Doors time · Load-In time.</p>
 
     <h3>Private events</h3>
     <p>Private venue rentals (Type = Private Event) are shown on the calendar with a 🔒 lock icon and a subtle grey background so staff can distinguish them from publicly promoted shows at a glance. Private events are never announced publicly and will never appear on the public calendar or event page.</p>
@@ -429,7 +430,8 @@ const HELP_CONTENT = {
       <li><strong>Date</strong> (required) — show date. Defaults to today.</li>
       <li><strong>End Date</strong> — optional, only for events spanning more than one calendar day. See <a href="#help-multi-day-events">Multi-day events</a>.</li>
       <li><strong>Recurring Event</strong> — optional. Check this to spin off a whole series (weekly, every other week, monthly by weekday or by date) instead of a single show — see <a href="#help-recurring-events">Recurring events</a>.</li>
-      <li><strong>Room / Venue</strong> (required) — which space is being used (Downstairs 21+, Upstairs, Both Rooms, etc.).</li>
+      <li><strong>Venue</strong> (required) — which venue the show is at. Only shown once your account has more than one venue to choose from; a single-venue install skips straight to Room.</li>
+      <li><strong>Room</strong> — which space within that venue is being used (e.g. Downstairs 21+, Upstairs, Both Rooms). Optional — leave it blank if the venue has no separate rooms defined. See <a href="#help-admin-venue">Venue &amp; rooms</a>.</li>
       <li><strong>Event Type</strong> (required) — Live Music, Karaoke, Open Mic, Promoter Night, DJ Night, Comedy, Private Event, or Special Event.</li>
       <li><strong>Doors Open / Show Time / End / Curfew</strong> — defaults to 7 pm / 8 pm / 11 pm.</li>
       <li><strong>Age Restriction</strong> — All Ages, 18+, or 21+.</li>
@@ -602,7 +604,8 @@ const HELP_CONTENT = {
       <li><strong>Title</strong> — the marquee name. Used everywhere: dashboard, calendar chips, public page, print packets.</li>
       <li><strong>Date</strong> — show date.</li>
       <li><strong>End Date</strong> — optional. Only set this for an event that spans more than one calendar day (a festival, a weekend rental, a multi-day workshop). Leave it blank for a normal single-day show. See <a href="#help-multi-day-events">Multi-day events</a>.</li>
-      <li><strong>Venue</strong> — choose from the venues your account can see.</li>
+      <li><strong>Venue</strong> — which venue the show is at. Only shown when your account has more than one venue to choose from.</li>
+      <li><strong>Room</strong> — which space within that venue, if any are defined (see <a href="#help-admin-venue">Venue &amp; rooms</a>). Drives the calendar's room colour-coding and room-conflict checks.</li>
       <li><strong>Type</strong> — live music, karaoke, open mic, promoter night, DJ night, comedy, private event, or special event. Changing to or from <em>private event</em> changes the entire form layout.</li>
       <li><strong>Status</strong> — see <a href="#help-statuses">Event status reference</a>. Private events show a filtered dropdown.</li>
       <li><strong>Owner</strong> — the staff member responsible. Owners get implicit access to the event.</li>
@@ -671,7 +674,7 @@ const HELP_CONTENT = {
     <h3>How it shows up</h3>
     <ul>
       <li><strong>Calendar &amp; agenda</strong> — instead of a single dot, the event renders as one continuous chip across every day in its range. See <a href="#help-calendar">Calendar</a>.</li>
-      <li><strong>Room conflicts</strong> — the venue is considered booked for the <em>entire</em> range. Trying to book the same room (or another room in the same building/zone) on any day inside that span will be blocked as a conflict, not just the first day.</li>
+      <li><strong>Room conflicts</strong> — the room is considered booked for the <em>entire</em> range. Trying to book that same room — or, for a "Both Rooms"-type booking, any of the individual rooms it spans — on any day inside that range will be blocked as a conflict, not just the first day. See <a href="#help-admin-venue">Venue &amp; rooms</a> for how rooms relate to each other.</li>
       <li><strong>Staffing</strong> — the Staffing tab groups shifts by day first, then role, and each shift carries its own date within the event's range (defaulting to the start date). "Auto-fill from capacity" applies a full crew tier to <em>every</em> day in the range rather than once for the whole run, and both the payroll CSV export and the printed staffing schedule break out one section per day.</li>
       <li><strong>Everything else</strong> (contract, ticketing, guest list, settlement) stays attached to the single event record exactly like a normal show — a multi-day event is still one event, just with a wider footprint on the calendar. The contract renderer also shows the full date range (e.g. "August 14 – August 16, 2026") anywhere it would otherwise print just the start date, and auto-includes a Multi-Day Event clause covering exclusivity, load-in/strike scheduling, and overnight-gear risk.</li>
     </ul>
@@ -1103,12 +1106,32 @@ const HELP_CONTENT = {
     <p>The Admin nav item is visible only to venue admins. It groups these management tools as tabs on a single page:</p>
     <ul>
       <li><a href="#help-admin-users">Users</a> — create, edit, and delete backstage login accounts; reset passwords; change roles.</li>
+      <li><a href="#help-admin-venue">Venue</a> — the venue's own profile (name, address, timezone) and its rooms.</li>
       <li><a href="#help-admin-staff">Staff</a> — keep the roster of bartenders, security, door, sound, etc. used in event staffing.</li>
       <li><a href="#help-admin-templates">Templates</a> — edit run-sheet and checklist templates used to create new events.</li>
       <li><a href="#help-admin-contracts">Contracts</a> — the contract clause library, contract templates, and a venue-wide list of all contracts.</li>
       <li><a href="#help-admin-payments">Payments</a> — choose the payment processor and currency used for in-house ticket sales.</li>
     </ul>
-    <p>Each tab has a stable deep link: <code>#admin-users</code>, <code>#admin-staff</code>, <code>#admin-templates</code>, <code>#admin-contracts</code>, <code>#admin-payments</code>.</p>
+    <p>Each tab has a stable deep link: <code>#admin-users</code>, <code>#admin-venue</code>, <code>#admin-staff</code>, <code>#admin-templates</code>, <code>#admin-contracts</code>, <code>#admin-payments</code>.</p>
+  `,
+
+  'admin-venue': `
+    <h2>Venue &amp; rooms</h2>
+    <p>The <strong>Venue</strong> admin tab has two parts: the venue's own profile, and the rooms within it.</p>
+
+    <h3>Venue details</h3>
+    <p>Name, address, city/state, timezone, phone, and website. These appear on contracts, emails, and the public event page — fill them in early (the onboarding checklist links here).</p>
+
+    <h3>Rooms</h3>
+    <p>Rooms are the actual bookable spaces within the venue — e.g. a room per stage, floor, or sub-space. An event's <a href="#help-details">Room</a> field picks one of these. Each room has:</p>
+    <ul>
+      <li><strong>Name</strong> — shown on the event's Room field, the calendar legend, and room-conflict messages.</li>
+      <li><strong>Capacity</strong> — optional; falls back to the event's own Capacity field when set.</li>
+      <li><strong>Zone</strong> — <em>Primary</em> (a standalone room with no special relationship to others), <em>Up</em> / <em>Down</em> (one of two paired halves of a building), or <em>Both</em> (a whole-building booking that spans the Up/Down pair). Zone drives two things: the calendar's up/down/both colour-coded split, and room-conflict detection — a <em>Both</em> booking blocks every other room in the venue for that date range, and a specific room booking is blocked by any existing <em>Both</em> booking.</li>
+      <li><strong>Sort order</strong> — display order in the Room dropdown and the rooms table.</li>
+      <li><strong>Active / Archived</strong> — archiving a room (rather than deleting it) hides it from the Room picker for new bookings while keeping it on any past event that already used it. Archived rooms can be restored at any time.</li>
+    </ul>
+    <p class="help-tip">💡 On a single-venue install, the event Venue field is hidden everywhere (Details tab, Quick Create, the event wizard) since there's nothing to choose — only Room shows. Add a second venue and the Venue picker reappears automatically across all three.</p>
   `,
 
   'admin-users': `
