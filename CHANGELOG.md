@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `nav` — Add Navigation Manager and derive the app shell sidebar from it
+- **Added** `nav` — Add Navigation Manager and derive the app shell sidebar from it
 - **Documentation** `events` — Document the Upcoming card view in help and the ops manual
 - **Added** `events` — Make Upcoming cards clickable to open the event
 - **Added** `events` — Add Events ▸ Upcoming card view with ticket-sales filters

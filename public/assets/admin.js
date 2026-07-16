@@ -17,6 +17,7 @@ const ADMIN_TABS = [
   { key: 'venue',     title: 'Venue',     icon: 'fa-building' },
   { key: 'db',        title: 'DB Browser', icon: 'fa-database' },
   { key: 'db-history', title: 'DB History', icon: 'fa-clock-rotate-left' },
+  { key: 'navigation', title: 'Navigation', icon: 'fa-bars' },
 ];
 
 
@@ -40,7 +41,7 @@ class AdminPage extends PanicElement {
       this.render();
     }));
     const outlet = $('.admin-outlet', this);
-    const tag = { users: 'pb-admin-users', duplicates: 'pb-user-duplicates', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts', payments: 'pb-payment-settings', wizard: 'pb-admin-wizard-defaults', venue: 'pb-admin-venue', db: 'pb-admin-db-browser', 'db-history': 'pb-admin-db-history' }[this.tab];
+    const tag = { users: 'pb-admin-users', duplicates: 'pb-user-duplicates', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts', payments: 'pb-payment-settings', wizard: 'pb-admin-wizard-defaults', venue: 'pb-admin-venue', db: 'pb-admin-db-browser', 'db-history': 'pb-admin-db-history', navigation: 'pb-admin-navigation' }[this.tab];
     outlet.replaceChildren(document.createElement(tag));
   }
 }

@@ -84,6 +84,7 @@ abstract class BaseEndpoint implements Endpoint
             'reopen_settlement',
             'manage_db_history',
             'view_reports',
+            'manage_navigation',
         ],
         'event_owner' => ['view_leads'],
         'promoter' => [],

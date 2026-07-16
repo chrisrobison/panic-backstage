@@ -8447,6 +8447,86 @@ components:
         security_paid_by:
           type: string
       additionalProperties: false
+    NavItem:
+      type: object
+      description: >-
+        One row of the app shell's sidebar. A null parent_id is a top-level item; a purely-grouping
+        parent (e.g. "Events", "Admin") has a null link since it renders as an expand/collapse
+        button, not an anchor.
+      properties:
+        id:
+          type: integer
+        parent_id:
+          type: integer
+          nullable: true
+        label:
+          type: string
+        icon:
+          type: string
+          description: FontAwesome class string, e.g. "fa-solid fa-gauge-high".
+        link:
+          type: string
+          nullable: true
+          description: >-
+            An internal route key matching an app hash route (e.g. "dashboard", "admin-users",
+            "inbox" — no leading "#"), an external "https://" URL, or null for a grouping-only
+            parent with no route of its own.
+        capability:
+          type: string
+          nullable: true
+          description: >-
+            A global capability key (see BaseEndpoint::GLOBAL_CAPABILITIES) required to see this
+            item, or null for no restriction.
+        open_in_new_window:
+          type: boolean
+        visible:
+          type: boolean
+          description: Toggle to hide from the sidebar without deleting the row.
+        is_home:
+          type: boolean
+          description: The default landing page when a user opens the app with no route in the URL. At most one item has this set.
+        sort_order:
+          type: integer
+          description: Lower numbers appear first within the same level (top-level vs. children of the same parent).
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    NavItemInput:
+      type: object
+      required:
+        - label
+      properties:
+        label:
+          type: string
+          description: Required; 422 if blank after trimming.
+        icon:
+          type: string
+          default: fa-solid fa-circle
+        link:
+          type: string
+          nullable: true
+        parent_id:
+          type: integer
+          nullable: true
+          description: Must reference a top-level item (its own parent_id must be null).
+        capability:
+          type: string
+          nullable: true
+        open_in_new_window:
+          type: boolean
+          default: false
+        visible:
+          type: boolean
+          default: true
+        is_home:
+          type: boolean
+          default: false
+        sort_order:
+          type: integer
+          default: 0
     StaffMember:
       type: object
       properties:
@@ -22105,6 +22185,198 @@ paths:
           description: Deleted
         '403':
           description: Missing manage_systems_inventory capability, or caller is not venue_admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/nav-items:
+    get:
+      operationId: navItems_list
+      summary: List all app shell navigation items
+      description: >-
+        Backs both the Admin > Navigation manager and the app shell's sidebar itself, so it's
+        readable by any authenticated user (not gated by manage_navigation) — every user's sidebar
+        needs it, same as /api/me. Returns every row including hidden (visible=0) ones; the caller
+        is responsible for filtering by `visible` and `capability` for its own purposes (the app
+        shell does this via public/assets/nav-shared.js's filterNavTree()). At most two levels deep:
+        `parent_id` is null for a top-level item, or references another top-level item for a child —
+        an item can never be nested more than one level.
+      tags:
+        - Navigation
+      responses:
+        '200':
+          description: All nav items (flat, unordered by tree — sorted top-level-first, then by sort_order/id), plus the full set of global capability keys available for the Permission field.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NavItem'
+                  capabilities:
+                    type: array
+                    items:
+                      type: string
+                    example:
+                      - view_all_events
+                      - create_events
+                      - manage_users
+                      - manage_navigation
+    post:
+      operationId: navItems_create
+      summary: Create a navigation item
+      description: >-
+        Gated by manage_navigation. `link` may be blank for a pure grouping parent (renders as an
+        expand/collapse button with no route of its own). `parent_id`, if set, must reference a
+        top-level item (one whose own parent_id is null) — nesting under a child is rejected.
+      tags:
+        - Navigation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NavItemInput'
+      responses:
+        '200':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+        '403':
+          description: Missing manage_navigation capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error (label required, or an invalid/too-deep parent_id)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/nav-items/reorder:
+    post:
+      operationId: navItems_reorder
+      summary: Bulk move/reorder navigation items
+      description: >-
+        Gated by manage_navigation. Used by the Navigation manager's drag-and-drop list: accepts the
+        full set of moved/reordered items in one call and applies them in a single transaction. Every
+        `id` must already exist; every `parent_id` (if not null) must reference a top-level item.
+      tags:
+        - Navigation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - items
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - id
+                    properties:
+                      id:
+                        type: integer
+                      parent_id:
+                        type: integer
+                        nullable: true
+                      sort_order:
+                        type: integer
+      responses:
+        '200':
+          description: Applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '403':
+          description: Missing manage_navigation capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Unknown id/parent_id, an item nesting under a child, or an item becoming its own parent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/nav-items/{itemId}:
+    parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      operationId: navItems_update
+      summary: Update a navigation item
+      description: >-
+        Gated by manage_navigation. Rejects giving an item that already has children a `parent_id`
+        (would create a 3rd nesting level). Setting `is_home` clears it on every other item — only one
+        item can be the default landing page at a time.
+      tags:
+        - Navigation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NavItemInput'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '403':
+          description: Missing manage_navigation capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Navigation item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: navItems_delete
+      summary: Delete a navigation item
+      description: Gated by manage_navigation. Cascades to any children of this item.
+      tags:
+        - Navigation
+      responses:
+        '204':
+          description: Deleted
+        '403':
+          description: Missing manage_navigation capability
           content:
             application/json:
               schema:

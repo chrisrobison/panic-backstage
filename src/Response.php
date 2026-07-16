@@ -9,7 +9,14 @@ final class Response
 
     public static function json(mixed $body, int $status = 200): self
     {
-        return new self($body, $status, ['Content-Type' => 'application/json; charset=utf-8']);
+        // No-store: these are dynamic, per-request API responses with no
+        // Last-Modified/ETag, so there's no reason a browser (or an
+        // intermediate proxy) should ever cache one. Cheap defense-in-depth
+        // for every JSON endpoint.
+        return new self($body, $status, [
+            'Content-Type' => 'application/json; charset=utf-8',
+            'Cache-Control' => 'no-store',
+        ]);
     }
 
     public static function noContent(): self

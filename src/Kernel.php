@@ -376,6 +376,20 @@ final class Kernel
             return [SystemsInventory::class, ['itemId' => $this->intOrNull($segments[1] ?? null)]];
         }
 
+        // Nav items — app shell main navigation structure (Admin > Navigation manager).
+        //   GET    /api/nav-items            list (any authenticated user — the shell needs it)
+        //   POST   /api/nav-items            create (manage_navigation)
+        //   PATCH  /api/nav-items/{id}       update (manage_navigation)
+        //   DELETE /api/nav-items/{id}       delete (manage_navigation)
+        //   POST   /api/nav-items/reorder    bulk parent/order update (manage_navigation)
+        if ($segments[0] === 'nav-items') {
+            $sub = $segments[1] ?? null;
+            return [NavItems::class, [
+                'itemId' => $sub === 'reorder' ? null : $this->intOrNull($sub),
+                'action' => $sub === 'reorder' ? 'reorder' : null,
+            ]];
+        }
+
         // Outbox — sent-mail log (admin; manage_users gate inside endpoint)
         if ($segments[0] === 'outbox') {
             return [Outbox::class, ['outboxId' => $this->intOrNull($segments[1] ?? null)]];

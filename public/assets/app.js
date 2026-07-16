@@ -25,6 +25,8 @@ import './leads.js';
 import './asset-library.js';
 import './reports.js';
 import './event-report.js';
+import './nav-manager.js';
+import { buildNavTree, filterNavTree, renderNavHtml } from './nav-shared.js';
 
 
 class AppShell extends PanicElement {
@@ -37,15 +39,17 @@ class AppShell extends PanicElement {
     subscribe('event.saved', () => this.refreshCurrent(), this.abort.signal);
     window.addEventListener('hashchange', () => this.route(), { signal: this.abort.signal });
     try {
-      const me = await api('/me');
+      const [me, navData] = await Promise.all([api('/me'), api('/nav-items')]);
       this.user = me.user;
       this.capabilities = me.capabilities || {};
+      this.navItems = navData.items || [];
       setAppUser(me.user);
       publish('auth.changed', me);
       if (!this.user) {
         location.href = appUrl('login.html');
         return;
       }
+      this.renderNav();
       this.applyCapabilities();
       this.applyUserPrefs();
       this._loadVenueName();
@@ -89,60 +93,7 @@ class AppShell extends PanicElement {
     this.innerHTML = `<aside class="sidebar">
       <button class="drawer-close" data-drawer-close type="button" aria-label="Close navigation"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
       <a class="brand" href="#dashboard" aria-label="Panic Backstage home"><span class="brand-mark" aria-hidden="true"></span><span>Panic Backstage</span></a>
-      <nav class="side-nav" aria-label="Main navigation">
-        <a data-nav="dashboard" href="#dashboard" title="Dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
-        <a data-nav="reports" href="#reports" title="Reports" data-nav-reports><i class="fa-solid fa-chart-line" aria-hidden="true"></i>Reports</a>
-        <a data-nav="leads" href="#leads" title="Leads Inbox" data-nav-leads><i class="fa-solid fa-filter" aria-hidden="true"></i>Leads</a>
-        <a data-nav="contacts" href="#contacts" title="Contacts" data-nav-contacts><i class="fa-solid fa-address-book" aria-hidden="true"></i>Contacts</a>
-        <a data-nav="promote" href="#promote" title="Promote"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i>Promote</a>
-        <div class="nav-group" data-group="messages">
-          <button class="nav-parent" type="button" data-group-toggle="messages" aria-expanded="false" title="Messages"><i class="fa-solid fa-envelope" aria-hidden="true"></i><span class="nav-parent-label">Messages</span><span class="nav-badge" data-inbox-badge hidden></span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
-          <div class="nav-children">
-            <a data-nav="inbox" href="#inbox" title="Inbox"><i class="fa-solid fa-inbox" aria-hidden="true"></i>Inbox<span class="nav-badge" data-inbox-badge hidden></span></a>
-            <a data-nav="archive" href="#archive" title="Archive"><i class="fa-solid fa-box-archive" aria-hidden="true"></i>Archive</a>
-            <a data-nav="sent" href="#sent" title="Outbox"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i>Outbox</a>
-            <a data-nav="campaigns" data-nav-campaigns href="#campaigns" title="Campaigns"><i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i>Campaigns</a>
-            <a data-nav="lists" data-nav-campaigns href="#lists" title="Lists"><i class="fa-solid fa-rectangle-list" aria-hidden="true"></i>Lists</a>
-            <a data-nav="listmaster" data-nav-campaigns href="#listmaster" title="ListMaster"><i class="fa-solid fa-table-list" aria-hidden="true"></i>ListMaster</a>
-          </div>
-        </div>
-        <div class="nav-group" data-group="events">
-          <button class="nav-parent" type="button" data-group-toggle="events" aria-expanded="false" title="Events"><i class="fa-solid fa-ticket" aria-hidden="true"></i><span class="nav-parent-label">Events</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
-          <div class="nav-children">
-            <a data-nav="events" href="#events" title="Event list"><i class="fa-solid fa-list" aria-hidden="true"></i>List</a>
-            <a data-nav="upcoming" href="#upcoming" title="Upcoming Events"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i>Upcoming</a>
-            <a data-nav="calendar" href="#calendar" title="Calendar"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Calendar</a>
-            <a data-nav="pipeline" href="#pipeline" title="Pipeline"><i class="fa-solid fa-table-columns" aria-hidden="true"></i>Pipeline</a>
-            <a data-nav="asset-library" href="#asset-library" title="Asset Library"><i class="fa-solid fa-images" aria-hidden="true"></i>Assets</a>
-          </div>
-        </div>
-        <div class="nav-group" data-group="settings">
-          <button class="nav-parent" type="button" data-group-toggle="settings" aria-expanded="false" title="Settings"><i class="fa-solid fa-gear" aria-hidden="true"></i><span class="nav-parent-label">Settings</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
-          <div class="nav-children">
-            <a data-nav="account" href="#account" title="Account"><i class="fa-solid fa-user" aria-hidden="true"></i>Account</a>
-            <a data-nav="templates" href="#templates" title="Templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
-            <a data-nav="preferences" href="#preferences" title="Preferences"><i class="fa-solid fa-sliders" aria-hidden="true"></i>Preferences</a>
-            <a data-nav="promote-settings" href="#promote-settings" title="Promote Settings"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i>Promote</a>
-          </div>
-        </div>
-        <div class="nav-group" data-group="admin" data-nav-admin>
-          <button class="nav-parent" type="button" data-group-toggle="admin" aria-expanded="false" title="Admin"><i class="fa-solid fa-user-shield" aria-hidden="true"></i><span class="nav-parent-label">Admin</span><i class="nav-chevron fa-solid fa-chevron-right" aria-hidden="true"></i></button>
-          <div class="nav-children">
-            <a data-nav="admin-users" href="#admin-users" title="Users"><i class="fa-solid fa-user-gear" aria-hidden="true"></i>Users</a>
-            <!-- Duplicates hidden for now; restore this link to bring it back (capability gating in applyCapabilities still references it):
-            <a data-nav="admin-duplicates" href="#admin-duplicates" title="Duplicates"><i class="fa-solid fa-clone" aria-hidden="true"></i>Duplicates</a> -->
-            <a data-nav="admin-staff" href="#admin-staff" title="Staff"><i class="fa-solid fa-people-group" aria-hidden="true"></i>Staff</a>
-            <a data-nav="admin-templates" href="#admin-templates" title="Admin templates"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Templates</a>
-            <a data-nav="admin-contracts" href="#admin-contracts" title="Contracts"><i class="fa-solid fa-file-signature" aria-hidden="true"></i>Contracts</a>
-            <a data-nav="admin-payments" href="#admin-payments" title="Payments"><i class="fa-solid fa-credit-card" aria-hidden="true"></i>Payments</a>
-            <a data-nav="admin-venue" href="#admin-venue" title="Venue"><i class="fa-solid fa-building" aria-hidden="true"></i>Venue</a>
-            <a data-nav="admin-db" href="#admin-db" title="Database browser" data-nav-db><i class="fa-solid fa-database" aria-hidden="true"></i>DB Browser</a>
-            <a data-nav="admin-db-history" href="#admin-db-history" title="Database history &amp; undo" data-nav-db-history><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>DB History</a>
-            <a data-nav="outbox" href="#outbox" title="All sent email"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i>All Email</a>
-          </div>
-        </div>
-        ${this.helpNavGroup()}
-      </nav>
+      <nav class="side-nav" aria-label="Main navigation"></nav>
       <div class="side-card"><span class="bolt"></span><strong>Good shows.<br><span>No surprises.</span></strong></div>
       <button class="venue-switch" type="button" data-venue-label><i class="fa-solid fa-building" aria-hidden="true"></i><span class="venue-name">Venue</span></button>
       <p class="copyright">&copy; 2026 Panic Backstage</p>
@@ -180,8 +131,22 @@ class AppShell extends PanicElement {
     $('[data-search]', this).addEventListener('input', (event) => publish('events.search', { query: event.target.value }));
     $('[data-action="new-event"]', this).addEventListener('click', () => { location.hash = 'new-event'; });
     this.setupNavCollapse();
-    this.setupNavGroups();
     this.setupMobileDrawer();
+  }
+
+  // Renders the whole <nav class="side-nav"> — the DB-driven groups/links
+  // from nav_items, followed by the static Help group (content-driven from
+  // HELP_SECTIONS, not part of nav_items — see helpNavGroup()) — into the
+  // empty <nav> left by renderShell(). Deferred until nav_items has loaded
+  // (see connect()), and binds the collapsible-group behavior once, here,
+  // rather than in renderShell(), since the group buttons don't exist yet
+  // at that point.
+  renderNav() {
+    const nav = $('.side-nav', this);
+    if (!nav) return;
+    const tree = filterNavTree(buildNavTree(this.navItems || []), this.capabilities || {});
+    nav.innerHTML = renderNavHtml(tree) + this.helpNavGroup();
+    this.setupNavGroups();
   }
 
   // Mobile slide-in navigation drawer. The drawer IS the desktop sidebar
@@ -263,37 +228,14 @@ class AppShell extends PanicElement {
     });
   }
 
+  // Nav-link capability gating now happens once in filterNavTree() (see
+  // renderNav()), sourced from each nav_items row's `capability` column
+  // instead of a hand-maintained list of DOM selectors here. What's left is
+  // the one piece of shell chrome that isn't a nav item: the topbar's
+  // "+ New event" button.
   applyCapabilities() {
-    if (!this.capabilities?.manage_templates) {
-      $$('[data-nav="templates"]', this).forEach((link) => link.remove());
-    }
     if (!this.capabilities?.create_events) {
       $$('[data-action="new-event"]', this).forEach((btn) => btn.remove());
-    }
-    if (!this.capabilities?.manage_users) {
-      $$('[data-nav="admin-duplicates"]', this).forEach((link) => link.remove());
-      // DB browser is restricted to tenant instance admins / super admins.
-      $$('[data-nav-db]', this).forEach((link) => link.remove());
-    }
-    if (!this.capabilities?.manage_db_history) {
-      // DB history + undo is more dangerous than read-only browsing, so it
-      // gets its own capability rather than reusing manage_users.
-      $$('[data-nav-db-history]', this).forEach((link) => link.remove());
-    }
-    if (!this.capabilities?.manage_contacts) {
-      $$('[data-nav-contacts]', this).forEach((link) => link.remove());
-    }
-    if (!this.capabilities?.manage_campaigns) {
-      $$('[data-nav-campaigns]', this).forEach((link) => link.remove());
-    }
-    const leadsLinks = $$('[data-nav-leads]', this);
-    const hasLeads = this.capabilities?.view_leads || this.capabilities?.manage_leads;
-    leadsLinks.forEach((el) => { el.hidden = !hasLeads; });
-    if (!this.capabilities?.view_reports) {
-      $$('[data-nav-reports]', this).forEach((link) => link.remove());
-    }
-    if (!this.capabilities?.manage_users && !this.capabilities?.manage_staff_roster && !this.capabilities?.manage_templates && !this.capabilities?.manage_db_history) {
-      $$('[data-nav-admin]', this).forEach((el) => el.remove());
     }
     const pill = $('[data-user-pill]', this);
     if (pill && this.user) pill.textContent = this.user.name || this.user.email || 'Account';
@@ -354,7 +296,8 @@ class AppShell extends PanicElement {
   }
 
   async route() {
-    const route = location.hash.replace(/^#/, '') || this.user?.default_landing || 'dashboard';
+    const homeRoute = (this.navItems || []).find((item) => item.is_home)?.link || 'dashboard';
+    const route = location.hash.replace(/^#/, '') || this.user?.default_landing || homeRoute;
     publish('app.route.changed', { route });
     this.closeDrawer();
     const promoteRoute = this.parsePromoteRoute(route);
