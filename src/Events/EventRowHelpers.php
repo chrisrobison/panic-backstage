@@ -45,37 +45,46 @@ trait EventRowHelpers
     }
 
     /**
-     * Check whether the given venue + date + time window conflicts with any
-     * existing booking (with a 30-minute buffer between events). Returns a
-     * 409 Response describing the conflict, or null if the slot is clear.
+     * Check whether the given venue/room + date + time window conflicts with
+     * any existing booking (with a 30-minute buffer between events). Returns
+     * a 409 Response describing the conflict, or null if the slot is clear.
+     *
+     * $resourceId is the room (see `resources` table) the event is booked
+     * into, if any. When set, conflicts are scoped to that room plus any
+     * `zone='both'` (whole-building) room in the same venue — a 'both'
+     * booking blocks every other room, and a single-room booking is blocked
+     * by any 'both' booking. When $resourceId is null (a venue with no rooms
+     * defined, or a legacy event that predates this), conflicts fall back to
+     * the whole venue, matching the original single-space behavior.
      */
-    private function checkRoomConflict(int $venueId, string $date, ?string $doorsTime, ?string $endTime, ?int $excludeId = null, ?string $endDate = null): ?\Panic\Response
+    private function checkRoomConflict(int $venueId, string $date, ?string $doorsTime, ?string $endTime, ?int $excludeId = null, ?string $endDate = null, ?int $resourceId = null): ?\Panic\Response
     {
-        $venue = $this->db->one('SELECT zone, venue_group FROM venues WHERE id = ? LIMIT 1', [$venueId]);
-        $zone  = $venue['zone']        ?? null;
-        $group = $venue['venue_group'] ?? null;
-        $ids   = [$venueId];
-        // Generic group conflict: a 'both' (whole-building) booking conflicts
-        // with every specific room in the same group, and a room booking also
-        // conflicts with any whole-building event on the same day.
-        // venue_group and zone are set in the DB (see migration 020_resources.sql).
-        if ($group !== null) {
+        if ($resourceId !== null) {
+            $resource = $this->db->one('SELECT zone FROM resources WHERE id = ? AND venue_id = ? LIMIT 1', [$resourceId, $venueId]);
+            $zone     = $resource['zone'] ?? null;
+            $ids      = [$resourceId];
             if ($zone === 'both') {
                 $others = $this->db->all(
-                    "SELECT id FROM venues WHERE venue_group = ? AND zone != 'both'",
-                    [$group]
+                    "SELECT id FROM resources WHERE venue_id = ? AND id != ? AND active = 1 AND zone != 'both'",
+                    [$venueId, $resourceId]
                 );
                 foreach ($others as $r) { $ids[] = (int) $r['id']; }
             } else {
-                $both = $this->db->one(
-                    "SELECT id FROM venues WHERE venue_group = ? AND zone = 'both' LIMIT 1",
-                    [$group]
+                $both = $this->db->all(
+                    "SELECT id FROM resources WHERE venue_id = ? AND id != ? AND active = 1 AND zone = 'both'",
+                    [$venueId, $resourceId]
                 );
-                if ($both) { $ids[] = (int) $both['id']; }
+                foreach ($both as $r) { $ids[] = (int) $r['id']; }
             }
+            $col  = 'resource_id';
+            $ph   = implode(',', array_fill(0, count($ids), '?'));
+            $args = array_values(array_map('intval', $ids));
+        } else {
+            // No room specified — fall back to conflict-checking the whole venue.
+            $col  = 'venue_id';
+            $ph   = '?';
+            $args = [$venueId];
         }
-        $ph      = implode(',', array_fill(0, count($ids), '?'));
-        $args    = array_values(array_map('intval', $ids));
         // Find events whose date range overlaps [date, endDate].
         // COALESCE(end_date, date) treats single-day events as a range of one day.
         $rangeEnd = $endDate ?: $date;
@@ -84,7 +93,7 @@ trait EventRowHelpers
         $excl    = $excludeId ? ' AND id != ?' : '';
         if ($excludeId) $args[] = $excludeId;
         $rows = $this->db->all(
-            "SELECT id, title, date, end_date, doors_time, end_time FROM events WHERE venue_id IN ($ph) AND date <= ? AND COALESCE(end_date, date) >= ? AND status NOT IN ('canceled','empty')$excl",
+            "SELECT id, title, date, end_date, doors_time, end_time FROM events WHERE $col IN ($ph) AND date <= ? AND COALESCE(end_date, date) >= ? AND status NOT IN ('canceled','empty')$excl",
             $args
         );
         $isMultiDayNew = $endDate && $endDate !== $date;

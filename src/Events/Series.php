@@ -104,7 +104,10 @@ final class Series extends BaseEndpoint
                 (int) $anchor['venue_id'],
                 $date,
                 $anchor['doors_time'],
-                $anchor['end_time']
+                $anchor['end_time'],
+                null,
+                null,
+                $anchor['resource_id'] !== null ? (int) $anchor['resource_id'] : null
             );
             if ($conflict) {
                 $conflicts[] = $date;

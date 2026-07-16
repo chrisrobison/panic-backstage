@@ -119,6 +119,10 @@ final class Events extends BaseEndpoint
             'events' => $events,
             'users' => $this->accessibleUsers(),
             'venues' => $this->db->all('SELECT * FROM venues ORDER BY name'),
+            // Rooms within each venue — the Calendar's zone-split rendering keys
+            // off each event's resource_id (not venue_id, now that a venue can
+            // have multiple rooms) to decide which half of a day cell it lands in.
+            'resources' => $this->db->all('SELECT * FROM resources WHERE active = 1 ORDER BY venue_id, sort_order, name'),
             'statuses' => self::STATUSES,
             'types' => self::TYPES,
             'range' => [
@@ -394,14 +398,14 @@ final class Events extends BaseEndpoint
         $publicVisibility = $isPrivate ? 0 : (boolish($body['public_visibility'] ?? false) ? 1 : 0);
         $ownerId = ($body['owner_user_id'] ?? null) ?: ($isPrivate ? $this->getPrivateEventHandlerId() : $this->userId());
 
-        if (in_array($newStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
-            if ($conflict = $this->checkRoomConflict((int) $body['venue_id'], $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['end_time'] ?? null), null, $newEndDate)) {
-                return $conflict;
-            }
-        }
         [$resourceId, $resourceError] = $this->resolveResourceId($body, (int) $body['venue_id']);
         if ($resourceError) {
             return $resourceError;
+        }
+        if (in_array($newStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
+            if ($conflict = $this->checkRoomConflict((int) $body['venue_id'], $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['end_time'] ?? null), null, $newEndDate, $resourceId)) {
+                return $conflict;
+            }
         }
         $id = $this->db->insert(
             'INSERT INTO events (venue_id, resource_id, title, slug, event_type, status, description_public, description_internal, av_requirements, catering_notes, date, end_date, doors_time, show_time, end_time, load_in_time, age_restriction, ticket_price, deposit_amount, potential_revenue, ticket_url, ticket_system, contract_url, venue_contract_url, walkthrough_done, settlement_doc_url, capacity, estimated_guests, public_visibility, owner_user_id, promoter_name, promoter_email, promoter_phone, client_org, booker_name, booker_email, booker_phone)
@@ -471,7 +475,7 @@ final class Events extends BaseEndpoint
                 return $transitionError;
             }
             if (in_array($newStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
-                if ($conflict = $this->checkRoomConflict((int) $existing['venue_id'], $existing['date'], $existing['doors_time'], $existing['end_time'], $id, $existing['end_date'] ?? null)) {
+                if ($conflict = $this->checkRoomConflict((int) $existing['venue_id'], $existing['date'], $existing['doors_time'], $existing['end_time'], $id, $existing['end_date'] ?? null, self::nullableInt($existing['resource_id'] ?? null))) {
                     return $conflict;
                 }
             }
@@ -547,7 +551,8 @@ final class Events extends BaseEndpoint
             $checkEndDate  = self::nullableDate($body['end_date'] ?? $old['end_date'] ?? null, $checkDate);
             $checkDoors    = date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null);
             $checkEnd      = date_or_null($body['end_time']   ?? $old['end_time']   ?? null);
-            if ($conflict = $this->checkRoomConflict($checkVenueId, $checkDate, $checkDoors, $checkEnd, $id, $checkEndDate)) {
+            $checkResource = self::nullableInt($body['resource_id'] ?? $old['resource_id'] ?? null);
+            if ($conflict = $this->checkRoomConflict($checkVenueId, $checkDate, $checkDoors, $checkEnd, $id, $checkEndDate, $checkResource)) {
                 return $conflict;
             }
         }

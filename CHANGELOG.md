@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `venues` — Consolidate Mabuhay's 3 venue rows into 1 venue + rooms
+- **Added** `venues` — Consolidate Mabuhay's 3 venue rows into 1 venue + rooms
 - **Fixed** `events` — Reject an end_date before the start date
 - **Added** `nav` — Add Navigation Manager and derive the app shell sidebar from it
 - **Added** `nav` — Add Navigation Manager and derive the app shell sidebar from it

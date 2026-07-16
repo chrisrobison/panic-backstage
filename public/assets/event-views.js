@@ -12,16 +12,19 @@ const DEFAULT_DASHBOARD_METRICS = ['newLeads', 'nextShow', 'openItems', 'empty',
 // Statuses valid for private events (no public-promo stages).
 const PRIVATE_EVENT_STATUSES = ['empty', 'proposed', 'confirmed', 'booked', 'completed', 'settled', 'canceled'];
 
-// On the calendar a day cell is split by resource zone: venues with zone='up'
-// render in the top half, zone='down' in the bottom, zone='both' straddles
-// the divider. The zone field is configured in the venues table (see migration
-// 020_resources.sql) so this code contains no hardcoded venue names or slugs.
-function venueZoneMap(venues) {
+// On the calendar a day cell is split by room zone: a room with zone='up'
+// renders in the top half, zone='down' in the bottom, zone='both' straddles
+// the divider. Rooms live in the `resources` table (a venue can have several)
+// so this keys off each event's resource_id, not venue_id — a venue is no
+// longer assumed to be a single room. An event with no resource_id (a venue
+// with no rooms defined, or a legacy event predating rooms) falls back to
+// 'down' so it still renders somewhere instead of disappearing.
+function resourceZoneMap(resources) {
   const map = new Map();
-  (venues || []).forEach((venue) => {
-    const zone  = venue.zone  || 'down';
-    const label = venue.name  || 'Venue';
-    map.set(Number(venue.id), { zone, label });
+  (resources || []).forEach((resource) => {
+    const zone  = resource.zone || 'down';
+    const label = resource.name || 'Room';
+    map.set(Number(resource.id), { zone, label });
   });
   return map;
 }
@@ -444,8 +447,9 @@ class EventCalendar extends PanicElement {
       this.canCreate = Boolean(data?.capabilities?.create_events);
       this._events = data.events || [];
       this._venues = data.venues || [];
+      this._resources = data.resources || [];
       this._start  = start;
-      this._zoneMap = venueZoneMap(this._venues);
+      this._zoneMap = resourceZoneMap(this._resources);
       this.render();
     } catch (error) {
       this.showError(error);
@@ -462,21 +466,21 @@ class EventCalendar extends PanicElement {
   }
 
   _zoneOf(event) {
-    return this._zoneMap.get(Number(event.venue_id)) || { zone: 'down', label: 'Unassigned' };
+    return this._zoneMap.get(Number(event.resource_id)) || { zone: 'down', label: 'Unassigned' };
   }
 
   _legend() {
-    // Build legend from the actual zones present in the venue list — no hardcoded labels.
+    // Build legend from the actual zones present in the room list — no hardcoded labels.
     const seen = new Map();
-    (this._venues || []).forEach((v) => {
-      const zone = v.zone || 'down';
-      if (!seen.has(zone)) seen.set(zone, v.name || 'Venue');
+    (this._resources || []).forEach((r) => {
+      const zone = r.zone || 'down';
+      if (!seen.has(zone)) seen.set(zone, r.name || 'Room');
     });
     if (!seen.size) return '';
     const items = [...seen.entries()]
       .map(([zone, label]) => `<span class="legend-item"><span class="status-dot ${roomTone(zone)}"></span>${esc(label)}</span>`)
       .join('');
-    return `<div class="calendar-legend" aria-label="Venue resource colour key">${items}</div>`;
+    return `<div class="calendar-legend" aria-label="Room colour key">${items}</div>`;
   }
 
   // ── Top-level render ──────────────────────────────────────────────────────
