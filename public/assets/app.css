@@ -6323,6 +6323,12 @@ pb-listmaster { --lm-accent: var(--blue); background: var(--bg); }
 .upcoming-dow { font-size: 11px; font-weight: 760; color: var(--muted); letter-spacing: .04em; }
 .upcoming-mon { font-size: 12px; font-weight: 760; color: var(--blue); }
 .upcoming-day { font-size: 22px; font-weight: 800; }
+/* Multi-day badge ("2 DAYS" / "JUL" / "19–20"): the day + weekday-row text
+   run longer than a single-day badge's "FRI" / "19", so both shrink a touch
+   to keep the whole span inside the fixed 56px date column. */
+.upcoming-date-range .upcoming-dow { font-size: 9px; letter-spacing: .02em; }
+.upcoming-date-range .upcoming-mon { font-size: 10px; letter-spacing: -.02em; white-space: nowrap; }
+.upcoming-date-range .upcoming-day { font-size: 16px; letter-spacing: -.01em; }
 .upcoming-thumb { width: 96px; height: 64px; border-radius: 8px; overflow: hidden; background: var(--soft); flex-shrink: 0; }
 .upcoming-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .upcoming-thumb-fallback { width: 100%; height: 100%; display: grid; place-items: center; color: var(--muted); font-size: 20px; }

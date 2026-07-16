@@ -274,9 +274,28 @@ class EventsUpcoming extends PanicElement {
 
   card(event) {
     const d = eventDate(event);
+    // Multi-day booking (end_date set and different from the start date) —
+    // show the span ("JUL 19–20", or "JUL–AUG 30–2" across a month boundary)
+    // instead of just the start day, so a 2-night event doesn't look like a
+    // single-night one. See eventDateRangeLabel() in core.js for the
+    // longer-form ("Fri, Jul 19 – Sat, Jul 20") version used in list/print
+    // views; this is the compact badge variant.
+    const endD = (event.end_date && event.end_date !== event.date) ? eventDate({ date: event.end_date }) : null;
     const dow = d ? d.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase() : '';
     const mon = d ? d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase() : '';
     const day = d ? d.getDate() : '—';
+    let badgeDow = dow;
+    let badgeMon = mon;
+    let badgeDay = day;
+    let badgeTitle = longDate(d);
+    if (endD) {
+      const sameMonth = d.getMonth() === endD.getMonth() && d.getFullYear() === endD.getFullYear();
+      const endMon = endD.toLocaleDateString(undefined, { month: 'short' }).toUpperCase();
+      badgeDow = `${Math.round((endD - d) / 86400000) + 1} DAYS`;
+      badgeMon = sameMonth ? mon : `${mon}–${endMon}`;
+      badgeDay = `${day}–${endD.getDate()}`;
+      badgeTitle = `${longDate(d)} – ${longDate(endD)}`;
+    }
     const thumb = event.flyer_path
       ? `<img src="${esc(assetUrl(event.flyer_path))}" alt="" loading="lazy">`
       : '<span class="upcoming-thumb-fallback"><i class="fa-solid fa-image" aria-hidden="true"></i></span>';
@@ -296,7 +315,7 @@ class EventsUpcoming extends PanicElement {
     const venueLine = [event.venue_name, [event.venue_city, event.venue_state].filter(Boolean).join(', ')].filter(Boolean).join(' • ');
 
     return `<article class="upcoming-card" data-event-card="${esc(event.id)}" tabindex="0" role="link" aria-label="Open ${esc(event.title)}">
-      <div class="upcoming-date" title="${esc(longDate(d))}"><span class="upcoming-dow">${esc(dow)}</span><span class="upcoming-mon">${esc(mon)}</span><span class="upcoming-day">${esc(day)}</span></div>
+      <div class="upcoming-date${endD ? ' upcoming-date-range' : ''}" title="${esc(badgeTitle)}"><span class="upcoming-dow">${esc(badgeDow)}</span><span class="upcoming-mon">${esc(badgeMon)}</span><span class="upcoming-day">${esc(badgeDay)}</span></div>
       <div class="upcoming-thumb">${thumb}</div>
       <div class="upcoming-body">
         <div class="upcoming-time muted small">${esc(timeLabel(event.show_time))}</div>
