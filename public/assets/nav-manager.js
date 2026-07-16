@@ -51,6 +51,7 @@ const ICONS = [
 
 class AdminNavigation extends PanicElement {
   async connect() {
+    publish('page.context', { title: 'Navigation Manager', blurb: 'Manage the main app navigation items.' });
     this.setLoading('Loading navigation…');
     this.selectedId = null;
     this.draft = null; // pending, unsaved edits to the selected item — preview-only
@@ -91,9 +92,6 @@ class AdminNavigation extends PanicElement {
   render() {
     const selected = this.selectedId ? this.items.find((i) => i.id === this.selectedId) : null;
     this.innerHTML = `
-      <div class="page-head">
-        <div><h1>Navigation Manager</h1><p class="muted">Manage the main app navigation items.</p></div>
-      </div>
       <div class="nav-manager-body">
         <section class="panel nav-manager-list">
           <div class="section-head padded">
