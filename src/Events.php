@@ -48,6 +48,7 @@ final class Events extends BaseEndpoint
         'public_visibility'    => 'Public Visibility',
         'owner_user_id'        => 'Owner',
         'venue_id'             => 'Venue',
+        'resource_id'          => 'Room',
         'promoter_name'        => 'Producer / Artist',
         'promoter_email'       => 'Producer Email',
         'promoter_phone'       => 'Producer Phone',
@@ -352,6 +353,9 @@ final class Events extends BaseEndpoint
             'activity' => $this->db->all('SELECT a.*, u.name user_name FROM event_activity_log a LEFT JOIN users u ON u.id = a.user_id WHERE a.event_id = ? ORDER BY a.created_at DESC LIMIT 80', [$id]),
             'users' => $this->assignmentUsersForEvent($id),
             'venues' => $this->db->all('SELECT * FROM venues ORDER BY name'),
+            // Rooms within each venue, for the Details tab's Venue/Room fields
+            // (Venue is omitted client-side when there's only one venue).
+            'resources' => $this->db->all('SELECT * FROM resources WHERE active = 1 ORDER BY venue_id, sort_order, name'),
             'taskTemplates' => $this->db->all("SELECT id, name FROM event_templates WHERE checklist_json IS NOT NULL AND checklist_json != '[]' ORDER BY name"),
             'nextAction' => $nextAction,
             'readiness' => $readiness,
@@ -543,16 +547,28 @@ final class Events extends BaseEndpoint
                 return $transitionError;
             }
         }
+        // Resolve venue/room together: room_id must belong to venue_id (guards
+        // against a stale/mismatched Room dropdown if the venue was also just
+        // changed). Missing `resource_id` in the body keeps the existing room;
+        // an explicit '' clears it.
+        $updateVenueId    = (int) ($body['venue_id'] ?? $old['venue_id']);
+        $updateResourceId = array_key_exists('resource_id', $body)
+            ? self::nullableInt($body['resource_id'])
+            : self::nullableInt($old['resource_id'] ?? null);
+        if ($updateResourceId !== null) {
+            $resourceRow = $this->db->one('SELECT id FROM resources WHERE id = ? AND venue_id = ?', [$updateResourceId, $updateVenueId]);
+            if (!$resourceRow) {
+                return Response::json(['error' => 'Selected room does not belong to the chosen venue.'], 422);
+            }
+        }
         // Room conflict check for committed bookings
         $checkStatus = $body['status'] ?? $old['status'];
         if (in_array($checkStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
-            $checkVenueId  = (int) ($body['venue_id'] ?? $old['venue_id']);
             $checkDate     = $body['date'] ?? $old['date'];
             $checkEndDate  = self::nullableDate($body['end_date'] ?? $old['end_date'] ?? null, $checkDate);
             $checkDoors    = date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null);
             $checkEnd      = date_or_null($body['end_time']   ?? $old['end_time']   ?? null);
-            $checkResource = self::nullableInt($body['resource_id'] ?? $old['resource_id'] ?? null);
-            if ($conflict = $this->checkRoomConflict($checkVenueId, $checkDate, $checkDoors, $checkEnd, $id, $checkEndDate, $checkResource)) {
+            if ($conflict = $this->checkRoomConflict($updateVenueId, $checkDate, $checkDoors, $checkEnd, $id, $checkEndDate, $updateResourceId)) {
                 return $conflict;
             }
         }
@@ -569,8 +585,8 @@ final class Events extends BaseEndpoint
         }
 
         $this->db->run(
-            'UPDATE events SET venue_id=?, title=?, slug=?, event_type=?, status=?, description_public=?, description_internal=?, av_requirements=?, catering_notes=?, date=?, end_date=?, doors_time=?, show_time=?, end_time=?, load_in_time=?, age_restriction=?, ticket_price=?, deposit_amount=?, potential_revenue=?, ticket_url=?, ticket_system=?, contract_url=?, venue_contract_url=?, walkthrough_done=?, settlement_doc_url=?, capacity=?, estimated_guests=?, public_visibility=?, owner_user_id=?, promoter_name=?, promoter_email=?, promoter_phone=?, client_org=?, booker_name=?, booker_email=?, booker_phone=? WHERE id=?',
-            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $body['status'], $isPrivate ? null : ($body['description_public'] ?? $old['description_public']), $body['description_internal'] ?? $old['description_internal'], self::nullableString($body['av_requirements'] ?? $old['av_requirements']), self::nullableString($body['catering_notes'] ?? $old['catering_notes']), $body['date'], $updateEndDate, date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null), date_or_null($body['show_time'] ?? $old['show_time'] ?? null), date_or_null($body['end_time'] ?? $old['end_time'] ?? null), date_or_null($body['load_in_time'] ?? $old['load_in_time'] ?? null), $body['age_restriction'] ?? $old['age_restriction'], $isPrivate ? 0 : (float) ($body['ticket_price'] ?? $old['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? $old['deposit_amount']), self::nullableDecimal($body['potential_revenue'] ?? $old['potential_revenue']), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? $old['ticket_url']), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? $old['ticket_system']), self::nullableString($body['contract_url'] ?? $old['contract_url']), self::nullableString($body['venue_contract_url'] ?? $old['venue_contract_url']), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? $old['settlement_doc_url']), ($body['capacity'] ?? $old['capacity']) ?: null, isset($body['estimated_guests']) && $body['estimated_guests'] !== '' ? (int) $body['estimated_guests'] : ($old['estimated_guests'] ?? null), $updatePublicVis, ($body['owner_user_id'] ?? null) ?: null, self::nullableString($body['promoter_name'] ?? $old['promoter_name']), self::nullableString($body['promoter_email'] ?? $old['promoter_email']), self::nullableString($body['promoter_phone'] ?? $old['promoter_phone']), self::nullableString($body['client_org'] ?? $old['client_org']), $isPrivate ? null : self::nullableString($body['booker_name'] ?? $old['booker_name']), $isPrivate ? null : self::nullableString($body['booker_email'] ?? $old['booker_email']), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? $old['booker_phone']), $id]
+            'UPDATE events SET venue_id=?, resource_id=?, title=?, slug=?, event_type=?, status=?, description_public=?, description_internal=?, av_requirements=?, catering_notes=?, date=?, end_date=?, doors_time=?, show_time=?, end_time=?, load_in_time=?, age_restriction=?, ticket_price=?, deposit_amount=?, potential_revenue=?, ticket_url=?, ticket_system=?, contract_url=?, venue_contract_url=?, walkthrough_done=?, settlement_doc_url=?, capacity=?, estimated_guests=?, public_visibility=?, owner_user_id=?, promoter_name=?, promoter_email=?, promoter_phone=?, client_org=?, booker_name=?, booker_email=?, booker_phone=? WHERE id=?',
+            [$updateVenueId, $updateResourceId, $body['title'], $slug, $body['event_type'], $body['status'], $isPrivate ? null : ($body['description_public'] ?? $old['description_public']), $body['description_internal'] ?? $old['description_internal'], self::nullableString($body['av_requirements'] ?? $old['av_requirements']), self::nullableString($body['catering_notes'] ?? $old['catering_notes']), $body['date'], $updateEndDate, date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null), date_or_null($body['show_time'] ?? $old['show_time'] ?? null), date_or_null($body['end_time'] ?? $old['end_time'] ?? null), date_or_null($body['load_in_time'] ?? $old['load_in_time'] ?? null), $body['age_restriction'] ?? $old['age_restriction'], $isPrivate ? 0 : (float) ($body['ticket_price'] ?? $old['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? $old['deposit_amount']), self::nullableDecimal($body['potential_revenue'] ?? $old['potential_revenue']), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? $old['ticket_url']), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? $old['ticket_system']), self::nullableString($body['contract_url'] ?? $old['contract_url']), self::nullableString($body['venue_contract_url'] ?? $old['venue_contract_url']), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? $old['settlement_doc_url']), ($body['capacity'] ?? $old['capacity']) ?: null, isset($body['estimated_guests']) && $body['estimated_guests'] !== '' ? (int) $body['estimated_guests'] : ($old['estimated_guests'] ?? null), $updatePublicVis, ($body['owner_user_id'] ?? null) ?: null, self::nullableString($body['promoter_name'] ?? $old['promoter_name']), self::nullableString($body['promoter_email'] ?? $old['promoter_email']), self::nullableString($body['promoter_phone'] ?? $old['promoter_phone']), self::nullableString($body['client_org'] ?? $old['client_org']), $isPrivate ? null : self::nullableString($body['booker_name'] ?? $old['booker_name']), $isPrivate ? null : self::nullableString($body['booker_email'] ?? $old['booker_email']), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? $old['booker_phone']), $id]
         );
         if (isset($body['status']) && $body['status'] !== $wasStatus) {
             $this->notifyStatusChange($id, $wasStatus, $body['status']);

@@ -100,7 +100,9 @@ async function openEventQuickCreate({ date = null } = {}) {
     <label>Show <input type="time" name="show_time" value="20:00"></label>
 
     <fieldset class="quick-create-blank-fields" hidden>
-      <label>Venue <select name="venue_id">${venues.map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join('')}</select></label>
+      ${venues.length > 1
+        ? `<label>Venue <select name="venue_id">${venues.map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join('')}</select></label>`
+        : `<input type="hidden" name="venue_id" value="${esc(venues[0]?.id || '')}">`}
       <label>Type <select name="event_type">${types.map((t) => `<option value="${esc(t)}">${esc(titleCase(t))}</option>`).join('')}</select></label>
     </fieldset>
 
@@ -121,7 +123,9 @@ async function openEventQuickCreate({ date = null } = {}) {
   const templateSelect = $('select[name="template_id"]', form);
   const titleInput     = $('input[name="title"]', form);
   const blankFields    = $('.quick-create-blank-fields', form);
-  const venueSelect    = $('select[name="venue_id"]', form);
+  // A single-venue install renders venue_id as a hidden input instead of a
+  // <select> (nothing to pick) — form.venue_id resolves either way.
+  const venueSelect    = form.venue_id;
   const roomSelect     = $('select[name="resource_id"]', form);
   const dateInput      = $('input[name="date"]', form);
   const endDateInput   = $('input[name="end_date"]', form);

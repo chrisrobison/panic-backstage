@@ -317,6 +317,26 @@ function ownerSelect(users = [], selected = '') {
 }
 
 
+// Venue picker for an event create/edit form. Omitted entirely when there's
+// only one venue (the common case, and the point of the 2026-07 venue/room
+// consolidation — a single-venue install shouldn't force a meaningless
+// one-option dropdown). Returns '' when `venues.length <= 1`.
+function venueSelectField(venues = [], selected = '', disabledAttr = '') {
+  if (venues.length <= 1) return '';
+  return `<label>Venue <select name="venue_id"${disabledAttr}>${venues.map((v) => option(v.id, selected, v.name)).join('')}</select></label>`;
+}
+
+
+// Room picker scoped to one venue — options are `resources` filtered to
+// `venueId`. Returns '' when that venue has no rooms defined, so a
+// single-space venue doesn't show an empty/pointless dropdown either.
+function roomSelectField(resources = [], venueId, selected = '', disabledAttr = '') {
+  const rooms = resources.filter((r) => String(r.venue_id) === String(venueId));
+  if (!rooms.length) return '<label data-room-field hidden></label>';
+  return `<label data-room-field>Room <select name="resource_id"${disabledAttr}><option value="">— No specific room —</option>${rooms.map((r) => option(r.id, selected, r.name)).join('')}</select></label>`;
+}
+
+
 function emptyState(message) {
   return `<div class="empty-state">${esc(message)}</div>`;
 }
@@ -581,4 +601,4 @@ function mdToHtml(text) {
   }).join('\n');
 }
 
-export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox, openModal };
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox, openModal };

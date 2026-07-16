@@ -1,7 +1,7 @@
 // ── Event workspace shell ────────────────────────────────────────────────────
 // The event workspace (tabs, print menu, publish toggle) plus the read-only
 // summary/readiness/next-action bus cards and the autosaving details form.
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
 import { openPrintWindow } from './print.js';
 import './paint-splat.js';
 import './event-vendors.js';
@@ -818,7 +818,8 @@ class EventDetailsForm extends HTMLElement {
           <label>Title <input name="title" required value="${esc(event.title)}"${disabled}></label>
           <label>Date <input type="date" name="date" required value="${esc(event.date)}"${disabled}></label>
           <label>End Date <input type="date" name="end_date" value="${esc(event.end_date || '')}" min="${esc(event.date)}"${disabled}></label>
-          <label>Location <select name="venue_id"${disabled}>${data.venues.map((venue) => option(venue.id, event.venue_id, venue.name)).join('')}</select></label>
+          ${venueSelectField(data.venues, event.venue_id, disabled)}
+          ${roomSelectField(data.resources, event.venue_id, event.resource_id, disabled)}
           <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
           <label>Status ${statusSelect}</label>
           <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
@@ -851,7 +852,8 @@ class EventDetailsForm extends HTMLElement {
         <label>Title <input name="title" required value="${esc(event.title)}"${disabled}></label>
         <label>Date <input type="date" name="date" required value="${esc(event.date)}"${disabled}></label>
         <label>End Date <input type="date" name="end_date" value="${esc(event.end_date || '')}" min="${esc(event.date)}"${disabled}></label>
-        <label>Location <select name="venue_id"${disabled}>${data.venues.map((venue) => option(venue.id, event.venue_id, venue.name)).join('')}</select></label>
+        ${venueSelectField(data.venues, event.venue_id, disabled)}
+        ${roomSelectField(data.resources, event.venue_id, event.resource_id, disabled)}
         <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
         <label>Status ${statusSelect}</label>
         <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
@@ -936,6 +938,13 @@ class EventDetailsForm extends HTMLElement {
         field.value = '';
         publish('toast.show', { message: 'End date can’t be before the start date — cleared.', tone: 'error' });
         return;
+      }
+      // Changing Venue re-scopes the Room dropdown to that venue's rooms
+      // (only reachable at all on a multi-venue install, since the Venue
+      // field itself is omitted when there's just one).
+      if (field.name === 'venue_id') {
+        const roomField = $('[data-room-field]', form);
+        if (roomField) roomField.outerHTML = roomSelectField(this.eventData.resources || [], field.value, '', disabled);
       }
       save(field.name);
     }));

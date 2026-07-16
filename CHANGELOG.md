@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Split the Location field into Venue + Room pickers
 - **Added** `venues` — Consolidate Mabuhay's 3 venue rows into 1 venue + rooms
 - **Added** `venues` — Consolidate Mabuhay's 3 venue rows into 1 venue + rooms
 - **Fixed** `events` — Reject an end_date before the start date

@@ -116,11 +116,20 @@ const WIZARD_FLOW = {
           help: 'Creates additional independent events on a repeating schedule — each occurrence gets its own contract, staffing, and ticketing.',
         },
         {
+          // Omitted entirely on a single-venue install (the common case) —
+          // see _visibleFields()'s special case for this field id.
           id: 'venue_id',
-          label: 'Room / Venue',
+          label: 'Venue',
           type: 'select',
           required: true,
           source: 'venues',
+        },
+        {
+          id: 'resource_id',
+          label: 'Room',
+          type: 'select',
+          help: 'Optional — leave blank if this venue has no separate rooms.',
+          source: 'resources',
         },
         {
           id: 'event_type',
@@ -504,6 +513,7 @@ class EventContractWizard extends PanicElement {
 
       this.meta = {
         venues:             tplData.venues    || [],
+        resources:          tplData.resources || [],
         event_types:        tplData.types     || [
           'live_music', 'karaoke', 'open_mic', 'promoter_night',
           'dj_night', 'comedy', 'private_event', 'special_event',
@@ -525,6 +535,13 @@ class EventContractWizard extends PanicElement {
       // Pre-fill today as the default date if none set
       if (!this.wizardData.date) {
         this.wizardData.date = isoDate(new Date());
+      }
+
+      // Single-venue install: the Venue field is hidden (_visibleFields()),
+      // so nothing ever sets wizardData.venue_id from user input — default it
+      // here or the create payload would be missing a required field.
+      if (!this.wizardData.venue_id && this.meta.venues.length === 1) {
+        this.wizardData.venue_id = String(this.meta.venues[0].id);
       }
 
       // Edit mode: overlay the source event's (and its contract's) real values
@@ -576,6 +593,7 @@ class EventContractWizard extends PanicElement {
     d.date                = event.date || d.date;
     d.end_date            = event.end_date || '';
     d.venue_id            = event.venue_id != null ? String(event.venue_id) : '';
+    d.resource_id         = event.resource_id != null ? String(event.resource_id) : '';
     d.event_type          = event.event_type || '';
     if (event.doors_time) d.doors_time = String(event.doors_time).slice(0, 5);
     if (event.show_time)  d.show_time  = String(event.show_time).slice(0, 5);
@@ -643,7 +661,21 @@ class EventContractWizard extends PanicElement {
 
   /** Fields for a step that are visible under current conditions. */
   _visibleFields(step) {
-    return (step.fields || []).filter((f) => this._conditionMet(f.condition));
+    return (step.fields || []).filter((f) => {
+      // Venue picker is pointless (and hidden) on a single-venue install —
+      // same rule as venueSelectField()/roomSelectField() in core.js.
+      if (f.id === 'venue_id' && (this.meta?.venues?.length || 0) <= 1) return false;
+      // Room picker only makes sense once the venue has rooms defined.
+      if (f.id === 'resource_id' && !this._roomsForCurrentVenue().length) return false;
+      return this._conditionMet(f.condition);
+    });
+  }
+
+  /** Rooms belonging to the currently-selected (or sole) venue. */
+  _roomsForCurrentVenue() {
+    if (!this.meta) return [];
+    const venueId = this.wizardData.venue_id || (this.meta.venues[0] ? String(this.meta.venues[0].id) : '');
+    return this.meta.resources.filter((r) => String(r.venue_id) === String(venueId));
   }
 
   /** Convert a `source` key into [{value, label}] option pairs. */
@@ -652,6 +684,8 @@ class EventContractWizard extends PanicElement {
     switch (source) {
       case 'venues':
         return this.meta.venues.map((v) => ({ value: String(v.id), label: v.name }));
+      case 'resources':
+        return this._roomsForCurrentVenue().map((r) => ({ value: String(r.id), label: r.name }));
       case 'event_types':
         return this.meta.event_types.map((t) => ({ value: t, label: titleCase(t) }));
       case 'contract_templates':
@@ -960,7 +994,12 @@ class EventContractWizard extends PanicElement {
 
   _sidebarHtml() {
     const d        = this.wizardData;
-    const venue    = this.meta?.venues?.find((v) => String(v.id) === String(d.venue_id));
+    // Only worth showing once there's more than one venue to distinguish —
+    // matches the Venue field itself being hidden on a single-venue install.
+    const venue    = (this.meta?.venues?.length || 0) > 1
+      ? this.meta?.venues?.find((v) => String(v.id) === String(d.venue_id))
+      : null;
+    const room     = this.meta?.resources?.find((r) => String(r.id) === String(d.resource_id));
     const dealType = DEAL_TYPES.find((dt) => dt.value === d.deal_type);
     const tmpl     = this.meta?.contract_templates?.find((t) => String(t.id) === String(d.contract_template_id));
 
@@ -992,6 +1031,7 @@ class EventContractWizard extends PanicElement {
           </div>
           ${dateStr         ? `<div class="sidebar-fact"><span>Date</span><strong>${esc(dateStr)}</strong></div>` : ''}
           ${venue           ? `<div class="sidebar-fact"><span>Venue</span><strong>${esc(venue.name)}</strong></div>` : ''}
+          ${room            ? `<div class="sidebar-fact"><span>Room</span><strong>${esc(room.name)}</strong></div>` : ''}
           ${d.event_type    ? `<div class="sidebar-fact"><span>Type</span><strong>${esc(titleCase(d.event_type))}</strong></div>` : ''}
           ${dealType        ? `<div class="sidebar-fact"><span>Deal</span><strong>${esc(dealType.label)}</strong></div>` : ''}
           ${d.counterparty_name ? `<div class="sidebar-fact"><span>With</span><strong>${esc(d.counterparty_name)}</strong></div>` : ''}
@@ -1118,6 +1158,18 @@ class EventContractWizard extends PanicElement {
         if (endDateInput) endDateInput.min = e.target.value;
         const recurrenceFields = $('pb-recurrence-fields', this);
         if (recurrenceFields) recurrenceFields.anchorDate = e.target.value;
+      }
+      // Only reachable on a multi-venue install (venue_id field is hidden
+      // otherwise) — re-scope the Room options to the newly-chosen venue and
+      // drop any room selection that no longer belongs to it.
+      if (e.target.name === 'venue_id') {
+        this.wizardData.resource_id = '';
+        const resourceSelect = $('select[name="resource_id"]', this);
+        if (resourceSelect) {
+          const opts = this._sourceOptions('resources');
+          resourceSelect.innerHTML = `<option value="">— Choose —</option>`
+            + opts.map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('');
+        }
       }
       this._refreshSidebar();
     });
@@ -1503,6 +1555,10 @@ class EventContractWizard extends PanicElement {
     // never silently reset a further-along status (confirmed, booked, etc.).
     if (!this.sourceEventId) payload.status = 'proposed';
     if (d.venue_id)           payload.venue_id           = Number(d.venue_id);
+    // Always sent, same reasoning as end_date above — clearing the Room
+    // field (or it being unavailable, e.g. venue has no rooms) must actually
+    // clear resource_id server-side, not leave a stale value in place.
+    payload.resource_id      = d.resource_id ? Number(d.resource_id) : null;
     if (d.event_type)         payload.event_type         = d.event_type;
     if (d.doors_time)         payload.doors_time         = d.doors_time;
     if (d.show_time)          payload.show_time          = d.show_time;
