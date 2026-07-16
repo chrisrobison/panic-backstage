@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `admin` — Add missing sidebar nav item for the Navigation manager
 - **Documentation** `events` — Document the venue/room split in help and the ops manual
 - **Fixed** `pos` — Repair PosWebhook's broken date-match fallback query
 - **Added** `events` — Split the Location field into Venue + Room pickers
