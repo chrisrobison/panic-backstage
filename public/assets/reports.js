@@ -221,6 +221,7 @@ class ReportsPage extends PanicElement {
     this.innerHTML = `
       <div class="page-head">
         <h1>Reports</h1>
+        <a class="button secondary small" href="#dashboard-metrics">Classic Dashboard</a>
       </div>
       <nav class="workspace-tabs tabs reports-tabs">
         <a data-rpt-tab="overview" href="#reports" class="${this.tab === 'overview' ? 'active' : ''}">Overview</a>

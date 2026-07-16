@@ -4,10 +4,18 @@ import { test, assert } from './harness.mjs';
 test('dashboard boots with the sidebar nav', async (page) => {
   await page.goto('#dashboard');
   assert.ok(
+    await page.until(`document.querySelector('pb-events-upcoming') && document.querySelector('pb-events-upcoming').children.length>0`),
+    'pb-events-upcoming renders content',
+  );
+  assert.ok(await page.exists('.side-nav'), 'sidebar nav is present');
+});
+
+test('classic metrics dashboard still renders at #dashboard-metrics', async (page) => {
+  await page.goto('#dashboard-metrics');
+  assert.ok(
     await page.until(`document.querySelector('pb-dashboard') && document.querySelector('pb-dashboard').children.length>0`),
     'pb-dashboard renders content',
   );
-  assert.ok(await page.exists('.side-nav'), 'sidebar nav is present');
 });
 
 test('sidebar nav items expose title tooltips for the collapsed rail', async (page) => {

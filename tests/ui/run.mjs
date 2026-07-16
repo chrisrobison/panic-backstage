@@ -54,8 +54,11 @@ async function main() {
     await seedAuth(browser.cdp, BASE, auth);
     await browser.cdp.send('Page.navigate', { url: BASE + '/#dashboard' });
     await browser.cdp.onceEvent('Page.loadEventFired');
-    const booted = await browser.cdp.until(`document.querySelector('pb-dashboard') && document.querySelector('pb-dashboard').children.length>0 && document.querySelector('.side-nav')`);
-    if (!booted) throw new Error('app did not boot (pb-dashboard / .side-nav never appeared)');
+    // "#dashboard" now mounts the Upcoming-events view (pb-events-upcoming) —
+    // see public/assets/app.js's route() — the old metrics/cards view
+    // (pb-dashboard) lives on at "#dashboard-metrics".
+    const booted = await browser.cdp.until(`document.querySelector('pb-events-upcoming') && document.querySelector('pb-events-upcoming').children.length>0 && document.querySelector('.side-nav')`);
+    if (!booted) throw new Error('app did not boot (pb-events-upcoming / .side-nav never appeared)');
 
     const page = makePage(browser.cdp, BASE);
     page.eventId = EVENT_ID;

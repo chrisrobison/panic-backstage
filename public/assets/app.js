@@ -328,6 +328,11 @@ class AppShell extends PanicElement {
     if (route === 'pipeline')    return this.mount(outlet, 'pb-pipeline-board');
     if (route === 'events')      return this.mount(outlet, 'pb-events-list');
     if (route === 'upcoming')    return this.mount(outlet, 'pb-events-upcoming');
+    // "Upcoming" is the default landing page (see homeRoute above, which
+    // resolves to the "dashboard" nav link's route); the old metrics/cards
+    // dashboard view lives on under "dashboard-metrics", linked from Reports.
+    if (route === 'dashboard')   return this.mount(outlet, 'pb-events-upcoming');
+    if (route === 'dashboard-metrics') return this.mount(outlet, 'pb-dashboard');
     if (route === 'asset-library') return this.mount(outlet, 'pb-asset-library');
     if (route === 'leads')       return this.mount(outlet, 'pb-leads-page');
     if (route === 'contacts')    return this.mount(outlet, 'pb-contacts-page');

@@ -1,15 +1,26 @@
 // Events ▸ Upcoming — the card-based ticketing-aware alternative to the plain
-// List table (see public/assets/event-upcoming.js). Non-destructive: only
-// exercises client-side filters/search/status toggles/date-range presets and
-// checks the DOM reacts; never submits a form or mutates event data.
+// List table (see public/assets/event-upcoming.js). Now also the app's
+// default landing page: the "Dashboard" nav item/route mounts this same
+// component (see public/assets/app.js route()), and the standalone
+// "Upcoming" nav_items row is hidden (visible=0) to avoid a duplicate link —
+// the page is still reachable directly at #upcoming, just unlinked from the
+// sidebar. Non-destructive: only exercises client-side filters/search/status
+// toggles/date-range presets and checks the DOM reacts; never submits a form
+// or mutates event data.
 import { test, assert } from './harness.mjs';
 
-test('Upcoming nav item is present and routes to the card view', async (page) => {
-  assert.ok(await page.exists('.side-nav [data-nav="upcoming"]'), 'sidebar has an Upcoming link under Events');
-  await page.goto('#upcoming');
+test('Dashboard nav item routes to the Upcoming card view', async (page) => {
+  assert.ok(await page.exists('.side-nav [data-nav="dashboard"]'), 'sidebar has a Dashboard link');
+  await page.goto('#dashboard');
   const mounted = await page.cdp.until(`document.querySelector('pb-events-upcoming .upcoming-page')`);
   assert.ok(mounted, 'pb-events-upcoming mounts the .upcoming-page shell');
-  assert.ok(await page.exists('.side-nav [data-nav="upcoming"].active'), 'Upcoming nav link is marked active');
+  assert.ok(await page.exists('.side-nav [data-nav="dashboard"].active'), 'Dashboard nav link is marked active');
+});
+
+test('the direct #upcoming route still mounts the same card view', async (page) => {
+  await page.goto('#upcoming');
+  const mounted = await page.cdp.until(`document.querySelector('pb-events-upcoming .upcoming-page')`);
+  assert.ok(mounted, 'pb-events-upcoming mounts the .upcoming-page shell at #upcoming too');
 });
 
 test('Upcoming view renders a stats footer and a filters sidebar', async (page) => {

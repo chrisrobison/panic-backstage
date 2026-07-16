@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `nav` — Make the Upcoming events page the default dashboard
 - **Added** `tickets` — Skip payment and fulfill instantly for $0 orders
 - **Fixed** `admin` — Drop Navigation manager's own header, use page.context like its sibling tabs
 - **Fixed** `admin` — Add missing sidebar nav item for the Navigation manager
