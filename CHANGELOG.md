@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Reject an end_date before the start date
 - **Added** `nav` — Add Navigation Manager and derive the app shell sidebar from it
 - **Added** `nav` — Add Navigation Manager and derive the app shell sidebar from it
 - **Documentation** `events` — Document the Upcoming card view in help and the ops manual

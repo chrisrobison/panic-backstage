@@ -385,13 +385,17 @@ final class Events extends BaseEndpoint
         $slug = $this->uniqueSlug($body['title'] . '-' . $body['date']);
         $newStatus  = $body['status'] ?? 'proposed';
         $isPrivate  = ($body['event_type'] ?? '') === 'private_event';
+        $newEndDate = self::nullableDate($body['end_date'] ?? null, $body['date']);
+        if ($err = self::endDateBeforeStartError($newEndDate, $body['date'])) {
+            return $err;
+        }
 
         // Private events are never publicly visible and auto-assign to Colleen.
         $publicVisibility = $isPrivate ? 0 : (boolish($body['public_visibility'] ?? false) ? 1 : 0);
         $ownerId = ($body['owner_user_id'] ?? null) ?: ($isPrivate ? $this->getPrivateEventHandlerId() : $this->userId());
 
         if (in_array($newStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
-            if ($conflict = $this->checkRoomConflict((int) $body['venue_id'], $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['end_time'] ?? null), null, self::nullableDate($body['end_date'] ?? null, $body['date']))) {
+            if ($conflict = $this->checkRoomConflict((int) $body['venue_id'], $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['end_time'] ?? null), null, $newEndDate)) {
                 return $conflict;
             }
         }
@@ -402,7 +406,7 @@ final class Events extends BaseEndpoint
         $id = $this->db->insert(
             'INSERT INTO events (venue_id, resource_id, title, slug, event_type, status, description_public, description_internal, av_requirements, catering_notes, date, end_date, doors_time, show_time, end_time, load_in_time, age_restriction, ticket_price, deposit_amount, potential_revenue, ticket_url, ticket_system, contract_url, venue_contract_url, walkthrough_done, settlement_doc_url, capacity, estimated_guests, public_visibility, owner_user_id, promoter_name, promoter_email, promoter_phone, client_org, booker_name, booker_email, booker_phone)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [(int) $body['venue_id'], $resourceId, $body['title'], $slug, $body['event_type'], $newStatus, $isPrivate ? null : self::nullableString($body['description_public'] ?? null), self::nullableString($body['description_internal'] ?? null), self::nullableString($body['av_requirements'] ?? null), self::nullableString($body['catering_notes'] ?? null), $body['date'], self::nullableDate($body['end_date'] ?? null, $body['date']), date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), date_or_null($body['load_in_time'] ?? null), $body['age_restriction'] ?? null, $isPrivate ? 0 : (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), self::nullableString($body['venue_contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), ($body['capacity'] ?? null) ?: null, ($body['estimated_guests'] ?? null) ?: null, $publicVisibility, $ownerId, self::nullableString($body['promoter_name'] ?? null), self::nullableString($body['promoter_email'] ?? null), self::nullableString($body['promoter_phone'] ?? null), self::nullableString($body['client_org'] ?? null), $isPrivate ? null : self::nullableString($body['booker_name'] ?? null), $isPrivate ? null : self::nullableString($body['booker_email'] ?? null), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? null)]
+            [(int) $body['venue_id'], $resourceId, $body['title'], $slug, $body['event_type'], $newStatus, $isPrivate ? null : self::nullableString($body['description_public'] ?? null), self::nullableString($body['description_internal'] ?? null), self::nullableString($body['av_requirements'] ?? null), self::nullableString($body['catering_notes'] ?? null), $body['date'], $newEndDate, date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), date_or_null($body['load_in_time'] ?? null), $body['age_restriction'] ?? null, $isPrivate ? 0 : (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), self::nullableString($body['venue_contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), ($body['capacity'] ?? null) ?: null, ($body['estimated_guests'] ?? null) ?: null, $publicVisibility, $ownerId, self::nullableString($body['promoter_name'] ?? null), self::nullableString($body['promoter_email'] ?? null), self::nullableString($body['promoter_phone'] ?? null), self::nullableString($body['client_org'] ?? null), $isPrivate ? null : self::nullableString($body['booker_name'] ?? null), $isPrivate ? null : self::nullableString($body['booker_email'] ?? null), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? null)]
         );
         $this->assignEventCode($id);
         log_activity($this->db, $id, $this->userId(), 'event created', ['title' => $body['title']]);
@@ -505,8 +509,13 @@ final class Events extends BaseEndpoint
         if (count($body) === 1) {
             $key = array_key_first($body);
             if (isset($partialAllowlist[$key])) {
-                $oldRow  = $this->db->one("SELECT `{$key}` FROM events WHERE id = ?", [$id]);
+                $oldRow  = $key === 'end_date'
+                    ? $this->db->one('SELECT `end_date`, `date` FROM events WHERE id = ?', [$id])
+                    : $this->db->one("SELECT `{$key}` FROM events WHERE id = ?", [$id]);
                 $coerced = $partialAllowlist[$key]($body[$key]);
+                if ($key === 'end_date' && ($err = self::endDateBeforeStartError($coerced, (string) $oldRow['date']))) {
+                    return $err;
+                }
                 $this->db->run("UPDATE events SET {$key} = ? WHERE id = ?", [$coerced, $id]);
                 $labels  = self::EVENT_FIELD_LABELS;
                 $label   = $labels[$key] ?? $key;
@@ -549,10 +558,14 @@ final class Events extends BaseEndpoint
         $isPrivate = ($body['event_type'] ?? $old['event_type'] ?? '') === 'private_event';
         // Private events are never publicly visible.
         $updatePublicVis = $isPrivate ? 0 : (boolish($body['public_visibility'] ?? false) ? 1 : 0);
+        $updateEndDate = self::nullableDate($body['end_date'] ?? $old['end_date'] ?? null, $body['date']);
+        if ($err = self::endDateBeforeStartError($updateEndDate, $body['date'])) {
+            return $err;
+        }
 
         $this->db->run(
             'UPDATE events SET venue_id=?, title=?, slug=?, event_type=?, status=?, description_public=?, description_internal=?, av_requirements=?, catering_notes=?, date=?, end_date=?, doors_time=?, show_time=?, end_time=?, load_in_time=?, age_restriction=?, ticket_price=?, deposit_amount=?, potential_revenue=?, ticket_url=?, ticket_system=?, contract_url=?, venue_contract_url=?, walkthrough_done=?, settlement_doc_url=?, capacity=?, estimated_guests=?, public_visibility=?, owner_user_id=?, promoter_name=?, promoter_email=?, promoter_phone=?, client_org=?, booker_name=?, booker_email=?, booker_phone=? WHERE id=?',
-            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $body['status'], $isPrivate ? null : ($body['description_public'] ?? $old['description_public']), $body['description_internal'] ?? $old['description_internal'], self::nullableString($body['av_requirements'] ?? $old['av_requirements']), self::nullableString($body['catering_notes'] ?? $old['catering_notes']), $body['date'], self::nullableDate($body['end_date'] ?? $old['end_date'] ?? null, $body['date']), date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null), date_or_null($body['show_time'] ?? $old['show_time'] ?? null), date_or_null($body['end_time'] ?? $old['end_time'] ?? null), date_or_null($body['load_in_time'] ?? $old['load_in_time'] ?? null), $body['age_restriction'] ?? $old['age_restriction'], $isPrivate ? 0 : (float) ($body['ticket_price'] ?? $old['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? $old['deposit_amount']), self::nullableDecimal($body['potential_revenue'] ?? $old['potential_revenue']), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? $old['ticket_url']), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? $old['ticket_system']), self::nullableString($body['contract_url'] ?? $old['contract_url']), self::nullableString($body['venue_contract_url'] ?? $old['venue_contract_url']), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? $old['settlement_doc_url']), ($body['capacity'] ?? $old['capacity']) ?: null, isset($body['estimated_guests']) && $body['estimated_guests'] !== '' ? (int) $body['estimated_guests'] : ($old['estimated_guests'] ?? null), $updatePublicVis, ($body['owner_user_id'] ?? null) ?: null, self::nullableString($body['promoter_name'] ?? $old['promoter_name']), self::nullableString($body['promoter_email'] ?? $old['promoter_email']), self::nullableString($body['promoter_phone'] ?? $old['promoter_phone']), self::nullableString($body['client_org'] ?? $old['client_org']), $isPrivate ? null : self::nullableString($body['booker_name'] ?? $old['booker_name']), $isPrivate ? null : self::nullableString($body['booker_email'] ?? $old['booker_email']), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? $old['booker_phone']), $id]
+            [(int) $body['venue_id'], $body['title'], $slug, $body['event_type'], $body['status'], $isPrivate ? null : ($body['description_public'] ?? $old['description_public']), $body['description_internal'] ?? $old['description_internal'], self::nullableString($body['av_requirements'] ?? $old['av_requirements']), self::nullableString($body['catering_notes'] ?? $old['catering_notes']), $body['date'], $updateEndDate, date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null), date_or_null($body['show_time'] ?? $old['show_time'] ?? null), date_or_null($body['end_time'] ?? $old['end_time'] ?? null), date_or_null($body['load_in_time'] ?? $old['load_in_time'] ?? null), $body['age_restriction'] ?? $old['age_restriction'], $isPrivate ? 0 : (float) ($body['ticket_price'] ?? $old['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? $old['deposit_amount']), self::nullableDecimal($body['potential_revenue'] ?? $old['potential_revenue']), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? $old['ticket_url']), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? $old['ticket_system']), self::nullableString($body['contract_url'] ?? $old['contract_url']), self::nullableString($body['venue_contract_url'] ?? $old['venue_contract_url']), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? $old['settlement_doc_url']), ($body['capacity'] ?? $old['capacity']) ?: null, isset($body['estimated_guests']) && $body['estimated_guests'] !== '' ? (int) $body['estimated_guests'] : ($old['estimated_guests'] ?? null), $updatePublicVis, ($body['owner_user_id'] ?? null) ?: null, self::nullableString($body['promoter_name'] ?? $old['promoter_name']), self::nullableString($body['promoter_email'] ?? $old['promoter_email']), self::nullableString($body['promoter_phone'] ?? $old['promoter_phone']), self::nullableString($body['client_org'] ?? $old['client_org']), $isPrivate ? null : self::nullableString($body['booker_name'] ?? $old['booker_name']), $isPrivate ? null : self::nullableString($body['booker_email'] ?? $old['booker_email']), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? $old['booker_phone']), $id]
         );
         if (isset($body['status']) && $body['status'] !== $wasStatus) {
             $this->notifyStatusChange($id, $wasStatus, $body['status']);
@@ -595,6 +608,10 @@ final class Events extends BaseEndpoint
             return Response::json(['error' => 'date is required'], 422);
         }
         $title = ($body['title'] ?? '') !== '' ? $body['title'] : ($template['default_title'] ?: $template['name']);
+        $templateEndDate = self::nullableDate($body['end_date'] ?? null, $date);
+        if ($err = self::endDateBeforeStartError($templateEndDate, $date)) {
+            return $err;
+        }
         [$resourceId, $resourceError] = $this->resolveResourceId($body, (int) $template['venue_id']);
         if ($resourceError) {
             return $resourceError;
@@ -602,7 +619,7 @@ final class Events extends BaseEndpoint
         $id = $this->db->insert(
             "INSERT INTO events (venue_id, resource_id, title, slug, event_type, status, description_public, date, end_date, doors_time, show_time, age_restriction, ticket_price, owner_user_id)
              VALUES (?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?)",
-            [(int) $template['venue_id'], $resourceId, $title, $this->uniqueSlug($title . '-' . $date), $template['event_type'], $template['default_description_public'], $date, self::nullableDate($body['end_date'] ?? null, $date), ($body['doors_time'] ?? '') ?: '19:00', ($body['show_time'] ?? '') ?: '20:00', $template['default_age_restriction'], (float) $template['default_ticket_price'], $this->userId()]
+            [(int) $template['venue_id'], $resourceId, $title, $this->uniqueSlug($title . '-' . $date), $template['event_type'], $template['default_description_public'], $date, $templateEndDate, ($body['doors_time'] ?? '') ?: '19:00', ($body['show_time'] ?? '') ?: '20:00', $template['default_age_restriction'], (float) $template['default_ticket_price'], $this->userId()]
         );
         $this->assignEventCode($id);
         foreach ($this->jsonList($template['checklist_json']) as $task) {
@@ -782,6 +799,25 @@ final class Events extends BaseEndpoint
      * $startDate (single-day event), otherwise the trimmed date string.
      * Prevents storing a redundant end_date that equals the start date.
      */
+    /**
+     * Guard against an end_date that precedes the event's start date — the
+     * `min` attribute on the date-picker inputs is a soft UI hint only; a
+     * stray keystroke/arrow-key/scroll on the native <input type=date>, or a
+     * direct API call, can still produce an out-of-order value with nothing
+     * client-side stopping it. Without this, the bad end_date silently saves
+     * and then makes the event vanish from Calendar/Upcoming (both filter on
+     * `COALESCE(end_date, date) >= window_start`), even though List/Dashboard
+     * (unfiltered) still show it — see issue where "multi-day event stopped
+     * appearing on the calendar".
+     */
+    private static function endDateBeforeStartError(?string $endDate, string $startDate): ?Response
+    {
+        if ($endDate !== null && $endDate < $startDate) {
+            return Response::json(['error' => 'End date cannot be before the start date.'], 422);
+        }
+        return null;
+    }
+
     private static function nullableDate($value, string $startDate): ?string
     {
         if ($value === null) return null;

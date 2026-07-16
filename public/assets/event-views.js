@@ -129,6 +129,15 @@ async function openEventQuickCreate({ date = null } = {}) {
     endDateInput.min = dateInput.value;
     if (endDateInput.value && endDateInput.value < dateInput.value) endDateInput.value = '';
   });
+  // `min` is a soft UI hint only — an arrow-key nudge or mouse-wheel scroll
+  // over the focused End Date field can still land it below the start date
+  // with no visual warning. Catch that directly on the field too.
+  endDateInput.addEventListener('change', () => {
+    if (endDateInput.value && endDateInput.value < dateInput.value) {
+      endDateInput.value = '';
+      publish('toast.show', { message: 'End date can’t be before the start date — cleared.', tone: 'error' });
+    }
+  });
 
   // The Room picker (bookable sub-space, e.g. Green Room / Patio) depends on
   // which venue is in play: the selected template's venue when a template is

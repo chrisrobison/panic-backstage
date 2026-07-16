@@ -925,6 +925,18 @@ class EventDetailsForm extends HTMLElement {
           if (endDateInput.value && endDateInput.value < field.value) endDateInput.value = '';
         }
       }
+      // The `min` attribute on the End Date input is only a soft UI hint —
+      // browsers don't stop an arrow-key nudge or a mouse-wheel scroll over a
+      // focused date field from landing below it. Catch that here so a
+      // silently-invalid value never reaches the server (where an end_date
+      // before the start date would also make the event vanish from
+      // Calendar/Upcoming, which filter on the date range, while List/
+      // Dashboard don't — see issue "multi-day event stopped appearing").
+      if (field.name === 'end_date' && field.value && form.date?.value && field.value < form.date.value) {
+        field.value = '';
+        publish('toast.show', { message: 'End date can’t be before the start date — cleared.', tone: 'error' });
+        return;
+      }
       save(field.name);
     }));
     // Pressing Enter in a field still saves, but never reloads the page.
