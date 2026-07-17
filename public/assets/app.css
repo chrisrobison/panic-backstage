@@ -5827,17 +5827,7 @@ pb-admin-wizard-defaults { display: block; }
   margin-top: 8px;
 }
 
-/* ── QR code panel (pb-qr-panel) ──────────────────────────────────────────── */
-.qr-panel {
-  max-width: 560px;
-  margin: 0 auto 20px;
-}
-.qr-panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
+/* ── QR code modal body (event-workspace.js EventWorkspace._openQrModal) ──── */
 .qr-panel-blurb {
   font-size: .875rem;
   color: var(--ink-dim);

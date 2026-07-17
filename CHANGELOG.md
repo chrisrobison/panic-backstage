@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `event` — Open the QR code panel as a modal instead of inline
+- **Fixed** `event` — Open the QR code panel as a modal instead of inline
 - **Fixed** `public-event` — Icon-over-text facts row, share buttons instead of QR
 - **Fixed** `public-event` — Icon-over-text facts row, share buttons instead of QR
 - **Fixed** `public-event` — Full-bleed hero layout, much bigger QR code

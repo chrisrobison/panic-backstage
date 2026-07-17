@@ -1,7 +1,7 @@
 // ── Event workspace shell ────────────────────────────────────────────────────
 // The event workspace (tabs, print menu, publish toggle) plus the read-only
 // summary/readiness/next-action bus cards and the autosaving details form.
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, openModal, $, $$ } from './core.js';
 import { openPrintWindow } from './print.js';
 import './paint-splat.js';
 import './event-vendors.js';
@@ -628,7 +628,6 @@ class EventWorkspace extends PanicElement {
       </div>
     </section>
     <pb-portal-panel id="portalPanel"></pb-portal-panel>
-    <pb-qr-panel id="qrPanel"></pb-qr-panel>
     <pb-event-summary></pb-event-summary>
     <div class="workspace-tabs-wrap">
       <button type="button" class="tab-scroll-edge tab-scroll-left" data-tab-scroll="-1" aria-label="Scroll tabs left" hidden>&laquo;</button>
@@ -701,11 +700,7 @@ class EventWorkspace extends PanicElement {
       portalPanel.eventId = event.id;
       $('[data-portal-toggle]', this)?.addEventListener('click', () => portalPanel.toggle());
     }
-    const qrPanel = $('pb-qr-panel', this);
-    if (qrPanel) {
-      qrPanel.data = data;
-      $('[data-qr-toggle]', this)?.addEventListener('click', () => qrPanel.toggle());
-    }
+    $('[data-qr-toggle]', this)?.addEventListener('click', () => this._openQrModal(data));
     $('[data-pos-set]', this)?.addEventListener('click', () => this.setPosEvent(event.id));
     $$('[data-print]', this).forEach((button) => button.addEventListener('click', () => {
       button.closest('details.print-menu')?.removeAttribute('open');
@@ -715,6 +710,56 @@ class EventWorkspace extends PanicElement {
     this._applySectionVisibility();
     this._bindSectionToggles(userId, event.id, prefs);
     this._wireTabScrollEdges();
+  }
+
+  /**
+   * "QR Code" header button — a scannable QR code for the event's public
+   * page, a copy-link action, a straight-to-file PNG download, and a "Save
+   * to Assets" button that persists the same code as a downloadable
+   * event_assets row (Events\GenerateQr). Opens as a modal (openModal(),
+   * per the site-wide add/view/edit convention) rather than the inline
+   * panel this used to be.
+   */
+  _openQrModal(data) {
+    const url = appUrl(data.links.public_page);
+    const encoded = encodeURIComponent(url);
+    const qrImage = appUrl(`assets/qr.svg?text=${encoded}&size=240`);
+    const qrDownload = appUrl(`assets/qr.png?text=${encoded}&size=600`);
+    const { dialog } = openModal({
+      title: 'QR Code — Public Page',
+      bodyHtml: `<div class="padded">
+        <p class="qr-panel-blurb">Scans straight to this event's public page. Share it on flyers, table tents, or at the door.</p>
+        <div class="qr-panel-body">
+          <img class="qr-panel-image" src="${esc(qrImage)}" width="180" height="180" alt="QR code linking to the public event page">
+          <div class="qr-panel-actions">
+            <input class="qr-panel-url" type="text" readonly value="${esc(url)}" onclick="this.select()">
+            <div class="inline-actions">
+              <button type="button" class="secondary small" data-qr-copy>Copy Link</button>
+              <a class="button secondary small" href="${esc(qrDownload)}" download="qr-code.png">Download PNG</a>
+              <button type="button" class="small" data-qr-save-asset>Save to Assets</button>
+            </div>
+          </div>
+        </div>
+      </div>`,
+    });
+    $('[data-qr-copy]', dialog)?.addEventListener('click', () => {
+      navigator.clipboard.writeText(url).then(() => publish('toast.show', { message: 'Link copied!' }));
+    });
+    $('[data-qr-save-asset]', dialog)?.addEventListener('click', async (event) => {
+      const btn = event.currentTarget;
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="btn-spinner"></span>Saving…';
+      try {
+        await api(`/events/${data.event.id}/assets/generate-qr`, { method: 'POST' });
+        publish('toast.show', { message: 'QR code saved to this event’s Assets tab.' });
+      } catch (err) {
+        publish('toast.show', { message: err.message || 'Could not save QR code as an asset.', tone: 'error' });
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+    });
   }
 
   async togglePublic() {
@@ -1229,79 +1274,6 @@ class PortalPanel extends PanicElement {
   }
 }
 
-/**
- * Collapsible panel (toggled from the "QR Code" header button) showing a
- * scannable QR code for the event's public page, a copy-link action, a
- * straight-to-file PNG download, and a "Save to Assets" button that persists
- * the same code as a downloadable event_assets row (Events\GenerateQr).
- */
-class QrPanel extends PanicElement {
-  connect() {
-    this._open = false;
-    this._url  = '';
-    this._eventId = null;
-    this.render();
-  }
-
-  set data(data) {
-    this._eventId = data.event.id;
-    this._url = appUrl(data.links.public_page);
-    if (this._open) this.render();
-  }
-
-  toggle() {
-    this._open = !this._open;
-    this.render();
-  }
-
-  render() {
-    if (!this._open) {
-      this.innerHTML = '';
-      return;
-    }
-    const encoded = encodeURIComponent(this._url);
-    const qrImage = appUrl(`assets/qr.svg?text=${encoded}&size=240`);
-    const qrDownload = appUrl(`assets/qr.png?text=${encoded}&size=600`);
-    this.innerHTML = `<div class="qr-panel card">
-      <div class="qr-panel-head">
-        <strong>QR Code — Public Page</strong>
-        <button class="secondary small" data-qr-close>Close</button>
-      </div>
-      <p class="qr-panel-blurb">Scans straight to this event's public page. Share it on flyers, table tents, or at the door.</p>
-      <div class="qr-panel-body">
-        <img class="qr-panel-image" src="${esc(qrImage)}" width="180" height="180" alt="QR code linking to the public event page">
-        <div class="qr-panel-actions">
-          <input class="qr-panel-url" type="text" readonly value="${esc(this._url)}" onclick="this.select()">
-          <div class="inline-actions">
-            <button class="secondary small" data-qr-copy>Copy Link</button>
-            <a class="button secondary small" href="${esc(qrDownload)}" download="qr-code.png">Download PNG</a>
-            <button class="small" data-qr-save-asset>Save to Assets</button>
-          </div>
-        </div>
-      </div>
-    </div>`;
-    $('[data-qr-close]', this)?.addEventListener('click', () => this.toggle());
-    $('[data-qr-copy]', this)?.addEventListener('click', () => {
-      navigator.clipboard.writeText(this._url).then(() => publish('toast.show', { message: 'Link copied!' }));
-    });
-    $('[data-qr-save-asset]', this)?.addEventListener('click', async (event) => {
-      const btn = event.currentTarget;
-      const originalHtml = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<span class="btn-spinner"></span>Saving…';
-      try {
-        await api(`/events/${this._eventId}/assets/generate-qr`, { method: 'POST' });
-        publish('toast.show', { message: 'QR code saved to this event’s Assets tab.' });
-      } catch (err) {
-        publish('toast.show', { message: err.message || 'Could not save QR code as an asset.', tone: 'error' });
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalHtml;
-      }
-    });
-  }
-}
-
 customElements.define('pb-event-workspace', EventWorkspace);
 customElements.define('pb-event-summary', EventSummary);
 customElements.define('pb-event-readiness', EventReadiness);
@@ -1310,7 +1282,6 @@ customElements.define('pb-event-overview', EventOverview);
 customElements.define('pb-event-details-form', EventDetailsForm);
 customElements.define('pb-event-recurrence', EventRecurrencePanel);
 customElements.define('pb-portal-panel', PortalPanel);
-customElements.define('pb-qr-panel', QrPanel);
 
 // ── Event Payments panel ─────────────────────────────────────────────────────
 // Lists event_payments rows, and lets a manage_payments user add/edit/void a
