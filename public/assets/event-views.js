@@ -967,17 +967,6 @@ class PublicEventPage extends PanicElement {
               ${data.flyer
                 ? `<img class="pev-flyer" src="${esc(assetUrl(data.flyer.file_path))}" alt="${esc(event.title)} flyer">`
                 : `<div class="pev-flyer pev-flyer-placeholder"><paint-splat width="640" height="800" bg-color="#141a22" interactive="false"></paint-splat><span class="pev-flyer-placeholder-title">${esc(event.title)}</span></div>`}
-              <div class="pev-share-card">
-                <p class="pev-share-title">Share This Event</p>
-                <div class="pev-share-buttons">
-                  <a class="pev-share-btn" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}" target="_blank" rel="noopener" aria-label="Share on Facebook"><i class="fa-brands fa-facebook-f" aria-hidden="true"></i></a>
-                  <a class="pev-share-btn" href="https://twitter.com/intent/tweet?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(event.title)}" target="_blank" rel="noopener" aria-label="Share on X"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i></a>
-                  <a class="pev-share-btn" href="https://www.reddit.com/submit?url=${encodeURIComponent(publicUrl)}&title=${encodeURIComponent(event.title)}" target="_blank" rel="noopener" aria-label="Share on Reddit"><i class="fa-brands fa-reddit-alien" aria-hidden="true"></i></a>
-                  <a class="pev-share-btn" href="https://api.whatsapp.com/send?text=${encodeURIComponent(`${event.title} ${publicUrl}`)}" target="_blank" rel="noopener" aria-label="Share on WhatsApp"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i></a>
-                  <button type="button" class="pev-share-btn" data-share-instagram aria-label="Share on Instagram"><i class="fa-brands fa-instagram" aria-hidden="true"></i></button>
-                  <button type="button" class="pev-share-btn" data-copy-link aria-label="Copy link"><i class="fa-solid fa-link" aria-hidden="true"></i></button>
-                </div>
-              </div>
             </div>
 
             <div class="pev-copy">
@@ -994,6 +983,18 @@ class PublicEventPage extends PanicElement {
               </ul>
 
               ${tags.length ? `<div class="pev-tags">${tags.map((t) => `<span class="pev-tag">${esc(t)}</span>`).join('')}</div>` : ''}
+
+              <div class="pev-share-card">
+                <p class="pev-share-title">Share This Event</p>
+                <div class="pev-share-buttons">
+                  <a class="pev-share-btn" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}" target="_blank" rel="noopener" aria-label="Share on Facebook"><i class="fa-brands fa-facebook-f" aria-hidden="true"></i></a>
+                  <a class="pev-share-btn" href="https://twitter.com/intent/tweet?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(event.title)}" target="_blank" rel="noopener" aria-label="Share on X"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i></a>
+                  <a class="pev-share-btn" href="https://www.reddit.com/submit?url=${encodeURIComponent(publicUrl)}&title=${encodeURIComponent(event.title)}" target="_blank" rel="noopener" aria-label="Share on Reddit"><i class="fa-brands fa-reddit-alien" aria-hidden="true"></i></a>
+                  <a class="pev-share-btn" href="https://api.whatsapp.com/send?text=${encodeURIComponent(`${event.title} ${publicUrl}`)}" target="_blank" rel="noopener" aria-label="Share on WhatsApp"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i></a>
+                  <button type="button" class="pev-share-btn" data-share-instagram aria-label="Share on Instagram"><i class="fa-brands fa-instagram" aria-hidden="true"></i></button>
+                  <button type="button" class="pev-share-btn" data-copy-link aria-label="Copy link"><i class="fa-solid fa-link" aria-hidden="true"></i></button>
+                </div>
+              </div>
 
               ${event.ticket_url ? `<a class="pev-external-tickets" href="${esc(event.ticket_url)}">Get Tickets <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>` : ''}
             </div>

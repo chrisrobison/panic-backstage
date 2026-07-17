@@ -1915,11 +1915,14 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   text-transform: uppercase;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
 }
-/* "Share This Event" card — sits where a QR code used to (nobody scans a QR
-   code on the page they're already looking at). Real share-intent URLs for
+/* "Share This Event" card — sits in the copy column just below the facts/
+   tags (replaced a QR code that pointed back at the very page showing it —
+   never actionable for a visitor already there). Real share-intent URLs for
    Facebook/X/Reddit/WhatsApp; Instagram has no such URL, so that button uses
-   the native OS share sheet (see the click handler in PublicEventPage). */
-.pev-share-card { background: var(--pev-panel); border: 1px solid var(--pev-border); border-radius: 12px; padding: 16px; }
+   the native OS share sheet (see the click handler in PublicEventPage).
+   Capped width + auto margins so it reads as a centered block rather than
+   stretching across the (much wider on desktop) copy column. */
+.pev-share-card { max-width: 440px; margin: 0 auto 20px; background: var(--pev-panel); border: 1px solid var(--pev-border); border-radius: 12px; padding: 16px; }
 .pev-share-title { margin: 0 0 12px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pev-muted); text-align: center; }
 .pev-share-buttons { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
 .pev-share-btn {
@@ -1946,9 +1949,9 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
 /* Facts row: icon-over-text tiles divided by hairlines on desktop/tablet
    (matches the reference mockup); collapses to a plain icon-left-text-right
    stacked list on mobile, where columns would be too cramped. */
-.pev-facts { list-style: none; margin: 0 0 20px; padding: 20px 0; border-top: 1px solid var(--pev-border); border-bottom: 1px solid var(--pev-border); display: flex; flex-wrap: wrap; }
-.pev-facts li { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 0 22px; border-left: 1px solid var(--pev-border); font-size: 13.5px; line-height: 1.35; max-width: 170px; }
-.pev-facts li:first-child { padding-left: 0; border-left: 0; }
+.pev-facts { list-style: none; margin: 0 0 20px; padding: 20px 0; border-top: 1px solid var(--pev-border); border-bottom: 1px solid var(--pev-border); display: flex; flex-wrap: wrap; justify-content: center; text-transform: uppercase; }
+.pev-facts li { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 0 22px; border-left: 1px solid var(--pev-border); font-size: 13.5px; line-height: 1.35; max-width: 170px; }
+.pev-facts li:first-child { border-left: 0; }
 .pev-facts i { color: var(--pev-cyan); font-size: 17px; }
 
 .pev-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
@@ -2051,9 +2054,10 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   .pev-flyer, .pev-flyer-placeholder { aspect-ratio: 16 / 11; }
   .pev-info-grid { grid-template-columns: 1fr; margin-top: 28px; }
   /* Icon-over-text tiles are too cramped on a phone-width screen — fall back
-     to a plain icon-left-text-right stacked list instead. */
-  .pev-facts { flex-direction: column; gap: 12px; padding: 18px 0; }
-  .pev-facts li { flex-direction: row; align-items: center; gap: 10px; padding: 0; border-left: 0; max-width: none; }
+     to a plain icon-left-text-right stacked list instead, centered as a
+     block on the page like the desktop tile row. */
+  .pev-facts { flex-direction: column; align-items: center; gap: 12px; padding: 18px 0; }
+  .pev-facts li { flex-direction: row; align-items: center; text-align: left; gap: 10px; padding: 0; border-left: 0; max-width: none; }
 }
 
 /* Public ticket purchase widget (pb-ticket-purchase) — only ever mounted
