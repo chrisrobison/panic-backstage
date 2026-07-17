@@ -510,7 +510,14 @@ function openCredentialSetupModal(user, onChange) {
       try {
         // current_password is empty — user has no password yet, the server
         // accepts that path.
-        await api('/auth/set-password', { method: 'POST', body: JSON.stringify(fd) });
+        const data = await api('/auth/set-password', { method: 'POST', body: JSON.stringify(fd) });
+        // Setting a password bumps the server-side token_version, which
+        // invalidates the access token we're currently holding. The server
+        // returns a fresh pair (same shape as /auth/verify) — store it
+        // before the refresh() call below, or that /me lookup silently
+        // comes back as {user: null} (it's a public endpoint) and the
+        // modal appears to hang with the password never confirmed as set.
+        if (data?.access_token) setTokens(data.access_token, data.refresh_token);
         await refresh();
       } catch (err) {
         $('[data-pw-error]', dialog).textContent = err.message || 'Could not set password';
@@ -721,7 +728,11 @@ class AccountSettings extends PanicElement {
     btn.disabled = true;
     $('[data-pw-error]', this).textContent = '';
     try {
-      await api('/auth/set-password', { method: 'POST', body: JSON.stringify(fd) });
+      const data = await api('/auth/set-password', { method: 'POST', body: JSON.stringify(fd) });
+      // Same token_version bump as the credential-setup modal — store the
+      // fresh pair the server returns so the current bearer token isn't
+      // left dangling (see the matching comment in openCredentialSetupModal).
+      if (data?.access_token) setTokens(data.access_token, data.refresh_token);
       publish('toast.show', { message: 'Password saved.', tone: 'success' });
       this.hasPassword = true;
       this.render();

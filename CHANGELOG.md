@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `auth` — Reissue tokens on password set so new users aren't silently logged out
 - **Added** `admin` — Add App Settings page for app-shell brand + venue contact info
 - **Fixed** `overview` — Keep readiness card items on one row
 - **Added** `calendar` — Add List button to the Grid|Agenda toggle

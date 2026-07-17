@@ -551,7 +551,15 @@ final class AuthEndpoint extends BaseEndpoint
             [$hash, $currentUser['id']]
         );
 
-        return $this->ok(['ok' => true]);
+        // The token_version bump above means the bearer token this request
+        // just authenticated with is now dead (Kernel::handle() will reject
+        // it on the very next call). Issue a fresh pair so the client isn't
+        // silently logged out mid-flow — most visibly for brand-new users,
+        // whose post-login credential-setup modal calls /me immediately
+        // after this request completes.
+        $fresh = $this->db->one('SELECT * FROM users WHERE id = ? LIMIT 1', [$currentUser['id']]);
+
+        return $this->ok($this->issueTokenPair($fresh ?: $currentUser));
     }
 
     // ─── Passkey registration ─────────────────────────────────────────────────
