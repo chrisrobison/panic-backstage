@@ -1501,7 +1501,8 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   border-radius: 8px;
   overflow: hidden;
 }
-.cal-view-toggle button {
+.cal-view-toggle button,
+.cal-view-toggle a {
   border-radius: 0;
   border: 0;
   border-right: 1px solid var(--line);
@@ -1512,7 +1513,8 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   gap: 5px;
   font-size: 13px;
 }
-.cal-view-toggle button:last-child { border-right: 0; }
+.cal-view-toggle button:last-child,
+.cal-view-toggle a:last-child { border-right: 0; }
 .cal-view-toggle button.active {
   background: var(--accent, #2563eb);
   color: #fff;

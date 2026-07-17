@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `calendar` — Add List button to the Grid|Agenda toggle
 - **Fixed** `public-event` — Center facts row, uppercase it, relocate share card
 - **Fixed** `public-event` — Center facts row, uppercase it, relocate share card
 - **Fixed** `event` — Open the QR code panel as a modal instead of inline

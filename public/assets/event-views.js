@@ -511,6 +511,10 @@ class EventCalendar extends PanicElement {
                 <i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>
                 <span class="cal-view-label"> Grid</span>
               </button>
+              <a class="button secondary small" href="#dashboard" title="Back to dashboard">
+                <i class="fa-solid fa-list" aria-hidden="true"></i>
+                <span class="cal-view-label"> List</span>
+              </a>
               <button class="secondary small${this.viewMode === 'agenda' ? ' active' : ''}" data-view="agenda" title="Agenda view">
                 <i class="fa-solid fa-bars" aria-hidden="true"></i>
                 <span class="cal-view-label"> Agenda</span>
