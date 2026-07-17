@@ -1915,18 +1915,41 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   text-transform: uppercase;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
 }
-.pev-qr { display: flex; flex-direction: column; align-items: center; gap: 10px; background: #fff; color: #101318; border-radius: 12px; padding: 18px; text-align: center; }
-.pev-qr img { width: min(150px, 100%); height: auto; aspect-ratio: 1 / 1; }
-.pev-qr span { font-size: 13px; font-weight: 700; line-height: 1.35; }
+/* "Share This Event" card — sits where a QR code used to (nobody scans a QR
+   code on the page they're already looking at). Real share-intent URLs for
+   Facebook/X/Reddit/WhatsApp; Instagram has no such URL, so that button uses
+   the native OS share sheet (see the click handler in PublicEventPage). */
+.pev-share-card { background: var(--pev-panel); border: 1px solid var(--pev-border); border-radius: 12px; padding: 16px; }
+.pev-share-title { margin: 0 0 12px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pev-muted); text-align: center; }
+.pev-share-buttons { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.pev-share-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--pev-panel-2);
+  border: 1px solid var(--pev-border);
+  color: var(--pev-text);
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 15px;
+}
+.pev-share-btn:hover { border-color: var(--pev-cyan); color: var(--pev-cyan); }
+.pev-share-btn.is-copied { border-color: var(--pev-cyan); color: var(--pev-cyan); }
 
 .pev-copy { flex: 3 1 420px; min-width: 300px; }
 .pev-eyebrow { margin: 0 0 8px; color: var(--pev-cyan); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; font-size: 13px; }
 .pev-title { margin: 0 0 10px; font-size: clamp(28px, 3.6vw, 46px); font-weight: 900; line-height: 1.06; letter-spacing: -0.01em; text-transform: uppercase; }
 .pev-with { margin: 0 0 20px; color: var(--pev-muted); font-size: 16px; }
 
-.pev-facts { list-style: none; margin: 0 0 20px; padding: 18px 0; border-top: 1px solid var(--pev-border); border-bottom: 1px solid var(--pev-border); display: grid; gap: 10px; }
-.pev-facts li { display: flex; align-items: center; gap: 10px; font-size: 14.5px; }
-.pev-facts i { color: var(--pev-cyan); width: 16px; text-align: center; }
+/* Facts row: icon-over-text tiles divided by hairlines on desktop/tablet
+   (matches the reference mockup); collapses to a plain icon-left-text-right
+   stacked list on mobile, where columns would be too cramped. */
+.pev-facts { list-style: none; margin: 0 0 20px; padding: 20px 0; border-top: 1px solid var(--pev-border); border-bottom: 1px solid var(--pev-border); display: flex; flex-wrap: wrap; }
+.pev-facts li { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 0 22px; border-left: 1px solid var(--pev-border); font-size: 13.5px; line-height: 1.35; max-width: 170px; }
+.pev-facts li:first-child { padding-left: 0; border-left: 0; }
+.pev-facts i { color: var(--pev-cyan); font-size: 17px; }
 
 .pev-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
 .pev-tag {
@@ -1994,23 +2017,6 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
 .pev-lineup-body strong { font-size: 14.5px; overflow-wrap: anywhere; }
 .pev-lineup-body span { font-size: 12.5px; color: var(--pev-muted); }
 
-.pev-share { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--pev-border); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.pev-share-label { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pev-muted); font-weight: 700; }
-.pev-share-buttons { display: flex; gap: 8px; }
-.pev-share-buttons a, .pev-share-buttons button {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--pev-panel-2);
-  border: 1px solid var(--pev-border);
-  color: var(--pev-text);
-  cursor: pointer;
-}
-.pev-share-buttons a:hover, .pev-share-buttons button:hover { border-color: var(--pev-cyan); color: var(--pev-cyan); }
-.pev-share-buttons button.is-copied { border-color: var(--pev-cyan); color: var(--pev-cyan); }
-
 .pev-venue-name { font-weight: 800; margin: 0 0 4px; }
 .pev-directions { display: inline-flex; align-items: center; gap: 6px; margin: 10px 0; color: var(--pev-cyan); font-weight: 700; font-size: 13.5px; text-decoration: none; }
 .pev-directions:hover { text-decoration: underline; }
@@ -2044,6 +2050,10 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   .pev-media, .pev-copy, .pev-ticket-card { max-width: none; width: 100%; }
   .pev-flyer, .pev-flyer-placeholder { aspect-ratio: 16 / 11; }
   .pev-info-grid { grid-template-columns: 1fr; margin-top: 28px; }
+  /* Icon-over-text tiles are too cramped on a phone-width screen — fall back
+     to a plain icon-left-text-right stacked list instead. */
+  .pev-facts { flex-direction: column; gap: 12px; padding: 18px 0; }
+  .pev-facts li { flex-direction: row; align-items: center; gap: 10px; padding: 0; border-left: 0; max-width: none; }
 }
 
 /* Public ticket purchase widget (pb-ticket-purchase) — only ever mounted

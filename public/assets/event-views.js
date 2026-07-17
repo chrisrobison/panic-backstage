@@ -943,16 +943,11 @@ class PublicEventPage extends PanicElement {
       const data = await api(`/public/events/${encodeURIComponent(idOrSlug || '')}`);
       const event = data.event;
       document.title = event.title ? `${event.title} - Panic Backstage` : 'Panic Backstage Event';
-      // QR code encodes this page's own canonical URL (not location.href, which
-      // may carry transient ?order=&checkout= params from a just-completed
-      // purchase) so it always scans back to a clean link for this event. Keyed
-      // by id (not slug) so a printed/scanned code never goes stale if the
-      // event is later renamed or rescheduled.
+      // Canonical share URL — not location.href, which may carry transient
+      // ?order=&checkout= params from a just-completed purchase. Keyed by id
+      // (not slug) so a shared/bookmarked link never goes stale if the event
+      // is later renamed or rescheduled.
       const publicUrl = appUrl(`event.html?id=${encodeURIComponent(event.id)}`);
-      // SVG output is resolution-independent (no retina-scaling math needed);
-      // a generous intrinsic size just keeps the module grid precise at the
-      // larger 150px CSS display size below.
-      const qrImage = appUrl(`assets/qr.svg?text=${encodeURIComponent(publicUrl)}&size=300`);
       const priceLabel = publicTicketPriceLabel(event, data.ticket_types);
       const lineup = data.lineup || [];
       const tags = String(event.public_tags || '').split(',').map((t) => t.trim()).filter(Boolean);
@@ -972,9 +967,16 @@ class PublicEventPage extends PanicElement {
               ${data.flyer
                 ? `<img class="pev-flyer" src="${esc(assetUrl(data.flyer.file_path))}" alt="${esc(event.title)} flyer">`
                 : `<div class="pev-flyer pev-flyer-placeholder"><paint-splat width="640" height="800" bg-color="#141a22" interactive="false"></paint-splat><span class="pev-flyer-placeholder-title">${esc(event.title)}</span></div>`}
-              <div class="pev-qr">
-                <img src="${esc(qrImage)}" width="150" height="150" alt="QR code linking to this event's public page">
-                <span>Scan to share this page</span>
+              <div class="pev-share-card">
+                <p class="pev-share-title">Share This Event</p>
+                <div class="pev-share-buttons">
+                  <a class="pev-share-btn" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}" target="_blank" rel="noopener" aria-label="Share on Facebook"><i class="fa-brands fa-facebook-f" aria-hidden="true"></i></a>
+                  <a class="pev-share-btn" href="https://twitter.com/intent/tweet?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(event.title)}" target="_blank" rel="noopener" aria-label="Share on X"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i></a>
+                  <a class="pev-share-btn" href="https://www.reddit.com/submit?url=${encodeURIComponent(publicUrl)}&title=${encodeURIComponent(event.title)}" target="_blank" rel="noopener" aria-label="Share on Reddit"><i class="fa-brands fa-reddit-alien" aria-hidden="true"></i></a>
+                  <a class="pev-share-btn" href="https://api.whatsapp.com/send?text=${encodeURIComponent(`${event.title} ${publicUrl}`)}" target="_blank" rel="noopener" aria-label="Share on WhatsApp"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i></a>
+                  <button type="button" class="pev-share-btn" data-share-instagram aria-label="Share on Instagram"><i class="fa-brands fa-instagram" aria-hidden="true"></i></button>
+                  <button type="button" class="pev-share-btn" data-copy-link aria-label="Copy link"><i class="fa-solid fa-link" aria-hidden="true"></i></button>
+                </div>
               </div>
             </div>
 
@@ -984,11 +986,11 @@ class PublicEventPage extends PanicElement {
               ${withLine ? `<p class="pev-with">${esc(withLine)}</p>` : ''}
 
               <ul class="pev-facts">
-                <li><i class="fa-solid fa-calendar-day" aria-hidden="true"></i>${esc(eventDateRangeLabel(event))}</li>
-                <li><i class="fa-solid fa-location-dot" aria-hidden="true"></i>${esc(event.venue_name)}</li>
-                <li><i class="fa-solid fa-clock" aria-hidden="true"></i>Doors ${esc(timeLabel(event.doors_time))} &middot; Show ${esc(timeLabel(event.show_time))}</li>
-                <li><i class="fa-solid fa-id-card" aria-hidden="true"></i>${esc(event.age_restriction || 'All ages')}</li>
-                <li><i class="fa-solid fa-tag" aria-hidden="true"></i>${esc(priceLabel)}</li>
+                <li><i class="fa-solid fa-calendar-day" aria-hidden="true"></i><span>${esc(eventDateRangeLabel(event))}</span></li>
+                <li><i class="fa-solid fa-location-dot" aria-hidden="true"></i><span>${esc(event.venue_name)}</span></li>
+                <li><i class="fa-solid fa-clock" aria-hidden="true"></i><span>Doors ${esc(timeLabel(event.doors_time))} &middot; Show ${esc(timeLabel(event.show_time))}</span></li>
+                <li><i class="fa-solid fa-id-card" aria-hidden="true"></i><span>${esc(event.age_restriction || 'All ages')}</span></li>
+                <li><i class="fa-solid fa-tag" aria-hidden="true"></i><span>${esc(priceLabel)}</span></li>
               </ul>
 
               ${tags.length ? `<div class="pev-tags">${tags.map((t) => `<span class="pev-tag">${esc(t)}</span>`).join('')}</div>` : ''}
@@ -1016,14 +1018,6 @@ class PublicEventPage extends PanicElement {
             <article class="pev-info-card">
               <h2><i class="fa-solid fa-bolt" aria-hidden="true"></i> About the Show</h2>
               ${event.description_public ? `<div class="event-description">${mdToHtml(event.description_public)}</div>` : `<p class="muted">More details coming soon.</p>`}
-              <div class="pev-share">
-                <span class="pev-share-label">Share this show</span>
-                <div class="pev-share-buttons">
-                  <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}" target="_blank" rel="noopener" aria-label="Share on Facebook"><i class="fa-brands fa-facebook-f" aria-hidden="true"></i></a>
-                  <a href="https://twitter.com/intent/tweet?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(event.title)}" target="_blank" rel="noopener" aria-label="Share on X"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i></a>
-                  <button type="button" data-copy-link aria-label="Copy link"><i class="fa-solid fa-link" aria-hidden="true"></i></button>
-                </div>
-              </div>
             </article>
 
             <article class="pev-info-card">
@@ -1042,12 +1036,27 @@ class PublicEventPage extends PanicElement {
         </footer>
       </div>`;
 
+      const flashCopied = (btn) => {
+        btn.classList.add('is-copied');
+        setTimeout(() => btn.classList.remove('is-copied'), 1500);
+      };
       this.querySelector('[data-copy-link]')?.addEventListener('click', async (event2) => {
         try {
           await navigator.clipboard.writeText(publicUrl);
-          const btn = event2.currentTarget;
-          btn.classList.add('is-copied');
-          setTimeout(() => btn.classList.remove('is-copied'), 1500);
+          flashCopied(event2.currentTarget);
+        } catch { /* clipboard unavailable — quietly ignore */ }
+      });
+      // Instagram has no web share-intent URL (unlike Facebook/X/Reddit/
+      // WhatsApp), so lean on the native OS share sheet where it's available
+      // (mobile browsers — that sheet includes Instagram) and fall back to
+      // copying the link for the visitor to paste in manually.
+      this.querySelector('[data-share-instagram]')?.addEventListener('click', async (event2) => {
+        if (navigator.share) {
+          try { await navigator.share({ title: event.title, url: publicUrl }); return; } catch { /* canceled — fall through to copy */ }
+        }
+        try {
+          await navigator.clipboard.writeText(publicUrl);
+          flashCopied(event2.currentTarget);
         } catch { /* clipboard unavailable — quietly ignore */ }
       });
     } catch (error) {

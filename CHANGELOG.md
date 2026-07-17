@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `public-event` — Icon-over-text facts row, share buttons instead of QR
+- **Fixed** `public-event` — Icon-over-text facts row, share buttons instead of QR
 - **Fixed** `public-event` — Full-bleed hero layout, much bigger QR code
 - **Fixed** `public-event` — Full-bleed hero layout, much bigger QR code
 - **Added** `public-event` — Redesign the public event landing page
