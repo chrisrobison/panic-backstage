@@ -27,6 +27,24 @@ test('event Promote action opens campaign workspace or create prompt', async (pa
   assert.notOk(await page.exists('pb-promote-campaign-overview .error-text'), 'Promote route does not show the generic API error state');
 });
 
+test('Readiness card keeps all items on a single row', async (page) => {
+  if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
+  await page.openEvent();
+  await page.until(`document.querySelector('.health-row .health-item')`);
+  const itemCount = await page.count('.health-item');
+  assert.atLeast(itemCount, 1, 'readiness row has at least one item');
+  // The grid's column count now tracks the actual item count (see
+  // --readiness-cols), so the row should lay out as a single grid track no
+  // matter how many items the server sends. Before that fix, a hardcoded
+  // 6-column template would push a 7th item onto its own row with unused
+  // whitespace beside it. gridTemplateRows reporting more than one length
+  // means the browser actually generated a second row.
+  const rowTracks = await page.eval(
+    `getComputedStyle(document.querySelector('.health-row')).gridTemplateRows.trim().split(/\\s+/).length`,
+  );
+  assert.equal(rowTracks, 1, 'readiness items all sit on a single grid row');
+});
+
 test('Event Details form drops ticket + contract fields (now in their own sections)', async (page) => {
   if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
   await page.openEvent();

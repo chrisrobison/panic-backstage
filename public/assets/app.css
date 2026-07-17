@@ -1130,7 +1130,7 @@ pb-event-overview { display: block; }
   align-items: center;
   border-top: 1px solid var(--line);
 }
-.health-row { grid-template-columns: repeat(6, 1fr); padding: 18px; gap: 10px; }
+.health-row { grid-template-columns: repeat(var(--readiness-cols, 6), 1fr); padding: 18px; gap: 10px; }
 .health-item { display: flex; gap: 10px; align-items: center; font-size: 14px; }
 .check, .warn-mark, .neutral {
   width: 25px;

@@ -118,7 +118,11 @@ class EventReadiness extends EventBusCard {
     const data = this._data;
     if (!data) return;
     const readiness = data.readiness || [];
-    this.innerHTML = `<article class="panel"><div class="section-head padded"><h2>Readiness ${helpLink('overview', 'Overview &amp; Readiness')}</h2></div><div class="health-row">${readiness.map((item) => `<div class="health-item">${item.ok ? '<span class="check">OK</span>' : '<span class="warn-mark">!</span>'}<span><strong>${esc(item.label)}</strong><br>${esc(item.state)}</span></div>`).join('')}</div></article>`;
+    // Column count tracks however many items the server actually sends (varies
+    // by event type/permissions — private events, or viewers lacking
+    // view_settlement, get fewer than the public-event max) so the row always
+    // fills evenly instead of a hardcoded count leaving a stray item to wrap.
+    this.innerHTML = `<article class="panel"><div class="section-head padded"><h2>Readiness ${helpLink('overview', 'Overview &amp; Readiness')}</h2></div><div class="health-row" style="--readiness-cols:${readiness.length || 1}">${readiness.map((item) => `<div class="health-item">${item.ok ? '<span class="check">OK</span>' : '<span class="warn-mark">!</span>'}<span><strong>${esc(item.label)}</strong><br>${esc(item.state)}</span></div>`).join('')}</div></article>`;
   }
 }
 

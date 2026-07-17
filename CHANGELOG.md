@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `overview` — Keep readiness card items on one row
 - **Added** `calendar` — Add List button to the Grid|Agenda toggle
 - **Fixed** `public-event` — Center facts row, uppercase it, relocate share card
 - **Fixed** `public-event` — Center facts row, uppercase it, relocate share card
