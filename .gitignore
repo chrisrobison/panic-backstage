@@ -5,6 +5,8 @@ storage/logs/*
 !storage/logs/.gitkeep
 storage/mail/*
 !storage/mail/.gitkeep
+storage/config/*
+!storage/config/.gitkeep
 .DS_Store
 tests/.state
 scripts/__pycache__/

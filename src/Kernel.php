@@ -20,6 +20,18 @@ final class Kernel
     public static function boot(string $root, ?Database $db = null): self
     {
         Env::load($root . '/.env');
+        // App Settings overlay (Admin > App Settings — see src/AppSettings.php):
+        // a small, allow-listed slice of venue-contact env keys the web app
+        // itself can write. It lives under storage/, which is group-writable
+        // by the PHP-FPM user, unlike the repo root .env (owner-only writes,
+        // holds real secrets) — so this is a genuinely separate file, loaded
+        // after .env so it wins. Loaded here (not in public/api/index.php)
+        // so it applies uniformly to every request that reaches Kernel,
+        // including the CLI/test bootstrap paths that call boot() directly.
+        // NOTE: single-tenant only for now — in multi-tenant SaaS mode this
+        // would need to be scoped per-tenant (e.g. clients/{slug}/storage/…)
+        // rather than shared across every tenant database.
+        Env::load($root . '/storage/config/app-settings.env');
         return new self($root, $db ?? new Database(), new Auth());
     }
 
@@ -427,6 +439,15 @@ final class Kernel
         // Wizard defaults — admin-configurable defaults for the event wizard
         if ($segments[0] === 'wizard-defaults') {
             return [WizardDefaults::class, []];
+        }
+
+        // App Settings — app-shell brand (name/logo) + a safe allow-listed
+        // slice of .env (admin contact + social handles). GET is open to any
+        // authenticated user (the shell renders the brand for everyone);
+        // PUT is gated by manage_settings inside the endpoint. See
+        // src/AppSettings.php for exactly which fields this touches.
+        if ($segments[0] === 'app-settings') {
+            return [AppSettings::class, []];
         }
 
         // Panic Promote — /api/promote/...

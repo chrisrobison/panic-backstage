@@ -21,6 +21,7 @@ const ADMIN_TABS = [
   { key: 'payments',  title: 'Payments',  icon: 'fa-credit-card' },
   { key: 'wizard',    title: 'Wizard',    icon: 'fa-wand-magic-sparkles' },
   { key: 'venue',     title: 'Venue',     icon: 'fa-building' },
+  { key: 'settings',  title: 'App Settings', icon: 'fa-sliders' },
   { key: 'db',        title: 'DB Browser', icon: 'fa-database' },
   { key: 'db-history', title: 'DB History', icon: 'fa-clock-rotate-left' },
   { key: 'navigation', title: 'Navigation', icon: 'fa-bars' },
@@ -47,7 +48,7 @@ class AdminPage extends PanicElement {
       this.render();
     }));
     const outlet = $('.admin-outlet', this);
-    const tag = { users: 'pb-admin-users', duplicates: 'pb-user-duplicates', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts', payments: 'pb-payment-settings', wizard: 'pb-admin-wizard-defaults', venue: 'pb-admin-venue', db: 'pb-admin-db-browser', 'db-history': 'pb-admin-db-history', navigation: 'pb-admin-navigation' }[this.tab];
+    const tag = { users: 'pb-admin-users', duplicates: 'pb-user-duplicates', staff: 'pb-admin-staff', templates: 'pb-admin-templates', contracts: 'pb-admin-contracts', payments: 'pb-payment-settings', wizard: 'pb-admin-wizard-defaults', venue: 'pb-admin-venue', settings: 'pb-admin-app-settings', db: 'pb-admin-db-browser', 'db-history': 'pb-admin-db-history', navigation: 'pb-admin-navigation' }[this.tab];
     outlet.replaceChildren(document.createElement(tag));
   }
 }
@@ -965,9 +966,133 @@ class AdminVenue extends PanicElement {
   }
 }
 
+// ── App Settings ───────────────────────────────────────────────────────────
+// The app shell's own brand identity (name/logo shown top-left, browser tab
+// title) plus the small set of venue contact/social fields that are safe to
+// edit from a web form. Two stores behind one form/Save button — see
+// src/AppSettings.php for exactly what goes where and why:
+//   - Brand fields  → app_settings DB singleton (brand_name, logo_url).
+//   - Everything else on this page → an allow-listed slice of .env, rewritten
+//     in place (never a raw file editor — no secret ever reaches this page).
+// Deliberately does NOT duplicate Admin > Venue (venues.name/city/state/
+// website_url) — that stays the one place to edit the venue's own profile.
+class AdminAppSettings extends PanicElement {
+  async connect() {
+    this.saving = false;
+    this.setLoading('Loading app settings…');
+    try {
+      const res = await api('/app-settings');
+      this.settings = res.settings || {};
+      this.env = res.env || {};
+      this.render();
+    } catch (err) {
+      this.showError(err);
+    }
+  }
+
+  _field({ id, label, value, hint, placeholder, type = 'text' }) {
+    return `
+      <div class="wd-field">
+        <label class="wd-label" for="as-${esc(id)}">${esc(label)}</label>
+        <input name="${esc(id)}" id="as-${esc(id)}" type="${esc(type)}" class="as-input" value="${esc(value ?? '')}" placeholder="${esc(placeholder || '')}">
+        ${hint ? `<span class="wd-hint">${esc(hint)}</span>` : ''}
+      </div>`;
+  }
+
+  render() {
+    const s = this.settings || {};
+    const e = this.env || {};
+
+    this.innerHTML = `
+      <div class="wd-editor">
+        <div class="wd-header">
+          <div>
+            <h2>App Settings</h2>
+            <p class="subtle">How this app identifies itself to your team, and who gets contacted about it.
+              Login credentials, payment tokens, and other secrets live outside this page — server access only.</p>
+          </div>
+          <button class="btn-primary as-save" ${this.saving ? 'disabled' : ''}>
+            <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+            ${this.saving ? 'Saving…' : 'Save settings'}
+          </button>
+        </div>
+
+        <form class="wd-form" novalidate>
+
+          <fieldset class="wd-section">
+            <legend><i class="fa-solid fa-signature" aria-hidden="true"></i> Brand</legend>
+            <div class="wd-grid">
+              ${this._field({ id: 'brand_name', label: 'App name', value: s.brand_name, placeholder: 'Panic Backstage', hint: 'Shown top-left in the sidebar/topbar and in the browser tab. Leave blank to use the default.' })}
+              ${this._field({ id: 'logo_url', label: 'Logo URL', value: s.logo_url, placeholder: '(default icon)', hint: 'Leave blank to keep the default icon. Square image works best.' })}
+            </div>
+          </fieldset>
+
+          <fieldset class="wd-section">
+            <legend><i class="fa-solid fa-address-card" aria-hidden="true"></i> Admin contact</legend>
+            <div class="wd-grid">
+              ${this._field({ id: 'manager_name', label: 'Name', value: e.manager_name, placeholder: 'Jane Smith', hint: 'Notified alongside venue_admins when an event reaches Intake Complete.' })}
+              ${this._field({ id: 'manager_email', label: 'Email', type: 'email', value: e.manager_email, placeholder: 'jane@myvenue.com' })}
+              ${this._field({ id: 'manager_phone', label: 'Phone', type: 'tel', value: e.manager_phone, placeholder: '(415) 555-0100' })}
+            </div>
+          </fieldset>
+
+          <fieldset class="wd-section">
+            <legend><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Venue contact &amp; social</legend>
+            <div class="wd-grid">
+              ${this._field({ id: 'venue_email', label: 'Public contact email', type: 'email', value: e.venue_email, placeholder: 'hello@myvenue.com', hint: 'From address for Promote email blasts.' })}
+              ${this._field({ id: 'press_email', label: 'Press contact email', type: 'email', value: e.press_email, placeholder: 'press@myvenue.com' })}
+              ${this._field({ id: 'hashtags', label: 'Hashtags', value: e.hashtags, placeholder: 'LiveMusic,MyVenue', hint: 'Comma-separated, no #, used in social-media copy.' })}
+              ${this._field({ id: 'tiktok_handle', label: 'TikTok handle', value: e.tiktok_handle, placeholder: '(without @)' })}
+            </div>
+          </fieldset>
+
+        </form>
+      </div>
+    `;
+
+    $('.as-save', this).addEventListener('click', (event) => { event.preventDefault(); this.save(); });
+  }
+
+  async save() {
+    if (this.saving) return;
+
+    // Collect the typed values BEFORE re-rendering, and immediately adopt
+    // them as this.settings/this.env too — render() always rebuilds the
+    // form from those two fields, so if they weren't updated first, the
+    // "Saving…" render (or a failed save's final render) would flash the
+    // user's just-typed values back to whatever was last loaded.
+    const settings = {};
+    const env = {};
+    const envKeys = new Set(['manager_name', 'manager_email', 'manager_phone', 'venue_email', 'press_email', 'hashtags', 'tiktok_handle']);
+    $$('.as-input', this).forEach((el) => {
+      if (envKeys.has(el.name)) env[el.name] = el.value.trim();
+      else settings[el.name] = el.value.trim();
+    });
+    this.settings = settings;
+    this.env = env;
+
+    this.saving = true;
+    this.render();
+
+    try {
+      const res = await api('/app-settings', { method: 'PUT', body: JSON.stringify({ settings, env }) });
+      this.settings = res.settings || settings;
+      this.env = res.env || env;
+      publish('toast.show', { message: 'App settings saved.', tone: 'success' });
+      publish('app-settings.updated', { settings: this.settings });
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Save failed.', tone: 'error' });
+    } finally {
+      this.saving = false;
+      this.render();
+    }
+  }
+}
+
 customElements.define('pb-admin-page', AdminPage);
 customElements.define('pb-admin-users', AdminUsers);
 customElements.define('pb-admin-staff', AdminStaff);
 customElements.define('pb-admin-templates', AdminTemplates);
 customElements.define('pb-admin-wizard-defaults', AdminWizardDefaults);
 customElements.define('pb-admin-venue', AdminVenue);
+customElements.define('pb-admin-app-settings', AdminAppSettings);

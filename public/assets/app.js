@@ -53,6 +53,8 @@ class AppShell extends PanicElement {
       this.applyCapabilities();
       this.applyUserPrefs();
       this._loadVenueName();
+      this._loadBrand();
+      subscribe('app-settings.updated', (data) => this.applyBrand(data.settings || {}), this.abort.signal);
       subscribe('messages.changed', () => this.refreshUnread(), this.abort.signal);
       this.refreshUnread();
       await this.route();
@@ -70,6 +72,34 @@ class AppShell extends PanicElement {
       const span = $('[data-venue-label] .venue-name', this);
       if (span) span.textContent = name;
     }).catch(() => { /* non-critical — label stays as 'Venue' */ });
+  }
+
+  /**
+   * Fetch the configured app-shell brand (Admin > App Settings) and apply it.
+   * Falls back to the hardcoded "Panic Backstage" markup/title already in
+   * renderShell()/index.html when nothing has been configured. See
+   * applyBrand() — also called live when the settings page saves, so a
+   * change shows up immediately without a reload.
+   */
+  _loadBrand() {
+    api('/app-settings').then((data) => this.applyBrand(data?.settings || {}))
+      .catch(() => { /* non-critical — brand stays the default */ });
+  }
+
+  applyBrand(settings) {
+    const name = (settings.brand_name || '').trim();
+    const logo = (settings.logo_url || '').trim();
+    if (name) {
+      $$('.brand, .mobile-brand', this).forEach((el) => {
+        const label = $('span:last-child', el);
+        if (label) label.textContent = name;
+        el.setAttribute('aria-label', `${name} home`);
+      });
+      document.title = name;
+    }
+    if (logo) {
+      $$('.brand-mark', this).forEach((el) => { el.style.backgroundImage = `url("${logo.replace(/["\\]/g, '')}")`; });
+    }
   }
 
   /**

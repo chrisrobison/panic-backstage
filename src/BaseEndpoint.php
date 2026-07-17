@@ -85,6 +85,7 @@ abstract class BaseEndpoint implements Endpoint
             'manage_db_history',
             'view_reports',
             'manage_navigation',
+            'manage_settings',
         ],
         'event_owner' => ['view_leads'],
         'promoter' => [],
