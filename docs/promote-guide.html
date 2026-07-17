@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Panic Promote — Setup &amp; User Guide — Mabuhay Backstage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+
+    :root {
+      --paper: #f7f4ec;
+      --paper-raised: #ffffff;
+      --ink: #201b14;
+      --ink-soft: #5c5346;
+      --line: #e3dbc9;
+      --stage: #18130d;
+      --stage-soft: #241c14;
+      --marquee: #b5720f;
+      --marquee-bright: #d99a2b;
+      --velvet: #a23c3c;
+      --house: #2f6f5e;
+      --code-bg: #eee5d0;
+      --shadow: 0 1px 2px rgba(24,19,13,.06), 0 10px 28px -14px rgba(24,19,13,.28);
+      --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+      --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #14110c;
+        --paper-raised: #1c1710;
+        --ink: #ece3d3;
+        --ink-soft: #b3a894;
+        --line: #35291b;
+        --stage: #0b0906;
+        --stage-soft: #191209;
+        --marquee: #e2a542;
+        --marquee-bright: #f2c374;
+        --velvet: #e08a8a;
+        --house: #74c2ab;
+        --code-bg: #201a11;
+        --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.65);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--paper); scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* ---- Stage header band ---- */
+    .stagehead {
+      background: linear-gradient(180deg, var(--stage) 0%, var(--stage-soft) 100%);
+      position: relative;
+      overflow: hidden;
+      padding: 4.5rem 1.5rem 3.25rem;
+    }
+    .stagehead::after {
+      content: "";
+      position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+      background: repeating-linear-gradient(90deg, var(--marquee-bright) 0 8px, transparent 8px 22px);
+      opacity: .85;
+    }
+    .stagehead-inner { max-width: 740px; margin: 0 auto; }
+    .kicker {
+      display: inline-block;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: .16em;
+      font-size: .74rem;
+      font-weight: 600;
+      color: var(--marquee-bright);
+      margin: 0 0 1rem;
+    }
+    .stagehead h1 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(2rem, 4.2vw, 3.1rem);
+      line-height: 1.1;
+      letter-spacing: -.01em;
+      margin: 0;
+      color: #fbf6e9;
+    }
+
+    main.page { max-width: 740px; margin: 0 auto; padding: 3.25rem 1.5rem 6rem; }
+
+    h2, h3, h4 { font-family: var(--font-display); color: var(--ink); }
+    h2 {
+      font-weight: 600; font-size: 1.7rem;
+      margin: 3.25rem 0 1.1rem;
+      scroll-margin-top: 1.75rem;
+      position: relative;
+    }
+    h3 {
+      font-weight: 600; font-size: 1.28rem;
+      margin: 2.25rem 0 .85rem;
+      scroll-margin-top: 1.75rem;
+      position: relative;
+    }
+    h4 {
+      font-family: var(--font-mono);
+      font-weight: 600; font-size: .82rem;
+      text-transform: uppercase; letter-spacing: .06em;
+      color: var(--ink-soft);
+      margin: 1.9rem 0 .6rem;
+      position: relative;
+    }
+    .anchor-link {
+      position: absolute; left: -1.2em; top: .12em;
+      color: var(--marquee); opacity: 0;
+      text-decoration: none; font-family: var(--font-mono); font-weight: 400;
+      font-size: .82em;
+      transition: opacity .12s ease;
+    }
+    h2:hover .anchor-link, h3:hover .anchor-link, h4:hover .anchor-link { opacity: .7; }
+    .anchor-link:hover { opacity: 1 !important; }
+
+    p { margin: 0 0 1.15rem; }
+    strong { color: var(--ink); font-weight: 600; }
+    em { color: var(--ink-soft); }
+    a { color: var(--marquee); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--marquee) 40%, transparent); text-underline-offset: 2px; }
+    a:hover { color: var(--velvet); text-decoration-color: currentColor; }
+
+    ul, ol { padding-left: 1.35rem; margin: 0 0 1.2rem; }
+    li { margin-bottom: .42rem; }
+    li > ul, li > ol { margin-top: .5rem; margin-bottom: 0; }
+
+    hr {
+      border: 0;
+      margin: 3.25rem auto;
+      height: 1.1rem;
+      background-image: radial-gradient(circle, var(--marquee) 1.6px, transparent 1.7px);
+      background-repeat: repeat-x;
+      background-position: center;
+      background-size: 18px 100%;
+      opacity: .55;
+    }
+
+    table {
+      width: 100%; border-collapse: collapse;
+      margin: 1.6rem 0 2rem;
+      font-size: .95rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      background: var(--paper-raised);
+    }
+    table col { width: auto !important; }
+    thead th {
+      background: var(--stage);
+      color: #f2ead8;
+      text-align: left;
+      padding: .7rem 1rem;
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      font-weight: 600;
+    }
+    tbody td { padding: .75rem 1rem; border-top: 1px solid var(--line); vertical-align: top; }
+    tbody tr:nth-child(even) { background: color-mix(in srgb, var(--stage) 3%, var(--paper-raised)); }
+    tbody tr:hover { background: color-mix(in srgb, var(--marquee) 9%, transparent); }
+
+    code {
+      font-family: var(--font-mono);
+      background: var(--code-bg);
+      padding: .16em .42em;
+      border-radius: 5px;
+      font-size: .87em;
+      color: var(--velvet);
+    }
+    pre {
+      background: var(--stage);
+      color: #e7dfcd;
+      padding: 1.1rem 1.3rem;
+      border-radius: 10px;
+      overflow-x: auto;
+      border-left: 3px solid var(--marquee);
+      box-shadow: var(--shadow);
+      margin: 1.5rem 0 1.9rem;
+    }
+    pre code { background: none; padding: 0; color: inherit; font-size: .85rem; line-height: 1.65; }
+
+    blockquote {
+      margin: 1.7rem 0; padding: 1.05rem 1.35rem;
+      border-left: 3px solid var(--marquee);
+      background: color-mix(in srgb, var(--marquee) 9%, var(--paper-raised));
+      border-radius: 0 10px 10px 0;
+      color: var(--ink-soft);
+      box-shadow: var(--shadow);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+    blockquote strong { color: var(--ink); }
+
+    /* ---- Table of contents card ---- */
+    .toc-card {
+      background: var(--paper-raised);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.4rem 1.7rem 1.4rem 2.4rem;
+      box-shadow: var(--shadow);
+      margin: 0 0 2rem;
+    }
+    .toc-card ol { margin-bottom: 0; }
+    .toc-card li { margin-bottom: .3rem; }
+    .toc-card a { text-decoration: none; }
+    .toc-card a:hover { text-decoration: underline; }
+
+    /* ---- Status badges ---- */
+    .badge {
+      display: inline-flex; align-items: center; gap: .45em;
+      font-family: var(--font-mono); font-size: .78em; font-weight: 600;
+      padding: .18em .6em; border-radius: 999px; white-space: nowrap;
+      vertical-align: .04em;
+    }
+    .badge::before { content: ""; width: .5em; height: .5em; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .badge-green  { color: #2f8f5b; background: rgba(47,143,91,.13); }
+    .badge-yellow { color: #ab7712; background: rgba(171,119,18,.15); }
+    .badge-blue   { color: #3568b0; background: rgba(53,104,176,.15); }
+    .badge-red    { color: #b0402f; background: rgba(176,64,47,.15); }
+    .badge-gray   { color: var(--ink-soft); background: rgba(120,110,95,.15); }
+
+    /* ---- Cue rail (persistent in-page nav) ---- */
+    .cue-rail {
+      position: fixed;
+      top: 7rem;
+      right: max(1rem, calc(50% - 370px - 240px));
+      width: 210px;
+      max-height: 72vh;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      display: none;
+    }
+    @media (min-width: 1240px) { .cue-rail { display: block; } }
+    .cue-rail .cue-title {
+      text-transform: uppercase; letter-spacing: .12em;
+      color: var(--ink-soft); margin-bottom: .7rem; font-weight: 600; font-size: .68rem;
+    }
+    .cue-rail a {
+      display: flex; gap: .55rem; align-items: baseline;
+      padding: .32rem 0 .32rem .75rem;
+      margin-bottom: .05rem;
+      color: var(--ink-soft);
+      text-decoration: none;
+      border-left: 2px solid var(--line);
+      line-height: 1.35;
+    }
+    .cue-rail a .n { color: var(--marquee); font-weight: 600; flex-shrink: 0; }
+    .cue-rail a.active { color: var(--ink); border-left-color: var(--marquee); }
+    .cue-rail a:hover { color: var(--ink); }
+
+    @media (max-width: 640px) {
+      .stagehead { padding: 3rem 1.25rem 2.25rem; }
+      main.page { padding: 2.25rem 1.25rem 4.5rem; }
+      h2 { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="stagehead"><div class="stagehead-inner">
+<p class="kicker">Mabuhay Backstage · Setup &amp; User Guide</p>
+<h1 id="panic-promote-setup-user-guide">Panic Promote — Setup &amp; User
+Guide</h1>
+</div></div>
+<main class="page">
+<p>A complete walkthrough for configuring platform credentials,
+connecting social and event channels, and broadcasting posts through the
+Promote module.</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<div class="toc-card">
+<ol type="1">
+<li><a href="#overview">Overview</a></li>
+<li><a href="#quick-start">Quick Start</a></li>
+<li><a href="#platform-connectors">Platform Connectors — Setup &amp;
+Credentials</a>
+<ul>
+<li><a href="#facebook-page">Facebook Page</a></li>
+<li><a href="#instagram-business">Instagram Business</a></li>
+<li><a href="#tiktok">TikTok</a></li>
+<li><a href="#twitter--x">Twitter / X</a></li>
+<li><a href="#threads">Threads</a></li>
+<li><a href="#bluesky">Bluesky</a></li>
+<li><a href="#eventbrite">Eventbrite</a></li>
+<li><a href="#luma">Luma</a></li>
+<li><a href="#email--mailchimp">Email (Mailchimp)</a></li>
+<li><a href="#email--sendgrid">Email (SendGrid)</a></li>
+<li><a href="#editorial--listing-sites">Editorial &amp; Listing
+Sites</a></li>
+</ul></li>
+<li><a href="#saving-credentials-in-backstage">Saving Credentials in
+Backstage</a></li>
+<li><a href="#creating-a-campaign--posts">Creating a Campaign &amp;
+Posts</a></li>
+<li><a href="#broadcasting-a-post">Broadcasting a Post</a></li>
+<li><a href="#promotion-health-checklist">Promotion Health
+Checklist</a></li>
+<li><a href="#broadcast-history--analytics">Broadcast History &amp;
+Analytics</a></li>
+<li><a href="#troubleshooting">Troubleshooting</a></li>
+<li><a href="#things-to-watch-out-for">Things to Watch Out For</a></li>
+</ol>
+</div>
+<hr />
+<h2 id="overview">Overview</h2>
+<p>Panic Promote is the marketing command center inside Mabuhay
+Backstage. It lets you turn any event into a structured promotion
+campaign — write posts, generate platform-specific copy, and broadcast
+to social media, event listing platforms, and email lists from a single
+screen.</p>
+<p><strong>Supported channels:</strong></p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Type</th>
+<th>Platforms</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Direct social post</td>
+<td>Facebook Page, Instagram, TikTok, Twitter/X, Threads, Bluesky</td>
+</tr>
+<tr class="even">
+<td>Event platforms</td>
+<td>Eventbrite, Luma</td>
+</tr>
+<tr class="odd">
+<td>Email</td>
+<td>Mailchimp, SendGrid</td>
+</tr>
+<tr class="even">
+<td>Manual / editorial</td>
+<td>Funcheap, Foopee, SF Chronicle, SF Station, DoTheBay, Dice, Resident
+Advisor, SongKick, JamBase</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="quick-start">Quick Start</h2>
+<ol type="1">
+<li><strong>Open an event</strong> in Backstage and navigate to the
+<strong>Promote</strong> tab.</li>
+<li>Click <strong>Start Campaign</strong> if no campaign exists for this
+event yet.</li>
+<li>Click <strong>New Post</strong> → enter a title and master copy
+text.</li>
+<li>Click <strong>Generate Variants</strong> — the system produces
+platform-specific copy for every channel.</li>
+<li>Review and edit any variant in the editor. Fix warnings (character
+limits, missing images, etc.).</li>
+<li>Go to <strong>Destinations</strong> and ensure the platforms you
+want are marked <span class="badge badge-green">Connected</span>.</li>
+<li>Click <strong>Broadcast</strong> → choose destinations → choose
+<em>Send Now</em> or <em>Schedule</em> → confirm.</li>
+<li>Check <strong>Broadcast History</strong> to see per-platform
+delivery status.</li>
+</ol>
+<p>If any destinations show <span class="badge badge-yellow">Needs Setup</span>, follow the
+relevant section below to add credentials.</p>
+<hr />
+<h2 id="platform-connectors">Platform Connectors</h2>
+<blockquote>
+<p><strong>Permission:</strong> Only venue admins
+(<code>manage_users</code> capability) can save or update API
+credentials. Staff with <code>edit_event</code> can create posts and
+trigger broadcasts using already-connected platforms.</p>
+</blockquote>
+<hr />
+<h3 id="facebook-page">Facebook Page</h3>
+<p>Facebook posts are made to your <strong>Facebook Page</strong> (not a
+personal profile) via the Graph API. Posts include a caption and, when a
+flyer is attached to the event, a photo.</p>
+<h4 id="what-you-need">What you need</h4>
+<ul>
+<li>A Facebook Developer account</li>
+<li>A Facebook App with <strong>Pages API</strong> enabled</li>
+<li>A <strong>Page Access Token</strong> (long-lived, 60+ days)</li>
+<li>Your <strong>numeric Page ID</strong></li>
+</ul>
+<h4 id="step-by-step-setup">Step-by-step setup</h4>
+<ol type="1">
+<li><p>Go to <a
+href="https://developers.facebook.com">developers.facebook.com</a> and
+log in.</p></li>
+<li><p>Click <strong>My Apps → Create App</strong>. Select
+<strong>Business</strong> as the app type.</p></li>
+<li><p>Under <strong>Products</strong>, add <strong>Facebook
+Login</strong> and <strong>Pages API</strong>.</p></li>
+<li><p>In your app dashboard, go to <strong>Tools → Graph API
+Explorer</strong>.</p></li>
+<li><p>Under <strong>User or Page</strong>, select your Facebook Page
+from the dropdown.</p></li>
+<li><p>Click <strong>Generate Access Token</strong> and grant the
+<code>pages_manage_posts</code> and <code>pages_read_engagement</code>
+permissions.</p></li>
+<li><p>Copy the short-lived token, then exchange it for a
+<strong>long-lived token</strong>:</p>
+<pre><code>GET https://graph.facebook.com/oauth/access_token
+  ?grant_type=fb_exchange_token
+  &amp;client_id={app-id}
+  &amp;client_secret={app-secret}
+  &amp;fb_exchange_token={short-lived-token}</code></pre></li>
+<li><p>Use the long-lived token to fetch your <strong>Page Access
+Token</strong>:</p>
+<pre><code>GET https://graph.facebook.com/me/accounts?access_token={long-lived-user-token}</code></pre>
+<p>Find your page in the response and copy its <code>access_token</code>
+and <code>id</code>.</p></li>
+<li><p>In Backstage → <strong>Promote → Settings → Credentials</strong>,
+select <strong>Facebook Page</strong> and enter:</p>
+<ul>
+<li><strong>Access Token</strong> — the page access token from step
+8</li>
+<li><strong>Config → page_id</strong> — the numeric page <code>id</code>
+from step 8</li>
+</ul></li>
+</ol>
+<h4 id="things-to-watch-out-for">Things to watch out for</h4>
+<ul>
+<li><strong>App Review:</strong> Your app must go through Facebook’s App
+Review before you can post to a real public page. In development mode,
+you can only post to pages you own/admin.</li>
+<li><strong>Token expiry:</strong> Page access tokens can be made
+“never-expiring” if generated from a long-lived user token. If posts
+start failing, regenerate the token.</li>
+<li><strong>Link previews:</strong> Text-only posts get a link preview
+card; photo posts show the flyer image.</li>
+<li><strong>Post visibility:</strong> Posts go live immediately unless
+you schedule them.</li>
+</ul>
+<hr />
+<h3 id="instagram-business">Instagram Business</h3>
+<p>Instagram uses the same <strong>Facebook Graph API</strong> as
+Facebook posts, but targets your <strong>Instagram Business
+Account</strong> rather than a Facebook Page. Posts require an image —
+text-only posts are not supported by the API.</p>
+<h4 id="what-you-need-1">What you need</h4>
+<ul>
+<li>A Facebook Developer App (same app as Facebook if you like)</li>
+<li><code>instagram_content_publish</code> permission (requires App
+Review)</li>
+<li>An <strong>Instagram Business Account</strong> linked to your
+Facebook Page</li>
+<li>A <strong>User Access Token</strong> with Instagram permissions</li>
+<li>Your <strong>numeric Instagram Business Account ID</strong></li>
+</ul>
+<h4 id="step-by-step-setup-1">Step-by-step setup</h4>
+<ol type="1">
+<li><p>In your Facebook Developer App, add the <strong>Instagram Graph
+API</strong> product.</p></li>
+<li><p>Under <strong>App Review</strong>, request the
+<code>instagram_content_publish</code> and <code>instagram_basic</code>
+permissions.</p></li>
+<li><p>In Graph API Explorer, generate a user token that includes
+<code>instagram_content_publish</code>.</p></li>
+<li><p>Get your Instagram Business Account ID:</p>
+<pre><code>GET https://graph.facebook.com/me/accounts?access_token={token}</code></pre>
+<p>Then for the page that has the linked Instagram account:</p>
+<pre><code>GET https://graph.facebook.com/{page-id}?fields=instagram_business_account&amp;access_token={token}</code></pre>
+<p>Copy the <code>id</code> value from
+<code>instagram_business_account</code>.</p></li>
+<li><p>In Backstage → <strong>Promote → Settings → Credentials</strong>,
+select <strong>Instagram</strong> and enter:</p>
+<ul>
+<li><strong>Access Token</strong> — user token with
+<code>instagram_content_publish</code></li>
+<li><strong>Config → ig_user_id</strong> — the numeric Instagram
+Business Account ID</li>
+</ul></li>
+</ol>
+<h4 id="things-to-watch-out-for-1">Things to watch out for</h4>
+<ul>
+<li><strong>Image is required.</strong> If the event has no approved
+flyer, the Instagram broadcast will fail. Always upload a flyer before
+broadcasting.</li>
+<li><strong>Image must be publicly accessible.</strong> The Instagram
+API fetches your image from its URL. Make sure <code>APP_URL</code> in
+your <code>.env</code> is correct and the uploads folder is public.</li>
+<li><strong>Two-step publish:</strong> The adapter creates a media
+container first, then publishes it. There is a brief wait between steps
+— if you see a timeout, the image may still appear on Instagram after a
+delay.</li>
+<li><strong>App Review is mandatory</strong> for posting to real
+accounts. Test mode only works with accounts that are testers/developers
+on the app.</li>
+<li><strong>Links in captions are not clickable.</strong> Instagram does
+not make URLs in captions tappable. Use a bio link tool (Linktree, etc.)
+and reference “link in bio” in the caption — the variant copy already
+does this.</li>
+</ul>
+<hr />
+<h3 id="tiktok">TikTok</h3>
+<p>TikTok posts are photo posts made via the <strong>Content Posting API
+v2</strong>. Like Instagram, an image is required. TikTok uses an OAuth
+2.0 flow and the user token expires periodically.</p>
+<h4 id="what-you-need-2">What you need</h4>
+<ul>
+<li>A TikTok Developer account at <a
+href="https://developers.tiktok.com">developers.tiktok.com</a></li>
+<li>An app with <strong>Content Posting API</strong> enabled</li>
+<li>App Review approval</li>
+<li>A <strong>User Access Token</strong> with <code>video.publish</code>
+scope (or <code>photo.publish</code> for photo posts)</li>
+</ul>
+<h4 id="step-by-step-setup-2">Step-by-step setup</h4>
+<ol type="1">
+<li>Log in to <a
+href="https://developers.tiktok.com">developers.tiktok.com</a> →
+<strong>Manage Apps → Create App</strong>.</li>
+<li>Under <strong>Products</strong>, add <strong>Content Posting
+API</strong>.</li>
+<li>In <strong>Login Kit</strong>, add the scopes:
+<code>user.info.basic</code>, <code>video.publish</code> (or
+<code>photo.publish</code>).</li>
+<li>Set your OAuth redirect URI.</li>
+<li>Submit the app for <strong>App Review</strong> (required before live
+posting).</li>
+<li>After approval, run the OAuth flow from your redirect URI to obtain
+a user access token.
+<ul>
+<li>The access token is tied to the TikTok user who authorizes the app —
+this should be your venue’s TikTok account.</li>
+</ul></li>
+<li>In Backstage → <strong>Promote → Settings → Credentials</strong>,
+select <strong>TikTok</strong> and enter:
+<ul>
+<li><strong>Access Token</strong> — user access token from the OAuth
+flow</li>
+<li><strong>Config → privacy_level</strong> — one of
+<code>PUBLIC_TO_EVERYONE</code>, <code>MUTUAL_FOLLOW_FRIENDS</code>, or
+<code>SELF_ONLY</code> (default: <code>PUBLIC_TO_EVERYONE</code>)</li>
+</ul></li>
+</ol>
+<h4 id="things-to-watch-out-for-2">Things to watch out for</h4>
+<ul>
+<li><strong>Image is required</strong> — same as Instagram.</li>
+<li><strong>Image URL must be allowlisted</strong> in TikTok Developer
+settings under <strong>Content Posting API → Media Hosting
+Domains</strong>. Add your <code>APP_URL</code> domain there or posts
+will be rejected.</li>
+<li><strong>Token expiration:</strong> TikTok tokens can expire. If
+posting fails with an auth error, re-run the OAuth flow.</li>
+<li><strong>Daily rate limits</strong> exist per creator account. Avoid
+broadcasting the same post multiple times.</li>
+<li><strong>Publish status polling:</strong> After initiating a post,
+TikTok processes it asynchronously. The adapter polls up to 6 times
+waiting for confirmation. A <code>queued</code> status in broadcast
+history means it was submitted but confirmation timed out — check TikTok
+directly.</li>
+</ul>
+<hr />
+<h3 id="twitter-x">Twitter / X</h3>
+<p>Tweets are sent via the <strong>X API v2</strong> as text-only posts
+(no image). The variant copy is automatically truncated to 280
+characters.</p>
+<h4 id="what-you-need-3">What you need</h4>
+<ul>
+<li>A Twitter/X Developer account at <a
+href="https://developer.x.com">developer.x.com</a></li>
+<li>A Project + App with <strong>Read and Write</strong>
+permissions</li>
+<li><strong>OAuth 2.0 PKCE</strong> configured (with
+<code>tweet.write</code> scope and optionally
+<code>offline.access</code>)</li>
+<li>A <strong>User Access Token</strong> from a completed OAuth
+flow</li>
+</ul>
+<h4 id="step-by-step-setup-3">Step-by-step setup</h4>
+<ol type="1">
+<li>Go to <a
+href="https://developer.twitter.com">developer.twitter.com</a> →
+<strong>Developer Portal → Projects &amp; Apps → New App</strong>.</li>
+<li>Under <strong>User Authentication Settings</strong>, enable
+<strong>OAuth 2.0</strong> with:
+<ul>
+<li><strong>App type:</strong> Web App (Confidential Client) <em>or</em>
+Native App (Public Client for PKCE)</li>
+<li><strong>Callback URL:</strong> your redirect URI</li>
+<li><strong>Permissions:</strong> Read and Write</li>
+</ul></li>
+<li>Add the scope <code>tweet.write</code> (and
+<code>offline.access</code> if you want refresh token support).</li>
+<li>Run the OAuth 2.0 PKCE flow to generate a <strong>user access
+token</strong> on behalf of your venue’s Twitter account.</li>
+<li>In Backstage → <strong>Promote → Settings → Credentials</strong>,
+select <strong>Twitter</strong> and enter:
+<ul>
+<li><strong>Access Token</strong> — user access token</li>
+<li><strong>Refresh Token</strong> — (optional but recommended) for
+token renewal without re-auth</li>
+</ul></li>
+</ol>
+<h4 id="things-to-watch-out-for-3">Things to watch out for</h4>
+<ul>
+<li><strong>Free tier rate limits:</strong> The free X API plan allows
+approximately 17 tweets per 24-hour window per user. Exceed this and
+posts will fail with a 429 error. If you broadcast to multiple events
+frequently, consider upgrading to a Basic plan.</li>
+<li><strong>280 character limit is strict.</strong> The variant
+generator truncates text automatically, but always review the preview to
+make sure it reads well after truncation.</li>
+<li><strong>No images on v2 text endpoint:</strong> Twitter/X text
+tweets do not include the flyer image. Image attachment requires a
+separate media upload step that is not yet implemented.</li>
+<li><strong>Token refresh:</strong> Tokens without
+<code>offline.access</code> expire in ~2 hours. With
+<code>offline.access</code>, you get a refresh token — add it to the
+credentials so the adapter can renew automatically in a future
+update.</li>
+<li><strong>URL character count:</strong> URLs count as 23 characters
+regardless of length.</li>
+</ul>
+<hr />
+<h3 id="threads">Threads</h3>
+<p>Threads posts use the <strong>Threads Graph API</strong> at
+<code>graph.threads.net</code>. The API supports text posts and
+optionally a single image. Tokens expire every 60 days and must be
+refreshed.</p>
+<h4 id="what-you-need-4">What you need</h4>
+<ul>
+<li>A Meta Developer App (same or separate from your Facebook/Instagram
+app)</li>
+<li>The <strong>Threads API</strong> product added to the app</li>
+<li><code>threads_basic</code> and <code>threads_content_publish</code>
+permissions (App Review required)</li>
+<li>A <strong>User Access Token</strong> and your <strong>Threads User
+ID</strong></li>
+</ul>
+<h4 id="step-by-step-setup-4">Step-by-step setup</h4>
+<ol type="1">
+<li><p>In <a
+href="https://developers.facebook.com">developers.facebook.com</a>, open
+your app (or create a new one).</p></li>
+<li><p>Add the <strong>Threads API</strong> product.</p></li>
+<li><p>Under <strong>App Review</strong>, request
+<code>threads_basic</code> and
+<code>threads_content_publish</code>.</p></li>
+<li><p>Generate a user access token through Graph API Explorer with
+those permissions.</p></li>
+<li><p>Fetch your Threads User ID:</p>
+<pre><code>GET https://graph.threads.net/me?access_token={token}</code></pre>
+<p>Copy the <code>id</code> value.</p></li>
+<li><p>Exchange for a <strong>long-lived token</strong> (valid 60
+days):</p>
+<pre><code>GET https://graph.threads.net/access_token
+  ?grant_type=th_exchange_token
+  &amp;client_id={app-id}
+  &amp;client_secret={app-secret}
+  &amp;access_token={short-lived-token}</code></pre></li>
+<li><p>In Backstage → <strong>Promote → Settings → Credentials</strong>,
+select <strong>Threads</strong> and enter:</p>
+<ul>
+<li><strong>Access Token</strong> — long-lived token</li>
+<li><strong>Config → threads_user_id</strong> — numeric user ID from
+step 5</li>
+</ul></li>
+</ol>
+<h4 id="things-to-watch-out-for-4">Things to watch out for</h4>
+<ul>
+<li><strong>60-day token expiry.</strong> Set a reminder to refresh your
+Threads token every ~50 days. After expiry, you’ll need to re-authorize.
+The token can be refreshed before it expires using the Threads token
+refresh endpoint.</li>
+<li><strong>Two-step publish:</strong> Like Instagram, the adapter
+creates a container then publishes it with a 0.5s delay. This is
+normal.</li>
+<li><strong>500 character limit</strong> on post text.</li>
+<li><strong>App Review required</strong> for production use.</li>
+</ul>
+<hr />
+<h3 id="bluesky">Bluesky</h3>
+<p>Bluesky uses the <strong>AT Protocol</strong> and authenticates with
+your Bluesky <strong>handle</strong> and an <strong>App
+Password</strong> — not your main account password. No OAuth, no token
+storage; the adapter authenticates fresh on every post.</p>
+<h4 id="what-you-need-5">What you need</h4>
+<ul>
+<li>A Bluesky account at <a href="https://bsky.app">bsky.app</a></li>
+<li>An <strong>App Password</strong> created in your account
+settings</li>
+<li>Your Bluesky <strong>handle</strong>
+(e.g. <code>yourvenue.bsky.social</code>)</li>
+</ul>
+<h4 id="step-by-step-setup-5">Step-by-step setup</h4>
+<ol type="1">
+<li>Log in to <a href="https://bsky.app">bsky.app</a>.</li>
+<li>Go to <strong>Settings → Privacy and Security → App
+Passwords</strong>.</li>
+<li>Click <strong>Add App Password</strong>. Give it a name like
+<code>Mabuhay Backstage</code>.</li>
+<li>Copy the generated password immediately — it won’t be shown
+again.</li>
+<li>In Backstage → <strong>Promote → Settings → Credentials</strong>,
+select <strong>Bluesky</strong> and enter:
+<ul>
+<li><strong>Access Token</strong> — the App Password (not your login
+password!)</li>
+<li><strong>Config → handle</strong> — your full Bluesky handle
+(e.g. <code>yourvenue.bsky.social</code>)</li>
+</ul></li>
+</ol>
+<h4 id="things-to-watch-out-for-5">Things to watch out for</h4>
+<ul>
+<li><strong>This is an App Password, not your account password.</strong>
+Using your real password here is a security risk. Always create a
+dedicated App Password for Backstage.</li>
+<li><strong>300 character limit</strong> — shorter than Twitter. The
+variant generator enforces this.</li>
+<li><strong>URLs in text are clickable</strong> because the adapter
+automatically inserts AT Protocol “facets” (rich-text annotations). You
+do not need to shorten URLs.</li>
+<li><strong>No stored session.</strong> Bluesky authenticates on every
+post using handle + App Password. There is nothing to “expire” or
+refresh. If you change your Bluesky password, delete the App Password
+and generate a new one.</li>
+<li><strong>Rate limits</strong> apply per handle. Avoid spamming
+Bluesky with repeated test posts.</li>
+</ul>
+<hr />
+<h3 id="eventbrite">Eventbrite</h3>
+<p>The Eventbrite adapter creates a <strong>draft event</strong> in your
+Eventbrite organization and adds a General Admission ticket class. If
+broadcast mode is <em>Send Now</em>, the event is published
+immediately.</p>
+<h4 id="what-you-need-6">What you need</h4>
+<ul>
+<li>An Eventbrite account at <a
+href="https://eventbrite.com">eventbrite.com</a> with an Organizer
+profile</li>
+<li>A <strong>Private API Key</strong> from Eventbrite</li>
+<li>Your <strong>Organization ID</strong></li>
+<li>(Optional) A pre-created <strong>Venue ID</strong> in
+Eventbrite</li>
+</ul>
+<h4 id="step-by-step-setup-6">Step-by-step setup</h4>
+<ol type="1">
+<li><p>Log in to Eventbrite → go to <a
+href="https://www.eventbrite.com/account-settings/apps">eventbrite.com/account-settings/apps</a>.</p></li>
+<li><p>Click <strong>Create API Key</strong>. Fill in your app info.
+Copy the <strong>Private token</strong>.</p></li>
+<li><p>Find your <strong>Organization ID</strong> — use the Backstage
+helper endpoint:</p>
+<pre><code>GET /api/promote/eventbrite/org</code></pre>
+<p>This returns a list of organizations associated with your API key.
+Copy the <code>id</code> of the correct organization.</p></li>
+<li><p>(Optional) Pre-create your venue in Eventbrite’s UI and note the
+<strong>Venue ID</strong> from the URL.</p></li>
+<li><p>In Backstage → <strong>Promote → Settings → Credentials</strong>,
+select <strong>Eventbrite</strong> and enter:</p>
+<ul>
+<li><strong>Access Token</strong> — your Eventbrite Private API
+token</li>
+<li><strong>Config → org_id</strong> — your Organization ID from step
+3</li>
+<li><strong>Config → eb_venue_id</strong> — (optional) Eventbrite Venue
+ID</li>
+</ul></li>
+</ol>
+<h4 id="things-to-watch-out-for-6">Things to watch out for</h4>
+<ul>
+<li><strong>Send Now publishes immediately.</strong> Choosing <em>Send
+Now</em> in the broadcast dialog creates and publishes the Eventbrite
+listing in one step. Choose <em>Schedule</em> if you want to review the
+draft in Eventbrite before it goes live.</li>
+<li><strong>Cover image is not uploaded automatically.</strong> After
+broadcasting, log in to Eventbrite and manually add your flyer image to
+the event.</li>
+<li><strong>Event times</strong> are pulled from the event’s
+<code>doors_time</code> and <code>show_time</code> fields. Make sure
+these are set correctly on the event before broadcasting.</li>
+<li><strong>Ticket price</strong> defaults to free ($0.00). Edit the
+ticket class in Eventbrite if you need paid tickets.</li>
+</ul>
+<hr />
+<h3 id="luma">Luma</h3>
+<p>The Luma adapter creates an event at <a
+href="https://lu.ma">lu.ma</a> via their public API. Events are
+published immediately on creation — there is no draft mode.</p>
+<h4 id="what-you-need-7">What you need</h4>
+<ul>
+<li>A Luma account at <a href="https://lu.ma">lu.ma</a></li>
+<li>A <strong>Luma API key</strong> from your account settings</li>
+</ul>
+<h4 id="step-by-step-setup-7">Step-by-step setup</h4>
+<ol type="1">
+<li>Log in to <a href="https://lu.ma">lu.ma</a>.</li>
+<li>Go to <strong>Settings → API</strong>.</li>
+<li>Generate an API key. Copy it.</li>
+<li>In Backstage → <strong>Promote → Settings → Credentials</strong>,
+select <strong>Luma</strong> and enter:
+<ul>
+<li><strong>Access Token</strong> — your Luma API key</li>
+</ul></li>
+</ol>
+<h4 id="things-to-watch-out-for-7">Things to watch out for</h4>
+<ul>
+<li><strong>Events go live immediately.</strong> Unlike Eventbrite, Luma
+has no concept of a draft event — the moment you broadcast, the event is
+live and public. Plan accordingly.</li>
+<li><strong>Cover image is not uploaded automatically.</strong> After
+the event is created, log in to Luma and upload the flyer manually from
+the event editor.</li>
+<li><strong>Venue address</strong> is constructed from your event’s
+venue fields. Make sure address, city, state, and zip code are filled in
+on the event.</li>
+<li><strong>Timezone</strong> is hardcoded to
+<code>America/Los_Angeles</code>. If you ever run events in a different
+timezone, this will need to be updated.</li>
+<li><strong>Capacity</strong> is set from the event’s
+<code>capacity</code> field. If that field is empty, capacity is left
+unlimited.</li>
+</ul>
+<hr />
+<h3 id="email-mailchimp">Email — Mailchimp</h3>
+<p>The Mailchimp adapter creates a <strong>Regular Campaign</strong>,
+sets the HTML and plain-text content, then either sends it immediately
+or schedules it.</p>
+<h4 id="what-you-need-8">What you need</h4>
+<ul>
+<li>A Mailchimp account at <a
+href="https://mailchimp.com">mailchimp.com</a></li>
+<li>An <strong>API Key</strong></li>
+<li>An existing <strong>Audience (List) ID</strong></li>
+<li>Your sender name and email address (must be verified in
+Mailchimp)</li>
+</ul>
+<h4 id="step-by-step-setup-8">Step-by-step setup</h4>
+<ol type="1">
+<li>Log in to Mailchimp → <strong>Account → Extras → API
+Keys</strong>.</li>
+<li>Click <strong>Create A Key</strong>. Copy it.</li>
+<li>Find your <strong>Audience ID</strong> → <strong>Audience → All
+Contacts → Settings → Audience name and defaults</strong>. The List ID
+is shown in the “Audience ID” section.</li>
+<li>In Backstage → <strong>Promote → Settings → Credentials</strong>,
+select <strong>Email (General)</strong> or <strong>Email
+(Press)</strong> and enter:
+<ul>
+<li><strong>Access Token</strong> — Mailchimp API key</li>
+<li><strong>Config → provider</strong> — <code>mailchimp</code></li>
+<li><strong>Config → list_id</strong> — your Audience ID</li>
+<li><strong>Config → from_name</strong> —
+e.g. <code>Your Venue Name</code></li>
+<li><strong>Config → from_email</strong> — a verified sender address in
+your Mailchimp account</li>
+</ul></li>
+</ol>
+<h4 id="things-to-watch-out-for-8">Things to watch out for</h4>
+<ul>
+<li><strong>Audience must already exist.</strong> The adapter does not
+create audiences. The list you specify must already have
+subscribers.</li>
+<li><strong>From address must be verified.</strong> Mailchimp rejects
+campaigns with unverified sender domains. Verify your domain or use
+Mailchimp’s approved sender address.</li>
+<li><strong>Unsubscribe footer is automatic.</strong> Mailchimp injects
+a <code>*|UNSUB|*</code> unsubscribe link. This is required by CAN-SPAM
+and cannot be removed.</li>
+<li><strong>Scheduled sends</strong> use Mailchimp’s own scheduling
+system. The send time is passed as an ISO 8601 datetime. Mailchimp
+requires the scheduled time to be at least 15 minutes in the
+future.</li>
+</ul>
+<hr />
+<h3 id="email-sendgrid">Email — SendGrid</h3>
+<p>The SendGrid adapter creates a <strong>Single Send</strong> (a
+one-time email blast), sets the content, and either sends it or
+schedules it.</p>
+<h4 id="what-you-need-9">What you need</h4>
+<ul>
+<li>A SendGrid account at <a
+href="https://sendgrid.com">sendgrid.com</a></li>
+<li>An <strong>API Key</strong> with <code>Mail Send</code>
+permissions</li>
+<li>An existing <strong>Contact List ID</strong></li>
+<li>A verified <strong>Sender Identity</strong> (Sender ID)</li>
+<li>Your sender name and email address</li>
+</ul>
+<h4 id="step-by-step-setup-9">Step-by-step setup</h4>
+<ol type="1">
+<li>Log in to <a href="https://app.sendgrid.com">app.sendgrid.com</a> →
+<strong>Settings → API Keys → Create API Key</strong>.</li>
+<li>Give it <strong>Full Access</strong> or at minimum
+<code>Mail Send</code> and <code>Marketing</code> permissions.</li>
+<li>Copy the API key immediately — it won’t be shown again.</li>
+<li>Go to <strong>Marketing → Contacts</strong> and note the
+<strong>List ID</strong> of the list you want to send to (it’s in the
+URL when you click a list).</li>
+<li>Go to <strong>Marketing → Senders</strong> and note the
+<strong>Sender ID</strong> (numeric, visible in the URL of a
+sender).</li>
+<li>In Backstage → <strong>Promote → Settings → Credentials</strong>,
+select <strong>Email (General)</strong> or <strong>Email
+(Press)</strong> and enter:
+<ul>
+<li><strong>Access Token</strong> — SendGrid API key</li>
+<li><strong>Config → provider</strong> — <code>sendgrid</code></li>
+<li><strong>Config → list_id</strong> — your Contact List ID</li>
+<li><strong>Config → from_name</strong> —
+e.g. <code>Your Venue Name</code></li>
+<li><strong>Config → from_email</strong> — verified sender address</li>
+<li><strong>Config → sender_id</strong> — numeric Sender ID from step
+5</li>
+</ul></li>
+</ol>
+<h4 id="things-to-watch-out-for-9">Things to watch out for</h4>
+<ul>
+<li><strong>Sender verification required.</strong> SendGrid requires
+domain authentication or single-sender verification before sending. Set
+this up under <strong>Settings → Sender Authentication</strong>.</li>
+<li><strong>Contact List must exist.</strong> The adapter targets a
+pre-existing contact list. Build and manage lists in SendGrid’s
+Marketing Contacts.</li>
+<li><strong>Unsubscribe links are required.</strong> SendGrid injects
+<code>&lt;%asm_global_unsubscribe_url%&gt;</code> into the email
+template. This is required for compliance and cannot be removed.</li>
+<li><strong>Scheduled sends:</strong> Like Mailchimp, the
+<code>send_at</code> time must be in the future. SendGrid requires an
+ISO 8601 UTC datetime.</li>
+</ul>
+<hr />
+<h3 id="editorial-listing-sites">Editorial &amp; Listing Sites</h3>
+<p>These platforms — <strong>Funcheap, Foopee, SF Chronicle, SF Station,
+DoTheBay, Dice, Resident Advisor, SongKick, JamBase</strong> — do not
+have APIs available for automated posting. Instead, the Promote
+module:</p>
+<ol type="1">
+<li><strong>Generates platform-specific copy</strong> for each site
+(500-char descriptions, press pitches, etc.)</li>
+<li><strong>Marks the broadcast as <code>manual_required</code></strong>
+— a prompt for you to take action</li>
+<li>Optionally <strong>sends a submission email</strong> if a
+<code>contact_email</code> is configured for that destination</li>
+</ol>
+<h4 id="setup-for-manual-destinations">Setup for manual
+destinations</h4>
+<p>For each editorial platform, you can store helpful reference info in
+Backstage credentials:</p>
+<ul>
+<li><strong>Config → submission_url</strong> — the URL of the platform’s
+event submission form</li>
+<li><strong>Config → contact_email</strong> — an editorial contact email
+(enables the <em>Send Email</em> action)</li>
+<li><strong>Config → partner_url</strong> — (Dice/RA) your artist or
+promoter profile URL</li>
+<li><strong>Config → event_platform_url</strong> — link to your existing
+listing if already created</li>
+</ul>
+<p>These are stored but not used for automated posting — they simply
+pre-fill useful links in the broadcast result view.</p>
+<h4 id="workflow-for-editorial-submissions">Workflow for editorial
+submissions</h4>
+<ol type="1">
+<li>After broadcasting, go to <strong>Broadcast History</strong>.</li>
+<li>Platforms with <code>manual_required</code> status show a
+<strong>View Submission</strong> button.</li>
+<li>Click it to open the generated copy for that platform.</li>
+<li>Copy the text and paste it into the platform’s submission form, or
+click <strong>Send Email</strong> to email an editorial contact.</li>
+<li>Mark the item as submitted in the Promotion Health checklist.</li>
+</ol>
+<h4 id="lead-time-warnings">Lead time warnings</h4>
+<p>The variant generator includes platform-specific warnings. Common
+ones:</p>
+<table>
+<thead>
+<tr class="header">
+<th>Platform</th>
+<th>Lead time needed</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Dice</td>
+<td>Submit at least 7 days before the event</td>
+</tr>
+<tr class="even">
+<td>Resident Advisor</td>
+<td>Submit 2–4 weeks in advance</td>
+</tr>
+<tr class="odd">
+<td>SF Chronicle</td>
+<td>2–3 weeks for calendar listings</td>
+</tr>
+<tr class="even">
+<td>SongKick / JamBase</td>
+<td>A few days; artist must have existing profile</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="saving-credentials-in-backstage">Saving Credentials in
+Backstage</h2>
+<p>All credentials are stored <strong>per venue</strong> in Backstage.
+Only users with the <code>manage_users</code> capability (venue admins)
+can view or update them.</p>
+<ol type="1">
+<li>In Backstage, go to <strong>Promote → Settings → Platform
+Credentials</strong>.</li>
+<li>Select a platform from the list.</li>
+<li>Enter the required fields (access token + any config values
+described in the platform sections above).</li>
+<li>Click <strong>Save</strong>. The platform status will update to
+<span class="badge badge-green">Connected</span>.</li>
+<li>To disconnect a platform, click <strong>Disconnect</strong> — this
+deletes the stored credential.</li>
+</ol>
+<p><strong>Credentials are stored in the database, not in
+<code>.env</code>.</strong><br />
+The <code>.env</code> file may contain fallback values for
+<code>EVENTBRITE_API_KEY</code> and <code>EVENTBRITE_ORG_ID</code> from
+an older configuration, but database credentials take precedence.</p>
+<hr />
+<h2 id="creating-a-campaign-posts">Creating a Campaign &amp; Posts</h2>
+<h3 id="starting-a-campaign">Starting a campaign</h3>
+<ol type="1">
+<li>Open an event from the <strong>Events</strong> list.</li>
+<li>Click the <strong>Promote</strong> tab.</li>
+<li>If no campaign exists, click <strong>Start Campaign</strong>. This
+creates a campaign record linked to the event.</li>
+<li>(Optional) Set a <strong>ticket goal</strong> for the campaign in
+the campaign settings panel.</li>
+</ol>
+<h3 id="creating-a-post">Creating a post</h3>
+<p>A <em>post</em> is a master piece of content (text + optional flyer
+image) that gets adapted into platform-specific variants.</p>
+<ol type="1">
+<li>Click <strong>New Post</strong>.</li>
+<li>Enter a <strong>title</strong> (internal reference, not published)
+and <strong>master copy</strong> — write your core message here. Don’t
+worry about character limits; the variant generator handles them.</li>
+<li>If you want a flyer attached, make sure the event has an
+<strong>approved asset</strong> (flyer image) uploaded. Go to the
+<strong>Assets</strong> tab on the event to upload one.</li>
+<li>Click <strong>Save Post</strong>.</li>
+</ol>
+<h3 id="generating-variants">Generating variants</h3>
+<ol type="1">
+<li>On the post, click <strong>Generate Variants</strong>.</li>
+<li>The system produces channel-specific copy for all 20+ channels:
+Instagram, Facebook, TikTok, Twitter, Threads, Bluesky, Email,
+Eventbrite, Luma, and all editorial sites.</li>
+<li>Each variant shows:
+<ul>
+<li>The generated copy (editable)</li>
+<li>Character count vs. limit</li>
+<li>Any <strong>warnings</strong> (e.g., “Links are not clickable on
+Instagram”)</li>
+</ul></li>
+<li>Edit any variant directly in the text area. Changes are saved
+automatically.</li>
+<li>Variants marked with a warning are still broadcastable — warnings
+are informational, not blocking.</li>
+</ol>
+<hr />
+<h2 id="broadcasting-a-post">Broadcasting a Post</h2>
+<ol type="1">
+<li>From a post, click <strong>Broadcast</strong>.</li>
+<li>The <strong>Destinations</strong> panel shows all available
+platforms with their status:
+<ul>
+<li><span class="badge badge-green">Connected</span> — ready to broadcast</li>
+<li><span class="badge badge-yellow">Needs Setup</span> — no credentials stored; see
+setup sections above</li>
+<li><span class="badge badge-blue">Manual Required</span> — no API available; will
+generate copy for manual submission</li>
+</ul></li>
+<li>Select the destinations you want to include in this broadcast.</li>
+<li>Choose <strong>Send Now</strong> or <strong>Schedule</strong> (enter
+a date/time for scheduled sends).</li>
+<li>Click <strong>Broadcast</strong> to confirm.</li>
+<li>The system dispatches to each selected platform in sequence.</li>
+<li>Results appear immediately in the <strong>Broadcast Results</strong>
+panel:
+<ul>
+<li><span class="badge badge-green">Sent</span> — posted successfully; link to the live post
+shown</li>
+<li><span class="badge badge-blue">Queued</span> — submitted for scheduled delivery</li>
+<li><span class="badge badge-blue">Manual Required</span> — no API; go to the result to
+copy/submit manually</li>
+<li><span class="badge badge-yellow">Needs Auth</span> — credential problem; check the platform
+setup</li>
+<li><span class="badge badge-red">Failed</span> — API error; the error message is shown for
+debugging</li>
+</ul></li>
+</ol>
+<h3 id="tips-for-a-smooth-broadcast">Tips for a smooth broadcast</h3>
+<ul>
+<li><strong>Run the Promotion Health check first</strong> (see below) —
+it surfaces common issues before you broadcast.</li>
+<li><strong>Make sure there’s an approved flyer</strong> before
+broadcasting to Instagram and TikTok. Without one, those adapters will
+skip or fail.</li>
+<li><strong>Check character counts</strong> in the Twitter and Bluesky
+variants before sending. The generator truncates automatically, but read
+it to confirm the message still makes sense.</li>
+<li><strong>Broadcast to a few platforms first</strong> as a test before
+sending everything at once, especially when credentials are new.</li>
+</ul>
+<hr />
+<h2 id="promotion-health-checklist">Promotion Health Checklist</h2>
+<p>The <strong>Health</strong> panel scores your campaign on a 20-point
+checklist. Items include:</p>
+<table>
+<thead>
+<tr class="header">
+<th>Item</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Panic page published</td>
+<td>Event is live on the public website</td>
+</tr>
+<tr class="even">
+<td>Approved flyer uploaded</td>
+<td>Required for Instagram, TikTok, Threads</td>
+</tr>
+<tr class="odd">
+<td>Instagram post sent</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>Facebook post sent</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>Eventbrite listing live</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>Luma listing live</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>Funcheap submitted</td>
+<td>Manual</td>
+</tr>
+<tr class="even">
+<td>Foopee submitted</td>
+<td>Manual</td>
+</tr>
+<tr class="odd">
+<td>Press email prepared</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>Email blast sent</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>Posts created</td>
+<td>At least one post in the campaign</td>
+</tr>
+<tr class="even">
+<td>Goal tickets set</td>
+<td>Ticket goal defined for the campaign</td>
+</tr>
+<tr class="odd">
+<td>SF Chronicle submitted</td>
+<td>Manual</td>
+</tr>
+<tr class="even">
+<td>SF Station submitted</td>
+<td>Manual</td>
+</tr>
+<tr class="odd">
+<td>DoTheBay submitted</td>
+<td>Manual</td>
+</tr>
+<tr class="even">
+<td>SongKick submitted</td>
+<td>Manual</td>
+</tr>
+<tr class="odd">
+<td>JamBase submitted</td>
+<td>Manual</td>
+</tr>
+<tr class="even">
+<td>Email (ad-hoc) sent</td>
+<td>One-off announcement email</td>
+</tr>
+<tr class="odd">
+<td>Day-before reminder sent</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>Band assets collected</td>
+<td>Bios, press photos, set times</td>
+</tr>
+</tbody>
+</table>
+<p>Items marked <strong>red</strong> are high-priority.
+<strong>Yellow</strong> items are recommended. <strong>Blue</strong>
+items are informational.</p>
+<p>The score is shown as a percentage. Aim for 80%+ for a well-promoted
+show.</p>
+<hr />
+<h2 id="broadcast-history-analytics">Broadcast History &amp;
+Analytics</h2>
+<h3 id="history">History</h3>
+<p><strong>Broadcast History</strong> shows every broadcast attempt for
+the campaign, grouped by broadcast run:</p>
+<ul>
+<li>Each run shows the timestamp, mode (now/scheduled), and the list of
+destinations.</li>
+<li>Expand a run to see per-platform results, external links, and error
+messages.</li>
+</ul>
+<h3 id="analytics">Analytics</h3>
+<p>The <strong>Analytics</strong> panel summarizes campaign reach at a
+glance:</p>
+<table>
+<thead>
+<tr class="header">
+<th>Metric</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Broadcasts</td>
+<td>Total broadcast runs</td>
+</tr>
+<tr class="even">
+<td>Destinations Reached</td>
+<td>Count of platforms with status <em>sent</em></td>
+</tr>
+<tr class="odd">
+<td>Live Listings</td>
+<td>Eventbrite + Luma events that are live</td>
+</tr>
+<tr class="even">
+<td>Manual Pending</td>
+<td>Editorial submissions awaiting your action</td>
+</tr>
+<tr class="odd">
+<td>Needs Setup</td>
+<td>Platforms with missing credentials</td>
+</tr>
+<tr class="even">
+<td>Failed</td>
+<td>Broadcast attempts that errored</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="needs-auth-after-broadcasting">“Needs Auth” after
+broadcasting</h3>
+<p>The stored access token was rejected by the platform. Steps to fix:
+1. Go to <strong>Promote → Settings → Platform Credentials</strong>. 2.
+Disconnect the platform and reconnect with a fresh token. 3. For
+Facebook/Instagram: regenerate the page/user token in Graph API
+Explorer. 4. For Twitter: re-run the OAuth 2.0 PKCE flow. 5. For
+Threads: check if the 60-day token has expired and refresh it. 6. For
+Bluesky: verify the App Password is still active in your Bluesky
+settings.</p>
+<h3 id="instagram-tiktok-post-fails-with-image-not-accessible">Instagram
+/ TikTok post fails with “image not accessible”</h3>
+<ul>
+<li>Confirm <code>APP_URL</code> in <code>.env</code> matches the actual
+public URL of your Backstage installation.</li>
+<li>Check that the flyer file exists in the <code>public/uploads/</code>
+directory and is publicly readable.</li>
+<li>For TikTok: ensure your domain is allowlisted in the TikTok
+developer app’s <strong>Content Posting API → Media Hosting
+Domains</strong> setting.</li>
+</ul>
+<h3 id="twitter-posts-are-cut-off-unexpectedly">Twitter posts are cut
+off unexpectedly</h3>
+<ul>
+<li>Review the Twitter variant in the post editor before
+broadcasting.</li>
+<li>URLs count as 23 characters in Twitter’s display but the API still
+enforces the 280-char total.</li>
+<li>The generator truncates at 280 chars — edit the variant manually if
+the cut falls in an awkward place.</li>
+</ul>
+<h3
+id="eventbrite-event-not-appearing-on-the-eventbrite-site">Eventbrite
+event not appearing on the Eventbrite site</h3>
+<ul>
+<li>If you used <em>Schedule</em> mode instead of <em>Send Now</em>, the
+event was created as a <strong>draft</strong>. Log in to Eventbrite and
+publish it manually.</li>
+<li>Check that <code>org_id</code> is correct in the credentials config.
+An incorrect org ID may silently succeed but create the event under the
+wrong organization.</li>
+</ul>
+<h3 id="email-campaign-not-sending">Email campaign not sending</h3>
+<ul>
+<li><strong>Mailchimp:</strong> Confirm your from_email is a verified
+domain sender. Check the Mailchimp campaign was created under
+<strong>Campaigns</strong> in the dashboard.</li>
+<li><strong>SendGrid:</strong> Confirm sender authentication is
+complete. Check that <code>sender_id</code> matches a verified sender in
+<strong>Marketing → Senders</strong>.</li>
+<li>Both providers require the list to have at least one
+subscriber.</li>
+</ul>
+<h3 id="failed-on-a-manual-editorial-platform">“Failed” on a manual
+editorial platform</h3>
+<p>Manual platforms should never fail — they always return
+<code>manual_required</code>. If you see a failure on an editorial
+destination, there may be a routing issue. Contact your Backstage
+administrator.</p>
+<hr />
+<h2 id="things-to-watch-out-for-10">Things to Watch Out For</h2>
+<ol type="1">
+<li><p><strong>App Review takes time.</strong> Facebook, Instagram,
+TikTok, and Threads all require App Review before you can post to live
+public accounts. This can take days to weeks. Start the review process
+well in advance of your first event.</p></li>
+<li><p><strong>Tokens expire.</strong> Twitter tokens (without
+<code>offline.access</code>) expire in ~2 hours. Threads tokens expire
+in 60 days. TikTok tokens expire periodically. When in doubt, reconnect
+the platform.</p></li>
+<li><p><strong>Images must be publicly accessible.</strong> Any platform
+that fetches your flyer image from a URL will fail if the URL is not
+publicly reachable. This includes staging/localhost environments — for
+testing, use a public staging domain or a direct image URL.</p></li>
+<li><p><strong>Bluesky App Password ≠ your password.</strong> Always
+create a dedicated App Password in Bluesky settings. Never put your real
+Bluesky account password in the credentials form.</p></li>
+<li><p><strong>Luma events go live immediately.</strong> There is no
+draft/preview mode in the Luma API. Only broadcast to Luma when you are
+ready for the event to be public.</p></li>
+<li><p><strong>Editorial submissions are not automated.</strong>
+Funcheap, Foopee, Dice, Resident Advisor, SF Chronicle, etc. require you
+to manually copy and paste content into their respective submission
+forms. The module generates the copy — you do the submitting.</p></li>
+<li><p><strong>Email unsubscribe links are required.</strong> Both
+Mailchimp and SendGrid inject unsubscribe links automatically. Do not
+attempt to remove them — this is a CAN-SPAM legal requirement.</p></li>
+<li><p><strong>Free-tier rate limits on Twitter/X.</strong> The free API
+plan is very limited (~17 tweets/day). If you post frequently across
+multiple events, upgrade to a paid plan.</p></li>
+<li><p><strong>Eventbrite cover images must be added manually.</strong>
+After the adapter creates the listing, log in to Eventbrite and upload
+your flyer from the event editor.</p></li>
+<li><p><strong>Character limits enforced at broadcast time.</strong> If
+you edited a variant and added too much text, the adapter may truncate
+it or the platform API may reject it. Always check warnings in the
+variant editor before broadcasting.</p></li>
+</ol>
+</main>
+<script>
+(function () {
+  var headings = Array.prototype.slice.call(document.querySelectorAll('main.page h2[id], main.page h3[id], main.page h4[id]'));
+  var labels = headings.map(function (h) { return h.textContent; });
+
+  headings.forEach(function (h) {
+    var a = document.createElement('a');
+    a.href = '#' + h.id;
+    a.className = 'anchor-link';
+    a.textContent = '#';
+    a.setAttribute('aria-hidden', 'true');
+    h.insertBefore(a, h.firstChild);
+  });
+
+  var sections = [];
+  headings.forEach(function (h, i) { if (h.tagName === 'H2') sections.push({ el: h, label: labels[i] }); });
+
+  if (sections.length) {
+    var rail = document.createElement('nav');
+    rail.className = 'cue-rail';
+    rail.setAttribute('aria-label', 'On this page');
+
+    var title = document.createElement('div');
+    title.className = 'cue-title';
+    title.textContent = 'On this page';
+    rail.appendChild(title);
+
+    var links = sections.map(function (s, i) {
+      var a = document.createElement('a');
+      a.href = '#' + s.el.id;
+      var n = document.createElement('span');
+      n.className = 'n';
+      n.textContent = String(i + 1).padStart(2, '0');
+      var label = document.createElement('span');
+      label.textContent = s.label;
+      a.appendChild(n);
+      a.appendChild(label);
+      rail.appendChild(a);
+      return { el: a, heading: s.el };
+    });
+
+    document.body.appendChild(rail);
+
+    var setActive = function () {
+      var y = window.scrollY + 130;
+      var current = null;
+      sections.forEach(function (s) { if (s.el.offsetTop <= y) current = s.el; });
+      links.forEach(function (l) { l.el.classList.toggle('active', l.heading === current); });
+    };
+    window.addEventListener('scroll', setActive, { passive: true });
+    setActive();
+  }
+})();
+</script>
+</body>
+</html>
