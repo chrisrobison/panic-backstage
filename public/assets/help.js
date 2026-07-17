@@ -158,10 +158,10 @@ export const HELP_SECTIONS = [
 
 const HELP_CONTENT = {
   welcome: `
-    <h2>Welcome to Panic Backstage</h2>
-    <p>Panic Backstage helps a venue run a show from the first hold through final settlement. It keeps the lineup, run sheet, flyers, ticketing notes, open items, door list, and money in one place so a small team can hand off cleanly between bookers, promoters, designers, and night-of-show staff.</p>
+    <h2>Welcome to Mabuhay Backstage</h2>
+    <p>Mabuhay Backstage helps a venue run a show from the first hold through final settlement. It keeps the lineup, run sheet, flyers, ticketing notes, open items, door list, and money in one place so a small team can hand off cleanly between bookers, promoters, designers, and night-of-show staff.</p>
     <figure class="help-shot">
-      <img src="./assets/help/dashboard.png" alt="The Panic Backstage dashboard: a left navigation sidebar and a grid of readiness counters and upcoming-show cards" loading="lazy">
+      <img src="./assets/help/dashboard.png" alt="The Mabuhay Backstage dashboard: a left navigation sidebar and a grid of readiness counters and upcoming-show cards" loading="lazy">
       <figcaption>The dashboard — the left sidebar navigates the app; the cards summarize the next two weeks of shows.</figcaption>
     </figure>
     <p>If this is your first visit, start with <a href="#help-sign-in">Signing in</a>, then <a href="#help-navigation">Main navigation</a>, then <a href="#help-event-create">Creating an event</a>. Section "?" icons inside each event open the relevant help page in a new tab so you do not lose your place.</p>
@@ -909,7 +909,7 @@ const HELP_CONTENT = {
 
   'e-signatures': `
     <h2>Electronic signatures</h2>
-    <p>Panic Backstage has a built-in e-signature flow — no DocuSign or third-party account required. Once a contract is approved, send it for signature with one click. Each signer receives a secure, time-limited link by email and signs right in their browser. When everyone has signed, the system generates a tamper-evident <strong>Final Executed PDF</strong> with embedded signature blocks and an audit certificate, stores a SHA-256 hash of that file, and automatically advances the linked event to <em>Booked</em>.</p>
+    <p>Mabuhay Backstage has a built-in e-signature flow — no DocuSign or third-party account required. Once a contract is approved, send it for signature with one click. Each signer receives a secure, time-limited link by email and signs right in their browser. When everyone has signed, the system generates a tamper-evident <strong>Final Executed PDF</strong> with embedded signature blocks and an audit certificate, stores a SHA-256 hash of that file, and automatically advances the linked event to <em>Booked</em>.</p>
 
     <h3>The contract signing status ladder</h3>
     <p>A contract that goes through the full e-sign workflow passes through these statuses:</p>

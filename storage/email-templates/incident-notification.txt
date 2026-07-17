@@ -11,4 +11,4 @@ Log in to review and resolve:
 {{app_url}}/#event-{{event_id}}
 
 ---
-Panic Backstage — Venue Operations
+Mabuhay Backstage — Venue Operations

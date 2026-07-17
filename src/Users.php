@@ -158,7 +158,7 @@ final class Users extends BaseEndpoint
 
     /**
      * (Re)send a login invite to any user account. Mints a fresh 7-day magic
-     * link and emails it. This is the "send them an invite to Panic Booking"
+     * link and emails it. This is the "send them an invite to Mabuhay Booking"
      * step once a Core Collaborator's account exists (issue #15) — create
      * the account via POST /api/users (e.g. once Andres has set up their
      * mab.org address), then invite them; also handy to resend a forgotten
@@ -184,7 +184,7 @@ final class Users extends BaseEndpoint
 
         (new Mailer($this->root, $this->db))->sendTemplate(
             (string) $user['email'],
-            "You're invited to Panic Booking",
+            "You're invited to Mabuhay Booking",
             'account-invite',
             [
                 'name'      => htmlspecialchars((string) $user['name'], ENT_QUOTES, 'UTF-8'),

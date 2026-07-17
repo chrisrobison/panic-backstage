@@ -10,4 +10,4 @@ View the contract in Backstage:
 {{contract_url}}
 
 ——
-Panic Backstage
+Mabuhay Backstage

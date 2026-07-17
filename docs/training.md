@@ -1,4 +1,4 @@
-# Panic Backstage — Staff Training Lesson Plan
+# Mabuhay Backstage — Staff Training Lesson Plan
 ## Session: Introduction & Core Workflow
 **Duration:** ~2.5–3 hours | **Audience:** New staff (all roles)
 
@@ -17,7 +17,7 @@
 **Goal:** Everyone knows what the system is and why it exists.
 
 ### Topics
-- What is Panic Backstage? ("One place where every show lives, from first inquiry to final settlement")
+- What is Mabuhay Backstage? ("One place where every show lives, from first inquiry to final settlement")
 - How to log in — magic link email flow, no passwords to remember
 - Tour of the interface: sidebar, dashboard, calendar view
 - The **Getting Started checklist** on the dashboard — what each item means and who's responsible for completing it (venue admin only, but good for everyone to know)

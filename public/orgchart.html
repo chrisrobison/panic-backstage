@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Mab — Staff Organization Chart</title>
+<style>
+  :root{
+    --bg:#f4f0e7;
+    --paper:#fffdf7;
+    --ink:#242424;
+    --muted:#6d675e;
+    --governance:#7c3aed;
+    --operations:#ff5d28;
+    --programming:#2457c5;
+    --line:#b8afa1;
+    --shadow:0 10px 30px rgba(0,0,0,.08);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink)}
+  button,input{font:inherit}
+
+  .app-header{
+    position:sticky;top:0;z-index:20;
+    display:flex;align-items:center;justify-content:space-between;gap:1rem;
+    padding:.85rem 1.1rem;background:rgba(255,253,247,.94);
+    backdrop-filter:blur(12px);border-bottom:1px solid #ddd4c7;
+  }
+  .brand h1{font-size:1.05rem;margin:0}
+  .brand p{font-size:.8rem;color:var(--muted);margin:.15rem 0 0}
+  .toolbar{display:flex;gap:.5rem;flex-wrap:wrap}
+  .toolbar button{
+    border:1px solid #cfc5b6;background:white;border-radius:999px;
+    padding:.45rem .8rem;cursor:pointer;
+  }
+  .toolbar button:hover{background:#f3eee5}
+
+  org-chart{
+    display:block;
+    width:min(1800px,100%);
+    margin:0 auto;
+    padding:1.25rem;
+  }
+
+  .legend{
+    display:flex;gap:1rem;flex-wrap:wrap;margin:0 0 1rem;
+    font-size:.82rem;color:var(--muted)
+  }
+  .legend span{display:flex;align-items:center;gap:.35rem}
+  .dot{width:.7rem;height:.7rem;border-radius:50%}
+  .dot.governance{background:var(--governance)}
+  .dot.operations{background:var(--operations)}
+  .dot.programming{background:var(--programming)}
+
+  .chart{
+    position:relative;
+    display:grid;
+    grid-template-columns:minmax(260px,.9fr) minmax(620px,2.3fr) minmax(260px,.9fr);
+    gap:1rem;
+    align-items:start;
+  }
+
+  .column{display:grid;gap:1rem}
+  .section{
+    background:var(--paper);
+    border:1px solid #ddd4c7;
+    border-top:8px solid var(--accent);
+    border-radius:14px;
+    box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+  .section.governance{--accent:var(--governance)}
+  .section.operations{--accent:var(--operations)}
+  .section.programming{--accent:var(--programming)}
+  .section-header{
+    padding:.8rem 1rem .65rem;
+    border-bottom:1px solid #e7dfd3;
+  }
+  .section-header h2{margin:0;font-size:1rem}
+  .section-header p{margin:.15rem 0 0;color:var(--muted);font-size:.76rem}
+  .section-body{padding:.8rem;display:grid;gap:.75rem}
+
+  .group{
+    border:1px solid #ddd4c7;border-radius:10px;background:#fff;
+    overflow:hidden;
+  }
+  .group-title{
+    padding:.55rem .7rem;background:#f5f0e8;
+    display:flex;justify-content:space-between;gap:.75rem;align-items:center;
+    font-size:.84rem;font-weight:700;
+  }
+  .group-title small{font-size:.7rem;color:var(--muted);font-weight:500}
+  .cards{padding:.55rem;display:grid;gap:.45rem}
+
+  org-person{display:block}
+  .person{
+    display:grid;grid-template-columns:1fr auto;gap:.6rem;
+    padding:.55rem .65rem;border:1px solid #e6ded2;border-radius:8px;background:#fff;
+  }
+  .person:hover{border-color:#bfb3a2;box-shadow:0 4px 12px rgba(0,0,0,.05)}
+  .person-name{font-weight:700;font-size:.84rem}
+  .person-role{font-size:.74rem;color:var(--muted);margin-top:.12rem}
+  .badge{
+    align-self:start;font-size:.65rem;text-transform:uppercase;letter-spacing:.04em;
+    padding:.2rem .38rem;border-radius:999px;background:#eee8df;color:#625c54;
+  }
+  .badge.open{background:#fff3ce;color:#7d5c00}
+  .badge.confirm{background:#ffe0dd;color:#923b31}
+
+  .wide-groups{
+    display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem;
+  }
+  .staff-grid{
+    display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;
+  }
+  .program-grid{
+    display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem;
+  }
+  .program-card{
+    border:1px solid #d9d1c5;border-radius:10px;padding:.65rem;background:#fff;
+  }
+  .program-card strong{display:block;font-size:.82rem}
+  .program-card span{display:block;color:var(--muted);font-size:.72rem;margin-top:.15rem}
+
+  .notes{
+    margin-top:1rem;padding:.75rem 1rem;border:1px dashed #cfc5b6;border-radius:10px;
+    color:var(--muted);font-size:.78rem;background:rgba(255,255,255,.55);
+  }
+
+  [contenteditable="true"]{outline:none}
+  [contenteditable="true"]:focus{background:#fff8d7;border-radius:3px}
+
+  body.compact .person{padding:.36rem .48rem}
+  body.compact .section-body{padding:.55rem;gap:.5rem}
+  body.compact .cards{padding:.4rem;gap:.3rem}
+  body.compact .person-role{display:none}
+
+  @media (max-width:1100px){
+    .chart{grid-template-columns:1fr 1fr}
+    .column.center{grid-column:1/-1;grid-row:1}
+    .wide-groups{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .staff-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media (max-width:700px){
+    org-chart{padding:.65rem}
+    .app-header{align-items:flex-start;flex-direction:column}
+    .chart{grid-template-columns:1fr}
+    .column.center{grid-column:auto;grid-row:auto}
+    .wide-groups,.staff-grid,.program-grid{grid-template-columns:1fr}
+  }
+
+  @media print{
+    body{background:white}
+    .app-header,.legend,.notes{display:none}
+    org-chart{width:100%;padding:0}
+    .section{box-shadow:none;break-inside:avoid}
+    .chart{grid-template-columns:26% 48% 26%;gap:.35rem}
+    .section-body{padding:.45rem;gap:.4rem}
+    .cards{padding:.35rem;gap:.25rem}
+    .person{padding:.28rem .38rem}
+    .person-role{font-size:7pt}.person-name{font-size:8pt}
+  }
+</style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <h1>The Mab — Staff Organization Chart</h1>
+      <p>Click any name or title to edit it directly.</p>
+    </div>
+    <div class="toolbar">
+      <button id="compactBtn">Compact view</button>
+      <button id="saveBtn">Save locally</button>
+      <button id="resetBtn">Reset</button>
+      <button onclick="window.print()">Print / PDF</button>
+    </div>
+  </header>
+
+  <org-chart></org-chart>
+
+<script>
+const DEFAULT_DATA = {
+  governance: [
+    {
+      title: "Booking Team",
+      note: "Programming / booking coordination",
+      people: [
+        { name: "Kathy", role: "Booking" },
+        { name: "Andrew", role: "Booking" },
+        { name: "Chris", role: "Booking / systems" },
+        { name: "Open seat", role: "Additional booking support", status: "open" }
+      ]
+    },
+    {
+      title: "Finance",
+      note: "Budgeting and financial oversight",
+      people: [
+        { name: "Kat / Kathryn", role: "Finance lead", status: "confirm" },
+        { name: "Open seat", role: "Finance support", status: "open" }
+      ]
+    },
+    {
+      title: "6-Member Board",
+      note: "Governance and strategic oversight",
+      people: [
+        { name: "Tom Watson", role: "Board member" },
+        { name: "Bobby Fishkin", role: "Board member" },
+        { name: "Andrew", role: "Board member", status: "confirm" },
+        { name: "Anthony", role: "Board member", status: "confirm" },
+        { name: "Open seat", role: "Board member", status: "open" },
+        { name: "Open seat", role: "Board member", status: "open" }
+      ]
+    },
+    {
+      title: "Historical Advisory Committee",
+      note: "Mab history, legacy and community guidance",
+      people: [
+        { name: "Advisory members", role: "Names to confirm", status: "confirm" }
+      ]
+    },
+    {
+      title: "Technology",
+      note: "Venue systems and Mabuhay Backstage",
+      people: [
+        { name: "Andrew", role: "Technology", status: "confirm" },
+        { name: "Chris", role: "Mabuhay Backstage / operations software" },
+        { name: "Open seat", role: "Technical support", status: "open" }
+      ]
+    },
+    {
+      title: "Mab Fan Council",
+      note: "Community representatives",
+      people: [
+        { name: "Council members", role: "Names to confirm", status: "confirm" }
+      ]
+    }
+  ],
+  leadership: [
+    {
+      title: "Ownership / Executive Leadership",
+      people: [
+        { name: "John Richmond", role: "Owner / executive", status: "confirm" },
+        { name: "Anthony Fishkin", role: "Owner / executive", status: "confirm" },
+        { name: "President / General Manager", role: "Overall venue leadership", status: "open" }
+      ]
+    },
+    {
+      title: "Administration",
+      people: [
+        { name: "Tony", role: "Secretary", status: "confirm" },
+        { name: "Open seat", role: "Administrative assistant", status: "open" }
+      ]
+    }
+  ],
+  departments: [
+    {
+      title: "Security",
+      people: [
+        { name: "Security lead", role: "House security / safety", status: "open" },
+        { name: "Security team", role: "Door and floor coverage", status: "open" }
+      ]
+    },
+    {
+      title: "Production",
+      people: [
+        { name: "Production director", role: "Production oversight", status: "confirm" },
+        { name: "Production manager", role: "Show execution", status: "confirm" },
+        { name: "Stage manager", role: "Stage and changeovers", status: "confirm" },
+        { name: "Crew", role: "Audio / lighting / stagehands", status: "open" }
+      ]
+    },
+    {
+      title: "DJ / Entertainment Tech",
+      people: [
+        { name: "Chris Bales", role: "DJ", status: "confirm" },
+        { name: "David H.", role: "DJ", status: "confirm" },
+        { name: "Open seat", role: "Lighting operator", status: "open" }
+      ]
+    },
+    {
+      title: "Cleaning",
+      people: [
+        { name: "Alex", role: "Cleaning", status: "confirm" },
+        { name: "Ernesto", role: "Cleaning", status: "confirm" }
+      ]
+    },
+    {
+      title: "Maintenance / Facilities",
+      people: [
+        { name: "Matas", role: "Facilities", status: "confirm" },
+        { name: "Sam", role: "Facilities", status: "confirm" },
+        { name: "Stuart", role: "Facilities", status: "confirm" }
+      ]
+    },
+    {
+      title: "Marketing / Communications",
+      people: [
+        { name: "Molly", role: "Marketing / communications", status: "confirm" },
+        { name: "Andres", role: "Marketing / communications", status: "confirm" }
+      ]
+    }
+  ],
+  staff: [
+    { title: "Bar", people: ["Bar manager", "Bartenders", "Barbacks"] },
+    { title: "Door", people: ["Door lead", "Ticketing / check-in", "Guest services"] },
+    { title: "Security", people: ["Security staff", "Floor staff"] },
+    { title: "Kitchen / Food", people: ["Kitchen lead", "Cooks", "Food service"] },
+    { title: "Operations", people: ["House manager", "Event lead", "Runners"] },
+    { title: "Production Crew", people: ["Audio engineer", "Lighting tech", "Stagehands"] },
+    { title: "Volunteer Team", people: ["Event volunteers", "Community support"] },
+    { title: "Hospitality", people: ["Artist hospitality", "Green room support"] }
+  ],
+  programming: [
+    { title: "Music", detail: "Bands, concerts, showcases" },
+    { title: "Comedy", detail: "Stand-up and variety" },
+    { title: "Dancing", detail: "Swing, social dance and DJs" },
+    { title: "Clown / Circus", detail: "Clown and physical performance" },
+    { title: "Family / School", detail: "All-ages and educational events" },
+    { title: "Performers", detail: "Specialty and guest performers" },
+    { title: "Theater", detail: "Plays and staged productions" },
+    { title: "Art & Culture", detail: "Exhibitions and cultural programming" },
+    { title: "Gaming", detail: "Tabletop, competitive and community games" },
+    { title: "Video / Multimedia", detail: "Film, streaming and recorded media" },
+    { title: "Museum / Merch / Library", detail: "Archive, memorabilia, retail and research" },
+    { title: "Food", detail: "Kitchen, pop-ups and culinary programming" }
+  ]
+};
+
+class OrgPerson extends HTMLElement {
+  set data(value){ this._data = value; this.render(); }
+  connectedCallback(){ if(this._data) this.render(); }
+  render(){
+    const p = this._data;
+    const badge = p.status
+      ? `<span class="badge ${p.status}">${p.status === "open" ? "Open" : "Confirm"}</span>`
+      : "";
+    this.innerHTML = `
+      <div class="person">
+        <div>
+          <div class="person-name" contenteditable="true">${p.name}</div>
+          <div class="person-role" contenteditable="true">${p.role || ""}</div>
+        </div>
+        ${badge}
+      </div>`;
+  }
+}
+customElements.define("org-person", OrgPerson);
+
+class OrgChart extends HTMLElement {
+  connectedCallback(){
+    this.data = this.load();
+    this.render();
+    this.addEventListener("input", () => this.capture());
+  }
+
+  load(){
+    try{
+      return JSON.parse(localStorage.getItem("mab-org-chart")) || structuredClone(DEFAULT_DATA);
+    }catch{
+      return structuredClone(DEFAULT_DATA);
+    }
+  }
+
+  group(group){
+    return `
+      <div class="group">
+        <div class="group-title">
+          <span contenteditable="true">${group.title}</span>
+          ${group.note ? `<small contenteditable="true">${group.note}</small>` : ""}
+        </div>
+        <div class="cards">
+          ${group.people.map((p,i) => `<org-person data-group="${group.title}" data-index="${i}"></org-person>`).join("")}
+        </div>
+      </div>`;
+  }
+
+  render(){
+    this.innerHTML = `
+      <div class="legend">
+        <span><i class="dot governance"></i> Governance</span>
+        <span><i class="dot operations"></i> Operations</span>
+        <span><i class="dot programming"></i> Programming</span>
+      </div>
+
+      <main class="chart">
+        <div class="column">
+          <section class="section governance">
+            <div class="section-header">
+              <h2>Governance & Oversight</h2>
+              <p>Board, finance, booking, technology and advisory groups</p>
+            </div>
+            <div class="section-body">
+              ${this.data.governance.map(g => this.group(g)).join("")}
+            </div>
+          </section>
+        </div>
+
+        <div class="column center">
+          <section class="section operations">
+            <div class="section-header">
+              <h2>Venue Leadership & Operations</h2>
+              <p>Day-to-day management and department structure</p>
+            </div>
+            <div class="section-body">
+              <div class="wide-groups">
+                ${this.data.leadership.map(g => this.group(g)).join("")}
+              </div>
+              <div class="wide-groups">
+                ${this.data.departments.map(g => this.group(g)).join("")}
+              </div>
+              <div class="group">
+                <div class="group-title"><span>Event & House Staff</span><small>Working teams</small></div>
+                <div class="cards staff-grid">
+                  ${this.data.staff.map(team => `
+                    <div class="program-card">
+                      <strong contenteditable="true">${team.title}</strong>
+                      <span contenteditable="true">${team.people.join(" · ")}</span>
+                    </div>`).join("")}
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="column">
+          <section class="section programming">
+            <div class="section-header">
+              <h2>Programming</h2>
+              <p>Events, culture and public-facing activities</p>
+            </div>
+            <div class="section-body program-grid">
+              ${this.data.programming.map(p => `
+                <div class="program-card">
+                  <strong contenteditable="true">${p.title}</strong>
+                  <span contenteditable="true">${p.detail}</span>
+                </div>`).join("")}
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <div class="notes">
+        Several handwritten names and roles in the source photo were hard to read. They are marked
+        <strong>Confirm</strong> or left as <strong>Open</strong>. Everything is editable in place,
+        and “Save locally” stores the edited chart in this browser.
+      </div>`;
+
+    const people = this.querySelectorAll("org-person");
+    const allGroups = [...this.data.governance, ...this.data.leadership, ...this.data.departments];
+    let n = 0;
+    allGroups.forEach(group => group.people.forEach(person => {
+      people[n++].data = person;
+    }));
+  }
+
+  capture(){
+    // Capture current visible text into a simple snapshot, preserving edits between reloads.
+    const snapshot = structuredClone(this.data);
+    const sections = this.querySelectorAll(".section");
+
+    const groupEls = this.querySelectorAll(".group");
+    const sourceGroups = [...snapshot.governance, ...snapshot.leadership, ...snapshot.departments];
+    sourceGroups.forEach((group, idx) => {
+      const el = groupEls[idx];
+      if(!el) return;
+      group.title = el.querySelector(".group-title span")?.textContent.trim() || group.title;
+      const persons = el.querySelectorAll("org-person");
+      persons.forEach((personEl, pIdx) => {
+        if(!group.people[pIdx]) return;
+        group.people[pIdx].name = personEl.querySelector(".person-name")?.textContent.trim() || "";
+        group.people[pIdx].role = personEl.querySelector(".person-role")?.textContent.trim() || "";
+      });
+    });
+
+    this._snapshot = snapshot;
+  }
+
+  save(){
+    this.capture();
+    localStorage.setItem("mab-org-chart", JSON.stringify(this._snapshot || this.data));
+  }
+
+  reset(){
+    localStorage.removeItem("mab-org-chart");
+    this.data = structuredClone(DEFAULT_DATA);
+    this.render();
+  }
+}
+customElements.define("org-chart", OrgChart);
+
+const chart = document.querySelector("org-chart");
+document.querySelector("#saveBtn").addEventListener("click", () => {
+  chart.save();
+  const btn = document.querySelector("#saveBtn");
+  const old = btn.textContent;
+  btn.textContent = "Saved";
+  setTimeout(() => btn.textContent = old, 1200);
+});
+document.querySelector("#resetBtn").addEventListener("click", () => {
+  if(confirm("Reset the chart to the original transcription?")) chart.reset();
+});
+document.querySelector("#compactBtn").addEventListener("click", e => {
+  document.body.classList.toggle("compact");
+  e.currentTarget.textContent = document.body.classList.contains("compact")
+    ? "Comfortable view"
+    : "Compact view";
+});
+</script>
+</body>
+</html>

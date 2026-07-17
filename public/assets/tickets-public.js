@@ -238,7 +238,7 @@ class TicketPurchase extends PanicElement {
             <span class="tkp-total">Total: <strong data-total>—</strong></span>
             <button type="submit" class="button" data-buy disabled>Select tickets</button>
           </div>
-          <p class="tkp-secure"><i class="fa-solid fa-lock" aria-hidden="true"></i> Secure checkout by Panic Booking</p>
+          <p class="tkp-secure"><i class="fa-solid fa-lock" aria-hidden="true"></i> Secure checkout by Mabuhay Booking</p>
         </form>
       </section>`;
 

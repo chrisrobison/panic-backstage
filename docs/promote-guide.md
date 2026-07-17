@@ -32,7 +32,7 @@ A complete walkthrough for configuring platform credentials, connecting social a
 
 ## Overview
 
-Panic Promote is the marketing command center inside Panic Backstage. It lets you turn any event into a structured promotion campaign — write posts, generate platform-specific copy, and broadcast to social media, event listing platforms, and email lists from a single screen.
+Panic Promote is the marketing command center inside Mabuhay Backstage. It lets you turn any event into a structured promotion campaign — write posts, generate platform-specific copy, and broadcast to social media, event listing platforms, and email lists from a single screen.
 
 **Supported channels:**
 
@@ -276,7 +276,7 @@ Bluesky uses the **AT Protocol** and authenticates with your Bluesky **handle** 
 
 1. Log in to [bsky.app](https://bsky.app).
 2. Go to **Settings → Privacy and Security → App Passwords**.
-3. Click **Add App Password**. Give it a name like `Panic Backstage`.
+3. Click **Add App Password**. Give it a name like `Mabuhay Backstage`.
 4. Copy the generated password immediately — it won't be shown again.
 5. In Backstage → **Promote → Settings → Credentials**, select **Bluesky** and enter:
    - **Access Token** — the App Password (not your login password!)

@@ -28,7 +28,7 @@ final class Webauthn
         $url           = rtrim((string) (getenv('APP_URL') ?: 'http://localhost'), '/');
         $parsed        = parse_url($url);
         $this->rpId    = (string) ($parsed['host'] ?? 'localhost');
-        $this->rpName  = (string) (getenv('WEBAUTHN_RP_NAME') ?: 'Panic Backstage');
+        $this->rpName  = (string) (getenv('WEBAUTHN_RP_NAME') ?: 'Mabuhay Backstage');
         // The WebAuthn origin the browser reports in clientDataJSON is scheme +
         // host + optional port — never the path. APP_URL may carry a base path
         // (e.g. https://panicbooking.com/backstage) for routing, so rebuild the

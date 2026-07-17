@@ -1022,7 +1022,7 @@ class AdminAppSettings extends PanicElement {
           <fieldset class="wd-section">
             <legend><i class="fa-solid fa-signature" aria-hidden="true"></i> Brand</legend>
             <div class="wd-grid">
-              ${this._field({ id: 'brand_name', label: 'App name', value: s.brand_name, placeholder: 'Panic Backstage', hint: 'Shown top-left in the sidebar/topbar and in the browser tab. Leave blank to use the default.' })}
+              ${this._field({ id: 'brand_name', label: 'App name', value: s.brand_name, placeholder: 'Mabuhay Backstage', hint: 'Shown top-left in the sidebar/topbar and in the browser tab. Leave blank to use the default.' })}
               ${this._field({ id: 'logo_url', label: 'Logo URL', value: s.logo_url, placeholder: '(default icon)', hint: 'Leave blank to keep the default icon. Square image works best.' })}
             </div>
           </fieldset>

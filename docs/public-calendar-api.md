@@ -1,7 +1,7 @@
 # Public Calendar / Events API
 
 Unauthenticated, read-only endpoints for pulling **publicly visible** event
-data out of Panic Backstage — calendar subscriptions, RSS aggregators, and
+data out of Mabuhay Backstage — calendar subscriptions, RSS aggregators, and
 the embeddable `<mab-events-carousel>` widget all read from here. No JWT, no
 API key: the only gate is `events.public_visibility = 1` (plus
 `status <> 'canceled'` on the feed endpoints), which is exactly the same gate

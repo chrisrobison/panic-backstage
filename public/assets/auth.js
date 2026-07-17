@@ -120,7 +120,7 @@ class LoginPage extends PanicElement {
 
     const greeting = status.name ? esc(status.name) : esc(status.email);
     this.innerHTML = `<main class="auth-card">
-      <h1>Panic Backstage</h1>
+      <h1>Mabuhay Backstage</h1>
       <p class="auth-greeting">Hi, <strong>${greeting}</strong></p>
       <p class="muted">Click below to finish signing in. This link can only be used once.</p>
       <button class="primary block" data-action="continue" type="button">Continue to your account</button>
@@ -165,7 +165,7 @@ class LoginPage extends PanicElement {
       ok = false;
     }
     this.innerHTML = `<main class="auth-card">
-      <h1>Panic Backstage</h1>
+      <h1>Mabuhay Backstage</h1>
       ${ok
         ? `<div class="auth-notice success">✓ Email confirmed. You can now sign in with this address.</div>`
         : `<div class="auth-notice error">That confirmation link is invalid or has expired. Ask an admin to resend it.</div>`}
@@ -188,7 +188,7 @@ class LoginPage extends PanicElement {
   /** Step 1: just an email field. We branch from here based on what the account has. */
   showEmailStep(notice = '') {
     this.innerHTML = `<main class="auth-card">
-      <h1>Panic Backstage</h1>
+      <h1>Mabuhay Backstage</h1>
       ${notice ? `<div class="auth-notice ${notice.startsWith('✓') ? 'success' : 'error'}">${esc(notice)}</div>` : ''}
 
       <form class="stack" data-form="email-step">
@@ -218,7 +218,7 @@ class LoginPage extends PanicElement {
   /** Self-service "request access" form. Stored server-side for admin approval. */
   showRequestAccessStep(notice = '') {
     this.innerHTML = `<main class="auth-card">
-      <h1>Panic Backstage</h1>
+      <h1>Mabuhay Backstage</h1>
       <p class="auth-greeting">Request access</p>
       <p class="muted">Tell us who you are and why you need access. An administrator will review your request and email you a login link once it's approved.</p>
       ${notice ? `<div class="auth-notice ${notice.startsWith('✓') ? 'success' : 'error'}">${esc(notice)}</div>` : ''}
@@ -252,7 +252,7 @@ class LoginPage extends PanicElement {
     try {
       const res = await api('/auth/request-access', { method: 'POST', body: JSON.stringify(formData(event.target)) });
       this.innerHTML = `<main class="auth-card">
-        <h1>Panic Backstage</h1>
+        <h1>Mabuhay Backstage</h1>
         <div class="auth-notice success">✓ ${esc(res?.message || 'Your request has been sent. An administrator will email you a login link once it is approved.')}</div>
         <p class="auth-sub"><a href="#" data-action="back-to-login">Back to sign in</a></p>
       </main>
@@ -302,7 +302,7 @@ class LoginPage extends PanicElement {
     </form>`);
 
     this.innerHTML = `<main class="auth-card">
-      <h1>Panic Backstage</h1>
+      <h1>Mabuhay Backstage</h1>
       <p class="auth-greeting">Signing in as <strong>${friendly}</strong> <a href="#" data-action="back" class="small">change</a></p>
       ${blocks.join('\n')}
     </main>

@@ -946,7 +946,7 @@ class PublicEventPage extends PanicElement {
     try {
       const data = await api(`/public/events/${encodeURIComponent(idOrSlug || '')}`);
       const event = data.event;
-      document.title = event.title ? `${event.title} - Panic Backstage` : 'Panic Backstage Event';
+      document.title = event.title ? `${event.title} - Mabuhay Backstage` : 'Mabuhay Backstage Event';
       // Canonical share URL — not location.href, which may carry transient
       // ?order=&checkout= params from a just-completed purchase. Keyed by id
       // (not slug) so a shared/bookmarked link never goes stale if the event
@@ -1037,7 +1037,7 @@ class PublicEventPage extends PanicElement {
         </main>
 
         <footer class="pev-footer">
-          <p>Powered by <strong>Panic Booking</strong> &mdash; Independent shows. Real music.</p>
+          <p>Powered by <strong>Mabuhay Booking</strong> &mdash; Independent shows. Real music.</p>
         </footer>
       </div>`;
 

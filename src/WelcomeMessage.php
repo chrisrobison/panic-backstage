@@ -68,7 +68,7 @@ final class WelcomeMessage
         $first   = trim((string) (explode(' ', trim((string) $name))[0] ?? ''));
         $hi      = $first !== '' ? 'Welcome aboard, ' . htmlspecialchars($first, ENT_QUOTES) . '!' : 'Welcome aboard!';
 
-        $subject = 'Welcome to Panic Backstage';
+        $subject = 'Welcome to Mabuhay Backstage';
 
         $html = <<<HTML
 <!doctype html>
@@ -80,7 +80,7 @@ final class WelcomeMessage
 <body style="margin:0;padding:0;background:#f4f4f7;-webkit-font-smoothing:antialiased;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <div style="max-width:640px;margin:0 auto;padding:24px 16px;">
     <div style="background:#16182b;border-radius:14px 14px 0 0;padding:30px 30px 24px;">
-      <div style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#ff4d5e;">⚡ Panic Backstage</div>
+      <div style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#ff4d5e;">⚡ Mabuhay Backstage</div>
       <h1 style="margin:10px 0 0;font-size:24px;line-height:1.25;color:#ffffff;font-weight:800;">{$hi}</h1>
       <p style="margin:8px 0 0;font-size:15px;color:#b9bbcc;">Good shows. No surprises.</p>
     </div>
@@ -98,7 +98,7 @@ final class WelcomeMessage
       </div>
       <p style="margin:20px 0 0;color:#7c7f8c;font-size:13px;">Questions or something not working? Reach out to your venue admin — they can help with access and getting set up.</p>
     </div>
-    <p style="text-align:center;color:#a6a8b4;font-size:12px;margin:18px 0 0;">Panic Backstage · Built for venues. Run by humans.</p>
+    <p style="text-align:center;color:#a6a8b4;font-size:12px;margin:18px 0 0;">Mabuhay Backstage · Built for venues. Run by humans.</p>
   </div>
 </body>
 </html>
@@ -108,7 +108,7 @@ HTML;
         $text = <<<TEXT
 {$textHi}
 
-Panic Backstage is your home base for running every show — from first hold
+Mabuhay Backstage is your home base for running every show — from first hold
 through settlement. A few quick pointers:
 
 - Dashboard — upcoming shows, open items, and what needs attention next.
@@ -123,7 +123,7 @@ Read the Ops Manual:   {$opsUrl}
 
 Questions or something not working? Reach out to your venue admin.
 
-Panic Backstage · Built for venues. Run by humans.
+Mabuhay Backstage · Built for venues. Run by humans.
 TEXT;
 
         return [$subject, $html, $text];
