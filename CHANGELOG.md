@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `public-event` — Full-bleed hero layout, much bigger QR code
+- **Fixed** `public-event` — Full-bleed hero layout, much bigger QR code
 - **Added** `public-event` — Redesign the public event landing page
 - **Added** `public-event` — Redesign the public event landing page
 - **Added** `upcoming` — Show the date span on multi-day event cards

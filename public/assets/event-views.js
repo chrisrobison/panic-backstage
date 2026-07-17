@@ -949,8 +949,10 @@ class PublicEventPage extends PanicElement {
       // by id (not slug) so a printed/scanned code never goes stale if the
       // event is later renamed or rescheduled.
       const publicUrl = appUrl(`event.html?id=${encodeURIComponent(event.id)}`);
-      // Requested at 2x the 84px CSS display size so it stays crisp on retina screens.
-      const qrImage = appUrl(`assets/qr.svg?text=${encodeURIComponent(publicUrl)}&size=168`);
+      // SVG output is resolution-independent (no retina-scaling math needed);
+      // a generous intrinsic size just keeps the module grid precise at the
+      // larger 150px CSS display size below.
+      const qrImage = appUrl(`assets/qr.svg?text=${encodeURIComponent(publicUrl)}&size=300`);
       const priceLabel = publicTicketPriceLabel(event, data.ticket_types);
       const lineup = data.lineup || [];
       const tags = String(event.public_tags || '').split(',').map((t) => t.trim()).filter(Boolean);
@@ -971,7 +973,7 @@ class PublicEventPage extends PanicElement {
                 ? `<img class="pev-flyer" src="${esc(assetUrl(data.flyer.file_path))}" alt="${esc(event.title)} flyer">`
                 : `<div class="pev-flyer pev-flyer-placeholder"><paint-splat width="640" height="800" bg-color="#141a22" interactive="false"></paint-splat><span class="pev-flyer-placeholder-title">${esc(event.title)}</span></div>`}
               <div class="pev-qr">
-                <img src="${esc(qrImage)}" width="60" height="60" alt="QR code linking to this event's public page">
+                <img src="${esc(qrImage)}" width="150" height="150" alt="QR code linking to this event's public page">
                 <span>Scan to share this page</span>
               </div>
             </div>
