@@ -18,11 +18,11 @@ final class PublicEvents extends BaseEndpoint
         }
         $event = ctype_digit((string) $idOrSlug)
             ? $this->db->one(
-                'SELECT e.*, v.name venue_name, v.address, v.city, v.state FROM events e JOIN venues v ON v.id = e.venue_id WHERE e.id = ? AND e.public_visibility = 1',
+                'SELECT e.*, v.name venue_name, v.address, v.city, v.state, v.phone venue_phone, v.website_url venue_website FROM events e JOIN venues v ON v.id = e.venue_id WHERE e.id = ? AND e.public_visibility = 1',
                 [(int) $idOrSlug]
             )
             : $this->db->one(
-                'SELECT e.*, v.name venue_name, v.address, v.city, v.state FROM events e JOIN venues v ON v.id = e.venue_id WHERE e.slug = ? AND e.public_visibility = 1',
+                'SELECT e.*, v.name venue_name, v.address, v.city, v.state, v.phone venue_phone, v.website_url venue_website FROM events e JOIN venues v ON v.id = e.venue_id WHERE e.slug = ? AND e.public_visibility = 1',
                 [(string) $idOrSlug]
             );
         if (!$event) {

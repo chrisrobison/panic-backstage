@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `public-event` — Redesign the public event landing page
+- **Added** `public-event` — Redesign the public event landing page
 - **Added** `upcoming` — Show the date span on multi-day event cards
 - **Added** `nav` — Make the Upcoming events page the default dashboard
 - **Added** `tickets` — Skip payment and fulfill instantly for $0 orders

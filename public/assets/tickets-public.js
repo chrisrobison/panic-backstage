@@ -205,7 +205,11 @@ class TicketPurchase extends PanicElement {
       const max = Math.min(type.available, 20);
       const select = soldOut
         ? '<span class="tkp-soldout">Sold out</span>'
-        : `<input type="number" class="tkp-qty-input" data-type="${esc(type.id)}" min="0" max="${max}" step="1" value="0" inputmode="numeric" aria-label="Quantity for ${esc(type.name)}">`;
+        : `<div class="tkp-stepper">
+             <button type="button" class="tkp-step" data-step="-1" data-type="${esc(type.id)}" aria-label="Decrease quantity for ${esc(type.name)}">&minus;</button>
+             <input type="number" class="tkp-qty-input" data-type="${esc(type.id)}" min="0" max="${max}" step="1" value="0" inputmode="numeric" aria-label="Quantity for ${esc(type.name)}">
+             <button type="button" class="tkp-step" data-step="1" data-type="${esc(type.id)}" aria-label="Increase quantity for ${esc(type.name)}">+</button>
+           </div>`;
       return `
         <li class="tkp-row${soldOut ? ' tkp-row-out' : ''}">
           <div class="tkp-info">
@@ -220,7 +224,8 @@ class TicketPurchase extends PanicElement {
     this.innerHTML = `
       ${this.receiptHtml || ''}
       <section class="tkp">
-        <h2 class="tkp-title">Tickets</h2>
+        <h2 class="tkp-title">Get Tickets</h2>
+        <p class="tkp-list-label">Ticket Type</p>
         <form class="tkp-form" novalidate>
           <ul class="tkp-list">${rows}</ul>
           <div class="tkp-buyer">
@@ -231,8 +236,9 @@ class TicketPurchase extends PanicElement {
           <p class="tkp-error" role="alert" hidden></p>
           <div class="tkp-footer">
             <span class="tkp-total">Total: <strong data-total>—</strong></span>
-            <button type="submit" class="button" data-buy disabled>Checkout</button>
+            <button type="submit" class="button" data-buy disabled>Select tickets</button>
           </div>
+          <p class="tkp-secure"><i class="fa-solid fa-lock" aria-hidden="true"></i> Secure checkout by Panic Booking</p>
         </form>
       </section>`;
 
@@ -244,6 +250,16 @@ class TicketPurchase extends PanicElement {
     this.form.addEventListener('change', () => this.recalc());
     this.form.addEventListener('input', () => this.recalc());
     this.form.addEventListener('submit', (event) => this.checkout(event));
+    this.querySelectorAll('.tkp-step').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const input = this.querySelector(`input.tkp-qty-input[data-type="${btn.dataset.type}"]`);
+        if (!input) return;
+        const max = Number(input.max) || 20;
+        const next = Math.max(0, Math.min(max, (Number(input.value) || 0) + Number(btn.dataset.step)));
+        input.value = next;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    });
     this.recalc();
   }
 
@@ -265,7 +281,9 @@ class TicketPurchase extends PanicElement {
 
   recalc() {
     const { items, totalCents, currency } = this.selectedItems();
-    this.totalEl.textContent = items.length ? priceLabel(totalCents, currency) : '—';
+    const total = items.length ? priceLabel(totalCents, currency) : '—';
+    this.totalEl.textContent = total;
+    this.buyBtn.textContent = items.length ? `Get Tickets — ${total}` : 'Select tickets';
     this.buyBtn.disabled = items.length === 0;
   }
 

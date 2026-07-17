@@ -3,6 +3,10 @@
 // public/unauthenticated pages (public event page + invite acceptance). Also
 // owns the quick-create event modal (shared by the calendar and the topbar).
 import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, setAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, mdToHtml, $, $$ } from './core.js';
+// Registers <paint-splat> — reused here as the generative "no flyer yet"
+// placeholder on the public event page (same treatment the event workspace
+// summary card uses for the same situation).
+import './paint-splat.js';
 
 // Default dashboard metric cards, in display order, shown when a user has not
 // customized their selection. Keys must match the DASHBOARD_METRIC_KEYS list in
@@ -909,6 +913,13 @@ class TemplatePicker extends PanicElement {
 // tier or a cheaper advance-sale tier would never show up above the fold.
 // price_cents (tiers) vs ticket_price (dollars) — normalize both to dollars
 // before formatting with money().
+// "A", "A & B", "A, B & C" — used for the public page's "with ..." lineup line.
+function joinNames(names) {
+  if (names.length <= 1) return names[0] || '';
+  if (names.length === 2) return `${names[0]} & ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
+}
+
 function publicTicketPriceLabel(event, ticketTypes) {
   if (event.ticketing_mode === 'internal' && Array.isArray(ticketTypes) && ticketTypes.length) {
     const prices = ticketTypes.map((t) => Number(t.price_cents || 0) / 100);
@@ -941,7 +952,102 @@ class PublicEventPage extends PanicElement {
       // Requested at 2x the 84px CSS display size so it stays crisp on retina screens.
       const qrImage = appUrl(`assets/qr.svg?text=${encodeURIComponent(publicUrl)}&size=168`);
       const priceLabel = publicTicketPriceLabel(event, data.ticket_types);
-      this.innerHTML = `<main class="public-container"><article class="public-event"><div class="public-media">${data.flyer ?`<img class="public-flyer" src="${esc(assetUrl(data.flyer.file_path))}" alt="">` : `<div class="public-flyer flyer">${esc(event.title)}</div>`}<div class="public-qr"><img class="public-qr-image" src="${esc(qrImage)}" width="84" height="84" alt="QR code linking to this event's public page"><span>Scan to share this page</span></div></div><div class="public-copy"><p class="eyebrow">${esc(eventDateRangeLabel(event))} - ${esc(event.venue_name)}</p><h1>${esc(event.title)}</h1><p><strong>Doors</strong> ${esc(timeLabel(event.doors_time))} - <strong>Show</strong> ${esc(timeLabel(event.show_time))}</p><p>${esc(event.age_restriction || 'All ages unless noted')} - ${esc(priceLabel)}</p>${event.ticket_url ? `<a class="button public-tickets-link" href="${esc(event.ticket_url)}">Tickets</a>` : ''}<pb-ticket-purchase event-id="${esc(String(event.id))}"></pb-ticket-purchase>${event.description_public ? `<div class="event-description">${mdToHtml(event.description_public)}</div>` : ''}<h2>Lineup</h2><ul class="plain-list">${data.lineup.map((item) => `<li>${esc(item.display_name)} ${item.set_time ? `<span>${esc(timeLabel(item.set_time))}</span>` : ''}</li>`).join('')}</ul><p class="muted">${esc(event.address)}, ${esc(event.city)}, ${esc(event.state)}</p></div></article></main>`;
+      const lineup = data.lineup || [];
+      const tags = String(event.public_tags || '').split(',').map((t) => t.trim()).filter(Boolean);
+      const eyebrow = event.public_subtitle
+        || (event.city ? `Live in ${event.city}` : `Live at ${event.venue_name}`);
+      const withLine = lineup.length ? `with ${joinNames(lineup.map((item) => item.display_name))}` : '';
+      const mapQuery = [event.address, event.city, event.state].filter(Boolean).join(', ') || event.venue_name;
+      const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
+
+      this.innerHTML = `<div class="pev">
+        <header class="pev-topbar">
+          <span class="pev-brand"><span class="pev-brand-panic">Panic</span><span class="pev-brand-chip">Backstage</span></span>
+        </header>
+        <main class="pev-main">
+          <section class="pev-hero">
+            <div class="pev-media">
+              ${data.flyer
+                ? `<img class="pev-flyer" src="${esc(assetUrl(data.flyer.file_path))}" alt="${esc(event.title)} flyer">`
+                : `<div class="pev-flyer pev-flyer-placeholder"><paint-splat width="640" height="800" bg-color="#141a22" interactive="false"></paint-splat><span class="pev-flyer-placeholder-title">${esc(event.title)}</span></div>`}
+              <div class="pev-qr">
+                <img src="${esc(qrImage)}" width="60" height="60" alt="QR code linking to this event's public page">
+                <span>Scan to share this page</span>
+              </div>
+            </div>
+
+            <div class="pev-copy">
+              <p class="pev-eyebrow">${esc(eyebrow)}</p>
+              <h1 class="pev-title">${esc(event.title)}</h1>
+              ${withLine ? `<p class="pev-with">${esc(withLine)}</p>` : ''}
+
+              <ul class="pev-facts">
+                <li><i class="fa-solid fa-calendar-day" aria-hidden="true"></i>${esc(eventDateRangeLabel(event))}</li>
+                <li><i class="fa-solid fa-location-dot" aria-hidden="true"></i>${esc(event.venue_name)}</li>
+                <li><i class="fa-solid fa-clock" aria-hidden="true"></i>Doors ${esc(timeLabel(event.doors_time))} &middot; Show ${esc(timeLabel(event.show_time))}</li>
+                <li><i class="fa-solid fa-id-card" aria-hidden="true"></i>${esc(event.age_restriction || 'All ages')}</li>
+                <li><i class="fa-solid fa-tag" aria-hidden="true"></i>${esc(priceLabel)}</li>
+              </ul>
+
+              ${tags.length ? `<div class="pev-tags">${tags.map((t) => `<span class="pev-tag">${esc(t)}</span>`).join('')}</div>` : ''}
+
+              ${event.ticket_url ? `<a class="pev-external-tickets" href="${esc(event.ticket_url)}">Get Tickets <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>` : ''}
+            </div>
+
+            <aside class="pev-ticket-card">
+              <pb-ticket-purchase event-id="${esc(String(event.id))}"></pb-ticket-purchase>
+            </aside>
+          </section>
+
+          <section class="pev-info-grid">
+            ${lineup.length ? `
+            <article class="pev-info-card">
+              <h2><i class="fa-solid fa-star" aria-hidden="true"></i> The Lineup</h2>
+              <ul class="pev-lineup-list">
+                ${lineup.map((item, i) => `<li>
+                  <span class="pev-lineup-avatar">${esc((item.display_name || '?').trim().charAt(0).toUpperCase())}</span>
+                  <span class="pev-lineup-body"><strong>${esc(item.display_name)}</strong><span>${item.set_time ? esc(timeLabel(item.set_time)) : (i === 0 && lineup.length > 1 ? 'Headliner' : 'Performer')}</span></span>
+                </li>`).join('')}
+              </ul>
+            </article>` : ''}
+
+            <article class="pev-info-card">
+              <h2><i class="fa-solid fa-bolt" aria-hidden="true"></i> About the Show</h2>
+              ${event.description_public ? `<div class="event-description">${mdToHtml(event.description_public)}</div>` : `<p class="muted">More details coming soon.</p>`}
+              <div class="pev-share">
+                <span class="pev-share-label">Share this show</span>
+                <div class="pev-share-buttons">
+                  <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}" target="_blank" rel="noopener" aria-label="Share on Facebook"><i class="fa-brands fa-facebook-f" aria-hidden="true"></i></a>
+                  <a href="https://twitter.com/intent/tweet?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(event.title)}" target="_blank" rel="noopener" aria-label="Share on X"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i></a>
+                  <button type="button" data-copy-link aria-label="Copy link"><i class="fa-solid fa-link" aria-hidden="true"></i></button>
+                </div>
+              </div>
+            </article>
+
+            <article class="pev-info-card">
+              <h2><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> The Venue</h2>
+              <p class="pev-venue-name">${esc(event.venue_name)}</p>
+              ${event.address ? `<p class="muted">${esc(event.address)}<br>${esc([event.city, event.state].filter(Boolean).join(', '))}</p>` : ''}
+              <a class="pev-directions" href="${esc(mapsHref)}" target="_blank" rel="noopener">Get Directions <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>
+              ${event.venue_phone ? `<p class="muted"><a href="tel:${esc(event.venue_phone)}">${esc(event.venue_phone)}</a></p>` : ''}
+              ${event.venue_website ? `<p class="muted"><a href="${esc(event.venue_website)}" target="_blank" rel="noopener">Visit website</a></p>` : ''}
+            </article>
+          </section>
+        </main>
+
+        <footer class="pev-footer">
+          <p>Powered by <strong>Panic Booking</strong> &mdash; Independent shows. Real music.</p>
+        </footer>
+      </div>`;
+
+      this.querySelector('[data-copy-link]')?.addEventListener('click', async (event2) => {
+        try {
+          await navigator.clipboard.writeText(publicUrl);
+          const btn = event2.currentTarget;
+          btn.classList.add('is-copied');
+          setTimeout(() => btn.classList.remove('is-copied'), 1500);
+        } catch { /* clipboard unavailable — quietly ignore */ }
+      });
     } catch (error) {
       this.showError(error);
     }
