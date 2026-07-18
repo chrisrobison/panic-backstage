@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `contracts` — Stop hidden required radio from silently blocking Create contract
 - **Changed** `docs` — Restyle contracts.html and promote-guide.html with a backstage/marquee theme
 - **Fixed** `auth` — Reissue tokens on password set so new users aren't silently logged out
 - **Added** `admin` — Add App Settings page for app-shell brand + venue contact info
