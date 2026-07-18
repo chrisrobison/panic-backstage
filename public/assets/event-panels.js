@@ -201,7 +201,7 @@ class RunSheet extends HTMLElement {
       { label: 'End', grid: 'minmax(80px, 1fr)', cell: (i) => i.end_time ? esc(timeLabel(i.end_time)) : '' },
       { label: 'Notes', grid: 'minmax(120px, 2fr)', cell: (i) => esc(i.notes || '') },
     ];
-    const editForm = (item) => `<form data-api="/events/${data.event.id}/schedule/${item.id}" data-method="PATCH" class="row-form record-form"><label>Item<input name="title" value="${esc(item.title)}"></label><label>Type${select('item_type', types, item.item_type)}</label><label>Start<input type="time" name="start_time" value="${esc(item.start_time || '')}"></label><label>End<input type="time" name="end_time" value="${esc(item.end_time || '')}"></label><label>Notes<input name="notes" value="${esc(item.notes || '')}"></label><button>Save</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
+    const editForm = (item) => `<form data-api="/events/${data.event.id}/schedule/${item.id}" data-method="PATCH" class="row-form record-form"><label>Item<input name="title" value="${esc(item.title)}"></label><label>Type${select('item_type', types, item.item_type)}</label><label>Start<input type="time" name="start_time" value="${esc(item.start_time || '')}"></label><label>End<input type="time" name="end_time" value="${esc(item.end_time || '')}"></label><label>Notes<input name="notes" value="${esc(item.notes || '')}"></label><button>Save</button><button type="button" class="small danger" data-delete="${esc(item.id)}">Delete</button><button type="button" class="secondary small" data-cancel>Cancel</button></form>`;
     const addForm = editable ? `<form data-api="/events/${data.event.id}/schedule" data-method="POST" class="row-form" data-add-form hidden><label>Item<input name="title" required placeholder="Schedule item"></label><label>Type${select('item_type', types, 'other')}</label><label>Start<input type="time" name="start_time"></label><label>End<input type="time" name="end_time"></label><label>Notes<input name="notes" placeholder="Notes"></label><button>Add item</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : '';
     const populateBtn = editable
       ? `<button type="button" class="small secondary" data-populate-schedule title="Add items from load-in/doors/curfew, lineup set times, and staff call times already entered on this event">Populate from event data</button>`
@@ -222,6 +222,17 @@ class RunSheet extends HTMLElement {
       await api(form.dataset.api, { method: form.dataset.method, body: JSON.stringify(formData(form)) });
       await refreshSection(this);
       publish('toast.show', { message: 'Run sheet saved.' });
+    }));
+
+    $$('[data-delete]', this).forEach((button) => button.addEventListener('click', async () => {
+      if (!confirm('Delete this run sheet item? This cannot be undone.')) return;
+      try {
+        await api(`/events/${this.eventData.event.id}/schedule/${button.dataset.delete}`, { method: 'DELETE' });
+        await refreshSection(this);
+        publish('toast.show', { message: 'Run sheet item deleted.' });
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
     }));
 
     // Populate from event data: synthesizes rows from load-in/doors/curfew,
