@@ -679,10 +679,30 @@ HTML;
         $mailer   = new Mailer($this->root, $this->db);
 
         // Void any existing pending signers on this contract (re-send scenario).
+        // Excludes role='venue': that's the countersignature placeholder below,
+        // which must survive a resend of the client-side link untouched.
         $this->db->run(
-            "UPDATE contract_signers SET status = 'voided', signing_token_hash = NULL WHERE contract_id = ? AND status IN ('pending','sent','viewed')",
+            "UPDATE contract_signers SET status = 'voided', signing_token_hash = NULL WHERE contract_id = ? AND status IN ('pending','sent','viewed') AND role != 'venue'",
             [$contractId]
         );
+
+        // Ensure a venue-side placeholder signer exists. Without it,
+        // ContractSigningEndpoint::advanceContractStatus() has no way to know
+        // a countersignature is still owed: it finalizes as soon as every
+        // *known* signer has signed, and if the only row is the client's,
+        // that's the instant they sign — before the venue ever gets a chance
+        // to countersign. This pending row is completed later by
+        // Contracts::countersign(), never by a public signing-token link.
+        $hasVenueSigner = $this->db->one(
+            "SELECT id FROM contract_signers WHERE contract_id = ? AND role = 'venue' AND status != 'voided' LIMIT 1",
+            [$contractId]
+        );
+        if (!$hasVenueSigner) {
+            $this->db->insert(
+                "INSERT INTO contract_signers (contract_id, role, name, email, status) VALUES (?, 'venue', '', '', 'pending')",
+                [$contractId]
+            );
+        }
 
         foreach ($signers as $signerData) {
             $email = trim((string) ($signerData['email'] ?? ''));
@@ -1134,7 +1154,7 @@ HTML;
                         'signer_name'    => (string) ($contract['counterparty_name'] ?? ''),
                         'signer_email'   => (string) ($contract['counterparty_email'] ?? ''),
                         'detail'         => '',
-                        'contract_url'   => $appUrl . '/#/contracts/' . $contract['id'],
+                        'contract_url'   => $appUrl . '/#contract-' . $contract['id'],
                     ]
                 );
             }
@@ -1161,7 +1181,7 @@ HTML;
                         'admin_name'     => $admin['name'],
                         'contract_title' => (string) ($contract['title'] ?? ''),
                         'reason'         => $reason ?: 'No reason provided',
-                        'contract_url'   => $appUrl . '/#/contracts/' . $contract['id'],
+                        'contract_url'   => $appUrl . '/#contract-' . $contract['id'],
                     ]
                 );
             }

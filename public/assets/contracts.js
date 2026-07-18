@@ -171,7 +171,7 @@ async function downloadContractPdf(contractId, title) {
 function contractAssetPickerRow(asset) {
   const isImage = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename || '');
   return `<label class="checkbox-row contract-asset-row">
-    <input type="radio" name="asset_id" value="${esc(asset.id)}" required>
+    <input type="radio" name="asset_id" value="${esc(asset.id)}">
     ${isImage ? `<img class="contract-asset-thumb" src="${esc(assetUrl(asset.file_path))}" alt="">` : '<span class="contract-asset-thumb asset-thumb">PDF</span>'}
     <span class="contract-asset-info"><strong>${esc(asset.title)}</strong><span class="muted small">${esc(titleCase(asset.asset_type))}</span></span>
   </label>`;

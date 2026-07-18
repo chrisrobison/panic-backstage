@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Contract / Deal Builder — Mabuhay Backstage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 0; }
+    pre.sourceCode { margin: 0; }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    code span { color: #d8d0bd; } /* Normal */
+    code span.al { color: #95da4c; background-color: #4d1f24; font-weight: bold; } /* Alert */
+    code span.an { color: #7fae8e; } /* Annotation */
+    code span.at { color: #7ab6e0; } /* Attribute */
+    code span.bn { color: #e0a458; } /* BaseN */
+    code span.bu { color: #a89c8a; } /* BuiltIn */
+    code span.cf { color: #f2c374; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #7ab6e0; } /* Char */
+    code span.cn { color: #6fbfa8; font-weight: bold; } /* Constant */
+    code span.co { color: #8a8070; font-style: italic; } /* Comment */
+    code span.cv { color: #a89c8a; } /* CommentVar */
+    code span.do { color: #e08a8a; } /* Documentation */
+    code span.dt { color: #7ab6e0; } /* DataType */
+    code span.dv { color: #e0a458; } /* DecVal */
+    code span.er { color: #e08a8a; text-decoration: underline; } /* Error */
+    code span.ex { color: #7ab6e0; font-weight: bold; } /* Extension */
+    code span.fl { color: #e0a458; } /* Float */
+    code span.fu { color: #d9a2e2; } /* Function */
+    code span.im { color: #6fbfa8; } /* Import */
+    code span.in { color: #e2a542; } /* Information */
+    code span.kw { color: #f2c374; font-weight: bold; } /* Keyword */
+    code span.op { color: #d8d0bd; } /* Operator */
+    code span.ot { color: #6fbfa8; } /* Other */
+    code span.pp { color: #6fbfa8; } /* Preprocessor */
+    code span.sc { color: #7ab6e0; } /* SpecialChar */
+    code span.ss { color: #e08a8a; } /* SpecialString */
+    code span.st { color: #e2a542; } /* String */
+    code span.va { color: #6fbfa8; } /* Variable */
+    code span.vs { color: #e08a8a; } /* VerbatimString */
+    code span.wa { color: #e08a8a; } /* Warning */
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+
+    :root {
+      --paper: #f7f4ec;
+      --paper-raised: #ffffff;
+      --ink: #201b14;
+      --ink-soft: #5c5346;
+      --line: #e3dbc9;
+      --stage: #18130d;
+      --stage-soft: #241c14;
+      --marquee: #b5720f;
+      --marquee-bright: #d99a2b;
+      --velvet: #a23c3c;
+      --house: #2f6f5e;
+      --code-bg: #eee5d0;
+      --shadow: 0 1px 2px rgba(24,19,13,.06), 0 10px 28px -14px rgba(24,19,13,.28);
+      --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+      --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #14110c;
+        --paper-raised: #1c1710;
+        --ink: #ece3d3;
+        --ink-soft: #b3a894;
+        --line: #35291b;
+        --stage: #0b0906;
+        --stage-soft: #191209;
+        --marquee: #e2a542;
+        --marquee-bright: #f2c374;
+        --velvet: #e08a8a;
+        --house: #74c2ab;
+        --code-bg: #201a11;
+        --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.65);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--paper); scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* ---- Stage header band ---- */
+    .stagehead {
+      background: linear-gradient(180deg, var(--stage) 0%, var(--stage-soft) 100%);
+      position: relative;
+      overflow: hidden;
+      padding: 4.5rem 1.5rem 3.25rem;
+    }
+    .stagehead::after {
+      content: "";
+      position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+      background: repeating-linear-gradient(90deg, var(--marquee-bright) 0 8px, transparent 8px 22px);
+      opacity: .85;
+    }
+    .stagehead-inner { max-width: 740px; margin: 0 auto; }
+    .kicker {
+      display: inline-block;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: .16em;
+      font-size: .74rem;
+      font-weight: 600;
+      color: var(--marquee-bright);
+      margin: 0 0 1rem;
+    }
+    .stagehead h1 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(2rem, 4.2vw, 3.1rem);
+      line-height: 1.1;
+      letter-spacing: -.01em;
+      margin: 0;
+      color: #fbf6e9;
+    }
+
+    main.page { max-width: 740px; margin: 0 auto; padding: 3.25rem 1.5rem 6rem; }
+
+    h2, h3, h4 { font-family: var(--font-display); color: var(--ink); }
+    h2 {
+      font-weight: 600; font-size: 1.7rem;
+      margin: 3.25rem 0 1.1rem;
+      scroll-margin-top: 1.75rem;
+      position: relative;
+    }
+    h3 {
+      font-weight: 600; font-size: 1.28rem;
+      margin: 2.25rem 0 .85rem;
+      scroll-margin-top: 1.75rem;
+      position: relative;
+    }
+    h4 {
+      font-family: var(--font-mono);
+      font-weight: 600; font-size: .82rem;
+      text-transform: uppercase; letter-spacing: .06em;
+      color: var(--ink-soft);
+      margin: 1.9rem 0 .6rem;
+      position: relative;
+    }
+    .anchor-link {
+      position: absolute; left: -1.2em; top: .12em;
+      color: var(--marquee); opacity: 0;
+      text-decoration: none; font-family: var(--font-mono); font-weight: 400;
+      font-size: .82em;
+      transition: opacity .12s ease;
+    }
+    h2:hover .anchor-link, h3:hover .anchor-link, h4:hover .anchor-link { opacity: .7; }
+    .anchor-link:hover { opacity: 1 !important; }
+
+    p { margin: 0 0 1.15rem; }
+    strong { color: var(--ink); font-weight: 600; }
+    em { color: var(--ink-soft); }
+    a { color: var(--marquee); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--marquee) 40%, transparent); text-underline-offset: 2px; }
+    a:hover { color: var(--velvet); text-decoration-color: currentColor; }
+
+    ul, ol { padding-left: 1.35rem; margin: 0 0 1.2rem; }
+    li { margin-bottom: .42rem; }
+    li > ul, li > ol { margin-top: .5rem; margin-bottom: 0; }
+
+    hr {
+      border: 0;
+      margin: 3.25rem auto;
+      height: 1.1rem;
+      background-image: radial-gradient(circle, var(--marquee) 1.6px, transparent 1.7px);
+      background-repeat: repeat-x;
+      background-position: center;
+      background-size: 18px 100%;
+      opacity: .55;
+    }
+
+    table {
+      width: 100%; border-collapse: collapse;
+      margin: 1.6rem 0 2rem;
+      font-size: .95rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      background: var(--paper-raised);
+    }
+    table col { width: auto !important; }
+    thead th {
+      background: var(--stage);
+      color: #f2ead8;
+      text-align: left;
+      padding: .7rem 1rem;
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      font-weight: 600;
+    }
+    tbody td { padding: .75rem 1rem; border-top: 1px solid var(--line); vertical-align: top; }
+    tbody tr:nth-child(even) { background: color-mix(in srgb, var(--stage) 3%, var(--paper-raised)); }
+    tbody tr:hover { background: color-mix(in srgb, var(--marquee) 9%, transparent); }
+
+    code {
+      font-family: var(--font-mono);
+      background: var(--code-bg);
+      padding: .16em .42em;
+      border-radius: 5px;
+      font-size: .87em;
+      color: var(--velvet);
+    }
+    pre {
+      background: var(--stage);
+      color: #e7dfcd;
+      padding: 1.1rem 1.3rem;
+      border-radius: 10px;
+      overflow-x: auto;
+      border-left: 3px solid var(--marquee);
+      box-shadow: var(--shadow);
+      margin: 1.5rem 0 1.9rem;
+    }
+    pre code { background: none; padding: 0; color: inherit; font-size: .85rem; line-height: 1.65; }
+
+    blockquote {
+      margin: 1.7rem 0; padding: 1.05rem 1.35rem;
+      border-left: 3px solid var(--marquee);
+      background: color-mix(in srgb, var(--marquee) 9%, var(--paper-raised));
+      border-radius: 0 10px 10px 0;
+      color: var(--ink-soft);
+      box-shadow: var(--shadow);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+    blockquote strong { color: var(--ink); }
+
+    /* ---- Table of contents card ---- */
+    .toc-card {
+      background: var(--paper-raised);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.4rem 1.7rem 1.4rem 2.4rem;
+      box-shadow: var(--shadow);
+      margin: 0 0 2rem;
+    }
+    .toc-card ol { margin-bottom: 0; }
+    .toc-card li { margin-bottom: .3rem; }
+    .toc-card a { text-decoration: none; }
+    .toc-card a:hover { text-decoration: underline; }
+
+    /* ---- Status badges ---- */
+    .badge {
+      display: inline-flex; align-items: center; gap: .45em;
+      font-family: var(--font-mono); font-size: .78em; font-weight: 600;
+      padding: .18em .6em; border-radius: 999px; white-space: nowrap;
+      vertical-align: .04em;
+    }
+    .badge::before { content: ""; width: .5em; height: .5em; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .badge-green  { color: #2f8f5b; background: rgba(47,143,91,.13); }
+    .badge-yellow { color: #ab7712; background: rgba(171,119,18,.15); }
+    .badge-blue   { color: #3568b0; background: rgba(53,104,176,.15); }
+    .badge-red    { color: #b0402f; background: rgba(176,64,47,.15); }
+    .badge-gray   { color: var(--ink-soft); background: rgba(120,110,95,.15); }
+
+    /* ---- Cue rail (persistent in-page nav) ---- */
+    .cue-rail {
+      position: fixed;
+      top: 7rem;
+      right: max(1rem, calc(50% - 370px - 240px));
+      width: 210px;
+      max-height: 72vh;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      display: none;
+    }
+    @media (min-width: 1240px) { .cue-rail { display: block; } }
+    .cue-rail .cue-title {
+      text-transform: uppercase; letter-spacing: .12em;
+      color: var(--ink-soft); margin-bottom: .7rem; font-weight: 600; font-size: .68rem;
+    }
+    .cue-rail a {
+      display: flex; gap: .55rem; align-items: baseline;
+      padding: .32rem 0 .32rem .75rem;
+      margin-bottom: .05rem;
+      color: var(--ink-soft);
+      text-decoration: none;
+      border-left: 2px solid var(--line);
+      line-height: 1.35;
+    }
+    .cue-rail a .n { color: var(--marquee); font-weight: 600; flex-shrink: 0; }
+    .cue-rail a.active { color: var(--ink); border-left-color: var(--marquee); }
+    .cue-rail a:hover { color: var(--ink); }
+
+    @media (max-width: 640px) {
+      .stagehead { padding: 3rem 1.25rem 2.25rem; }
+      main.page { padding: 2.25rem 1.25rem 4.5rem; }
+      h2 { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="stagehead"><div class="stagehead-inner">
+<p class="kicker">Mabuhay Backstage · Engineering Reference</p>
+<h1 id="contract-deal-builder">Contract / Deal Builder</h1>
+</div></div>
+<main class="page">
+<p>A structured <strong>deal builder</strong> for venue contracts. The
+guiding principle is <strong>capture the deal as structured terms first,
+render the document second</strong> — so the same source of truth can
+drive the contract, settlement, and reporting.</p>
+<ul>
+<li>End-user help lives in the app: <strong>Help → Contracts &amp; deal
+builder</strong> and <strong>Help → Contract library &amp;
+templates</strong> (<code>#help-contracts</code>,
+<code>#help-admin-contracts</code>).</li>
+<li>This document covers the data model, API, smart-selection engine,
+and how to operate/extend the system.</li>
+</ul>
+<blockquote>
+<p>The seeded clause text is <strong>starter boilerplate, not legal
+advice.</strong> Have counsel review the clause library before sending
+real agreements.</p>
+</blockquote>
+<hr />
+<h2 id="concepts">Concepts</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Thing</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Module (clause)</strong></td>
+<td>A reusable paragraph with <code>{{variable}}</code> tokens, a
+category, risk level, required-field list, and an optional
+<code>locked</code> flag. The clause library.</td>
+</tr>
+<tr class="even">
+<td><strong>Template</strong></td>
+<td>An ordered set of modules for a deal type, each wired as
+<em>required</em>, <em>conditional</em> (smart auto-select), or
+<em>default-on</em>.</td>
+</tr>
+<tr class="odd">
+<td><strong>Contract</strong></td>
+<td>One deal. Carries the money “spine” as real columns + a
+<code>variables_json</code> long tail. <code>event_id</code> is
+<strong>nullable</strong> so recurring residencies can be
+venue-bound.</td>
+</tr>
+<tr class="even">
+<td><strong>Section</strong></td>
+<td>A module placed on a contract — an editable snapshot (so editing the
+library never rewrites existing contracts).</td>
+</tr>
+<tr class="odd">
+<td><strong>Version</strong></td>
+<td>An immutable rendered snapshot (HTML + text + the variable values at
+render time).</td>
+</tr>
+</tbody>
+</table>
+<p>Contract types (<code>contract_type</code> enum):
+<code>private_event</code>, <code>promoter_show</code>,
+<code>artist_performance</code>, <code>recurring_night</code>,
+<code>fundraiser</code>, <code>house_show</code>,
+<code>other</code>.</p>
+<p>Status workflow — <strong>draft phase</strong>:
+<code>draft → needs_review → approved → sent</code> (internal review and
+approval). <strong>E-sign phase</strong>:
+<code>sent → viewed → partially_signed → signed_by_client → fully_executed</code>
+(the in-app signing lifecycle; see <a
+href="#e-signature">E-signature</a> below). Terminal statuses (at any
+point): <code>voided</code>, <code>declined</code>,
+<code>canceled</code>, <code>superseded</code>. Advancing to
+<code>sent</code> is blocked until every required term on every included
+section is filled <strong>and</strong> at least one rendered version
+exists.</p>
+<hr />
+<h2 id="data-model">Data model</h2>
+<p>The baseline <code>database/schema.sql</code> plus migration
+<code>017_contract_signatures.sql</code> create the contract tables:</p>
+<ul>
+<li><code>contract_modules</code> — clause library
+(<code>module_key</code> unique, <code>body_template</code>,
+<code>required_fields_json</code>, <code>risk_level</code>,
+<code>is_locked</code>, <code>is_active</code>).</li>
+<li><code>contract_templates</code> — name, <code>contract_type</code>,
+<code>intro_text</code>, <code>is_active</code>.</li>
+<li><code>contract_template_modules</code> — wiring:
+<code>template_id</code>, <code>module_id</code>,
+<code>sort_order</code>, <code>is_required</code>,
+<code>condition_json</code>.</li>
+<li><code>contracts</code> — deal-term columns +
+<code>variables_json</code> + workflow metadata. <code>event_id</code>,
+<code>venue_id</code>, <code>template_id</code> are all nullable (FKs
+<code>ON DELETE SET NULL</code>).</li>
+<li><code>contract_sections</code> — per-contract editable clause
+snapshots (<code>included</code>, <code>auto_selected</code>,
+<code>is_locked</code>, <code>sort_order</code>).</li>
+<li><code>contract_versions</code> — immutable rendered snapshots.</li>
+</ul>
+<p><strong>Deal-term columns</strong> (the queryable spine,
+<code>ContractRenderer::DEAL_COLUMNS</code>): <code>rental_fee</code>,
+<code>deposit_amount</code>, <code>balance_due_date</code>,
+<code>bar_minimum</code>, <code>guarantee_amount</code>,
+<code>door_split_artist|venue|promoter</code>,
+<code>advance_ticket_price</code>, <code>door_ticket_price</code>,
+<code>security_count</code>, <code>security_rate</code>,
+<code>security_paid_by</code>, <code>sound_tech_included</code>,
+<code>lighting_tech_included</code>, <code>merch_venue_percent</code>,
+<code>recurrence_rule</code>, <code>term_start</code>,
+<code>term_end</code>, <code>trial_period_weeks</code>,
+<code>termination_notice_days</code>, <code>review_cadence</code>,
+<code>revenue_split_house</code>, <code>revenue_split_producer</code>.
+Everything else a clause needs lives in <code>variables_json</code>
+(e.g. <code>marketing_deadline</code>, <code>ticket_platform</code>,
+<code>insurance_amount</code>, <code>beneficiary</code>,
+<code>radius_miles</code>).</p>
+<hr />
+<h2 id="backend">Backend</h2>
+<p>PHP, no framework, PSR-4 autoload (<code>Panic\Foo</code> →
+<code>src/Foo.php</code>).</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>File</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>src/ContractRenderer.php</code></td>
+<td>Token substitution, condition engine, missing-field detection, deal
+summary. Pure/static.</td>
+</tr>
+<tr class="even">
+<td><code>src/ContractService.php</code></td>
+<td>Create a contract; build sections from a template; re-evaluate smart
+selection. Shared by both endpoints.</td>
+</tr>
+<tr class="odd">
+<td><code>src/Contracts.php</code></td>
+<td><code>/api/contracts</code> — list/create/show/update/delete +
+render, status, apply-template, reevaluate, sections, versions.</td>
+</tr>
+<tr class="even">
+<td><code>src/ContractModules.php</code></td>
+<td><code>/api/contract-modules</code> — clause library CRUD
+(admin).</td>
+</tr>
+<tr class="odd">
+<td><code>src/ContractTemplates.php</code></td>
+<td><code>/api/contract-templates</code> — template CRUD + wiring
+(admin).</td>
+</tr>
+<tr class="even">
+<td><code>src/Events/Contracts.php</code></td>
+<td><code>/api/events/{id}/contracts</code> — list/create contracts for
+an event.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="capabilities-srcbaseendpoint.php">Capabilities
+(<code>src/BaseEndpoint.php</code>)</h3>
+<ul>
+<li>Event-scoped: <code>view_contracts</code>,
+<code>manage_contracts</code>, <code>approve_contracts</code> (admin +
+event owner manage/approve; promoter views).</li>
+<li>Global: <code>manage_contract_library</code>,
+<code>view_all_contracts</code> (venue admin).</li>
+<li>Standalone (no <code>event_id</code>) contracts are managed by a
+venue admin or the creator.</li>
+<li><code>locked</code> clauses can only be edited/removed on a contract
+by a venue admin.</li>
+</ul>
+<h3 id="routes">Routes</h3>
+<pre><code>GET    /api/contracts                      list (admin: all; else own/event-scoped)
+POST   /api/contracts                      create (standalone = admin only)
+GET    /api/contracts/{id}                 full contract incl. preview + missing terms + risk flags
+PATCH  /api/contracts/{id}                 update deal terms / counterparty / variables (re-evaluates auto sections)
+DELETE /api/contracts/{id}
+POST   /api/contracts/{id}/render          render a new immutable version
+GET    /api/contracts/{id}/versions/{vid}  fetch a past version
+POST   /api/contracts/{id}/status          change workflow status (gated)
+POST   /api/contracts/{id}/apply-template  (re)build sections from a template
+POST   /api/contracts/{id}/reevaluate      re-run smart selection on auto sections
+POST   /api/contracts/{id}/sections        add a section (module or custom)
+PATCH  /api/contracts/{id}/sections        bulk update (include / order / title / body)
+DELETE /api/contracts/{id}/sections/{sid}  remove a section
+GET    /api/contracts/{id}/download        download the final executed PDF (JWT-authed)
+GET/POST/PATCH/DELETE /api/contract-modules[/{id}]      clause library (admin)
+GET/POST/PATCH/DELETE /api/contract-templates[/{id}]    templates (admin)
+GET/POST              /api/events/{id}/contracts        per-event list/create
+
+# Public signing routes (no JWT — authenticated by one-time token hash):
+GET  /api/signing/{token}          load contract HTML + signer info for the signing page
+POST /api/signing/{token}/viewed   record that the signer opened the link
+POST /api/signing/{token}/sign     submit typed or drawn signature (+ consent flag)
+POST /api/signing/{token}/decline  decline to sign (records reason, voids contract)</code></pre>
+<hr />
+<h2 id="rendering-tokens">Rendering &amp; tokens</h2>
+<p><code>ContractRenderer::context($contract, $event, $venue)</code>
+builds two maps:</p>
+<ul>
+<li><code>tokens</code> — formatted display strings for
+<code>{{...}}</code> substitution.</li>
+<li><code>cond</code> — raw values for the condition engine.</li>
+</ul>
+<p>Token sources: deal-term columns, <code>variables_json</code>, and
+built-ins (<code>venue_name</code>, <code>venue_address</code>,
+<code>venue_city</code>, <code>venue_state</code>,
+<code>counterparty_display</code>, <code>title</code>,
+<code>event_title</code>, <code>event_date</code>,
+<code>event_end_date</code>, <code>event_room</code>,
+<code>age_restriction</code>, <code>capacity</code>,
+<code>doors_time</code>, <code>show_time</code>, <code>end_time</code>).
+For a multi-day event (<code>events.end_date</code> set and different
+from <code>events.date</code>), <code>event_date</code> itself renders
+as a range (“August 14, 2026 – August 16, 2026”) rather than just the
+start day — every existing clause that says “on {{event_date}}”
+(e.g. <code>flat_rental</code>) automatically describes the full
+engagement instead of only day one. <code>event_end_date</code> is the
+bare end date, for clauses that want to reference it on its own (e.g. a
+load-out deadline).</p>
+<p>Formatting heuristics by key:
+<code>*_fee|_amount|_minimum|_rate|_price</code> and
+<code>guarantee_amount</code> → money; keys containing
+<code>split</code>/<code>percent</code> → <code>NN%</code>;
+<code>*_included|_required|_sold</code> → Yes/No;
+<code>*_date|term_start|term_end</code> → long date. A blank token
+renders as a highlighted <code>[ Label ]</code> placeholder (HTML) /
+<code>[[ Label ]]</code> (text) so reviewers can see what’s
+unfilled.</p>
+<p>Output is plain semantic HTML under <code>.contract-doc</code>; the
+in-app preview and PDF reuse <code>app.css</code>, and popped-out
+version views use an inline stylesheet.</p>
+<hr />
+<h2 id="smart-selection-condition_json">Smart selection
+(<code>condition_json</code>)</h2>
+<p>Recursive rule object evaluated against the <code>cond</code>
+context:</p>
+<pre class="jsonc"><code>{ &quot;all&quot;: [ &lt;rule&gt;, ... ] }          // every rule must pass
+{ &quot;any&quot;: [ &lt;rule&gt;, ... ] }          // at least one
+{ &quot;not&quot;: &lt;rule&gt; }
+{ &quot;field&quot;: &quot;age_policy&quot;, &quot;op&quot;: &quot;eq&quot;, &quot;value&quot;: &quot;all_ages&quot; }   // leaf</code></pre>
+<p>Operators: <code>eq</code>, <code>ne</code>, <code>in</code>,
+<code>nin</code>, <code>gt</code>, <code>gte</code>, <code>lt</code>,
+<code>lte</code>, <code>set</code>, <code>truthy</code>,
+<code>falsy</code>. Fields: any deal-term column, any variable, or
+derived helpers <code>age_policy</code> (<code>all_ages</code> vs
+<code>21_plus</code>, from <code>age_restriction</code>),
+<code>expected_attendance</code> (from <code>capacity</code>),
+<code>room</code>, and <code>is_multi_day</code>
+(<code>events.end_date</code> set and different from
+<code>events.date</code>) — used to auto-include the
+<code>multi_day_event</code> clause.</p>
+<p>Template-module inclusion semantics:</p>
+<ul>
+<li><code>is_required = 1</code> → always included.</li>
+<li>condition present → included only when it passes; tagged
+<strong>auto</strong>.</li>
+<li>neither → included by default (removable on the contract).</li>
+</ul>
+<p><code>PATCH /contracts/{id}</code> and
+<code>POST /contracts/{id}/reevaluate</code> re-run this over the
+<strong>auto</strong> sections only — manual toggles are preserved.</p>
+<p><code>ContractRenderer::missingFields()</code> collects required
+fields from included sections whose token value is blank; this both
+warns the user and gates sent/signed.</p>
+<hr />
+<h2 id="seeding">Seeding</h2>
+<p><code>database/seed_contracts.php</code> (idempotent) seeds the
+clause library + starter templates. Modules upsert on
+<code>module_key</code>; templates are matched by name and their wiring
+is rebuilt each run. Run it standalone after applying migration 017:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">php</span> database/seed_contracts.php</span></code></pre></div>
+<p><code>database/seed.php</code> (full demo reset) also calls
+<code>seed_contract_library()</code> and truncates the contract
+tables.</p>
+<p>Ships <strong>27 clauses</strong> across <strong>7
+templates</strong>: Recurring Night Agreement, Private Event Rental,
+Promoter / Production Show, Artist / Band Performance, Famous /
+High-Draw Artist, Fundraiser / Charity Event, House-Produced Show.</p>
+<hr />
+<h2 id="frontend">Frontend</h2>
+<p>The frontend is vanilla web components split into ES modules under
+<code>public/assets/</code> (no build step; loaded via native ESM).
+<code>app.js</code> is the entry (shell + routing) and imports the rest;
+<code>core.js</code> holds the shared kit (<code>api</code>,
+<code>publish</code>/<code>subscribe</code>, <code>PanicElement</code>,
+<code>esc</code>, formatting helpers) that every module imports.
+Contract UI lives in <code>contracts.js</code>:</p>
+<ul>
+<li><code>pb-event-contracts</code> — the event-workspace
+<strong>Contracts</strong> tab (list + create).</li>
+<li><code>pb-contract-editor</code> — full builder at route
+<code>#contract-&lt;id&gt;</code> (deal-terms form, live preview, clause
+toggles/reorder/edit, status workflow, version history, warnings).</li>
+<li><code>pb-admin-contracts</code> — <strong>Admin →
+Contracts</strong>: All Contracts / Clause Library / Templates (with the
+smart-condition wiring editor).</li>
+</ul>
+<p>PDF is <strong>client-side</strong> via <code>html2pdf.js</code> (CDN
+<code>&lt;script&gt;</code> in <code>index.html</code>, sets
+<code>window.html2pdf</code>) — no build step, no server-side PDF
+dependency. The current preview HTML is rendered to a Letter-size PDF in
+the browser.</p>
+<hr />
+<h2 id="extending">Extending</h2>
+<ul>
+<li><strong>New clause:</strong> Admin → Contracts → Clause Library →
+<em>New clause</em>. Set the body with <code>{{tokens}}</code>, list
+required variables, pick category/risk, and mark <code>locked</code> for
+legal language.</li>
+<li><strong>New template:</strong> Admin → Contracts → Templates →
+<em>New template</em>. Check clauses, order them, and set each as
+required / conditional (paste the <code>condition_json</code>).</li>
+<li><strong>New deal-term column:</strong> add the column to
+<code>contracts</code> (a new migration under
+<code>database/migrations/</code>, plus the baseline
+<code>database/schema.sql</code>), append it to
+<code>ContractRenderer::DEAL_COLUMNS</code>, and add an input to the
+deal-terms form group in <code>ContractEditor.dealFormHtml()</code>.
+Free-form terms don’t need a column — use a contract variable
+instead.</li>
+</ul>
+<hr />
+<h2 id="e-signature">E-signature</h2>
+<p>Panic Backstage has a built-in electronic signature system — no
+DocuSign or third-party account required. The default provider
+(<code>SIGNATURE_PROVIDER=internal</code>) manages the entire signing
+lifecycle in-house using secure one-time magic links.</p>
+<h3 id="providers">Providers</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th><code>SIGNATURE_PROVIDER</code></th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>internal</code> <em>(default)</em></td>
+<td><span class="badge badge-green">Fully implemented</span> — magic-link flow, typed + drawn signatures, audit
+log, final PDF</td>
+</tr>
+<tr class="even">
+<td><code>dropbox_sign</code></td>
+<td><span class="badge badge-yellow">Wired interface</span> (struct + HMAC verify implemented);
+<code>createEnvelope</code>, <code>getEnvelopeStatus</code>,
+<code>downloadFinalPdf</code> are TODO stubs</td>
+</tr>
+<tr class="odd">
+<td><code>docusign</code></td>
+<td><span class="badge badge-red">Not implemented</span> — throws <code>RuntimeException</code> at startup if
+selected</td>
+</tr>
+</tbody>
+</table>
+<p>Set via <code>.env</code>: <code>SIGNATURE_PROVIDER=internal</code>
+(or omit — <code>internal</code> is the default).</p>
+<h3 id="signing-workflow">Signing workflow</h3>
+<ol type="1">
+<li>Admin clicks <strong>Send for Signature</strong> on an
+<code>approved</code> contract.</li>
+<li>Each signer receives a personalised email with a time-limited
+one-time link (<code>SIGNATURE_TOKEN_TTL_HOURS</code>, default 168 h / 7
+days). Only the <code>sha256</code> hash of the token is stored.</li>
+<li>Signer opens the link → contract HTML is rendered for review → they
+choose <strong>Type signature</strong> (cursive font rendering) or
+<strong>Draw signature</strong> (touch/mouse canvas).</li>
+<li>Signer ticks the e-sign consent checkbox and clicks <strong>Sign
+Agreement</strong>. The raw token is consumed and nulled; signature text
+and/or PNG image path are stored on the <code>contract_signers</code>
+row.</li>
+<li>Each signing action advances the contract status:
+<ul>
+<li><code>sent</code> → <code>viewed</code> (first signer opens their
+link)</li>
+<li><code>viewed</code> → <code>partially_signed</code> (at least one
+but not all have signed)</li>
+<li><code>partially_signed</code> → <code>signed_by_client</code> (all
+non-venue signers done; venue still pending)</li>
+<li><code>signed_by_client</code> → <code>fully_executed</code> (venue
+countersigns)</li>
+<li>Any signer <code>decline</code> → contract flips to
+<code>declined</code></li>
+</ul></li>
+<li>On <code>fully_executed</code>: <code>ContractPdfService</code>
+generates the final signed PDF server-side (contract body + signature
+blocks + audit certificate), stores the SHA-256 hash, and sets
+<code>contracts.final_pdf_path</code>. The linked event is advanced to
+<code>booked</code>. All signers and venue admins receive a “fully
+executed” email with a download link.</li>
+</ol>
+<h3 id="database-tables-migration-017_contract_signatures.sql">Database
+tables (migration <code>017_contract_signatures.sql</code>)</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Table</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>contract_signers</code></td>
+<td>One row per signer per contract: name, email, role
+(<code>venue</code>/<code>counterparty</code>), status,
+<code>signing_token_hash</code>, <code>signed_at</code>,
+<code>signature_text</code>, <code>signature_image_path</code>,
+<code>ip_address</code>, <code>user_agent</code>,
+<code>token_expires_at</code></td>
+</tr>
+<tr class="even">
+<td><code>contract_audit_log</code></td>
+<td>Append-only event log (never editable): <code>event_type</code>,
+<code>actor_id</code>, <code>metadata_json</code>,
+<code>ip_address</code>, <code>user_agent</code>,
+<code>created_at</code></td>
+</tr>
+</tbody>
+</table>
+<p>Audit event types: <code>signer_link_opened</code>,
+<code>signer_consented</code>, <code>signer_signed</code>,
+<code>signer_declined</code>, <code>contract_fully_executed</code>,
+<code>pdf_generated</code>, <code>pdf_hash_created</code>,
+<code>provider_error</code>.</p>
+<h3 id="security">Security</h3>
+<ul>
+<li>Token stored only as <code>sha256(token)</code> — the raw 64-byte
+random token is never persisted.</li>
+<li>Comparison via <code>hash_equals()</code> to prevent timing
+attacks.</li>
+<li>Tokens expire and are nulled after first use (signing or
+declining).</li>
+<li>Voided and fully-executed contracts cannot be signed.</li>
+<li>Signer IP + User-Agent are recorded at signing time for audit
+trail.</li>
+<li>The final executed PDF is SHA-256 hashed and the hash stored
+alongside it for tamper-evidence verification.</li>
+</ul>
+<hr />
+<h2 id="not-yet-built-future">Not yet built (future)</h2>
+<p>Redline/diff history between contract versions, an AI “suggest
+clauses” helper, and automatically flowing accepted deal terms into
+<code>event_settlements</code> (the deal-term columns are already
+queryable for this).</p>
+</main>
+<script>
+(function () {
+  var headings = Array.prototype.slice.call(document.querySelectorAll('main.page h2[id], main.page h3[id], main.page h4[id]'));
+  var labels = headings.map(function (h) { return h.textContent; });
+
+  headings.forEach(function (h) {
+    var a = document.createElement('a');
+    a.href = '#' + h.id;
+    a.className = 'anchor-link';
+    a.textContent = '#';
+    a.setAttribute('aria-hidden', 'true');
+    h.insertBefore(a, h.firstChild);
+  });
+
+  var sections = [];
+  headings.forEach(function (h, i) { if (h.tagName === 'H2') sections.push({ el: h, label: labels[i] }); });
+
+  if (sections.length) {
+    var rail = document.createElement('nav');
+    rail.className = 'cue-rail';
+    rail.setAttribute('aria-label', 'On this page');
+
+    var title = document.createElement('div');
+    title.className = 'cue-title';
+    title.textContent = 'On this page';
+    rail.appendChild(title);
+
+    var links = sections.map(function (s, i) {
+      var a = document.createElement('a');
+      a.href = '#' + s.el.id;
+      var n = document.createElement('span');
+      n.className = 'n';
+      n.textContent = String(i + 1).padStart(2, '0');
+      var label = document.createElement('span');
+      label.textContent = s.label;
+      a.appendChild(n);
+      a.appendChild(label);
+      rail.appendChild(a);
+      return { el: a, heading: s.el };
+    });
+
+    document.body.appendChild(rail);
+
+    var setActive = function () {
+      var y = window.scrollY + 130;
+      var current = null;
+      sections.forEach(function (s) { if (s.el.offsetTop <= y) current = s.el; });
+      links.forEach(function (l) { l.el.classList.toggle('active', l.heading === current); });
+    };
+    window.addEventListener('scroll', setActive, { passive: true });
+    setActive();
+  }
+})();
+</script>
+</body>
+</html>

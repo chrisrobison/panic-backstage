@@ -13,6 +13,7 @@ namespace Panic;
  *   POST /api/signing/{token}/viewed   record that the signer opened the link
  *   POST /api/signing/{token}/sign     submit electronic signature
  *   POST /api/signing/{token}/decline  decline to sign
+ *   GET  /api/signing/{token}/download download the final signed PDF once fully executed
  *
  * Security:
  *   - Only the sha256 hash of the token is stored in the DB.
@@ -21,6 +22,12 @@ namespace Panic;
  *   - A token is invalidated (nulled) after signing or declining.
  *   - Voided and fully-executed contracts cannot be signed.
  *   - Signer consent must be confirmed before a signature is accepted.
+ *   - The download action uses a *separate* token (contract_signers.
+ *     download_token_hash) minted once per signer when the contract reaches
+ *     fully_executed — the signing token above is single-use and already
+ *     nulled out by the time a signer's own signature completes it, so it
+ *     can't double as the link for the "your signed agreement is ready"
+ *     email. See finalizeContract() / notifySignersOfExecution().
  */
 final class ContractSigningEndpoint extends BaseEndpoint
 {
@@ -37,11 +44,12 @@ final class ContractSigningEndpoint extends BaseEndpoint
         }
 
         return match ($action) {
-            ''        => $this->loadForSigning($token, $request),
-            'viewed'  => $this->markViewed($token, $request),
-            'sign'    => $this->sign($token, $request),
-            'decline' => $this->decline($token, $request),
-            default   => Response::json(['error' => 'Unknown action'], 404),
+            ''         => $this->loadForSigning($token, $request),
+            'viewed'   => $this->markViewed($token, $request),
+            'sign'     => $this->sign($token, $request),
+            'decline'  => $this->decline($token, $request),
+            'download' => $this->downloadFinal($token, $request),
+            default    => Response::json(['error' => 'Unknown action'], 404),
         };
     }
 
@@ -266,6 +274,63 @@ final class ContractSigningEndpoint extends BaseEndpoint
         return $this->ok(['ok' => true]);
     }
 
+    // ── Download final signed PDF ──────────────────────────────────────────────
+
+    /**
+     * GET /api/signing/{token}/download
+     *
+     * Public counterpart to Contracts::downloadFinalPdf() (which requires a
+     * JWT + manage_contracts). Gated by a dedicated download token minted
+     * once per signer in notifySignersOfExecution() — deliberately *not* the
+     * signing_token_hash above, which is single-use and already nulled out
+     * by the time this signer's own signature completed the contract.
+     */
+    private function downloadFinal(string $token, Request $request): Response
+    {
+        if ($request->method() !== 'GET') {
+            return Response::methodNotAllowed();
+        }
+
+        if (strlen($token) < 32) {
+            return Response::json(['error' => 'Invalid download link'], 400);
+        }
+
+        $hash   = hash('sha256', $token);
+        $signer = $this->db->one(
+            'SELECT cs.id, cs.contract_id, cs.download_token_expires_at
+             FROM contract_signers cs WHERE cs.download_token_hash = ? LIMIT 1',
+            [$hash]
+        );
+        if (!$signer) {
+            return Response::json(['error' => 'This download link is invalid.'], 404);
+        }
+        if ($signer['download_token_expires_at'] && db_timestamp_to_epoch((string) $signer['download_token_expires_at']) < time()) {
+            return Response::json(['error' => 'This download link has expired. Please contact the venue for a copy.'], 410);
+        }
+
+        $contract = $this->db->one('SELECT id, title, final_pdf_path FROM contracts WHERE id = ?', [(int) $signer['contract_id']]);
+        $path     = (string) ($contract['final_pdf_path'] ?? '');
+        if ($path === '' || !is_file($this->root . '/' . $path)) {
+            return Response::json(['error' => 'The final PDF is not available yet.'], 404);
+        }
+
+        $pdf  = (string) file_get_contents($this->root . '/' . $path);
+        $safe = preg_replace('/[^\w\s-]/', '', (string) ($contract['title'] ?? 'contract'));
+        $safe = trim(preg_replace('/\s+/', '-', (string) $safe)) ?: 'contract';
+
+        ContractAuditLog::appendFromRequest(
+            $this->db, (int) $contract['id'], 'contract_previewed', (int) $signer['id'],
+            ['downloaded_via' => 'signer_email_link']
+        );
+
+        return new Response($pdf, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$safe}-signed.pdf\"",
+            'Content-Length'      => (string) strlen($pdf),
+            'Cache-Control'       => 'private, no-cache',
+        ]);
+    }
+
     // ── Token resolution ──────────────────────────────────────────────────────
 
     /**
@@ -466,7 +531,7 @@ final class ContractSigningEndpoint extends BaseEndpoint
                         'signer_name'   => (string) ($signer['name']  ?? ''),
                         'signer_email'  => (string) ($signer['email'] ?? ''),
                         'detail'        => $detail,
-                        'contract_url'  => $appUrl . '/#/contracts/' . $contract['id'],
+                        'contract_url'  => $appUrl . '/#contract-' . $contract['id'],
                     ]
                 );
             }
@@ -499,11 +564,27 @@ final class ContractSigningEndpoint extends BaseEndpoint
             );
             $mailer  = new Mailer($this->root, $this->db);
             $appUrl  = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+            $ttlDays = max(1, (int) (getenv('CONTRACT_DOWNLOAD_TOKEN_TTL_DAYS') ?: 365));
 
             foreach ($signers as $signer) {
                 if (empty($signer['email'])) {
                     continue;
                 }
+
+                // Signers have no backstage account, so this can't link
+                // straight at the JWT-protected /api/contracts/{id}/download
+                // admin endpoint (that just shows them a bare "Authentication
+                // required" JSON error). Mint a dedicated, longer-lived
+                // download token instead — the signing token this signer used
+                // is already nulled out from the moment they signed.
+                $rawToken  = $this->auth->generateToken(48);
+                $tokenHash = $this->auth->hashToken($rawToken);
+                $expiresAt = gmdate('Y-m-d H:i:s', time() + $ttlDays * 86400);
+                $this->db->run(
+                    'UPDATE contract_signers SET download_token_hash = ?, download_token_expires_at = ? WHERE id = ?',
+                    [$tokenHash, $expiresAt, $signer['id']]
+                );
+
                 $mailer->sendTemplate(
                     $signer['email'],
                     'Your signed agreement is ready: ' . ($contract['title'] ?? 'Contract'),
@@ -512,7 +593,7 @@ final class ContractSigningEndpoint extends BaseEndpoint
                         'signer_name'   => (string) ($signer['name'] ?? ''),
                         'contract_title'=> (string) ($contract['title'] ?? ''),
                         'signed_date'   => date('F j, Y'),
-                        'download_url'  => $appUrl . '/api/contracts/' . $contractId . '/download',
+                        'download_url'  => $appUrl . '/api/signing/' . $rawToken . '/download',
                     ]
                 );
             }
