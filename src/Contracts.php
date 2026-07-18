@@ -1134,7 +1134,7 @@ HTML;
                         'signer_name'    => (string) ($contract['counterparty_name'] ?? ''),
                         'signer_email'   => (string) ($contract['counterparty_email'] ?? ''),
                         'detail'         => '',
-                        'contract_url'   => $appUrl . '/#/contracts/' . $contract['id'],
+                        'contract_url'   => $appUrl . '/#contract-' . $contract['id'],
                     ]
                 );
             }
@@ -1161,7 +1161,7 @@ HTML;
                         'admin_name'     => $admin['name'],
                         'contract_title' => (string) ($contract['title'] ?? ''),
                         'reason'         => $reason ?: 'No reason provided',
-                        'contract_url'   => $appUrl . '/#/contracts/' . $contract['id'],
+                        'contract_url'   => $appUrl . '/#contract-' . $contract['id'],
                     ]
                 );
             }
