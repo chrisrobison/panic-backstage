@@ -2053,13 +2053,23 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   .pev-main { padding: 20px clamp(16px, 5vw, 28px) 40px; }
   .pev-hero { flex-direction: column; gap: 22px; }
   .pev-media, .pev-copy, .pev-ticket-card { max-width: none; width: 100%; }
-  .pev-flyer, .pev-flyer-placeholder { aspect-ratio: 16 / 11; }
+  /* Real flyer art is almost always a portrait poster — forcing it into a
+     landscape 16/11 crop here was chopping off large chunks of the artwork
+     (price, support acts, venue details often live near the bottom). Let the
+     image keep its natural proportions instead, just capped so an unusually
+     tall upload can't push the page too far. The placeholder has no art to
+     crop, so it keeps its fixed box (falls back to the desktop 4/5 default). */
+  img.pev-flyer { aspect-ratio: auto; max-height: 80vh; object-fit: contain; background: var(--pev-panel-2); }
   .pev-info-grid { grid-template-columns: 1fr; margin-top: 28px; }
   /* Icon-over-text tiles are too cramped on a phone-width screen — fall back
      to a plain icon-left-text-right stacked list instead, centered as a
      block on the page like the desktop tile row. */
   .pev-facts { flex-direction: column; align-items: center; gap: 12px; padding: 18px 0; }
   .pev-facts li { flex-direction: row; align-items: center; text-align: left; gap: 10px; padding: 0; border-left: 0; max-width: none; }
+  /* iOS Safari auto-zooms the page when a focused input's font is under
+     16px — bump just the buyer fields on mobile so tapping Name/Email/Phone
+     doesn't yank the viewport in. */
+  .tkp-buyer input { font-size: 16px; }
 }
 
 /* Public ticket purchase widget (pb-ticket-purchase) — only ever mounted

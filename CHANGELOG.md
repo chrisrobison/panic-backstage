@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `public-event` — Stop the mobile flyer crop from chopping off poster art
 - **Fixed** `events` — Fit the QR Flyer print sheet on one 8.5x11 page
 - **Added** `events` — Add a QR Flyer print option for door credit-card sales
 - **Added** `events` — Allow deleting Run Sheet items
