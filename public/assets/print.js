@@ -84,18 +84,24 @@ const PRINT_CSS = `
 
   /* QR Flyer — bold door-poster sheet: huge title, huge scannable QR, price/doors,
      then a stacked all-caps lineup. Pure black-on-white, no boxes/rules, meant to
-     be printed big and taped up or held at the door for walk-up card sales. */
-  .qr-flyer { text-align: center; padding: 4px 0 0; font-family: "Arial Black", Impact, "Franklin Gothic Bold", Arial, sans-serif; color: #000; }
-  .qr-flyer .qf-title { font-size: 60pt; font-weight: 900; line-height: 0.92; margin: 0 0 10px; text-transform: uppercase; letter-spacing: -0.01em; word-break: break-word; }
-  .qr-flyer .qf-scan-label { font-size: 17pt; font-weight: 900; letter-spacing: 0.03em; text-transform: uppercase; margin: 0 0 20px; }
-  .qr-flyer .qf-qr-wrap { margin: 0 0 22px; }
+     be printed big and taped up or held at the door for walk-up card sales.
+     Vertical rhythm is kept tight throughout (and the sheet's own padding and
+     footer margin are trimmed for this printout only, via :has()) so a normal
+     3-5 band bill fits a single 8.5x11 sheet instead of spilling a mostly-empty
+     second page. */
+  .sheet:has(.qr-flyer) { padding: 0.35in 0.55in 0.3in; }
+  .sheet:has(.qr-flyer) footer.sheet-foot { margin-top: 10px; padding-top: 6px; }
+  .qr-flyer { text-align: center; padding: 0; font-family: "Arial Black", Impact, "Franklin Gothic Bold", Arial, sans-serif; color: #000; }
+  .qr-flyer .qf-title { font-size: 52pt; font-weight: 900; line-height: 0.94; margin: 0 0 6px; text-transform: uppercase; letter-spacing: -0.01em; word-break: break-word; }
+  .qr-flyer .qf-scan-label { font-size: 15pt; font-weight: 900; letter-spacing: 0.03em; text-transform: uppercase; margin: 0 0 12px; }
+  .qr-flyer .qf-qr-wrap { margin: 0 0 14px; }
   .qr-flyer .qf-qr { display: block; margin: 0 auto; }
-  .qr-flyer .qf-facts { font-size: 27pt; font-weight: 900; text-transform: uppercase; line-height: 1.35; margin: 0 0 16px; }
-  .qr-flyer .qf-lineup-head { font-size: 27pt; font-weight: 900; text-transform: uppercase; margin: 4px 0 10px; }
+  .qr-flyer .qf-facts { font-size: 23pt; font-weight: 900; text-transform: uppercase; line-height: 1.25; margin: 0 0 12px; }
+  .qr-flyer .qf-lineup-head { font-size: 23pt; font-weight: 900; text-transform: uppercase; margin: 2px 0 6px; }
   .qr-flyer .qf-lineup { list-style: none; margin: 0; padding: 0; }
-  .qr-flyer .qf-lineup li { font-size: 21pt; font-weight: 900; text-transform: uppercase; line-height: 1.3; }
+  .qr-flyer .qf-lineup li { font-size: 18pt; font-weight: 900; text-transform: uppercase; line-height: 1.15; margin: 0 0 4px; }
   .qr-flyer .qf-lineup li.empty { font-weight: normal; font-style: italic; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
-  .qr-flyer .qf-lineup .qf-time { display: block; font-size: 11pt; font-weight: 600; letter-spacing: 0.03em; font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: -2px 0 6px; }
+  .qr-flyer .qf-lineup .qf-time { display: block; font-size: 10pt; font-weight: 600; letter-spacing: 0.03em; font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: -1px 0 0; }
 
   @media print {
     body { background: #fff; padding: 0; }
@@ -590,18 +596,22 @@ function renderContract(data) {
 function renderQrFlyer(data) {
   const event = data.event;
   const url = appUrl(data.links.public_page);
-  const qrImage = appUrl(`assets/qr.png?text=${encodeURIComponent(url)}&size=600`);
+  const qrImage = appUrl(`assets/qr.png?text=${encodeURIComponent(url)}&size=500`);
   const lineup = (data.lineup || []).slice().sort((a, b) => (a.set_time || '99:99:99').localeCompare(b.set_time || '99:99:99'));
   const priceLabel = Number(event.ticket_price) > 0 ? money(event.ticket_price) : 'Free';
   const lineupItems = lineup.length
     ? lineup.map((item) => `<li>${esc(item.display_name || item.band_name || 'Untitled')}${item.set_time ? `<span class="qf-time">${esc(timeLabel(item.set_time))}</span>` : ''}</li>`).join('')
     : '<li class="empty">Lineup TBA</li>';
+  // Long titles get a smaller font instead of wrapping to two lines — a two-line
+  // title at 52pt would eat ~0.7in of the already-tight one-page budget.
+  const title = String(event.title || '');
+  const titleSize = title.length > 34 ? 30 : title.length > 24 ? 38 : title.length > 16 ? 44 : 52;
 
   return `<div class="qr-flyer">
-    <h1 class="qf-title">${esc(event.title)}</h1>
+    <h1 class="qf-title" style="font-size:${titleSize}pt;">${esc(event.title)}</h1>
     <div class="qf-scan-label">Scan to Buy Tickets</div>
     <div class="qf-qr-wrap">
-      <img class="qf-qr" src="${esc(qrImage)}" width="360" height="360" alt="Scan to buy tickets">
+      <img class="qf-qr" src="${esc(qrImage)}" width="300" height="300" alt="Scan to buy tickets">
     </div>
     <div class="qf-facts">
       Price: ${priceLabel}${event.doors_time ? `<br>Doors: ${esc(timeLabel(event.doors_time))}` : ''}
