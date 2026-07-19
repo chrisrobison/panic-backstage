@@ -12,6 +12,10 @@ tests/.state
 scripts/__pycache__/
 storage/tmp/
 storage/backups/
+# Generated contract PDFs — signer names/emails/signatures (PII), and
+# regenerable on demand from contracts/contract_sections/contract_signers
+# (see scripts/regenerate-contract-pdf.php) if ever lost from disk.
+storage/contracts/
 dns.log
 database/mabevents-import.sql
 # Ticketing "Fan View" export — real customer PII; import locally, never commit.
