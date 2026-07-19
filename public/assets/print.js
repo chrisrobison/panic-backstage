@@ -1,4 +1,4 @@
-import { esc, titleCase, publish, eventDate, eventDateRangeLabel, timeLabel, money, statusLabel, can, table, mdToHtml } from './core.js';
+import { esc, titleCase, publish, eventDate, eventDateRangeLabel, timeLabel, money, statusLabel, can, table, mdToHtml, appUrl } from './core.js';
 
 
 // ── Print feature ────────────────────────────────────────────────────────────
@@ -15,6 +15,7 @@ const PRINT_TITLES = {
   master: 'Master Event Packet',
   'one-sheet': 'One Sheet',
   contract: 'Contract',
+  'qr-flyer': 'QR Flyer',
 };
 
 
@@ -80,6 +81,21 @@ const PRINT_CSS = `
   .contract .k-sign-line { margin: 14px 0 4px; }
   .contract .k-fill { display: inline-block; min-width: 260px; border-bottom: 1px solid #111; }
   .contract .k-fill.short { min-width: 200px; }
+
+  /* QR Flyer — bold door-poster sheet: huge title, huge scannable QR, price/doors,
+     then a stacked all-caps lineup. Pure black-on-white, no boxes/rules, meant to
+     be printed big and taped up or held at the door for walk-up card sales. */
+  .qr-flyer { text-align: center; padding: 4px 0 0; font-family: "Arial Black", Impact, "Franklin Gothic Bold", Arial, sans-serif; color: #000; }
+  .qr-flyer .qf-title { font-size: 60pt; font-weight: 900; line-height: 0.92; margin: 0 0 10px; text-transform: uppercase; letter-spacing: -0.01em; word-break: break-word; }
+  .qr-flyer .qf-scan-label { font-size: 17pt; font-weight: 900; letter-spacing: 0.03em; text-transform: uppercase; margin: 0 0 20px; }
+  .qr-flyer .qf-qr-wrap { margin: 0 0 22px; }
+  .qr-flyer .qf-qr { display: block; margin: 0 auto; }
+  .qr-flyer .qf-facts { font-size: 27pt; font-weight: 900; text-transform: uppercase; line-height: 1.35; margin: 0 0 16px; }
+  .qr-flyer .qf-lineup-head { font-size: 27pt; font-weight: 900; text-transform: uppercase; margin: 4px 0 10px; }
+  .qr-flyer .qf-lineup { list-style: none; margin: 0; padding: 0; }
+  .qr-flyer .qf-lineup li { font-size: 21pt; font-weight: 900; text-transform: uppercase; line-height: 1.3; }
+  .qr-flyer .qf-lineup li.empty { font-weight: normal; font-style: italic; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  .qr-flyer .qf-lineup .qf-time { display: block; font-size: 11pt; font-weight: 600; letter-spacing: 0.03em; font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: -2px 0 6px; }
 
   @media print {
     body { background: #fff; padding: 0; }
@@ -565,10 +581,42 @@ function renderContract(data) {
 }
 
 
+// QR Flyer — a bold door-poster for walk-up credit-card sales: show title in
+// huge type, "Scan to Buy Tickets", a big scannable QR code straight to the
+// event's public page (where in-house ticketing, if enabled, presents the
+// purchase/checkout form), the price, doors time, and the band lineup with
+// set times. No internal facts — this is meant to be printed big and taped
+// up or held at the door.
+function renderQrFlyer(data) {
+  const event = data.event;
+  const url = appUrl(data.links.public_page);
+  const qrImage = appUrl(`assets/qr.png?text=${encodeURIComponent(url)}&size=600`);
+  const lineup = (data.lineup || []).slice().sort((a, b) => (a.set_time || '99:99:99').localeCompare(b.set_time || '99:99:99'));
+  const priceLabel = Number(event.ticket_price) > 0 ? money(event.ticket_price) : 'Free';
+  const lineupItems = lineup.length
+    ? lineup.map((item) => `<li>${esc(item.display_name || item.band_name || 'Untitled')}${item.set_time ? `<span class="qf-time">${esc(timeLabel(item.set_time))}</span>` : ''}</li>`).join('')
+    : '<li class="empty">Lineup TBA</li>';
+
+  return `<div class="qr-flyer">
+    <h1 class="qf-title">${esc(event.title)}</h1>
+    <div class="qf-scan-label">Scan to Buy Tickets</div>
+    <div class="qf-qr-wrap">
+      <img class="qf-qr" src="${esc(qrImage)}" width="360" height="360" alt="Scan to buy tickets">
+    </div>
+    <div class="qf-facts">
+      Price: ${priceLabel}${event.doors_time ? `<br>Doors: ${esc(timeLabel(event.doors_time))}` : ''}
+    </div>
+    <h2 class="qf-lineup-head">Lineup:</h2>
+    <ul class="qf-lineup">${lineupItems}</ul>
+  </div>`;
+}
+
+
 function renderPrintBody(type, data) {
   switch (type) {
     case 'one-sheet':    return renderOneSheet(data);
     case 'contract':     return renderContract(data);
+    case 'qr-flyer':     return renderQrFlyer(data);
     case 'lineup':       return renderLineupSection(data);
     case 'staffing':     return renderStaffingSection(data);
     case 'run-of-show':  return renderRunOfShowSection(data);
@@ -608,7 +656,7 @@ function openPrintWindow(type, data) {
     <button type="button" onclick="window.close()">Close</button>
   </div>
   <article class="sheet">
-    ${type === 'one-sheet' || type === 'contract' ? '' : printHeader(data, title)}
+    ${type === 'one-sheet' || type === 'contract' || type === 'qr-flyer' ? '' : printHeader(data, title)}
     ${body}
     ${printFooter(data)}
   </article>

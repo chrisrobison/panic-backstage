@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Add a QR Flyer print option for door credit-card sales
 - **Added** `events` — Allow deleting Run Sheet items
 - **Fixed** `contracts` — Don't let a client's signature alone finalize the contract
 - **Fixed** `contracts` — Let signers download the fully-executed PDF without a login

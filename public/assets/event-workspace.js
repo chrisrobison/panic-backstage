@@ -618,6 +618,7 @@ class EventWorkspace extends PanicElement {
             <button type="button" data-print="run-of-show">Run of Show</button>
             <button type="button" data-print="guest-list">Door / Guest List</button>
             ${isPrivate ? '' : '<button type="button" data-print="one-sheet">One Sheet</button>'}
+            ${isPrivate ? '' : '<button type="button" data-print="qr-flyer">QR Flyer</button>'}
             <button type="button" data-print="contract">Contract</button>
             <button type="button" data-print="master">Master Event Packet</button>
           </div>
