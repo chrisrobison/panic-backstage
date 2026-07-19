@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Make the Execution tab's Add/Edit Record actually work
 - **Fixed** `contracts` — Add a recovery script for final PDFs missing from disk
 - **Fixed** `public-event` — Stop the mobile flyer crop from chopping off poster art
 - **Fixed** `events` — Fit the QR Flyer print sheet on one 8.5x11 page

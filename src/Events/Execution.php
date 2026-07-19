@@ -182,7 +182,7 @@ final class Execution extends BaseEndpoint
 
         // Notify venue admins when an incident is logged
         if ($type === 'incident') {
-            $this->notifyIncident($eventId, $id, $b['summary'] ?? '');
+            $this->notifyIncident($eventId, $id, $title);
         }
 
         // Link to ledger if this is a chargeable change order/overage

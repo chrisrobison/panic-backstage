@@ -126,7 +126,7 @@ function renderCard(rec) {
       <span style="display:flex;align-items:center;gap:0.4rem;">
         <i class="fa-solid ${icon}" aria-hidden="true" style="color:${TYPE_COLOR[rec.record_type] || '#6c757d'}"></i>
         ${typeBadge(rec.record_type)}${lock}
-        <strong>${esc(rec.summary)}</strong>
+        <strong>${esc(rec.title)}</strong>
       </span>
       <span style="font-size:0.8em;color:#888;white-space:nowrap">${esc(ago)}</span>
     </div>
@@ -176,7 +176,14 @@ class EventExecution extends PanicElement {
       this._error = err.message || 'Failed to load execution records.';
     }
     this._loading = false;
-    this._renderList();
+    // Full shell re-render (not just _renderList()): connect() renders the
+    // shell — including the "+ Add Record" button and the Incidents filter
+    // tab — before the workspace has assigned canEdit/canManageIncidents
+    // onto this element (they're set as plain properties right after
+    // eventId, which only kicks off this async load). By the time this
+    // await resolves, those properties are set, so this is the first
+    // point at which the shell can be rendered correctly.
+    this.render();
   }
 
   // Full render (shell: heading + filter tabs).  Called once in connect().
@@ -251,7 +258,7 @@ class EventExecution extends PanicElement {
           <select name="record_type" required>${typeOptions}</select>
         </label>
         <label>Summary
-          <input type="text" name="summary" required placeholder="Brief summary…">
+          <input type="text" name="title" required placeholder="Brief summary…">
         </label>
         <label class="wide">Details (optional)
           <textarea name="body" rows="3" placeholder="Additional details…"></textarea>
@@ -310,17 +317,16 @@ class EventExecution extends PanicElement {
     try {
       const body = {
         record_type:   form.record_type.value,
-        summary:       form.summary.value.trim(),
+        title:         form.title.value.trim(),
         body:          form.body?.value.trim() || '',
         amount:        parseFloat(form.amount?.value) || 0,
         is_restricted: form.is_restricted?.checked ? 1 : 0,
       };
-      if (!body.summary) { publish('toast.show', { message: 'Summary is required.', tone: 'error' }); return; }
+      if (!body.title) { publish('toast.show', { message: 'Summary is required.', tone: 'error' }); return; }
       await api(`/events/${this.eventId}/execution`, { method: 'POST', body: JSON.stringify(body) });
       publish('toast.show', { message: 'Record added.' });
       this._showForm = false;
-      await this._load();
-      this.render();
+      await this._load(); // now does a full render(), which picks up _showForm reset above
     } catch (err) {
       publish('toast.show', { message: err.message || 'Save failed.', tone: 'error' });
     } finally {
@@ -423,7 +429,7 @@ class EventExecution extends PanicElement {
     if (!foot) return;
     foot.innerHTML = `<form class="exec-record-edit-form" data-exec-edit-form style="width:100%">
       <label>Summary
-        <input type="text" name="summary" value="${esc(rec.summary)}" required style="width:100%;box-sizing:border-box;">
+        <input type="text" name="title" value="${esc(rec.title)}" required style="width:100%;box-sizing:border-box;">
       </label>
       <label>Details
         <textarea name="body" rows="3" style="width:100%;box-sizing:border-box;">${esc(rec.body || '')}</textarea>
@@ -449,11 +455,11 @@ class EventExecution extends PanicElement {
       if (btn) btn.disabled = true;
       try {
         const body = {
-          summary: editForm.summary.value.trim(),
-          body:    editForm.body?.value.trim() || '',
-          amount:  parseFloat(editForm.amount?.value) || 0,
+          title: editForm.title.value.trim(),
+          body:  editForm.body?.value.trim() || '',
+          amount: parseFloat(editForm.amount?.value) || 0,
         };
-        if (!body.summary) { publish('toast.show', { message: 'Summary is required.', tone: 'error' }); return; }
+        if (!body.title) { publish('toast.show', { message: 'Summary is required.', tone: 'error' }); return; }
         await api(`/events/${this.eventId}/execution/${rec.id}`, { method: 'PATCH', body: JSON.stringify(body) });
         publish('toast.show', { message: 'Record updated.' });
         await this._load();
