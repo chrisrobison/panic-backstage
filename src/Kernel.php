@@ -584,6 +584,14 @@ final class Kernel
             if ($child === 'execution') {
                 return [Events\Execution::class, ['eventId' => $eventId, 'recordId' => $childId]];
             }
+            // Event-scoped undo history: /events/{id}/history[/{hid}/undo]
+            if ($child === 'history') {
+                return [Events\History::class, [
+                    'eventId'   => $eventId,
+                    'historyId' => $childId,
+                    'action'    => $segments[4] ?? null,
+                ]];
+            }
             // AI flyer generation: POST /events/{id}/assets/generate-flyer
             if ($child === 'assets' && ($segments[3] ?? '') === 'generate-flyer') {
                 return [Events\GenerateFlyer::class, ['eventId' => $eventId]];

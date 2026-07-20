@@ -609,6 +609,7 @@ class EventWorkspace extends PanicElement {
         ${isPrivate ? '' : `<a class="button secondary" href="${esc(appUrl(data.links.public_page))}" target="_blank" rel="noreferrer">Public Page</a>`}
         ${isPrivate ? '' : `<button class="secondary" data-qr-toggle title="Show a QR code linking to this event's public page"><i class="fa-solid fa-qrcode" aria-hidden="true"></i> QR Code</button>`}
         ${can(data, 'edit_event') ? `<a class="button secondary" href="#new-event-${esc(String(event.id))}" title="Re-run this event through the guided setup wizard, pre-filled with its current details"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Wizard</a>` : ''}
+        ${can(data, 'edit_event') ? `<pb-event-history-undo></pb-event-history-undo>` : ''}
         ${sectionsDropdown}
         ${can(data, 'read_event') ? `<details class="print-menu">
           <summary class="button secondary">Print &#9662;</summary>
@@ -705,6 +706,8 @@ class EventWorkspace extends PanicElement {
       portalPanel.eventId = event.id;
       $('[data-portal-toggle]', this)?.addEventListener('click', () => portalPanel.toggle());
     }
+    const historyUndoEl = $('pb-event-history-undo', this);
+    if (historyUndoEl) historyUndoEl.eventId = event.id;
     $('[data-qr-toggle]', this)?.addEventListener('click', () => this._openQrModal(data));
     $('[data-pos-set]', this)?.addEventListener('click', () => this.setPosEvent(event.id));
     $$('[data-print]', this).forEach((button) => button.addEventListener('click', () => {
@@ -1279,6 +1282,177 @@ class PortalPanel extends PanicElement {
   }
 }
 
+// ── Event history / multi-level undo ─────────────────────────────────────────
+// Header "Undo" dropdown (same <details class="print-menu"> pattern as the
+// Sections/Print menus above): lists db_history entries scoped to this event
+// (src/Events/History.php — the event's own row plus a curated set of
+// directly related tables) and lets you pick *any* one of them, not just the
+// most recent, to revert — each behind its own confirm dialog. Reuses the
+// same undo_sql mechanism as the venue-admin Database History screen
+// (public/assets/db-history.js), just pre-filtered to one event and gated by
+// edit_event instead of manage_db_history.
+const HISTORY_TABLE_LABELS = {
+  events: 'Event details',
+  event_execution_records: 'Execution record',
+  event_ledger_entries: 'Ledger entry',
+  event_payments: 'Payment',
+  event_tasks: 'Task',
+  event_blockers: 'Open item',
+  event_vendors: 'Vendor',
+  event_lineup: 'Lineup',
+  event_schedule_items: 'Run of show item',
+  event_sessions: 'Session',
+  event_staffing: 'Staffing assignment',
+  event_guest_list: 'Guest list entry',
+  event_invites: 'Invite',
+  event_assets: 'Asset',
+  contracts: 'Contract',
+  ticket_types: 'Ticket type',
+  tickets: 'Ticket',
+  ticket_orders: 'Ticket order',
+  event_settlements: 'Settlement',
+  event_closeout_state: 'Closeout',
+};
+
+const HISTORY_ACTION_TONE = { INSERT: 'dbh-insert', UPDATE: 'dbh-update', DELETE: 'dbh-delete' };
+
+class EventHistoryUndo extends PanicElement {
+  connect() {
+    this._eventId = null;
+    this._entries = null;   // null = not loaded yet
+    this._loading = false;
+    this._undoingId = null;
+    this.render();
+  }
+
+  set eventId(id) {
+    const changed = id !== this._eventId;
+    this._eventId = id;
+    if (changed) { this._entries = null; if (this.abort) this.render(); }
+  }
+
+  // Lets refreshSection()/other shared helpers that expect .eventData work
+  // here too, same as EventPayments above, though this component drives its
+  // own reload via `open` on the <details> rather than a `.data` setter.
+  get eventData() { return { event: { id: this._eventId } }; }
+
+  tableLabel(tableName) {
+    return HISTORY_TABLE_LABELS[tableName]
+      || titleCase(String(tableName).replace(/^event_/, '').replace(/_/g, ' '));
+  }
+
+  fmtTime(ts) {
+    if (!ts) return '';
+    const d = new Date(String(ts).replace(' ', 'T') + 'Z');
+    return isNaN(d) ? ts : d.toLocaleString();
+  }
+
+  clip(v) {
+    const s = v === null || v === undefined || v === '' ? '(empty)' : String(v);
+    return s.length > 24 ? `${s.slice(0, 24)}…` : s;
+  }
+
+  describeEntry(e) {
+    const label = this.tableLabel(e.table_name);
+    if (e.action === 'INSERT') return `${label} added`;
+    if (e.action === 'DELETE') return `${label} removed`;
+    if (!e.changed_fields?.length) return `${label} updated`;
+    const first = e.changed_fields[0];
+    const extra = e.changed_fields.length > 1
+      ? ` (+${e.changed_fields.length - 1} more field${e.changed_fields.length > 2 ? 's' : ''})`
+      : '';
+    return `${label}: ${first.field} → ${this.clip(first.to)}${extra}`;
+  }
+
+  async onToggle(open) {
+    if (open && this._entries === null && !this._loading) {
+      await this.load();
+    }
+  }
+
+  async load() {
+    this._loading = true;
+    this.render();
+    try {
+      const res = await api(`/events/${this._eventId}/history`);
+      this._entries = res.entries || [];
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Could not load event history.', tone: 'error' });
+      this._entries = [];
+    } finally {
+      this._loading = false;
+      this.render();
+    }
+  }
+
+  async undoEntry(entry) {
+    if (this._undoingId) return;
+    const verb = entry.action === 'DELETE' ? 're-add' : entry.action === 'INSERT' ? 'remove' : 'revert';
+    const label = this.tableLabel(entry.table_name).toLowerCase();
+    const ok = confirm(
+      `Undo this change?\n\n${this.describeEntry(entry)}\n\nThis will ${verb} the ${label} immediately. ` +
+      `You can undo this undo afterward if you change your mind.`
+    );
+    if (!ok) return;
+
+    this._undoingId = entry.id;
+    this.render();
+    try {
+      await api(`/events/${this._eventId}/history/${entry.id}/undo`, { method: 'POST' });
+      publish('toast.show', { message: 'Undone.', tone: 'success' });
+      // History can touch any related table (payments, tasks, contracts...),
+      // not just what this component itself tracks, so force a full
+      // workspace remount rather than trying to patch every affected
+      // section in place — same event this element already reacted to.
+      publish('event.saved', { id: this._eventId });
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Undo failed.', tone: 'error' });
+      this._undoingId = null;
+      this.render();
+    }
+  }
+
+  render() {
+    const wasOpen = $('details.history-undo-menu', this)?.open;
+    this.innerHTML = `
+      <details class="print-menu history-undo-menu"${wasOpen ? ' open' : ''}>
+        <summary class="button secondary" title="Pick any past change to this event and revert it">
+          <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Undo &#9662;
+        </summary>
+        <div class="print-menu-items history-undo-items">${this.renderBody()}</div>
+      </details>
+    `;
+    $('details.history-undo-menu', this)?.addEventListener('toggle', (e) => this.onToggle(e.target.open));
+    $$('[data-undo-entry]', this).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const entry = (this._entries || []).find((x) => x.id === Number(btn.dataset.undoEntry));
+        if (entry) this.undoEntry(entry);
+      });
+    });
+  }
+
+  renderBody() {
+    if (this._loading) return `<div class="history-undo-status"><span class="spinner"></span> Loading…</div>`;
+    if (this._entries === null) return `<div class="history-undo-status muted">Open to load recent changes.</div>`;
+    if (!this._entries.length) return `<div class="history-undo-status muted">No changes recorded for this event yet.</div>`;
+
+    return this._entries.map((e) => {
+      const undone = !!e.undone_at;
+      const busy = this._undoingId === e.id;
+      return `
+        <button type="button" class="history-undo-row" data-undo-entry="${e.id}" ${undone || busy ? 'disabled' : ''}>
+          <span class="history-undo-row-top">
+            <span class="badge ${HISTORY_ACTION_TONE[e.action] || 'dbh-gray'}">${esc(e.action)}</span>
+            <span class="history-undo-time muted">${esc(this.fmtTime(e.created_at))}</span>
+          </span>
+          <span class="history-undo-desc">${esc(this.describeEntry(e))}</span>
+          <span class="history-undo-meta muted">${esc((e.actor || 'unattributed').replace(/^user:/, 'user #'))}${undone ? ' · already undone' : ''}${busy ? ' · undoing…' : ''}</span>
+        </button>
+      `;
+    }).join('');
+  }
+}
+
 customElements.define('pb-event-workspace', EventWorkspace);
 customElements.define('pb-event-summary', EventSummary);
 customElements.define('pb-event-readiness', EventReadiness);
@@ -1287,6 +1461,7 @@ customElements.define('pb-event-overview', EventOverview);
 customElements.define('pb-event-details-form', EventDetailsForm);
 customElements.define('pb-event-recurrence', EventRecurrencePanel);
 customElements.define('pb-portal-panel', PortalPanel);
+customElements.define('pb-event-history-undo', EventHistoryUndo);
 
 // ── Event Payments panel ─────────────────────────────────────────────────────
 // Lists event_payments rows, and lets a manage_payments user add/edit/void a

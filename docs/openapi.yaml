@@ -95,6 +95,10 @@ tags:
     description: Vendor tracking for an event, including COI (Certificate of Insurance).
   - name: Event Execution
     description: Live "run of night" execution records for an event.
+  - name: Event History
+    description: >-
+      Event-scoped, edit_event-gated view of the db_history audit trail (see "DB History") for
+      picking any past change to one event and undoing it.
   - name: Event Contracts (Link)
     description: >-
       Lightweight event-scoped view of the contracts linked to an event (the full deal-builder
@@ -14346,6 +14350,116 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Record or event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /events/{eventId}/history:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: eventHistory_list
+      summary: List db_history entries scoped to this event, for a multi-level undo menu
+      description: >-
+        Requires `edit_event` — the same capability that lets you edit the event at all, not the
+        venue-admin-only manage_db_history that the full Database History admin screen
+        (/api/db-history) requires. Scoped, event-owner/collaborator-safe view onto the same
+        audit-trigger log: matches db_history rows where table_name='events' AND pk_value=eventId,
+        OR table_name is one of a curated set of directly related tables (event_execution_records,
+        event_ledger_entries, event_payments, event_tasks, event_blockers, event_vendors,
+        event_lineup, event_schedule_items, event_sessions, event_staffing, event_guest_list,
+        event_invites, event_assets, contracts, ticket_types, tickets, ticket_orders,
+        event_settlements, event_closeout_state) AND its old_row/new_row JSON has this event_id.
+        Internal sync/plumbing tables (event_sheet_shadow, event_payment_audit,
+        accounting_sync_log, etc.) are deliberately excluded. Newest first, capped at 150 entries.
+      tags:
+        - Event History
+      responses:
+        '200':
+          description: History entries touching this event
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DbHistoryEntrySummary'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing edit_event capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /events/{eventId}/history/{historyId}/undo:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: historyId
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      operationId: eventHistory_undo
+      summary: Undo one history entry belonging to this event
+      description: >-
+        Requires `edit_event`. Before undoing, confirms the given historyId actually matches this
+        event's scope (same filter as the list above) — otherwise 404, so an edit_event holder on
+        one event can never use this to undo a row belonging to another event or an unrelated
+        table. Delegates the actual undo (run undo_sql in a transaction, mark undone_at, link the
+        resulting redo entry) to the same shared logic as /api/db-history/{id}/undo, and additionally
+        writes an event_activity_log entry ("history entry undone"). Returns 409 if this entry was
+        already undone. Entries can be undone in any order, not just the most recent.
+      tags:
+        - Event History
+      responses:
+        '200':
+          description: Undo executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DbHistoryUndoResult'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing edit_event capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Event not found, or history entry not found for this event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: This entry has already been undone
           content:
             application/json:
               schema:

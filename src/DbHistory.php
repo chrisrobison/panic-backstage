@@ -138,38 +138,13 @@ final class DbHistory extends BaseEndpoint
     /** List-view row: id/meta + a short changed-fields summary, no full JSON blobs. */
     private function summarize(array $row): array
     {
-        $old = $row['old_row'] !== null ? json_decode((string) $row['old_row'], true) : null;
-        $new = $row['new_row'] !== null ? json_decode((string) $row['new_row'], true) : null;
-
-        return [
-            'id'              => (int) $row['id'],
-            'table_name'      => $row['table_name'],
-            'pk_column'       => $row['pk_column'],
-            'pk_value'        => $row['pk_value'],
-            'action'          => $row['action'],
-            'actor'           => $row['actor'],
-            'created_at'      => $row['created_at'],
-            'undone_at'       => $row['undone_at'],
-            'undone_by_actor' => $row['undone_by_actor'],
-            'undo_of_id'      => $row['undo_of_id'] !== null ? (int) $row['undo_of_id'] : null,
-            'changed_fields'  => $this->diffSummary($row['action'], $old, $new),
-        ];
+        return DbHistorySupport::summarize($row);
     }
 
     /** @return array<int,array{field:string,from:mixed,to:mixed}> */
     private function diffSummary(string $action, ?array $old, ?array $new): array
     {
-        if ($action !== 'UPDATE' || $old === null || $new === null) {
-            return [];
-        }
-        $changes = [];
-        foreach ($new as $field => $value) {
-            $before = $old[$field] ?? null;
-            if ($before !== $value) {
-                $changes[] = ['field' => $field, 'from' => $before, 'to' => $value];
-            }
-        }
-        return $changes;
+        return DbHistorySupport::diffSummary($action, $old, $new);
     }
 
     // ─── Detail ──────────────────────────────────────────────────────────────────
@@ -212,55 +187,22 @@ final class DbHistory extends BaseEndpoint
 
     private function undo(int $id): Response
     {
-        $row = $this->db->one('SELECT * FROM db_history WHERE id = ?', [$id]);
-        if (!$row) {
-            return $this->notFound('History entry not found');
-        }
-        if ($row['undone_at'] !== null) {
-            return Response::json(['error' => 'This entry has already been undone.'], 409);
-        }
-
         $actor = 'user:' . $this->userId();
-        $pdo   = $this->db->pdo();
 
-        $pdo->beginTransaction();
         try {
-            // The undo_sql was built server-side by the trigger from QUOTE()'d
-            // historical values — not user input — so executing it directly is
-            // safe; it can't be parameterized since it's a full statement, not
-            // a single value.
-            $pdo->exec((string) $row['undo_sql']);
-
-            // That exec just fired the same AFTER trigger on the target table,
-            // which inserted its own new db_history row for the reverse write.
-            // Find it (same table+pk, newest, not itself already the target of
-            // this bookkeeping) and link it back to the entry we just undid.
-            $resultRow = $this->db->one(
-                'SELECT id FROM db_history
-                  WHERE table_name = ? AND pk_value = ? AND id > ?
-                  ORDER BY id DESC LIMIT 1',
-                [$row['table_name'], $row['pk_value'], $id]
-            );
-
-            if ($resultRow) {
-                $this->db->run('UPDATE db_history SET undo_of_id = ? WHERE id = ?', [$id, $resultRow['id']]);
-            }
-
-            $this->db->run(
-                'UPDATE db_history SET undone_at = NOW(6), undone_by_actor = ? WHERE id = ?',
-                [$actor, $id]
-            );
-
-            $pdo->commit();
+            $result = DbHistorySupport::undo($this->db, $id, $actor);
+        } catch (DbHistoryUndoPrecondition $e) {
+            return $e->getCode() === 404
+                ? $this->notFound($e->getMessage())
+                : Response::json(['error' => $e->getMessage()], 409);
         } catch (\Throwable $e) {
-            $pdo->rollBack();
             return Response::json(['error' => 'Undo failed: ' . $e->getMessage()], 500);
         }
 
         return $this->ok([
-            'ok'             => true,
-            'undone_id'      => $id,
-            'result_entry_id' => $resultRow['id'] ?? null,
+            'ok'              => true,
+            'undone_id'       => $id,
+            'result_entry_id' => $result['result_entry_id'],
         ]);
     }
 }
