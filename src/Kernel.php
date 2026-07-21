@@ -388,6 +388,39 @@ final class Kernel
             return [SystemsInventory::class, ['itemId' => $this->intOrNull($segments[1] ?? null)]];
         }
 
+        // Automation > Processes — the process-graph designer/engine.
+        //   GET/POST   /api/processes[/{id}]
+        //   PATCH/DELETE /api/processes/{id}
+        //   GET        /api/processes/{id}/versions/{v}
+        //   POST       /api/processes/{id}/versions                (new draft)
+        //   PATCH      /api/processes/{id}/versions/{v}             (save draft)
+        //   POST       /api/processes/{id}/versions/{v}/validate
+        //   POST       /api/processes/{id}/versions/{v}/publish
+        //   GET        /api/processes/{id}/instances[/{instanceId}]
+        //   GET        /api/processes/{id}/audit
+        if ($segments[0] === 'processes') {
+            $processId = $this->intOrNull($segments[1] ?? null);
+            $sub = $segments[2] ?? null;
+            if ($sub === 'versions') {
+                $versionSeg = $segments[3] ?? null;
+                return [Processes\Versions::class, [
+                    'processId' => $processId,
+                    'versionId' => $this->intOrNull($versionSeg),
+                    'action' => $segments[4] ?? null,
+                ]];
+            }
+            if ($sub === 'instances') {
+                return [Processes\Instances::class, [
+                    'processId' => $processId,
+                    'instanceId' => $this->intOrNull($segments[3] ?? null),
+                ]];
+            }
+            if ($sub === 'audit') {
+                return [Processes\Audit::class, ['processId' => $processId]];
+            }
+            return [Processes::class, ['processId' => $processId]];
+        }
+
         // Nav items — app shell main navigation structure (Admin > Navigation manager).
         //   GET    /api/nav-items            list (any authenticated user — the shell needs it)
         //   POST   /api/nav-items            create (manage_navigation)

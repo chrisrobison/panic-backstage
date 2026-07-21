@@ -1,0 +1,122 @@
+// <pb-process-live-cases> — the collapsible "Live Instances" drawer shown
+// under the canvas on the Live Cases tab. Lists process_instances rows
+// (search/filter by status, node, owner) and expands a selected case inline
+// into its timeline + variables — the operational read-model described in
+// the brief. Phase 1 ships this over seeded demonstration rows
+// (instance.is_demo) rather than a live runtime; the "Demo data" pill below
+// says so plainly rather than pretending these are real in-flight cases.
+import { $, $$, esc } from '../core.js';
+
+export class ProcessLiveCasesElement extends HTMLElement {
+  connectedCallback() {
+    this.open = true;
+    this.filters = { status: '', q: '' };
+    this.expandedId = null;
+    this.render();
+  }
+
+  /** { instances, nodeCounts, hasDemoData } */
+  set data(value) { this._data = value || { instances: [] }; this.render(); }
+
+  /** async (instanceId) => detail payload, provided by the designer so this
+   *  component doesn't need to know the API shape. */
+  set loadDetail(fn) { this._loadDetail = fn; }
+
+  render() {
+    const d = this._data || { instances: [] };
+    const filtered = this.applyFilters(d.instances || []);
+    const demoNote = d.instances?.some((i) => i.is_demo)
+      ? `<span class="pill pill-muted" title="These cases are seeded demonstration data — the execution runtime lands in Phase 2.">Demo data</span>`
+      : '';
+
+    this.innerHTML = `
+      <div class="proc-drawer-head">
+        <button type="button" class="proc-drawer-toggle" data-toggle-drawer aria-expanded="${this.open}">
+          <i class="fa-solid fa-chevron-${this.open ? 'down' : 'up'}" aria-hidden="true"></i>
+          Live Instances <span class="pill">${filtered.length}</span> ${demoNote}
+        </button>
+        <div class="proc-drawer-filters"${this.open ? '' : ' hidden'}>
+          <input type="search" placeholder="Search cases…" value="${esc(this.filters.q)}" data-filter="q" aria-label="Search cases">
+          <select data-filter="status" aria-label="Filter by status">
+            <option value="">All statuses</option>
+            ${['active', 'waiting', 'overdue', 'failed', 'completed', 'canceled'].map((s) => `<option value="${s}" ${this.filters.status === s ? 'selected' : ''}>${s[0].toUpperCase()}${s.slice(1)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="proc-drawer-body"${this.open ? '' : ' hidden'}>
+        ${filtered.length ? `<div class="table-scroll"><table class="data-table">
+          <thead><tr><th>Case</th><th>Current Step</th><th>Owner</th><th>Elapsed</th><th>Status</th><th></th></tr></thead>
+          <tbody>${filtered.map((i) => this.renderRow(i)).join('')}</tbody>
+        </table></div>` : '<div class="empty-state padded">No cases match these filters.</div>'}
+      </div>`;
+
+    $('[data-toggle-drawer]', this)?.addEventListener('click', () => { this.open = !this.open; this.render(); });
+    $$('[data-filter]', this).forEach((el) => el.addEventListener('input', () => {
+      this.filters[el.dataset.filter] = el.value;
+      this.render();
+    }));
+    $$('[data-row-id]', this).forEach((row) => row.addEventListener('click', (e) => {
+      if (e.target.closest('[data-badge-jump]')) return;
+      const id = Number(row.dataset.rowId);
+      this.expandedId = this.expandedId === id ? null : id;
+      this.render();
+      if (this.expandedId) this.loadAndShowDetail(id);
+      this.dispatchEvent(new CustomEvent('select-instance', { bubbles: true, detail: { instanceId: this.expandedId } }));
+    }));
+  }
+
+  renderRow(instance) {
+    const expanded = this.expandedId === instance.id;
+    const elapsed = this.elapsedLabel(instance.started_at);
+    const statusClass = { active: 'confirmed', waiting: 'needs_assets', overdue: 'canceled', failed: 'canceled', completed: 'advanced', canceled: 'empty' }[instance.status] || 'empty';
+    return `<tr class="clickable-row" data-row-id="${instance.id}">
+        <td data-label="Case"><strong>${esc(instance.name)}</strong>${instance.is_demo ? ' <span class="pill pill-muted small">demo</span>' : ''}</td>
+        <td data-label="Current Step">${esc(instance.current_node_id || '—')}</td>
+        <td data-label="Owner">${esc(instance.owner_name || 'Unassigned')}</td>
+        <td data-label="Elapsed">${esc(elapsed)}</td>
+        <td data-label="Status"><span class="badge status-${statusClass}">${esc(instance.status)}</span></td>
+        <td><i class="fa-solid fa-chevron-${expanded ? 'up' : 'down'}" aria-hidden="true"></i></td>
+      </tr>
+      ${expanded ? `<tr class="proc-instance-detail-row"><td colspan="6"><div class="proc-instance-detail padded" data-detail-for="${instance.id}">Loading…</div></td></tr>` : ''}`;
+  }
+
+  elapsedLabel(startedAt) {
+    if (!startedAt) return '—';
+    const ms = Date.now() - new Date(startedAt.replace(' ', 'T') + 'Z').getTime();
+    const hours = Math.floor(ms / 36e5);
+    if (hours < 1) return `${Math.max(1, Math.floor(ms / 60000))}m`;
+    if (hours < 48) return `${hours}h`;
+    return `${Math.floor(hours / 24)}d`;
+  }
+
+  applyFilters(instances) {
+    return instances.filter((i) => {
+      if (this.filters.status && i.status !== this.filters.status) return false;
+      if (this.filters.q && !i.name.toLowerCase().includes(this.filters.q.toLowerCase())) return false;
+      return true;
+    });
+  }
+
+  async loadAndShowDetail(id) {
+    const container = $(`[data-detail-for="${id}"]`, this);
+    if (!container || !this._loadDetail) return;
+    try {
+      const detail = await this._loadDetail(id);
+      if (!$(`[data-detail-for="${id}"]`, this)) return; // row collapsed while loading
+      container.innerHTML = this.renderDetail(detail);
+    } catch (err) {
+      container.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+    }
+  }
+
+  renderDetail(detail) {
+    const vars = detail.instance?.variables || {};
+    const varRows = Object.entries(vars).map(([k, v]) => `<div><strong>${esc(k)}</strong>: ${esc(String(v))}</div>`).join('') || '<span class="muted">No variables recorded.</span>';
+    const timeline = (detail.events || []).map((e) => `<li><span class="timeline-dot"></span><div><strong>${esc(e.label)}</strong> <span class="muted small">${esc(e.created_at)}</span>${e.detail ? `<div class="muted small">${esc(e.detail)}</div>` : ''}</div></li>`).join('') || '<li class="muted">No timeline events recorded yet.</li>';
+    return `<div class="proc-instance-detail-grid">
+      <div><h3>Timeline</h3><ul class="proc-timeline">${timeline}</ul></div>
+      <div><h3>Variables</h3><div class="proc-var-list">${varRows}</div></div>
+    </div>`;
+  }
+}
+customElements.define('pb-process-live-cases', ProcessLiveCasesElement);

@@ -80,3 +80,35 @@ function log_contact_activity(Database $db, int $contactId, ?int $userId, string
         [$contactId, $userId, $type, $message, $details ? json_encode($details) : null]
     );
 }
+
+/**
+ * Audit trail for the process-graph designer (see database/migrations/
+ * 066_add_process_automation.sql). Every draft save, publish, and manual
+ * instance intervention writes one row here — it's what backs the History
+ * tab's "Graph changes, executions, failures, and audit events" list.
+ * $before/$after are typically a version's graph_json (decoded) or a small
+ * before/after state diff for instance operations; either may be omitted.
+ */
+function log_process_audit(
+    Database $db,
+    int $definitionId,
+    ?int $versionId,
+    ?int $userId,
+    string $action,
+    array $before = [],
+    array $after = [],
+    ?string $note = null
+): void {
+    $db->run(
+        'INSERT INTO process_audit_log (process_definition_id, process_version_id, actor_user_id, action, before_json, after_json, note) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [
+            $definitionId,
+            $versionId,
+            $userId,
+            $action,
+            $before ? json_encode($before, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null,
+            $after ? json_encode($after, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null,
+            $note,
+        ]
+    );
+}

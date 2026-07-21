@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `automation` — Add process-graph designer and Event Booking sample process
 - **Documentation** — Cover contract upload option and calendar infinite scroll
 - **Added** `calendar` — Continuous scroll across months in Grid view
 - **Added** `contracts` — Upload a signed contract file directly from Create Contract

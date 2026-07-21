@@ -27,7 +27,7 @@ set -u
 cd "$(dirname "$0")/.."
 
 TESTS_DIR="./tests"
-DB_TESTS=("rate_limiter_test.php")
+DB_TESTS=("rate_limiter_test.php" "process_versions_test.php")
 MANUAL_TESTS=("contract_signing_test.php")
 
 shopt -s nullglob

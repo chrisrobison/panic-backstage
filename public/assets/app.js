@@ -27,6 +27,9 @@ import './reports.js';
 import './event-report.js';
 import './nav-manager.js';
 import { buildNavTree, filterNavTree, renderNavHtml } from './nav-shared.js';
+import './processes/process-list.js';
+import './processes/process-designer.js';
+import './processes/automation-placeholder.js';
 
 
 class AppShell extends PanicElement {
@@ -313,6 +316,7 @@ class AppShell extends PanicElement {
     if (route.startsWith('help')) return this.helpNavKey(route);
     if (route === 'outbox') return 'outbox';
     if (route === 'new-event') return 'events';
+    if (route.startsWith('automation-process-')) return 'automation-processes';
     return route;
   }
 
@@ -385,6 +389,13 @@ class AppShell extends PanicElement {
     if (route === 'lists') return this.mount(outlet, 'pb-msg-lists');
     if (route === 'listmaster') return this.mount(outlet, 'pb-listmaster');
     if (route === 'new-event') return this.mount(outlet, 'pb-event-wizard');
+    if (route === 'automation-processes') return this.mount(outlet, 'pb-processes-list');
+    const processMatch = route.match(/^automation-process-(\d+)$/);
+    if (processMatch) return this.mount(outlet, 'pb-process-designer', { processId: Number(processMatch[1]) });
+    if (route === 'automation-cases') return this.mount(outlet, 'pb-automation-placeholder', { page: 'cases' });
+    if (route === 'automation-tasks') return this.mount(outlet, 'pb-automation-placeholder', { page: 'tasks' });
+    if (route === 'automation-activity') return this.mount(outlet, 'pb-automation-placeholder', { page: 'activity' });
+    if (route === 'automation-connections') return this.mount(outlet, 'pb-automation-placeholder', { page: 'connections' });
     return this.mount(outlet, 'pb-dashboard');
   }
 

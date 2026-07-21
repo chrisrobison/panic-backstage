@@ -86,15 +86,17 @@ abstract class BaseEndpoint implements Endpoint
             'view_reports',
             'manage_navigation',
             'manage_settings',
+            'manage_processes',
+            'view_processes',
         ],
         'event_owner' => ['view_leads'],
         'promoter' => [],
         'band' => [],
         'artist' => [],
         'designer' => [],
-        'staff' => ['view_leads'],
+        'staff' => ['view_leads', 'view_processes'],
         'viewer' => [],
-        'global_viewer' => ['view_all_events', 'view_leads', 'view_reports'],
+        'global_viewer' => ['view_all_events', 'view_leads', 'view_reports', 'view_processes'],
     ];
 
     private array $eventAccessCache = [];

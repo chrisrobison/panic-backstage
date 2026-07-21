@@ -6840,3 +6840,243 @@ pb-listmaster { --lm-accent: var(--blue); background: var(--bg); }
 @media (max-width: 1100px) {
   .nav-manager-list, .nav-manager-edit, .nav-manager-preview { flex-basis: 100%; max-width: none; max-height: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Automation > Processes — the process-graph designer/engine.
+   All selectors scoped to .proc-* / pb-process-* / pb-processes-*.
+   ══════════════════════════════════════════════════════════════════════════════ */
+:root {
+  --proc-trigger: #0f8f46;
+  --proc-operation: #1268c7;
+  --proc-decision: #d99100;
+  --proc-human: #d9711a;
+  --proc-wait: #b8960b;
+  --proc-ai: #0f9488;
+  --proc-failure: #ef4338;
+  --proc-end: #0f8f46;
+  --proc-disabled: #a8aeb8;
+}
+
+pb-processes-list, pb-process-designer { display: block; }
+
+/* ── Processes list ───────────────────────────────────────────────────────── */
+pb-processes-list .status-dot.red { display: inline-block; margin-right: 6px; }
+
+/* ── Designer shell ───────────────────────────────────────────────────────── */
+.proc-designer { display: flex; flex-direction: column; gap: 14px; height: calc(100vh - 190px); min-height: 560px; }
+.proc-designer-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr) 320px; gap: 14px; }
+.proc-designer-palette, .proc-designer-inspector {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow);
+  min-height: 0; overflow-y: auto; display: flex; flex-direction: column;
+}
+.proc-designer-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.proc-designer-live { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; }
+.proc-designer-live .proc-designer-main { flex: 1 1 auto; min-height: 320px; }
+.proc-designer-history { flex: 1; min-height: 0; overflow-y: auto; }
+/* [hidden] must win over the unconditional `display` rules above — an
+   author rule that sets `display` on an element unconditionally otherwise
+   beats the UA stylesheet's `[hidden] { display: none }` even though this
+   looks like it "should" just work. Same gotcha, same fix pattern as any
+   other panel that toggles visibility via the hidden attribute. */
+.proc-designer-body[hidden], .proc-designer-live[hidden], .proc-designer-history[hidden] { display: none; }
+
+/* ── Toolbar ──────────────────────────────────────────────────────────────── */
+.proc-toolbar-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.proc-toolbar-title { display: flex; align-items: center; gap: 12px; }
+.proc-toolbar-back { font-size: 18px; color: var(--muted); }
+.proc-toolbar-back:hover { color: var(--ink); }
+.proc-toolbar-name { font-size: 20px; margin: 0; line-height: 1.15; }
+.proc-toolbar-sub { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+.proc-toolbar-tabs { gap: 4px; background: var(--soft); border-radius: 8px; padding: 4px; }
+.proc-toolbar-tabs button { background: none; border: none; color: var(--muted); font-weight: 750; padding: 7px 14px; border-radius: 6px; cursor: pointer; }
+.proc-toolbar-tabs button.active { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px rgba(20,25,32,.12); }
+.proc-toolbar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; position: relative; }
+.proc-validation-pill { display: inline-flex; gap: 8px; }
+.proc-count.error { color: var(--danger); font-weight: 800; }
+.proc-count.warning { color: #a06400; font-weight: 800; }
+.proc-toolbar-menu { position: relative; }
+.proc-toolbar-menu-list {
+  position: absolute; top: calc(100% + 4px); right: 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: var(--shadow); display: flex; flex-direction: column; min-width: 220px; z-index: 20; overflow: hidden;
+}
+.proc-toolbar-menu-list[hidden] { display: none; } /* see the [hidden]-vs-unconditional-display note above */
+.proc-toolbar-menu-list button { background: none; color: var(--ink); border: none; border-radius: 0; text-align: left; padding: 10px 14px; font-weight: 600; }
+.proc-toolbar-menu-list button:hover { background: var(--bg); }
+.proc-toolbar-canvas-controls { justify-content: space-between; }
+.proc-zoom-readout { font-size: 12px; color: var(--muted); font-weight: 700; min-width: 38px; text-align: center; }
+
+/* ── Palette ──────────────────────────────────────────────────────────────── */
+.proc-palette-search { position: relative; padding: 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+.proc-palette-search i { color: var(--muted); }
+.proc-palette-search input { border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font-size: 13px; }
+.proc-palette-groups { overflow-y: auto; flex: 1; padding: 6px 10px 14px; }
+.proc-palette-group summary { cursor: pointer; font-weight: 760; font-size: 12.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); padding: 10px 4px 6px; }
+.proc-palette-items { display: flex; flex-direction: column; gap: 4px; }
+.proc-palette-item {
+  display: flex; align-items: center; gap: 9px; text-align: left; background: var(--panel); color: var(--ink);
+  border: 1px solid var(--line); border-left: 4px solid var(--proc-disabled); border-radius: 6px; padding: 8px 10px; font-size: 13px; font-weight: 650; cursor: grab;
+}
+.proc-palette-item:hover { background: var(--bg); }
+.proc-palette-item[data-tone="trigger"] { border-left-color: var(--proc-trigger); }
+.proc-palette-item[data-tone="operation"] { border-left-color: var(--proc-operation); }
+.proc-palette-item[data-tone="decision"] { border-left-color: var(--proc-decision); }
+.proc-palette-item[data-tone="human"] { border-left-color: var(--proc-human); }
+.proc-palette-item[data-tone="wait"] { border-left-color: var(--proc-wait); }
+.proc-palette-item[data-tone="ai"] { border-left-color: var(--proc-ai); }
+.proc-palette-item i { width: 16px; text-align: center; color: var(--muted); }
+
+/* ── Canvas ───────────────────────────────────────────────────────────────── */
+pb-process-canvas {
+  display: block; position: relative; flex: 1; min-height: 320px; overflow: hidden; touch-action: none;
+  background-color: var(--bg);
+  background-image: radial-gradient(circle, #cfd5dd 1px, transparent 1px);
+  background-size: 22px 22px;
+  border: 1px solid var(--line); border-radius: 8px;
+  outline: none;
+}
+.proc-canvas-world { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
+.proc-canvas-edges { position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: visible; }
+.proc-canvas-nodes { position: absolute; top: 0; left: 0; }
+.proc-canvas-hint { position: absolute; left: 12px; bottom: 8px; margin: 0; max-width: 60%; pointer-events: none; }
+.proc-canvas-rubberband { position: absolute; border: 1px dashed var(--accent, #2563eb); background: color-mix(in srgb, var(--accent, #2563eb) 8%, transparent); pointer-events: none; }
+
+pb-process-node {
+  position: absolute; width: 190px; box-sizing: border-box; background: var(--panel); border: 1px solid var(--line);
+  border-left: 5px solid var(--proc-disabled); border-radius: 10px; box-shadow: var(--shadow); cursor: grab; user-select: none;
+}
+pb-process-node:focus-visible, pb-process-node.selected { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
+pb-process-node.has-error { border-color: var(--danger); }
+pb-process-node.has-warning { border-color: #d99100; }
+pb-process-node.disabled { opacity: .3; }
+pb-process-node.is-current { outline: 3px solid var(--blue); outline-offset: 2px; }
+pb-process-node.is-visited .proc-node-body { background: color-mix(in srgb, var(--green) 6%, transparent); }
+pb-process-node[data-tone="trigger"] { border-left-color: var(--proc-trigger); }
+pb-process-node[data-tone="operation"] { border-left-color: var(--proc-operation); }
+pb-process-node[data-tone="decision"] { border-left-color: var(--proc-decision); }
+pb-process-node[data-tone="human"] { border-left-color: var(--proc-human); }
+pb-process-node[data-tone="wait"] { border-left-color: var(--proc-wait); }
+pb-process-node[data-tone="ai"] { border-left-color: var(--proc-ai); }
+pb-process-node[data-tone="failure"] { border-left-color: var(--proc-failure); }
+pb-process-node[data-tone="end"] { border-left-color: var(--proc-end); }
+.proc-node-body { padding: 9px 12px; border-radius: 0 9px 9px 0; }
+.proc-node-head { display: flex; align-items: center; gap: 7px; color: var(--muted); }
+.proc-node-head i { font-size: 12px; }
+.proc-node-type { font-size: 11px; font-weight: 760; text-transform: uppercase; letter-spacing: .03em; }
+.proc-node-name { font-size: 14px; font-weight: 750; margin-top: 3px; line-height: 1.25; }
+.proc-node-marker { margin-left: auto; }
+.proc-node-marker.error { color: var(--danger); }
+.proc-node-marker.warning { color: #d99100; }
+.proc-node-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.proc-badge {
+  font-size: 10.5px; font-weight: 800; border-radius: 999px; padding: 2px 7px; border: none; cursor: pointer;
+  background: var(--soft); color: var(--muted);
+}
+.proc-badge-active { background: #d3f1df; color: #0c7a3c; }
+.proc-badge-waiting { background: #ffedc2; color: #a06400; }
+.proc-badge-overdue { background: #fde2e1; color: #b42318; }
+.proc-badge-failed { background: #fde2e1; color: #b42318; }
+
+.proc-port {
+  position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; padding: 0; cursor: crosshair;
+  background: var(--panel); border: 2px solid var(--muted); transform: translateY(-50%); z-index: 2;
+}
+.proc-port:hover { border-color: var(--accent, #2563eb); background: var(--accent, #2563eb); }
+.proc-port-in { left: -7px; }
+.proc-port-out { right: -7px; }
+.proc-port-label {
+  position: absolute; right: -8px; transform: translate(100%, -50%); white-space: nowrap; font-size: 10.5px;
+  color: var(--muted); background: var(--panel); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line);
+}
+.proc-port-label em { font-style: normal; color: var(--proc-decision); }
+
+.proc-edge { fill: none; stroke: #9aa2ad; stroke-width: 2; }
+.proc-edge.is-default { stroke-width: 2.5; }
+.proc-edge.selected { stroke: var(--accent, #2563eb); }
+.proc-edge-conditional { stroke-dasharray: 6 4; }
+.proc-edge-error { stroke: var(--danger); }
+.proc-edge-timeout { stroke: var(--proc-wait); stroke-dasharray: 3 4; }
+.proc-edge-escalation { stroke: #7c3aed; }
+.proc-edge-data { stroke: var(--proc-ai); stroke-dasharray: 1 5; stroke-linecap: round; }
+.proc-temp-edge { stroke: var(--accent, #2563eb); stroke-dasharray: 5 4; }
+.proc-arrow { fill: #9aa2ad; }
+.proc-arrow-error { fill: var(--danger); }
+.proc-arrow-timeout { fill: var(--proc-wait); }
+.proc-arrow-escalation { fill: #7c3aed; }
+.proc-arrow-data { fill: var(--proc-ai); }
+.proc-edge-label-wrap { overflow: visible; }
+.proc-edge-label {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 5px; font-size: 10.5px; color: var(--muted);
+  text-align: center; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 100%;
+}
+
+.proc-canvas-minimap {
+  position: absolute; right: 10px; bottom: 10px; width: 180px; height: 116px; background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); overflow: hidden;
+}
+.proc-canvas-minimap svg { width: 100%; height: 100%; display: block; }
+.proc-minimap-node { fill: #9aa2ad; }
+.proc-minimap-node[data-tone="trigger"] { fill: var(--proc-trigger); }
+.proc-minimap-node[data-tone="operation"] { fill: var(--proc-operation); }
+.proc-minimap-node[data-tone="decision"] { fill: var(--proc-decision); }
+.proc-minimap-node[data-tone="human"] { fill: var(--proc-human); }
+.proc-minimap-viewport { position: absolute; border: 2px solid var(--accent, #2563eb); pointer-events: none; }
+
+/* ── Inspector ────────────────────────────────────────────────────────────── */
+.proc-inspector-empty { text-align: center; color: var(--muted); margin: auto; }
+.proc-inspector-empty i { font-size: 26px; margin-bottom: 8px; display: block; }
+.proc-inspector-body { overflow-y: auto; flex: 1; }
+.proc-inspector-group { border-bottom: 1px solid var(--line); }
+.proc-inspector-group summary { cursor: pointer; font-weight: 780; padding: 12px 14px; }
+.proc-inspector-group[open] summary { border-bottom: 1px solid var(--line); }
+.proc-branch-row { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 6px; align-items: center; margin-bottom: 8px; }
+.proc-branch-row input[type="text"] { font-size: 12.5px; padding: 7px 8px; }
+.proc-connection-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+.proc-connection-row:last-child { border-bottom: none; }
+.proc-connection-list { margin-bottom: 10px; }
+
+/* ── Live Cases drawer ────────────────────────────────────────────────────── */
+pb-process-live-cases { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); flex-shrink: 0; max-height: 46%; display: flex; flex-direction: column; }
+.proc-drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 16px; flex-wrap: wrap; }
+.proc-drawer-toggle { background: none; border: none; font-weight: 780; font-size: 15px; display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--ink); padding: 0; }
+.proc-drawer-filters { display: flex; gap: 8px; }
+.proc-drawer-filters input, .proc-drawer-filters select { width: auto; font-size: 13px; padding: 6px 9px; }
+.proc-drawer-body { overflow-y: auto; border-top: 1px solid var(--line); }
+.proc-instance-detail-row td { background: var(--bg); }
+.proc-instance-detail-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 22px; }
+.proc-var-list { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+
+/* ── Shared timeline (validation modal / simulation log / live-case detail) ── */
+.proc-timeline { list-style: none; margin: 0; padding: 0; }
+.proc-timeline li { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 13.5px; }
+.proc-timeline li:last-child { border-bottom: none; }
+.proc-timeline .timeline-dot { flex-shrink: 0; margin-top: 6px; }
+
+/* ── History tab ──────────────────────────────────────────────────────────── */
+.proc-history-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
+.proc-history-preview pb-process-canvas { height: 420px; }
+
+/* ── Validation modal / findings ──────────────────────────────────────────── */
+.proc-finding-list { list-style: none; margin: 0 0 14px; padding: 0; }
+.proc-finding { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 13.5px; }
+.proc-finding-error i { color: var(--danger); }
+.proc-finding-warning i { color: #d99100; }
+.proc-sim-status { display: flex; align-items: center; gap: 8px; font-weight: 750; }
+.proc-sim-status.success { color: var(--green); }
+.proc-sim-status.error { color: var(--danger); }
+
+/* ── Simulation modal ─────────────────────────────────────────────────────── */
+.proc-sim-log { margin-top: 16px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; max-height: 260px; overflow-y: auto; }
+.proc-sim-log ol { margin: 0; padding-left: 18px; }
+.proc-sim-log li { margin-bottom: 5px; font-size: 13px; }
+.proc-sim-log li.error { color: var(--danger); }
+.proc-sim-log li.warn { color: #a06400; }
+.proc-sim-log li.success { color: var(--green); font-weight: 700; }
+
+/* ── Responsive: collapse palette/inspector to drawers on tablet widths ───── */
+@media (max-width: 1100px) {
+  .proc-designer { height: auto; }
+  .proc-designer-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(360px, 55vh) auto; }
+  .proc-designer-palette, .proc-designer-inspector { max-height: 260px; }
+  .proc-history-grid { grid-template-columns: 1fr; }
+  .proc-instance-detail-grid { grid-template-columns: 1fr; }
+}
