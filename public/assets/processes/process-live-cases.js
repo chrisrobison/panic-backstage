@@ -10,6 +10,15 @@
 // pretending they're real in-flight cases.
 import { $, $$, esc } from '../core.js';
 
+// Escape first (so nothing in the raw text can inject markup), then turn any
+// http(s) URL into a real link — this is how a Phase 3 real-handler detail
+// like "Draft ready — https://mail.google.com/...&body=..." becomes an
+// actual clickable "Open in Gmail" link in the timeline, without needing a
+// structured field just for that one case.
+function linkify(text) {
+  return esc(text).replace(/(https?:\/\/[^\s<]+)/g, (url) => `<a href="${url}" target="_blank" rel="noopener">${url.includes('mail.google.com') ? 'Open in Gmail' : 'Open link'}</a>`);
+}
+
 export class ProcessLiveCasesElement extends HTMLElement {
   connectedCallback() {
     this.open = true;
@@ -123,7 +132,7 @@ export class ProcessLiveCasesElement extends HTMLElement {
   renderDetail(detail) {
     const vars = detail.instance?.variables || {};
     const varRows = Object.entries(vars).map(([k, v]) => `<div><strong>${esc(k)}</strong>: ${esc(String(v))}</div>`).join('') || '<span class="muted">No variables recorded.</span>';
-    const timeline = (detail.events || []).map((e) => `<li><span class="timeline-dot"></span><div><strong>${esc(e.label)}</strong> <span class="muted small">${esc(e.created_at)}</span>${e.detail ? `<div class="muted small">${esc(e.detail)}</div>` : ''}</div></li>`).join('') || '<li class="muted">No timeline events recorded yet.</li>';
+    const timeline = (detail.events || []).map((e) => `<li><span class="timeline-dot"></span><div><strong>${esc(e.label)}</strong> <span class="muted small">${esc(e.created_at)}</span>${e.detail ? `<div class="muted small">${linkify(e.detail)}</div>` : ''}</div></li>`).join('') || '<li class="muted">No timeline events recorded yet.</li>';
 
     const status = detail.instance?.status;
     const openTasks = (detail.tasks || []).filter((t) => t.status === 'open');

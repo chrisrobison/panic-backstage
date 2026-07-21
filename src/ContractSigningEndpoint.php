@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use Panic\Processes\CenterStage\ProcessBridge;
+
 /**
  * Public signing endpoint — no JWT auth required.
  *
@@ -497,6 +499,15 @@ final class ContractSigningEndpoint extends BaseEndpoint
                 [$eventId]
             );
             log_activity($this->db, $eventId, null, 'contract_signed', ['contract_id' => $contractId]);
+
+            // Resume any Automation process instance waiting on this
+            // event's signature (Await Signature). Never let a bug here
+            // block the real contract-signing flow a customer is waiting on.
+            try {
+                ProcessBridge::onContractSigned($this->db, $eventId, $contractId);
+            } catch (\Throwable $e) {
+                error_log("ProcessBridge::onContractSigned failed for contract {$contractId}: " . $e->getMessage());
+            }
         }
 
         // Notify admins + all signers of fully executed contract.

@@ -28,16 +28,21 @@ use function Panic\log_process_audit;
  *   - a bounded step count per burst, so a genuine "loop without exit" in a
  *     graph fails loudly instead of hanging a request forever
  *
- * Honest scope note (do not read more into this than is here): the ops this
- * engine can execute automatically (op.* / ai.* node types) run through a
- * single generic SIMULATED handler — see runSimulatedOperation() below. It
- * updates instance variables from the node's own config (a generic,
- * non-CenterStage-specific mechanism: `config.setVariables`) and logs a
- * clearly-labeled simulated execution, but never sends a real email, calls a
- * real payment API, or writes to an unrelated CenterStage table. Wiring real
- * per-operation handlers (send an actual email, actually create the Event
- * row, etc.) through the same node-type registry is Phase 3. What IS fully
- * real here: the state machine itself, decision branching, human tasks,
+ * Honest scope note (do not read more into this than is here): this class
+ * itself has zero CenterStage-specific knowledge. Every op.* or ai.* node's
+ * config.operation string is looked up in an optional $handlers registry
+ * (see HandlerRegistry.php) supplied by whoever constructs the Engine; if
+ * nothing is registered for that operation, it falls through to the
+ * generic SIMULATED handler below (runSimulatedOperation()), which just
+ * applies config.setVariables and logs a clearly-labeled simulated
+ * execution — never a real email, payment, or CenterStage write. Phase 3
+ * (src/Processes/CenterStage/BookingHandlers.php) is where the REAL
+ * per-operation handlers for the Event Booking process are registered —
+ * see that file for exactly which operations are real, which are
+ * real-but-safe (e.g. drafting a Gmail compose link instead of sending),
+ * and which remain deliberately simulated (documented there, not here).
+ * What IS unconditionally real in THIS class regardless of registry
+ * wiring: the state machine itself, decision branching, human tasks,
  * waits/timeouts, retries, cancellation, pause/resume, and the audit trail.
  */
 final class Engine
@@ -45,7 +50,7 @@ final class Engine
     /** Safety cap on automatic (non-stopping) steps per advance() burst. */
     private const MAX_STEPS = 200;
 
-    public function __construct(private Database $db)
+    public function __construct(private Database $db, private ?HandlerRegistry $handlers = null)
     {
     }
 
@@ -203,16 +208,24 @@ final class Engine
                     continue;
                 }
 
-                // Everything else (trigger.*, op.*, ai.* non-decision): either
-                // a real, side-effect-free trigger pass-through, or the
-                // generic simulated operation handler.
+                // Everything else (trigger.*, op.*, ai.* non-decision): a
+                // real, side-effect-free trigger pass-through, a real
+                // registered handler (Phase 3 — see HandlerRegistry), or the
+                // generic simulated operation handler as a fallback.
                 try {
                     if (str_starts_with($type, 'trigger.')) {
                         $output = ['note' => 'Trigger already fired at instance start.'];
                         $simulated = false;
                     } else {
-                        $output = $this->runSimulatedOperation($node, $variables);
-                        $simulated = true;
+                        $operationId = (string) ($node['config']['operation'] ?? '');
+                        if ($operationId !== '' && $this->handlers?->has($operationId)) {
+                            $handler = $this->handlers->get($operationId);
+                            $output = $handler($this->db, $instance, $node, $variables);
+                            $simulated = false;
+                        } else {
+                            $output = $this->runSimulatedOperation($node, $variables);
+                            $simulated = true;
+                        }
                     }
                 } catch (OperationFailedException $e) {
                     $this->recordExecution($instanceId, $node, 1, 'failed', true, null, $e->getMessage());
@@ -223,7 +236,7 @@ final class Engine
                 }
 
                 $this->recordExecution($instanceId, $node, 1, 'succeeded', $simulated, $output);
-                $this->logEvent($instanceId, $node['id'], 'completed', $node['name'] . ' completed', $simulated ? ($output['note'] ?? null) : null, 'system');
+                $this->logEvent($instanceId, $node['id'], 'completed', $node['name'] . ' completed', $output['detail'] ?? $output['note'] ?? null, 'system');
 
                 $edge = $this->pickEdge($this->outgoingEdges($graph, $node['id']), null);
                 if (!$edge) {

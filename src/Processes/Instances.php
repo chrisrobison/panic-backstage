@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Panic\Processes;
 
 use Panic\BaseEndpoint;
+use Panic\Processes\CenterStage\BookingHandlers;
 use Panic\Processes\Runtime\Engine;
 use Panic\Processes\Runtime\EngineException;
 use Panic\Request;
@@ -79,7 +80,7 @@ final class Instances extends BaseEndpoint
             return $this->notFound('Instance not found');
         }
 
-        $engine = new Engine($this->db);
+        $engine = new Engine($this->db, BookingHandlers::registry());
 
         try {
             if (in_array($action, self::NOTE_REQUIRED, true)) {
@@ -147,7 +148,7 @@ final class Instances extends BaseEndpoint
         }
 
         try {
-            $engine = new Engine($this->db);
+            $engine = new Engine($this->db, BookingHandlers::registry());
             $result = $engine->startInstance($definition, $version, [
                 'name' => $request->body('name'),
                 'variables' => is_array($request->body('variables')) ? $request->body('variables') : [],

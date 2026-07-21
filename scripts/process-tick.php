@@ -37,6 +37,7 @@ require __DIR__ . '/../src/bootstrap.php';
 
 use Panic\Database;
 use Panic\Env;
+use Panic\Processes\CenterStage\BookingHandlers;
 use Panic\Processes\Runtime\Engine;
 
 $root = dirname(__DIR__);
@@ -51,7 +52,7 @@ try {
     exit(1);
 }
 
-$engine = new Engine($db);
+$engine = new Engine($db, BookingHandlers::registry());
 
 // ── 1. Timed-out waits ────────────────────────────────────────────────────
 $dueWaits = $db->all(

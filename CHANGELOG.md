@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `automation` — Wire Phase 3 real CenterStage handlers for Event Booking
 - **Added** `automation
 executable engine` — Add the Phase 2 process runtime (executable engine)
 - **Added** `automation` — Add process-graph designer and Event Booking sample process

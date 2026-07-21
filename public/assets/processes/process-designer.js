@@ -196,8 +196,9 @@ export class ProcessDesignerElement extends PanicElement {
       title: 'Start a new process instance',
       bodyHtml: `<form class="grid-form padded" data-form="start-instance">
         <label class="wide">Case name<input type="text" name="name" placeholder="e.g. a customer or event name" required></label>
-        <label class="wide">Starting variables (optional JSON)<textarea name="variables" rows="4" placeholder='{"client_org": "Acme Inc."}' style="font-family:ui-monospace,monospace"></textarea></label>
-        <p class="muted small wide">This runs for real: it creates an actual process_instances row and executes the process's automatic nodes (which are currently simulated — see each node's execution log — until Phase 3 wires real CenterStage operations).</p>
+        <label class="wide">Link to a real event ID (optional)<input type="number" name="entityId" placeholder="e.g. 482" min="1"></label>
+        <p class="muted small wide">If you link a real event, the process's automatic steps run against it for real: checking real availability, drafting a real quote/contract, applying a real task checklist, and updating the real event's status. Email steps never send on their own — they build a pre-filled Gmail link for you to review and send. Leave this blank to run entirely against made-up data.</p>
+        <label class="wide">Starting variables (optional JSON)<textarea name="variables" rows="3" placeholder='{"client_org": "Acme Inc."}' style="font-family:ui-monospace,monospace"></textarea></label>
         <div class="wide"><button type="submit">Start instance</button></div>
       </form>`,
       focus: '[name="name"]',
@@ -209,8 +210,13 @@ export class ProcessDesignerElement extends PanicElement {
       if (data.variables?.trim()) {
         try { variables = JSON.parse(data.variables); } catch { publish('toast.show', { message: 'Starting variables must be valid JSON.', tone: 'error' }); return; }
       }
+      const body = { name: data.name, variables };
+      if (data.entityId?.trim()) {
+        body.entityType = 'event';
+        body.entityId = Number(data.entityId);
+      }
       try {
-        const result = await api(`/processes/${this.processId}/instances`, { method: 'POST', body: JSON.stringify({ name: data.name, variables }) });
+        const result = await api(`/processes/${this.processId}/instances`, { method: 'POST', body: JSON.stringify(body) });
         close();
         publish('toast.show', { message: `Started "${result.instance.name}" — now at "${result.instance.current_node_id}" (${result.instance.status}).` });
         await this.loadLiveData();

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Panic\Processes;
 
 use Panic\BaseEndpoint;
+use Panic\Processes\CenterStage\BookingHandlers;
 use Panic\Processes\Runtime\Engine;
 use Panic\Processes\Runtime\EngineException;
 use Panic\Request;
@@ -115,7 +116,7 @@ final class Tasks extends BaseEndpoint
 
         $user = $this->auth->user();
         try {
-            $engine = new Engine($this->db);
+            $engine = new Engine($this->db, BookingHandlers::registry());
             $result = $engine->completeTask(
                 (int) $task['process_instance_id'],
                 $taskId,

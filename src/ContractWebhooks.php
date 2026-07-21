@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use Panic\Processes\CenterStage\ProcessBridge;
+
 /**
  * External e-signature provider webhooks.
  *
@@ -199,11 +201,22 @@ final class ContractWebhooks extends BaseEndpoint
 
         // Sync event status.
         if (!empty($contract['event_id'])) {
+            $eventId = (int) $contract['event_id'];
             $this->db->run(
                 "UPDATE events SET status = 'booked' WHERE id = ? AND status IN ('proposed','confirmed')",
-                [(int) $contract['event_id']]
+                [$eventId]
             );
-            log_activity($this->db, (int) $contract['event_id'], null, 'contract_signed', ['contract_id' => $contractId]);
+            log_activity($this->db, $eventId, null, 'contract_signed', ['contract_id' => $contractId]);
+
+            // Resume any Automation process instance waiting on this
+            // event's signature (Await Signature). Never let a bug here
+            // block the real webhook flow the e-signature provider expects
+            // a 200 response from.
+            try {
+                ProcessBridge::onContractSigned($this->db, $eventId, $contractId);
+            } catch (\Throwable $e) {
+                error_log("ProcessBridge::onContractSigned failed for contract {$contractId}: " . $e->getMessage());
+            }
         }
     }
 
