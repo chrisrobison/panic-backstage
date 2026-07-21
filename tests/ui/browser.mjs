@@ -150,6 +150,7 @@ export async function launchBrowser({ cdpPort, scale = 1, width = 1440, height =
   const cdp = new CDP(ws);
   await cdp.send('Page.enable');
   await cdp.send('Runtime.enable');
+  await cdp.send('DOM.enable'); // needed for setFileInputFiles (page.setFiles)
   await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: scale, mobile: false });
 
   const close = () => { try { ws.close(); } catch { /* ignore */ } try { chrome.kill('SIGTERM'); } catch { /* ignore */ } };
@@ -201,6 +202,21 @@ export function makePage(cdp, base) {
       const ok = await cdp.eval(`(()=>{const e=document.querySelector(${q(sel)});if(!e)return false;e.click();return true})()`);
       if (!ok) throw new Error('click: element not found: ' + sel);
       await sleep(140);
+    },
+    // Drive a real <input type="file"> — CDP's DOM.setFileInputFiles needs the
+    // element's Runtime objectId (not a nodeId, which would need a separate
+    // DOM.getDocument round-trip); dispatches 'change' the same way a real
+    // pick would, so app code listening for 'change' fires normally.
+    async setFiles(sel, filePaths) {
+      const { result } = await cdp.send('Runtime.evaluate', { expression: `document.querySelector(${q(sel)})` });
+      if (!result || !result.objectId) throw new Error('setFiles: element not found: ' + sel);
+      await cdp.send('DOM.setFileInputFiles', { files: filePaths, objectId: result.objectId });
+      await cdp.send('Runtime.releaseObject', { objectId: result.objectId }).catch(() => {});
+      // Chrome doesn't reliably fire 'change' for a CDP-driven file pick the
+      // way a real OS dialog does — dispatch it explicitly so app code
+      // listening for 'change' on the input runs.
+      await cdp.eval(`document.querySelector(${q(sel)})?.dispatchEvent(new Event('change', { bubbles: true }))`);
+      await sleep(200);
     },
     async setValue(sel, val) {
       const ok = await cdp.eval(`(()=>{const e=document.querySelector(${q(sel)});if(!e)return false;e.value=${JSON.stringify(String(val))};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);

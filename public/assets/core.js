@@ -485,6 +485,27 @@ function openImageLightbox(src, alt = '') {
   document.addEventListener('keydown', onEsc);
 }
 
+// Opens the right in-app viewer for an uploaded asset file based on its
+// extension: the image lightbox above for images, an embedded-PDF modal
+// (reusing openModal's chrome so it looks like the rest of the app) for
+// PDFs, and — since nothing else is embeddable in-browser — a plain new-tab
+// open as the fallback. Shared by anywhere an uploaded asset/contract file
+// needs a click-to-view affordance (currently: the event Contracts tab).
+function openAssetFileViewer(src, filename = '', title = '') {
+  if (!src) return;
+  if (/\.(png|jpe?g|gif|webp|svg)$/i.test(filename)) { openImageLightbox(src, title || filename); return; }
+  if (/\.pdf$/i.test(filename)) {
+    openModal({
+      title: title || filename || 'Document',
+      wide: true,
+      bodyHtml: `<div class="pdf-viewer-body"><embed class="pdf-viewer-embed" src="${esc(src)}" type="application/pdf"></div>
+        <div class="pdf-viewer-foot padded"><a class="small secondary button" href="${esc(src)}" target="_blank" rel="noopener">Open in new tab ↗</a></div>`,
+    });
+    return;
+  }
+  window.open(src, '_blank', 'noopener');
+}
+
 // Shared modal dialog shell (`.modal-backdrop` > `.modal-card`) — the default
 // way any table's add/view/edit form should present itself (see the
 // ui-conventions note in project memory). Renders a header with `title` and a
@@ -601,4 +622,4 @@ function mdToHtml(text) {
   }).join('\n');
 }
 
-export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox, openModal };
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox, openAssetFileViewer, openModal };

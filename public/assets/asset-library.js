@@ -7,7 +7,7 @@
 // opens in a new browser tab on click.
 import { esc, api, appUrl, assetUrl, titleCase, PanicElement, publish, openImageLightbox, emptyState, $, $$ } from './core.js';
 
-const ASSET_TYPES = ['flyer', 'poster', 'band_photo', 'logo', 'social_square', 'social_story', 'press_photo', 'qr_code', 'other'];
+const ASSET_TYPES = ['flyer', 'poster', 'band_photo', 'logo', 'social_square', 'social_story', 'press_photo', 'qr_code', 'contract', 'other'];
 const APPROVAL_STATUSES = ['draft', 'needs_review', 'approved', 'rejected'];
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
 const PDF_EXT = /\.pdf$/i;

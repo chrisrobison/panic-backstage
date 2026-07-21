@@ -1,4 +1,4 @@
-import { esc, titleCase, publish, api, apiUrl, getToken, formData, badge, option, select, helpLink, can, table, PanicElement, addToggle, openModal, assetUrl, $, $$ } from './core.js';
+import { esc, titleCase, publish, api, apiUrl, getToken, formData, badge, option, select, helpLink, can, table, PanicElement, addToggle, openModal, openAssetFileViewer, assetUrl, $, $$ } from './core.js';
 
 
 // ── Contracts (admin) ─────────────────────────────────────────────────────────
@@ -207,14 +207,14 @@ class EventContracts extends HTMLElement {
 
     const contractRow = (c) => {
       if (c.provider === 'manual_upload') {
-        return `<tr class="contract-uploaded-row">
+        return `<tr class="contract-uploaded-row clickable-row" data-view-uploaded="${esc(c.id)}">
           <td><strong>${esc(c.title)}</strong> <span class="badge status-blue">Uploaded</span></td>
           <td>${esc(titleCase(c.contract_type))}</td>
           <td>${esc(c.counterparty_name || '—')}</td>
           <td>${contractStatusBadge(c.status)}</td>
           <td class="muted">${esc((c.updated_at || '').slice(0, 10))}</td>
           <td class="row-action-cell">
-            ${c.asset_file_path ? `<a class="button small secondary" href="${esc(assetUrl(c.asset_file_path))}" target="_blank" rel="noopener">View file</a>` : ''}
+            ${c.asset_file_path ? '<button type="button" class="small secondary" data-view>View</button>' : ''}
             ${manage ? `<button class="small danger" data-remove-uploaded="${esc(c.id)}" data-name="${esc(c.title)}">Remove</button>` : ''}
           </td>
         </tr>`;
@@ -257,30 +257,76 @@ class EventContracts extends HTMLElement {
         location.hash = row.dataset.contractHref;
       });
     });
+    // Uploaded rows open the file in-app (image lightbox / embedded PDF)
+    // instead of navigating — same click-anywhere-but-a-button convention,
+    // plus an explicit "View" button for discoverability.
+    $$('tr[data-view-uploaded]', this).forEach((row) => {
+      const c = contracts.find((x) => Number(x.id) === Number(row.dataset.viewUploaded));
+      if (!c || !c.asset_file_path) return;
+      const open = () => openAssetFileViewer(assetUrl(c.asset_file_path), c.asset_filename || '', c.title);
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        open();
+      });
+      $('[data-view]', row)?.addEventListener('click', open);
+    });
   }
 
   // "Create contract" modal — one shared body whether the user is generating
   // a new deal-builder contract (template + counterparty) or recording one
-  // signed outside the system and attached as an uploaded asset, toggled by
-  // the checkbox at the top. Per the site-wide convention, a table's
-  // add/edit form always opens as a modal rather than an inline panel.
+  // signed outside the system, toggled by the Generate/Upload cards at the
+  // top. Per the site-wide convention, a table's add/edit form always opens
+  // as a modal rather than an inline panel.
+  //
+  // Upload mode has two paths, both ending in the same
+  // POST /events/{id}/contracts {asset_id, title} call:
+  //   - direct upload: choosing a file immediately POSTs it to the event's
+  //     assets endpoint tagged asset_type=contract, then attaches it — no
+  //     separate Save click, since there's nothing left to configure once
+  //     the file is picked.
+  //   - pick an existing asset: for a file already uploaded (e.g. from the
+  //     Assets tab, or by someone without upload_assets themselves), same
+  //     radio-list-then-Save flow as before.
+  // Direct upload is gated on the upload_assets capability — promoter has
+  // manage_contracts but not upload_assets, so they'd otherwise 403; they
+  // still see the "pick an existing asset" list.
   openCreateModal() {
     const templates = this.list.templates || [];
+    const canUpload = can(this.eventData, 'upload_assets');
     // Signed-contract assets first (the expected pick), then everything else —
     // a user may have uploaded the signed PDF under an older asset type before
     // this picker existed.
     const assetOptions = [...this.assets].sort((a, b) => (a.asset_type === 'contract' ? -1 : 0) - (b.asset_type === 'contract' ? -1 : 0));
+    const uploadPicker = assetOptions.length
+      ? `<p class="muted small">${canUpload ? '…or attach a contract you already uploaded to this event:' : 'Pick a contract you already uploaded to this event:'}</p><div class="contract-asset-picker">${assetOptions.map(contractAssetPickerRow).join('')}</div>`
+      : (canUpload ? '' : '<p class="muted small">No assets uploaded yet, and your role can\'t upload one directly here — ask someone who can to upload the signed contract from the Assets tab, then come back here.</p>');
     const { dialog, close } = openModal({
       title: 'Create contract',
+      wide: true,
       bodyHtml: `<form class="grid-form padded" data-form="new">
-        <label class="checkbox-row wide"><input type="checkbox" data-uploaded-toggle> Contract signed and attached (uploaded elsewhere, not generated here)</label>
+        <div class="contract-mode-toggle wide" role="radiogroup" aria-label="How is this contract being added?">
+          <label class="contract-mode-option">
+            <input type="radio" name="_mode" value="generate" checked>
+            <span><strong>Generate contract</strong><br><small>Build one from a boilerplate template.</small></span>
+          </label>
+          <label class="contract-mode-option">
+            <input type="radio" name="_mode" value="upload" data-uploaded-toggle>
+            <span><strong>Upload contract</strong><br><small>Attach a signed PDF or photo you already have.</small></span>
+          </label>
+        </div>
         <div data-generate-fields class="wide">
           <label>Deal type <select name="template_id" required><option value="">Choose a template…</option>${templates.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
           <label>Counterparty <input name="counterparty_name" placeholder="Artist / promoter / client"></label>
         </div>
         <div data-asset-fields class="wide" hidden>
-          <label>Title <input name="title" placeholder="e.g. Signed rental agreement"></label>
-          <div class="contract-asset-picker">${assetOptions.map(contractAssetPickerRow).join('') || '<p class="muted small">No assets uploaded yet — upload the signed contract (PDF or photo) from the Assets tab first, then come back here.</p>'}</div>
+          <label>Title <input name="title" placeholder="e.g. Signed rental agreement (optional — defaults to the file name)"></label>
+          ${canUpload ? `<div class="contract-upload-row">
+            <label class="button secondary" data-upload-label>
+              <input type="file" data-upload-input accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.pdf">
+              <span data-upload-label-text><i class="fa-solid fa-upload" aria-hidden="true"></i> Choose file to upload…</span>
+            </label>
+          </div>` : ''}
+          ${uploadPicker}
         </div>
         <button>Save</button>
       </form>`,
@@ -290,12 +336,45 @@ class EventContracts extends HTMLElement {
     const genFields = $('[data-generate-fields]', form);
     const assetFields = $('[data-asset-fields]', form);
     const templateSelect = $('select[name="template_id"]', genFields);
-    toggle.addEventListener('change', () => {
+    $$('input[name="_mode"]', form).forEach((radio) => radio.addEventListener('change', () => {
       genFields.hidden = toggle.checked;
       assetFields.hidden = !toggle.checked;
       templateSelect.required = !toggle.checked;
       $$('input[name="asset_id"]', assetFields).forEach((r) => { r.required = toggle.checked; });
+    }));
+
+    // Upload mode's direct-upload path: file picked → upload it as a
+    // 'contract'-tagged asset → attach it as a contract → confirm → close.
+    // No Save click involved; there's nothing left to configure.
+    const uploadInput = $('[data-upload-input]', assetFields);
+    const uploadLabelText = $('[data-upload-label-text]', assetFields);
+    uploadInput?.addEventListener('change', async () => {
+      const file = uploadInput.files[0];
+      if (!file) return;
+      const titleInput = $('input[name="title"]', form);
+      const title = (titleInput.value || '').trim()
+        || file.name.replace(/\.[^./\\]+$/, '').replace(/[_-]+/g, ' ').trim()
+        || 'Uploaded Contract';
+      uploadInput.disabled = true;
+      uploadLabelText.innerHTML = '<span class="btn-spinner"></span> Uploading…';
+      try {
+        const uploadBody = new FormData();
+        uploadBody.set('asset', file);
+        uploadBody.set('asset_type', 'contract');
+        uploadBody.set('title', title);
+        const asset = await api(`/events/${this.eventData.event.id}/assets`, { method: 'POST', body: uploadBody });
+        await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify({ asset_id: asset.id, title }) });
+        publish('toast.show', { message: 'Contract uploaded and attached.' });
+        close();
+        this.load();
+      } catch (error) {
+        publish('toast.show', { message: error.message || 'Upload failed.', tone: 'error' });
+        uploadInput.disabled = false;
+        uploadInput.value = '';
+        uploadLabelText.innerHTML = '<i class="fa-solid fa-upload" aria-hidden="true"></i> Choose file to upload…';
+      }
     });
+
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const data = formData(event.target);
