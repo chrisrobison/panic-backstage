@@ -97,40 +97,32 @@ class AdminUsers extends PanicElement {
     this.innerHTML = `
       ${pendingPanel}
       <article class="panel">
-        <div class="section-head padded"><h2>Login Accounts</h2><span class="muted">${users.length} total</span></div>
+        <div class="section-head padded">
+          <h2>Login Accounts</h2>
+          <div class="section-head-actions">
+            <span class="muted">${users.length} total</span>
+            ${addToggle('Add user', true)}
+          </div>
+        </div>
         <table class="data-table admin-table">
-          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Auth</th><th>Events</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Auth</th><th>Events</th></tr></thead>
           <tbody>
-            ${users.map((u) => `<tr>
+            ${users.map((u) => `<tr class="clickable-row" data-user-id="${esc(u.id)}">
               <td>${esc(u.name)}</td>
               <td>${esc(u.email)}</td>
               <td><span class="badge">${esc(titleCase(u.role))}</span></td>
               <td>${Number(u.has_password) ? '<span class="muted">Password</span>' : '<span class="muted">—</span>'}${Number(u.passkey_count) ? ` &middot; ${esc(u.passkey_count)} passkey${Number(u.passkey_count) === 1 ? '' : 's'}` : ''}</td>
               <td>${esc(u.owned_event_count || 0)} owned &middot; ${esc(u.collaborator_event_count || 0)} collab</td>
-              <td class="row-actions">
-                <button class="small secondary" data-edit="${esc(u.id)}">Edit</button>
-                <button class="small secondary" data-invite="${esc(u.id)}" data-name="${esc(u.name)}" title="Email a fresh sign-in link">Invite</button>
-                <button class="small danger" data-delete="${esc(u.id)}" data-name="${esc(u.name)}">Delete</button>
-              </td>
-            </tr>`).join('') || '<tr><td colspan="6"><div class="empty-state">No users yet.</div></td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="5"><div class="empty-state">No users yet — use the + above to add your first login.</div></td></tr>'}
           </tbody>
         </table>
       </article>
-      <article class="panel">
-        <div class="section-head padded"><h2>Create User</h2></div>
-        <form data-form="create" class="grid-form padded">
-          <label>Name <input name="name" required placeholder="Full name"></label>
-          <label>Email <input type="email" name="email" required placeholder="user@example.com"></label>
-          <label>Role ${select('role', roles, 'viewer')}</label>
-          <label>Password <input type="password" name="password" placeholder="Optional — they can also use email link"></label>
-          <button>Create user</button>
-        </form>
-      </article>
     `;
-    $('[data-form="create"]', this).addEventListener('submit', (event) => this.create(event));
-    $$('[data-edit]', this).forEach((b) => b.addEventListener('click', () => this.openEdit(Number(b.dataset.edit))));
-    $$('[data-invite]', this).forEach((b) => b.addEventListener('click', () => this.invite(Number(b.dataset.invite), b.dataset.name)));
-    $$('[data-delete]', this).forEach((b) => b.addEventListener('click', () => this.delete(Number(b.dataset.delete), b.dataset.name)));
+    $('[data-add]', this)?.addEventListener('click', () => this.openUserModal(null));
+    $$('tr[data-user-id]', this).forEach((row) => row.addEventListener('click', (e) => {
+      if (e.target.closest('a, button')) return;
+      this.openUserModal((this.data.users || []).find((u) => Number(u.id) === Number(row.dataset.userId)));
+    }));
     $$('[data-approve]', this).forEach((b) => b.addEventListener('click', () => {
       const role = $(`[data-approve-role="${b.dataset.approve}"]`, this)?.value || 'viewer';
       this.approve(Number(b.dataset.approve), b.dataset.name, role);
@@ -168,66 +160,75 @@ class AdminUsers extends PanicElement {
     }
   }
 
-  async create(event) {
-    event.preventDefault();
-    const body = formData(event.target);
-    try {
-      await api('/users', { method: 'POST', body: JSON.stringify(body) });
-      publish('toast.show', { message: `User ${body.name} created.` });
-      this.connect();
-    } catch (err) {
-      publish('toast.show', { message: err.message, tone: 'error' });
-    }
-  }
-
-  openEdit(id) {
-    const user = (this.data.users || []).find((u) => Number(u.id) === id);
-    if (!user) return;
+  // Add (user === null) and edit share one modal, mirroring AdminStaff's
+  // openStaffModal(). Invite/Delete — previously separate per-row buttons —
+  // live inside the edit modal instead of the table now.
+  openUserModal(user = null) {
+    const isEdit = Boolean(user && user.id);
+    const u = user || {};
     const roles = this.data.roles || [];
     const dialog = document.createElement('div');
     dialog.className = 'modal-backdrop';
     dialog.innerHTML = `<div class="modal-card">
-      <div class="section-head padded"><h2>Edit user</h2><button class="small secondary" data-close>Close</button></div>
-      <form class="grid-form padded" data-form="edit">
-        <label>Name <input name="name" required value="${esc(user.name)}"></label>
-        <label>Email <input type="email" name="email" required value="${esc(user.email)}"></label>
-        <label>Role ${select('role', roles, user.role)}</label>
-        <label>Reset password <input type="password" name="password" placeholder="Leave blank to keep current"></label>
-        <p class="muted">${Number(user.has_password) ? 'Password is set.' : 'No password set — user can sign in via passkey or email link.'} ${Number(user.passkey_count)} passkey${Number(user.passkey_count) === 1 ? '' : 's'} registered.</p>
-        <button>Save</button>
+      <div class="section-head padded"><h2>${isEdit ? 'Edit user' : 'Add user'}</h2><button class="small secondary" data-close type="button">Close</button></div>
+      <form class="grid-form padded" data-form="user">
+        <label>Name <input name="name" required value="${esc(u.name || '')}" placeholder="Full name"></label>
+        <label>Email <input type="email" name="email" required value="${esc(u.email || '')}" placeholder="user@example.com"></label>
+        <label>Role ${select('role', roles, u.role || 'viewer')}</label>
+        <label>${isEdit ? 'Reset password' : 'Password'} <input type="password" name="password" placeholder="${isEdit ? 'Leave blank to keep current' : 'Optional — they can also use email link'}"></label>
+        ${isEdit ? `<p class="muted wide">${Number(u.has_password) ? 'Password is set.' : 'No password set — user can sign in via passkey or email link.'} ${Number(u.passkey_count)} passkey${Number(u.passkey_count) === 1 ? '' : 's'} registered.</p>` : ''}
+        <div class="wide form-actions">
+          <button type="submit">${isEdit ? 'Save' : 'Add user'}</button>
+          ${isEdit ? '<button type="button" class="secondary" data-invite title="Email a fresh sign-in link">Send invite</button>' : ''}
+          ${isEdit ? '<button type="button" class="danger" data-delete>Delete</button>' : ''}
+        </div>
       </form>
-      <div class="section-head padded"><h2>Email addresses</h2></div>
-      <div class="padded" data-emails-mount></div>
+      ${isEdit ? '<div class="section-head padded"><h2>Email addresses</h2></div><div class="padded" data-emails-mount></div>' : ''}
     </div>`;
     document.body.appendChild(dialog);
-    const emailsEl = document.createElement('pb-user-emails');
-    emailsEl.user = user;
-    $('[data-emails-mount]', dialog).appendChild(emailsEl);
-    const close = () => dialog.remove();
+    if (isEdit) {
+      const emailsEl = document.createElement('pb-user-emails');
+      emailsEl.user = u;
+      $('[data-emails-mount]', dialog).appendChild(emailsEl);
+    }
+    const close = () => { dialog.remove(); document.removeEventListener('keydown', onEsc); };
+    function onEsc(event) { if (event.key === 'Escape') close(); }
+    document.addEventListener('keydown', onEsc);
     $('[data-close]', dialog).addEventListener('click', close);
     dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
-    $('[data-form="edit"]', dialog).addEventListener('submit', async (event) => {
+    $('input[name="name"]', dialog)?.focus();
+
+    $('[data-form="user"]', dialog).addEventListener('submit', async (event) => {
       event.preventDefault();
       const body = formData(event.target);
       try {
-        await api(`/users/${user.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-        publish('toast.show', { message: 'User updated.' });
+        if (isEdit) {
+          await api(`/users/${u.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+          publish('toast.show', { message: 'User updated.' });
+        } else {
+          await api('/users', { method: 'POST', body: JSON.stringify(body) });
+          publish('toast.show', { message: `User ${body.name} created.` });
+        }
         close();
         this.connect();
       } catch (err) {
         publish('toast.show', { message: err.message, tone: 'error' });
       }
     });
-  }
 
-  async delete(id, name) {
-    if (!confirm(`Delete user ${name}? This cannot be undone.`)) return;
-    try {
-      await api(`/users/${id}`, { method: 'DELETE' });
-      publish('toast.show', { message: `${name} deleted.` });
-      this.connect();
-    } catch (err) {
-      publish('toast.show', { message: err.message, tone: 'error' });
+    if (isEdit) {
+      $('[data-invite]', dialog).addEventListener('click', () => this.invite(u.id, u.name));
+      $('[data-delete]', dialog).addEventListener('click', async () => {
+        if (!confirm(`Delete user ${u.name}? This cannot be undone.`)) return;
+        try {
+          await api(`/users/${u.id}`, { method: 'DELETE' });
+          publish('toast.show', { message: `${u.name} deleted.` });
+          close();
+          this.connect();
+        } catch (err) {
+          publish('toast.show', { message: err.message, tone: 'error' });
+        }
+      });
     }
   }
 }

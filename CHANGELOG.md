@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `admin` — Move Login Accounts add/edit onto the shared modal pattern
 - **Added** `events` — Add a multi-level Undo menu to the event details page
 - **Fixed** `events` — Make the Execution tab's Add/Edit Record actually work
 - **Fixed** `contracts` — Add a recovery script for final PDFs missing from disk
