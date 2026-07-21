@@ -7044,6 +7044,10 @@ pb-process-live-cases { display: block; background: var(--panel); border: 1px so
 .proc-instance-detail-row td { background: var(--bg); }
 .proc-instance-detail-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 22px; }
 .proc-var-list { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.proc-instance-detail-grid h3 { margin: 16px 0 6px; font-size: 12.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+.proc-instance-detail-grid h3:first-child { margin-top: 0; }
+.proc-instance-task { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-size: 13px; }
+.proc-instance-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 
 /* ── Shared timeline (validation modal / simulation log / live-case detail) ── */
 .proc-timeline { list-style: none; margin: 0; padding: 0; }

@@ -113,6 +113,10 @@ export class ProcessDesignerElement extends PanicElement {
       this.liveCases.render();
     });
     this.addEventListener('view-version', (e) => this.viewHistoricalVersion(e.detail.versionId));
+    this.addEventListener('start-instance', () => this.openStartInstanceModal());
+    this.addEventListener('task-action', (e) => this.completeTask(e.detail));
+    this.addEventListener('wait-action', (e) => this.resumeWait(e.detail));
+    this.addEventListener('instance-action', (e) => this.instanceAction(e.detail));
   }
 
   onAddNode(type) {
@@ -182,7 +186,75 @@ export class ProcessDesignerElement extends PanicElement {
     this.querySelector('.proc-live-empty')?.remove();
     const data = await api(`/processes/${this.processId}/instances`);
     this.liveCanvas.liveData = { nodeCounts: data.nodeCounts };
-    this.liveCases.data = { instances: data.instances };
+    this.liveCases.data = { instances: data.instances, canStart: !!this.capabilities?.manage_processes };
+  }
+
+  // ── Live Cases: starting/driving real instances (Phase 2) ────────────────
+  openStartInstanceModal() {
+    if (!this.publishedVersion) return;
+    const { dialog, close } = openModal({
+      title: 'Start a new process instance',
+      bodyHtml: `<form class="grid-form padded" data-form="start-instance">
+        <label class="wide">Case name<input type="text" name="name" placeholder="e.g. a customer or event name" required></label>
+        <label class="wide">Starting variables (optional JSON)<textarea name="variables" rows="4" placeholder='{"client_org": "Acme Inc."}' style="font-family:ui-monospace,monospace"></textarea></label>
+        <p class="muted small wide">This runs for real: it creates an actual process_instances row and executes the process's automatic nodes (which are currently simulated — see each node's execution log — until Phase 3 wires real CenterStage operations).</p>
+        <div class="wide"><button type="submit">Start instance</button></div>
+      </form>`,
+      focus: '[name="name"]',
+    });
+    $('[data-form="start-instance"]', dialog).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = formData(e.target);
+      let variables = {};
+      if (data.variables?.trim()) {
+        try { variables = JSON.parse(data.variables); } catch { publish('toast.show', { message: 'Starting variables must be valid JSON.', tone: 'error' }); return; }
+      }
+      try {
+        const result = await api(`/processes/${this.processId}/instances`, { method: 'POST', body: JSON.stringify({ name: data.name, variables }) });
+        close();
+        publish('toast.show', { message: `Started "${result.instance.name}" — now at "${result.instance.current_node_id}" (${result.instance.status}).` });
+        await this.loadLiveData();
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
+  }
+
+  async completeTask({ instanceId, taskId, outcome, note }) {
+    try {
+      const result = await api(`/processes/${this.processId}/instances/${instanceId}/tasks/${taskId}/complete`, { method: 'POST', body: JSON.stringify({ outcome, note }) });
+      publish('toast.show', { message: result.already ? 'Already completed.' : `Marked "${outcome}" — case moved on.` });
+      await this.afterInstanceAction(instanceId);
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
+  }
+
+  async resumeWait({ instanceId, waitId, note }) {
+    try {
+      const result = await api(`/processes/${this.processId}/instances/${instanceId}/waits/${waitId}/resume`, { method: 'POST', body: JSON.stringify({ note }) });
+      publish('toast.show', { message: result.already ? 'Already resumed.' : 'Wait resumed — case moved on.' });
+      await this.afterInstanceAction(instanceId);
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
+  }
+
+  async instanceAction({ instanceId, action, note }) {
+    try {
+      await api(`/processes/${this.processId}/instances/${instanceId}/${action}`, { method: 'POST', body: JSON.stringify({ note }) });
+      publish('toast.show', { message: `Instance ${action === 'cancel' ? 'canceled' : action + 'd'}.` });
+      await this.afterInstanceAction(instanceId);
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
+  }
+
+  async afterInstanceAction(instanceId) {
+    await this.loadLiveData();
+    if (this.liveCases.expandedId === instanceId) {
+      await this.liveCases.loadAndShowDetail(instanceId);
+    }
   }
 
   async loadHistoryData() {

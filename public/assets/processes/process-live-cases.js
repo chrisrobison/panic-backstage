@@ -1,10 +1,13 @@
 // <pb-process-live-cases> — the collapsible "Live Instances" drawer shown
 // under the canvas on the Live Cases tab. Lists process_instances rows
 // (search/filter by status, node, owner) and expands a selected case inline
-// into its timeline + variables — the operational read-model described in
-// the brief. Phase 1 ships this over seeded demonstration rows
-// (instance.is_demo) rather than a live runtime; the "Demo data" pill below
-// says so plainly rather than pretending these are real in-flight cases.
+// into its timeline + variables + (Phase 2) real operator controls: starting
+// a new instance, completing an open human task with a real outcome, and
+// retry/cancel/pause/resume/move — each dispatched as a bubbling intent
+// event for the designer (which owns the API calls) to act on. The four
+// seeded is_demo=1 example cases predate the runtime and have no tasks/
+// waits/executions to act on — the "Demo data" pill says so rather than
+// pretending they're real in-flight cases.
 import { $, $$, esc } from '../core.js';
 
 export class ProcessLiveCasesElement extends HTMLElement {
@@ -26,8 +29,9 @@ export class ProcessLiveCasesElement extends HTMLElement {
     const d = this._data || { instances: [] };
     const filtered = this.applyFilters(d.instances || []);
     const demoNote = d.instances?.some((i) => i.is_demo)
-      ? `<span class="pill pill-muted" title="These cases are seeded demonstration data — the execution runtime lands in Phase 2.">Demo data</span>`
+      ? `<span class="pill pill-muted" title="These cases are seeded demonstration data — they predate the Phase 2 runtime and have no tasks/waits to act on.">Demo data</span>`
       : '';
+    const canStart = !!d.canStart;
 
     this.innerHTML = `
       <div class="proc-drawer-head">
@@ -39,8 +43,9 @@ export class ProcessLiveCasesElement extends HTMLElement {
           <input type="search" placeholder="Search cases…" value="${esc(this.filters.q)}" data-filter="q" aria-label="Search cases">
           <select data-filter="status" aria-label="Filter by status">
             <option value="">All statuses</option>
-            ${['active', 'waiting', 'overdue', 'failed', 'completed', 'canceled'].map((s) => `<option value="${s}" ${this.filters.status === s ? 'selected' : ''}>${s[0].toUpperCase()}${s.slice(1)}</option>`).join('')}
+            ${['active', 'waiting', 'overdue', 'failed', 'completed', 'canceled', 'paused'].map((s) => `<option value="${s}" ${this.filters.status === s ? 'selected' : ''}>${s[0].toUpperCase()}${s.slice(1)}</option>`).join('')}
           </select>
+          ${canStart ? `<button type="button" class="small" data-start-instance><i class="fa-solid fa-play" aria-hidden="true"></i> Start Instance</button>` : ''}
         </div>
       </div>
       <div class="proc-drawer-body"${this.open ? '' : ' hidden'}>
@@ -51,6 +56,10 @@ export class ProcessLiveCasesElement extends HTMLElement {
       </div>`;
 
     $('[data-toggle-drawer]', this)?.addEventListener('click', () => { this.open = !this.open; this.render(); });
+    $('[data-start-instance]', this)?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.dispatchEvent(new CustomEvent('start-instance', { bubbles: true }));
+    });
     $$('[data-filter]', this).forEach((el) => el.addEventListener('input', () => {
       this.filters[el.dataset.filter] = el.value;
       this.render();
@@ -103,7 +112,9 @@ export class ProcessLiveCasesElement extends HTMLElement {
     try {
       const detail = await this._loadDetail(id);
       if (!$(`[data-detail-for="${id}"]`, this)) return; // row collapsed while loading
+      this._lastDetail = detail;
       container.innerHTML = this.renderDetail(detail);
+      this.bindDetailActions(container, id, detail);
     } catch (err) {
       container.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
     }
@@ -113,10 +124,63 @@ export class ProcessLiveCasesElement extends HTMLElement {
     const vars = detail.instance?.variables || {};
     const varRows = Object.entries(vars).map(([k, v]) => `<div><strong>${esc(k)}</strong>: ${esc(String(v))}</div>`).join('') || '<span class="muted">No variables recorded.</span>';
     const timeline = (detail.events || []).map((e) => `<li><span class="timeline-dot"></span><div><strong>${esc(e.label)}</strong> <span class="muted small">${esc(e.created_at)}</span>${e.detail ? `<div class="muted small">${esc(e.detail)}</div>` : ''}</div></li>`).join('') || '<li class="muted">No timeline events recorded yet.</li>';
+
+    const status = detail.instance?.status;
+    const openTasks = (detail.tasks || []).filter((t) => t.status === 'open');
+    const openWaits = (detail.waits || []).filter((w) => w.status === 'waiting');
+    const graph = detail.graph;
+
+    const taskBlock = openTasks.length ? openTasks.map((t) => {
+      const node = graph?.nodes?.find((n) => n.id === t.node_id);
+      const outcomes = node?.config?.outcomes || node?.config?.branches || [{ id: 'complete', label: 'Complete' }];
+      return `<div class="proc-instance-task" data-task-id="${t.id}">
+        <strong>${esc(t.title)}</strong> <span class="muted small">${esc(t.assignee_role || 'Unassigned')}${t.due_at ? ` · due ${esc(t.due_at)}` : ''}</span>
+        <div class="proc-instance-actions">
+          ${outcomes.map((o) => `<button type="button" class="small" data-complete-task="${t.id}" data-outcome="${esc(o.id)}">${esc(o.label || o.id)}</button>`).join('')}
+        </div>
+      </div>`;
+    }).join('') : '';
+
+    const waitBlock = openWaits.length ? openWaits.map((w) => `<div class="proc-instance-task" data-wait-id="${w.id}">
+        <strong>Waiting: ${esc(w.awaited_event || 'timer')}</strong>${w.timeout_at ? ` <span class="muted small">times out ${esc(w.timeout_at)}</span>` : ''}
+        <div class="proc-instance-actions">
+          <button type="button" class="small" data-resume-wait="${w.id}">Resume now</button>
+        </div>
+      </div>`).join('') : '';
+
+    const opActions = [];
+    if (status === 'failed') opActions.push('<button type="button" class="small" data-instance-action="retry">Retry</button>');
+    if (!['completed', 'canceled'].includes(status)) opActions.push('<button type="button" class="small danger" data-instance-action="cancel">Cancel</button>');
+    if (status === 'paused') opActions.push('<button type="button" class="small" data-instance-action="resume">Resume</button>');
+    else if (!['completed', 'canceled'].includes(status)) opActions.push('<button type="button" class="small secondary" data-instance-action="pause">Pause</button>');
+
     return `<div class="proc-instance-detail-grid">
-      <div><h3>Timeline</h3><ul class="proc-timeline">${timeline}</ul></div>
-      <div><h3>Variables</h3><div class="proc-var-list">${varRows}</div></div>
+      <div>
+        <h3>Timeline</h3><ul class="proc-timeline">${timeline}</ul>
+      </div>
+      <div>
+        <h3>Variables</h3><div class="proc-var-list">${varRows}</div>
+        ${taskBlock || waitBlock ? `<h3>Waiting on</h3>${taskBlock}${waitBlock}` : ''}
+        ${opActions.length ? `<h3>Operator actions</h3><div class="proc-instance-actions">${opActions.join('')}</div>` : ''}
+      </div>
     </div>`;
+  }
+
+  bindDetailActions(container, instanceId, detail) {
+    $$('[data-complete-task]', container).forEach((btn) => btn.addEventListener('click', () => {
+      const note = prompt('Note for this decision (optional):') || '';
+      this.dispatchEvent(new CustomEvent('task-action', { bubbles: true, detail: { instanceId, taskId: Number(btn.dataset.completeTask), outcome: btn.dataset.outcome, note } }));
+    }));
+    $$('[data-resume-wait]', container).forEach((btn) => btn.addEventListener('click', () => {
+      const note = prompt('Note (optional) — e.g. how this event arrived:') || '';
+      this.dispatchEvent(new CustomEvent('wait-action', { bubbles: true, detail: { instanceId, waitId: Number(btn.dataset.resumeWait), note } }));
+    }));
+    $$('[data-instance-action]', container).forEach((btn) => btn.addEventListener('click', () => {
+      const action = btn.dataset.instanceAction;
+      const note = prompt(`Reason for "${action}" (required):`);
+      if (!note || !note.trim()) return;
+      this.dispatchEvent(new CustomEvent('instance-action', { bubbles: true, detail: { instanceId, action, note: note.trim() } }));
+    }));
   }
 }
 customElements.define('pb-process-live-cases', ProcessLiveCasesElement);

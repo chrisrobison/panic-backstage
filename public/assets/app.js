@@ -29,6 +29,7 @@ import './nav-manager.js';
 import { buildNavTree, filterNavTree, renderNavHtml } from './nav-shared.js';
 import './processes/process-list.js';
 import './processes/process-designer.js';
+import './processes/process-tasks-list.js';
 import './processes/automation-placeholder.js';
 
 
@@ -393,7 +394,7 @@ class AppShell extends PanicElement {
     const processMatch = route.match(/^automation-process-(\d+)$/);
     if (processMatch) return this.mount(outlet, 'pb-process-designer', { processId: Number(processMatch[1]) });
     if (route === 'automation-cases') return this.mount(outlet, 'pb-automation-placeholder', { page: 'cases' });
-    if (route === 'automation-tasks') return this.mount(outlet, 'pb-automation-placeholder', { page: 'tasks' });
+    if (route === 'automation-tasks') return this.mount(outlet, 'pb-process-tasks-list');
     if (route === 'automation-activity') return this.mount(outlet, 'pb-automation-placeholder', { page: 'activity' });
     if (route === 'automation-connections') return this.mount(outlet, 'pb-automation-placeholder', { page: 'connections' });
     return this.mount(outlet, 'pb-dashboard');

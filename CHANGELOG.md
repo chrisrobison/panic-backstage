@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `automation
+executable engine` — Add the Phase 2 process runtime (executable engine)
 - **Added** `automation` — Add process-graph designer and Event Booking sample process
 - **Documentation** — Cover contract upload option and calendar infinite scroll
 - **Added** `calendar` — Continuous scroll across months in Grid view

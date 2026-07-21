@@ -397,7 +397,19 @@ final class Kernel
         //   POST       /api/processes/{id}/versions/{v}/validate
         //   POST       /api/processes/{id}/versions/{v}/publish
         //   GET        /api/processes/{id}/instances[/{instanceId}]
+        //   POST       /api/processes/{id}/instances                              (start)
+        //   POST       /api/processes/{id}/instances/{iid}/tasks/{tid}/complete
+        //   POST       /api/processes/{id}/instances/{iid}/waits/{wid}/resume
+        //   POST       /api/processes/{id}/instances/{iid}/retry|cancel|pause|resume|move
         //   GET        /api/processes/{id}/audit
+        //   GET        /api/process-tasks                       cross-process task inbox
+        //   POST       /api/process-tasks/{id}/complete
+        if ($segments[0] === 'process-tasks') {
+            return [Processes\Tasks::class, [
+                'taskId' => $this->intOrNull($segments[1] ?? null),
+                'action' => $segments[2] ?? null,
+            ]];
+        }
         if ($segments[0] === 'processes') {
             $processId = $this->intOrNull($segments[1] ?? null);
             $sub = $segments[2] ?? null;
@@ -410,9 +422,14 @@ final class Kernel
                 ]];
             }
             if ($sub === 'instances') {
+                $instanceId = $this->intOrNull($segments[3] ?? null);
+                $action = $segments[4] ?? null;
                 return [Processes\Instances::class, [
                     'processId' => $processId,
-                    'instanceId' => $this->intOrNull($segments[3] ?? null),
+                    'instanceId' => $instanceId,
+                    'action' => $action,
+                    'taskId' => $action === 'tasks' ? $this->intOrNull($segments[5] ?? null) : null,
+                    'waitId' => $action === 'waits' ? $this->intOrNull($segments[5] ?? null) : null,
                 ]];
             }
             if ($sub === 'audit') {
