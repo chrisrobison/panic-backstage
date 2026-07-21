@@ -282,7 +282,8 @@ const HELP_CONTENT = {
 
   calendar: `
     <h2>Calendar</h2>
-    <p>The calendar shows a six-week window. Use the <code>&lt;</code> and <code>&gt;</code> buttons to move months, or <em>Today</em> to snap back. Dates without an event show an <em>Available</em> chip; dates with events show a colored status dot and the event title. Click any event chip to open the workspace.</p>
+    <p>The calendar's <strong>Grid</strong> view is a continuous scroll across months, the same way the macOS Calendar app works — it opens on the current month, and scrolling down or up fetches and appends the next or previous month automatically as you reach the edge of what's loaded. There's no page reload between months and no limit to how far you can scroll in either direction. Dates without an event show an <em>Available</em> chip; dates with events show a colored status dot and the event title. Click any event chip to open the workspace.</p>
+    <p>The month toolbar (with the <code>&lt;</code> / <code>&gt;</code> nav buttons and <em>Today</em>) stays pinned to the top as you scroll, and its month label updates live to whichever month is currently in view. <code>&lt;</code> / <code>&gt;</code> jump a month and scroll it into view (loading it first if needed); <em>Today</em> jumps straight back to the current month from anywhere in the stack. The <strong>Agenda</strong> view is unaffected by this — it still shows one focused window at a time via its own day navigation.</p>
 
     <h3>Room colour code</h3>
     <p>The coloured dot on each chip indicates which room the event is booked into. Rooms are configured under <a href="#help-admin-venue">Admin &rarr; Venue &amp; rooms</a> — for the current venue, that's:</p>
@@ -879,10 +880,12 @@ const HELP_CONTENT = {
     </ul>
 
     <h3>Creating a contract</h3>
-    <ol>
-      <li>From an event's <em>Contracts</em> tab, pick a <strong>deal type</strong> (template) — Private Event Rental, Promoter / Production Show, Artist / Band Performance, Recurring Night, Famous / High-Draw Artist, Fundraiser, or House-Produced Show.</li>
-      <li>Optionally enter the counterparty (artist, promoter, or client), then <em>Create contract</em>. You land in the contract builder.</li>
-    </ol>
+    <p>Click <strong>+ New contract</strong> on an event's <em>Contracts</em> tab to open the create-contract dialog, which offers two ways to get a contract attached to the show:</p>
+    <ul>
+      <li><strong>Generate contract</strong> — pick a <strong>deal type</strong> (template): Private Event Rental, Promoter / Production Show, Artist / Band Performance, Recurring Night, Famous / High-Draw Artist, Fundraiser, or House-Produced Show. Optionally enter the counterparty (artist, promoter, or client), then <em>Create contract</em> to land in the contract builder described below.</li>
+      <li><strong>Upload contract</strong> — for a deal that was already signed on paper or handled outside Backstage. Choose a file (PDF or image); it uploads immediately, is tagged as a contract asset, and is attached to the event as a <em>signed</em> contract. No deal-terms form, clause library, or e-sign workflow applies to an uploaded contract — it's a record of a deal made elsewhere. This option only appears for roles with permission to upload assets.</li>
+    </ul>
+    <p>Both kinds show up together in the event's Contracts list. Click a generated contract's row to open the builder; click an uploaded contract's row to view the file in place — images open in a lightbox, PDFs open in an embedded viewer.</p>
 
     <h3>The builder, left to right</h3>
     <ul>

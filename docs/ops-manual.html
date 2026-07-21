@@ -1589,6 +1589,8 @@
       <li><strong>Additional spaces</strong> — green tones</li>
     </ul>
 
+    <p>The calendar's Grid view scrolls continuously across months, the same way the macOS Calendar app does — it opens on the current month, and scrolling down or up fetches and appends the next or previous month automatically as you reach the edge of what's loaded, with no page reload and no limit on how far back or forward you can go. The month label pinned at the top updates live to whatever month is currently in view; the <span class="ui-label button">Today</span> button jumps straight back to the current month from anywhere in the stack.</p>
+
     <div class="callout warn">
       <span class="callout-title">⚠️ Holds are not promises</span>
       <p>Putting an event on Hold blocks the date visually on the calendar, but it does not commit the venue. A Hold means "this date is being considered." It becomes a firm commitment at <strong>Booked</strong> — which requires a signed contract.</p>
@@ -1967,7 +1969,15 @@
 
     <h3>Starting a contract</h3>
 
-    <p>In the Contracts tab, click <span class="ui-label button">+ New contract</span>. You'll be prompted to choose a template. For most shows, you'll use one of these:</p>
+    <p>In the Contracts tab, click <span class="ui-label button">+ New contract</span>. The dialog offers two ways to attach a contract to the show — pick whichever matches how the deal was actually put together:</p>
+
+    <table>
+      <tr><th>Option</th><th>When to use</th></tr>
+      <tr><td><strong>Generate contract</strong></td><td>The normal path — choose a deal-type template below, and Backstage assembles the document from your clause library so you can walk it through review, approval, and (optionally) e-signature.</td></tr>
+      <tr><td><strong>Upload contract</strong></td><td>The deal was already signed on paper, or handled entirely outside Backstage. Choose a PDF or image file and it uploads immediately as a signed contract attached to the event — no deal-terms form or e-sign workflow involved. Requires the asset-upload permission (venue admins and event owners have it; some collaborator roles don't).</td></tr>
+    </table>
+
+    <p>If you choose <strong>Generate contract</strong>, you'll be prompted to choose a template. For most shows, you'll use one of these:</p>
 
     <table>
       <tr><th>Template</th><th>When to use</th></tr>
@@ -1979,6 +1989,8 @@
     </table>
 
     <p>After choosing a template, the system will pre-populate smart clauses based on the deal terms. For example: if the show is "All Ages," the underage admission clause is automatically included. If there's a bar minimum, the bar minimum clause appears. You can add or remove clauses from the list.</p>
+
+    <p>Generated and uploaded contracts appear side by side in the Contracts tab's list. Click a generated contract to open it in the builder described below. Click an uploaded contract to view the file right there — images open in a lightbox, PDFs in an embedded viewer — no separate download needed.</p>
 
     <h3>The contract status ladder</h3>
 

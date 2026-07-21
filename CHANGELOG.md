@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** — Cover contract upload option and calendar infinite scroll
 - **Added** `calendar` — Continuous scroll across months in Grid view
 - **Added** `contracts` — Upload a signed contract file directly from Create Contract
 - **Added** `admin` — Move Login Accounts add/edit onto the shared modal pattern
