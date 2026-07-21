@@ -1,19 +1,18 @@
 // <pb-process-tasks-list> — Automation > Tasks. A real cross-process inbox
-// (src/Processes/Tasks.php, backed by the process_tasks rows the Phase 2
-// runtime creates for human.* nodes) rather than a placeholder: every open
-// task from every process definition, with a Complete action. This is the
-// one Phase 4 "operational view" pulled forward, because once real task
-// rows exist a cross-process list of them is just a join — see the doc
-// comment on Tasks.php.
+// (src/Processes/Tasks.php, backed by the process_tasks rows the runtime
+// creates for human.* nodes) rather than a placeholder: every open task
+// from every process definition. This is the one Phase 4 "operational
+// view" pulled forward, because once real task rows exist a cross-process
+// list of them is just a join — see the doc comment on Tasks.php.
 //
-// The outcome control here is intentionally a free-text field rather than
-// buttons matched to each node's configured outcomes/branches (like the
-// per-instance Live Cases detail view does) — this list spans many
-// different processes and node types at once, and fetching every task's
-// graph just to render its buttons isn't worth the request fan-out for a
-// first cut. Anyone who wants the exact configured outcome buttons can open
-// the case from here and act on it in Live Cases instead.
-import { $, $$, api, esc, publish, PanicElement } from '../core.js';
+// "Open" loads the task's full instance detail and hands it to the shared
+// <pb-process-step-form> in a modal — the exact same rendering Live Cases
+// uses (real outcome buttons/form fields from the node's own config, not a
+// freeform guess), so completing a task looks and behaves identically
+// whether you got here from this cross-process inbox or from a specific
+// case's Live Cases row.
+import { $, $$, api, esc, openModal, publish, PanicElement } from '../core.js';
+import './process-step-form.js';
 
 export class ProcessTasksListElement extends PanicElement {
   async connect() {
@@ -41,11 +40,7 @@ export class ProcessTasksListElement extends PanicElement {
         <td data-label="Assignee">${esc(t.assignee_name || t.assignee_role || 'Unassigned')}</td>
         <td data-label="Due">${t.due_at ? esc(t.due_at) : '—'}</td>
         <td data-label="Status"><span class="badge status-${t.status === 'completed' ? 'advanced' : t.status === 'canceled' ? 'empty' : 'needs_assets'}">${esc(t.status)}${t.outcome ? ` (${esc(t.outcome)})` : ''}</span></td>
-        <td>${t.status === 'open' ? `
-          <form class="proc-task-complete-form" data-task-id="${t.id}">
-            <input type="text" name="outcome" placeholder="outcome (e.g. approve)" required aria-label="Outcome">
-            <button type="submit" class="small">Complete</button>
-          </form>` : ''}</td>
+        <td>${t.status === 'open' ? `<button type="button" class="small" data-open-task data-def="${t.process_definition_id}" data-inst="${t.process_instance_id}" data-task="${t.id}">Open</button>` : ''}</td>
       </tr>`).join('');
 
     this.innerHTML = `
@@ -70,22 +65,41 @@ export class ProcessTasksListElement extends PanicElement {
     $('[data-filter="status"]', this)?.addEventListener('change', (e) => { this.filters.status = e.target.value; this.load(); });
     $('[data-filter="mine"]', this)?.addEventListener('change', (e) => { this.filters.assignee = e.target.checked ? 'me' : ''; this.load(); });
     $('[data-filter="q"]', this)?.addEventListener('input', (e) => { this.filters.q = e.target.value; this.load(); });
-    $$('.proc-task-complete-form', this).forEach((form) => form.addEventListener('submit', (e) => this.onComplete(e)));
+    $$('[data-open-task]', this).forEach((btn) => btn.addEventListener('click', () => this.openTaskModal(btn.dataset.def, btn.dataset.inst)));
   }
 
-  async onComplete(e) {
-    e.preventDefault();
-    const taskId = e.target.dataset.taskId;
-    const outcome = e.target.elements.outcome.value.trim();
-    if (!outcome) return;
-    const note = prompt('Note (optional):') || '';
+  async openTaskModal(processDefId, instanceId) {
+    const { dialog, close } = openModal({ title: 'Act on this step', bodyHtml: `<div class="padded" data-body><pb-process-step-form></pb-process-step-form></div>` });
+    const body = $('[data-body]', dialog);
+    const stepForm = $('pb-process-step-form', dialog);
+
     try {
-      await api(`/process-tasks/${taskId}/complete`, { method: 'POST', body: JSON.stringify({ outcome, note }) });
-      publish('toast.show', { message: `Marked "${outcome}".` });
-      await this.load();
+      stepForm.detail = await api(`/processes/${processDefId}/instances/${instanceId}`);
     } catch (err) {
-      publish('toast.show', { message: err.message, tone: 'error' });
+      body.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+      return;
     }
+
+    stepForm.addEventListener('task-action', async (e) => {
+      try {
+        await api(`/process-tasks/${e.detail.taskId}/complete`, { method: 'POST', body: JSON.stringify({ outcome: e.detail.outcome, note: e.detail.note, formValues: e.detail.formValues }) });
+        publish('toast.show', { message: `Marked "${e.detail.outcome}".` });
+        close();
+        await this.load();
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
+    stepForm.addEventListener('wait-action', async (e) => {
+      try {
+        await api(`/processes/${processDefId}/instances/${instanceId}/waits/${e.detail.waitId}/resume`, { method: 'POST', body: JSON.stringify({ note: e.detail.note }) });
+        publish('toast.show', { message: 'Wait resumed.' });
+        close();
+        await this.load();
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
   }
 }
 customElements.define('pb-process-tasks-list', ProcessTasksListElement);

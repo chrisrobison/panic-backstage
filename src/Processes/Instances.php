@@ -114,7 +114,8 @@ final class Instances extends BaseEndpoint
                 if ($outcome === '') {
                     return Response::json(['error' => 'outcome is required'], 422);
                 }
-                $result = $engine->completeTask($instanceId, $taskId, $outcome, $request->body('note') ?: null, $this->userId(), $this->actorLabel());
+                $formValues = is_array($request->body('formValues')) ? $request->body('formValues') : [];
+                $result = $engine->completeTask($instanceId, $taskId, $outcome, $request->body('note') ?: null, $this->userId(), $this->actorLabel(), $formValues);
                 return $this->ok($this->castResult($result));
             }
 

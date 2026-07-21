@@ -78,6 +78,7 @@ $nodes = [
     $node('approve', 'human.approval', 'Approve It', [
         'assigneeRole' => 'Tester',
         'outcomes' => [['id' => 'approve', 'label' => 'Approve'], ['id' => 'reject', 'label' => 'Reject', 'isDefault' => true]],
+        'formFields' => [['id' => 'quoted_amount', 'label' => 'Quoted amount', 'type' => 'number', 'required' => true]],
     ]),
     $node('wait_event', 'flow.wait', 'Wait For Reply', ['awaitedEvent' => 'test.replied', 'duration' => '1 seconds']),
     $node('flaky', 'op.http_request', 'Flaky Call', ['simulateFailure' => true, 'failureMessage' => 'simulated boom']),
@@ -124,13 +125,22 @@ $resultB = $engine->startInstance($definition, $version, ['name' => 'Case B', 'v
 ok($resultB['instance']['status'] === 'failed' && $resultB['instance']['current_node_id'] === 'bad_end',
    'Caller-supplied variables override the op node\'s default, sending the decision down the "no" branch to failure_end');
 
-// ── 3. Completing the human task resumes the instance into the wait node ────
+// ── 3. Completing the human task resumes the instance into the wait node,
+//        and its config.formFields submission is really persisted + merged
+//        into instance variables (the "form view" closes the loop back to
+//        the same variable bag a decision/op node can read). ─────────────
 $taskId = $result['tasks'][0]['id'];
-$resumed = $engine->completeTask($instA, $taskId, 'approve', 'looks good', null, 'tester');
+$resumed = $engine->completeTask($instA, $taskId, 'approve', 'looks good', null, 'tester', ['quoted_amount' => 4500]);
 ok($resumed['instance']['status'] === 'waiting' && $resumed['instance']['current_node_id'] === 'wait_event',
    'Completing the task with outcome=approve advanced the instance into the wait node');
 $waitRow = $db->one("SELECT * FROM process_waits WHERE process_instance_id = ? AND status = 'waiting'", [$instA]);
 ok($waitRow !== null && $waitRow['awaited_event'] === 'test.replied', 'A real process_waits row was created for the wait node');
+
+$completedTask = $db->one('SELECT form_data_json FROM process_tasks WHERE id = ?', [$taskId]);
+$storedFormData = json_decode((string) $completedTask['form_data_json'], true);
+ok(($storedFormData['quoted_amount'] ?? null) == 4500, 'A submitted config.formFields value is persisted on the task row (form_data_json)');
+$resumedVars = json_decode((string) $resumed['instance']['variables_json'], true) ?? [];
+ok(($resumedVars['quoted_amount'] ?? null) == 4500, 'The submitted form value was also merged into instance variables — a later node could reference it');
 
 // ── 4. Idempotency: completing the same task again is a harmless no-op ──────
 $again = $engine->completeTask($instA, $taskId, 'approve', 'duplicate click', null, 'tester');

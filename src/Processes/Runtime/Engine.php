@@ -266,11 +266,15 @@ final class Engine
 
     /** Complete a human task. Idempotent: a second call on an
      *  already-completed task is a harmless no-op (returns ok=true, already=true). */
-    public function completeTask(int $instanceId, int $taskId, string $outcome, ?string $note, ?int $actorUserId, string $actorLabel = 'system'): array
+    /** @param array $formValues submitted config.formFields values, keyed by
+     *  field id — persisted on the task row and merged into instance
+     *  variables (a person's answer becomes a real variable a later node
+     *  can reference), same treatment config.setVariables gets. */
+    public function completeTask(int $instanceId, int $taskId, string $outcome, ?string $note, ?int $actorUserId, string $actorLabel = 'system', array $formValues = []): array
     {
         $affected = $this->db->run(
-            "UPDATE process_tasks SET status = 'completed', outcome = ?, completed_at = NOW(), completed_by = ? WHERE id = ? AND process_instance_id = ? AND status = 'open'",
-            [$outcome, $actorUserId, $taskId, $instanceId]
+            "UPDATE process_tasks SET status = 'completed', outcome = ?, form_data_json = ?, completed_at = NOW(), completed_by = ? WHERE id = ? AND process_instance_id = ? AND status = 'open'",
+            [$outcome, $formValues ? json_encode($formValues, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null, $actorUserId, $taskId, $instanceId]
         );
         if ($affected === 0) {
             return ['ok' => true, 'already' => true];
@@ -284,6 +288,15 @@ final class Engine
         $edge = $node ? $this->pickEdge($this->outgoingEdges($graph, $node['id']), $outcome) : null;
 
         $this->logEvent($instanceId, $task['node_id'], 'completed', ($node['name'] ?? $task['title']) . ' → ' . $outcome, $note, $actorLabel);
+
+        if ($formValues) {
+            $current = $this->decodeVariables($instance);
+            $this->db->run(
+                'UPDATE process_instances SET variables_json = ? WHERE id = ?',
+                [json_encode(array_merge($current, $formValues), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $instanceId]
+            );
+            $instance['variables_json'] = json_encode(array_merge($current, $formValues));
+        }
 
         if (!$edge) {
             // No outgoing edge from this task's node — GraphValidator should

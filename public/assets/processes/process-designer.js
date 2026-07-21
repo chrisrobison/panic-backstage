@@ -226,9 +226,9 @@ export class ProcessDesignerElement extends PanicElement {
     });
   }
 
-  async completeTask({ instanceId, taskId, outcome, note }) {
+  async completeTask({ instanceId, taskId, outcome, note, formValues }) {
     try {
-      const result = await api(`/processes/${this.processId}/instances/${instanceId}/tasks/${taskId}/complete`, { method: 'POST', body: JSON.stringify({ outcome, note }) });
+      const result = await api(`/processes/${this.processId}/instances/${instanceId}/tasks/${taskId}/complete`, { method: 'POST', body: JSON.stringify({ outcome, note, formValues }) });
       publish('toast.show', { message: result.already ? 'Already completed.' : `Marked "${outcome}" — case moved on.` });
       await this.afterInstanceAction(instanceId);
     } catch (err) {

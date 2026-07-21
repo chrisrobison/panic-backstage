@@ -7030,6 +7030,8 @@ pb-process-node[data-tone="end"] { border-left-color: var(--proc-end); }
 .proc-inspector-group[open] summary { border-bottom: 1px solid var(--line); }
 .proc-branch-row { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 6px; align-items: center; margin-bottom: 8px; }
 .proc-branch-row input[type="text"] { font-size: 12.5px; padding: 7px 8px; }
+.proc-form-field-row { display: grid; grid-template-columns: 1fr auto 1fr auto auto; gap: 6px; align-items: center; margin-bottom: 8px; }
+.proc-form-field-row input[type="text"], .proc-form-field-row select { font-size: 12.5px; padding: 7px 8px; }
 .proc-connection-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
 .proc-connection-row:last-child { border-bottom: none; }
 .proc-connection-list { margin-bottom: 10px; }
@@ -7048,6 +7050,12 @@ pb-process-live-cases { display: block; background: var(--panel); border: 1px so
 .proc-instance-detail-grid h3:first-child { margin-top: 0; }
 .proc-instance-task { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-size: 13px; }
 .proc-instance-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+
+/* ── Shared <pb-process-step-form> — the "form view" of a process step,
+   embedded in Live Cases, the Tasks inbox, and elsewhere in the app. ── */
+pb-process-step-form { display: block; }
+.proc-step-form, .proc-step-wait { display: flex; flex-direction: column; gap: 8px; }
+.proc-step-form h4, .proc-step-wait h4 { margin: 0; font-size: 14px; }
 
 /* ── Shared timeline (validation modal / simulation log / live-case detail) ── */
 .proc-timeline { list-style: none; margin: 0; padding: 0; }

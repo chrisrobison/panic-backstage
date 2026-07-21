@@ -117,13 +117,15 @@ final class Tasks extends BaseEndpoint
         $user = $this->auth->user();
         try {
             $engine = new Engine($this->db, BookingHandlers::registry());
+            $formValues = is_array($request->body('formValues')) ? $request->body('formValues') : [];
             $result = $engine->completeTask(
                 (int) $task['process_instance_id'],
                 $taskId,
                 $outcome,
                 $request->body('note') ?: null,
                 $this->userId(),
-                (string) ($user['name'] ?? $user['email'] ?? 'operator')
+                (string) ($user['name'] ?? $user['email'] ?? 'operator'),
+                $formValues
             );
             if (!isset($result['instance'])) {
                 return $this->ok($result); // already completed — idempotent no-op

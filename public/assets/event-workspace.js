@@ -8,6 +8,7 @@ import './event-vendors.js';
 import './event-execution.js';
 import './event-closeout.js';
 import './recurrence.js'; // registers <pb-recurrence-fields>, used by EventRecurrencePanel below
+import './processes/process-step-form.js'; // registers <pb-process-step-form>, used by EventAutomation below
 
 function factCell(label, value) {
   return `<div class="fact"><label>${esc(label)}</label><strong>${value}</strong></div>`;
@@ -160,6 +161,71 @@ class EventNextAction extends EventBusCard {
     const id = this._data?.event?.id;
     if (!id) return;
     broadcastEventData(await api(`/events/${id}`));
+  }
+}
+
+// Automation card — this is the "form view" of the process-graph engine's
+// founding idea (see docs discussion "workflow-ui" / Automation > Processes)
+// embedded outside its own section entirely. Events.php has zero knowledge
+// of process automation; this card independently asks a small cross-process
+// endpoint (GET /api/process-instances) whether any process instance is
+// linked to this event (entity_type='event'), and if so renders the exact
+// same <pb-process-step-form> Live Cases and the Tasks inbox use — same
+// graph document, same outcome buttons/form fields, same dispatched
+// task-action/wait-action events. Renders nothing at all when there's no
+// active automation on this event, so it never clutters an event that
+// isn't using the Automation feature.
+// Deliberately does NOT extend EventBusCard's `render()`-on-data-set
+// contract (this card fetches its own data async instead of deriving it
+// from the shared event payload), so it replicates just the bus
+// subscription here rather than inheriting a `render()` call it doesn't
+// implement.
+class EventAutomation extends PanicElement {
+  connect() {
+    subscribe('event.changed', ({ data }) => { this.data = data; }, this.abort.signal);
+    if (this._data?.event?.id) this.load();
+  }
+
+  set data(value) {
+    this._data = value;
+    if (this.abort && value?.event?.id) this.load();
+  }
+  get data() { return this._data; }
+
+  async load() {
+    const eventId = this._data?.event?.id;
+    if (!eventId) return;
+    try {
+      const { instances } = await api(`/process-instances?entityType=event&entityId=${eventId}`);
+      const active = (instances || []).find((i) => !['completed', 'canceled'].includes(i.status));
+      if (!active) { this.innerHTML = ''; return; }
+      const detail = await api(`/processes/${active.process_definition_id}/instances/${active.id}`);
+      this.renderCard(active, detail);
+    } catch {
+      this.innerHTML = ''; // no view_processes capability, or nothing linked — stay silent
+    }
+  }
+
+  renderCard(instance, detail) {
+    this.innerHTML = `<article class="panel">
+      <div class="section-head padded"><h2>Automation: ${esc(instance.process_name)} ${helpLink('automation', 'Automation')}</h2>
+        <a href="#automation-process-${instance.process_definition_id}" class="small linklike">View full case &rarr;</a></div>
+      <div class="padded"><pb-process-step-form></pb-process-step-form></div>
+    </article>`;
+    const stepForm = $('pb-process-step-form', this);
+    stepForm.detail = detail;
+    stepForm.addEventListener('task-action', (e) => this.act(instance, () => api(`/process-tasks/${e.detail.taskId}/complete`, { method: 'POST', body: JSON.stringify({ outcome: e.detail.outcome, note: e.detail.note, formValues: e.detail.formValues }) })));
+    stepForm.addEventListener('wait-action', (e) => this.act(instance, () => api(`/processes/${instance.process_definition_id}/instances/${instance.id}/waits/${e.detail.waitId}/resume`, { method: 'POST', body: JSON.stringify({ note: e.detail.note }) })));
+  }
+
+  async act(instance, call) {
+    try {
+      await call();
+      publish('toast.show', { message: 'Updated.' });
+      await this.load();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
   }
 }
 
@@ -643,6 +709,7 @@ class EventWorkspace extends PanicElement {
     <pb-event-next-action></pb-event-next-action>
     <section id="overview">
       <pb-event-readiness></pb-event-readiness>
+      <pb-event-automation></pb-event-automation>
       <pb-event-overview></pb-event-overview>
     </section>
     <section id="details">
@@ -672,6 +739,7 @@ class EventWorkspace extends PanicElement {
     $('pb-event-summary', this).data = data;
     $('pb-event-next-action', this).data = data;
     $('pb-event-readiness', this).data = data;
+    $('pb-event-automation', this).data = data;
     $('pb-event-overview', this).data = data;
     $('pb-event-details-form', this).data = data;
     $('pb-event-sessions', this).data = data;
@@ -1456,6 +1524,7 @@ class EventHistoryUndo extends PanicElement {
 customElements.define('pb-event-workspace', EventWorkspace);
 customElements.define('pb-event-summary', EventSummary);
 customElements.define('pb-event-readiness', EventReadiness);
+customElements.define('pb-event-automation', EventAutomation);
 customElements.define('pb-event-next-action', EventNextAction);
 customElements.define('pb-event-overview', EventOverview);
 customElements.define('pb-event-details-form', EventDetailsForm);

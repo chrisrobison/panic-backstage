@@ -1,14 +1,18 @@
 // <pb-process-live-cases> — the collapsible "Live Instances" drawer shown
 // under the canvas on the Live Cases tab. Lists process_instances rows
 // (search/filter by status, node, owner) and expands a selected case inline
-// into its timeline + variables + (Phase 2) real operator controls: starting
-// a new instance, completing an open human task with a real outcome, and
-// retry/cancel/pause/resume/move — each dispatched as a bubbling intent
-// event for the designer (which owns the API calls) to act on. The four
-// seeded is_demo=1 example cases predate the runtime and have no tasks/
-// waits/executions to act on — the "Demo data" pill says so rather than
-// pretending they're real in-flight cases.
+// into its timeline + variables + real operator controls. Acting on the
+// current step itself (completing a task, resuming a wait) is delegated to
+// the shared <pb-process-step-form> — see process-step-form.js — the same
+// component the Tasks inbox and an embedded Event-workspace card use, so
+// there's exactly one rendering of "what does this step need" instead of
+// three. retry/cancel/pause/resume/move stay here since they're instance-
+// level operator actions, not step-specific. The four seeded is_demo=1
+// example cases predate the runtime and have no tasks/waits/executions to
+// act on — the "Demo data" pill says so rather than pretending they're real
+// in-flight cases.
 import { $, $$, esc } from '../core.js';
+import './process-step-form.js';
 
 // Escape first (so nothing in the raw text can inject markup), then turn any
 // http(s) URL into a real link — this is how a Phase 3 real-handler detail
@@ -123,6 +127,8 @@ export class ProcessLiveCasesElement extends HTMLElement {
       if (!$(`[data-detail-for="${id}"]`, this)) return; // row collapsed while loading
       this._lastDetail = detail;
       container.innerHTML = this.renderDetail(detail);
+      const stepForm = $('pb-process-step-form', container);
+      if (stepForm) stepForm.detail = detail;
       this.bindDetailActions(container, id, detail);
     } catch (err) {
       container.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
@@ -135,28 +141,6 @@ export class ProcessLiveCasesElement extends HTMLElement {
     const timeline = (detail.events || []).map((e) => `<li><span class="timeline-dot"></span><div><strong>${esc(e.label)}</strong> <span class="muted small">${esc(e.created_at)}</span>${e.detail ? `<div class="muted small">${linkify(e.detail)}</div>` : ''}</div></li>`).join('') || '<li class="muted">No timeline events recorded yet.</li>';
 
     const status = detail.instance?.status;
-    const openTasks = (detail.tasks || []).filter((t) => t.status === 'open');
-    const openWaits = (detail.waits || []).filter((w) => w.status === 'waiting');
-    const graph = detail.graph;
-
-    const taskBlock = openTasks.length ? openTasks.map((t) => {
-      const node = graph?.nodes?.find((n) => n.id === t.node_id);
-      const outcomes = node?.config?.outcomes || node?.config?.branches || [{ id: 'complete', label: 'Complete' }];
-      return `<div class="proc-instance-task" data-task-id="${t.id}">
-        <strong>${esc(t.title)}</strong> <span class="muted small">${esc(t.assignee_role || 'Unassigned')}${t.due_at ? ` · due ${esc(t.due_at)}` : ''}</span>
-        <div class="proc-instance-actions">
-          ${outcomes.map((o) => `<button type="button" class="small" data-complete-task="${t.id}" data-outcome="${esc(o.id)}">${esc(o.label || o.id)}</button>`).join('')}
-        </div>
-      </div>`;
-    }).join('') : '';
-
-    const waitBlock = openWaits.length ? openWaits.map((w) => `<div class="proc-instance-task" data-wait-id="${w.id}">
-        <strong>Waiting: ${esc(w.awaited_event || 'timer')}</strong>${w.timeout_at ? ` <span class="muted small">times out ${esc(w.timeout_at)}</span>` : ''}
-        <div class="proc-instance-actions">
-          <button type="button" class="small" data-resume-wait="${w.id}">Resume now</button>
-        </div>
-      </div>`).join('') : '';
-
     const opActions = [];
     if (status === 'failed') opActions.push('<button type="button" class="small" data-instance-action="retry">Retry</button>');
     if (!['completed', 'canceled'].includes(status)) opActions.push('<button type="button" class="small danger" data-instance-action="cancel">Cancel</button>');
@@ -169,21 +153,13 @@ export class ProcessLiveCasesElement extends HTMLElement {
       </div>
       <div>
         <h3>Variables</h3><div class="proc-var-list">${varRows}</div>
-        ${taskBlock || waitBlock ? `<h3>Waiting on</h3>${taskBlock}${waitBlock}` : ''}
+        <h3>Current step</h3><pb-process-step-form></pb-process-step-form>
         ${opActions.length ? `<h3>Operator actions</h3><div class="proc-instance-actions">${opActions.join('')}</div>` : ''}
       </div>
     </div>`;
   }
 
   bindDetailActions(container, instanceId, detail) {
-    $$('[data-complete-task]', container).forEach((btn) => btn.addEventListener('click', () => {
-      const note = prompt('Note for this decision (optional):') || '';
-      this.dispatchEvent(new CustomEvent('task-action', { bubbles: true, detail: { instanceId, taskId: Number(btn.dataset.completeTask), outcome: btn.dataset.outcome, note } }));
-    }));
-    $$('[data-resume-wait]', container).forEach((btn) => btn.addEventListener('click', () => {
-      const note = prompt('Note (optional) — e.g. how this event arrived:') || '';
-      this.dispatchEvent(new CustomEvent('wait-action', { bubbles: true, detail: { instanceId, waitId: Number(btn.dataset.resumeWait), note } }));
-    }));
     $$('[data-instance-action]', container).forEach((btn) => btn.addEventListener('click', () => {
       const action = btn.dataset.instanceAction;
       const note = prompt(`Reason for "${action}" (required):`);

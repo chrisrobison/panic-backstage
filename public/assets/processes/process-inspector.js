@@ -105,6 +105,16 @@ export class ProcessInspectorElement extends HTMLElement {
   renderHumanGroup(node, disabledAttr) {
     const cfg = node.config || {};
     const userOptions = `<option value="">— No specific person —</option>` + this._assignableUsers.map((u) => `<option value="${u.id}" ${String(cfg.assigneeUserId || '') === String(u.id) ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
+    const fields = cfg.formFields || [];
+    const fieldTypes = ['text', 'textarea', 'number', 'date', 'select', 'checkbox'];
+    const fieldRows = fields.map((f, i) => `
+      <div class="proc-form-field-row" data-form-field-index="${i}">
+        <input type="text" data-form-field="label" value="${esc(f.label || '')}" placeholder="Field label"${disabledAttr}>
+        <select data-form-field="type"${disabledAttr}>${fieldTypes.map((t) => `<option value="${t}" ${f.type === t ? 'selected' : ''}>${t[0].toUpperCase()}${t.slice(1)}</option>`).join('')}</select>
+        <input type="text" data-form-field="options" value="${esc(f.options || '')}" placeholder="Options (for Select), comma-separated"${disabledAttr}>
+        <label class="toggle-row small"><input type="checkbox" data-form-field="required" ${f.required ? 'checked' : ''}${disabledAttr}> Required</label>
+        <button type="button" class="small danger" data-remove-form-field="${i}"${disabledAttr} aria-label="Remove field"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
+      </div>`).join('');
     return `<details class="proc-inspector-group" open>
       <summary>Human Task</summary>
       <form class="grid-form padded" data-form="human">
@@ -113,9 +123,13 @@ export class ProcessInspectorElement extends HTMLElement {
         <label>Due<input type="text" name="dueRule" value="${esc(cfg.dueRule || '')}" placeholder="24 hours"${disabledAttr}></label>
         <label>Escalation<input type="text" name="escalationRule" value="${esc(cfg.escalationRule || '')}" placeholder="After 12 hours, notify Owner"${disabledAttr}></label>
         <label class="wide">Instructions<textarea name="instructions"${disabledAttr}>${esc(cfg.instructions || '')}</textarea></label>
-        <label class="wide">Required form<input type="text" name="requiredForm" value="${esc(cfg.requiredForm || '')}" placeholder="Optional form key"${disabledAttr}></label>
         <label class="wide toggle-row"><input type="checkbox" name="notifyByEmail" ${cfg.notifyByEmail !== false ? 'checked' : ''}${disabledAttr}> Notify assignee by email</label>
       </form>
+      <div class="padded" data-form-fields-section>
+        <p class="muted small" style="margin-top:0">Form fields (optional) — collected from whoever completes this task, alongside their outcome. The same graph document drives both the visual view and any form-view rendering of this step (Live Cases, the Tasks inbox, or an embedded widget elsewhere in the app).</p>
+        <div class="proc-form-field-list" data-form-field-list>${fieldRows}</div>
+        ${!disabledAttr ? `<button type="button" class="small secondary" data-add-form-field><i class="fa-solid fa-plus" aria-hidden="true"></i> Add field</button>` : ''}
+      </div>
     </details>`;
   }
 
@@ -258,6 +272,20 @@ export class ProcessInspectorElement extends HTMLElement {
       row.addEventListener('input', () => this.applyBranchRow(node, row));
       row.addEventListener('change', () => this.applyBranchRow(node, row));
     });
+
+    $('[data-add-form-field]', this)?.addEventListener('click', () => {
+      const formFields = [...(node.config?.formFields || []), { id: `f${Date.now().toString(36)}`, label: 'New field', type: 'text', required: false }];
+      this._store.updateNodeConfig(node.id, { formFields });
+    });
+    $$('[data-remove-form-field]', this).forEach((btn) => btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.removeFormField);
+      const formFields = (node.config?.formFields || []).filter((_, i) => i !== idx);
+      this._store.updateNodeConfig(node.id, { formFields });
+    }));
+    $$('.proc-form-field-row', this).forEach((row) => {
+      row.addEventListener('input', () => this.applyFormFieldRow(node, row));
+      row.addEventListener('change', () => this.applyFormFieldRow(node, row));
+    });
   }
 
   applyForm(node, form) {
@@ -272,13 +300,15 @@ export class ProcessInspectorElement extends HTMLElement {
       return;
     }
     if (form.dataset.form === 'human') {
+      // formFields (the structured data-collection schema) is edited via its
+      // own repeatable-row UI (see applyFormFieldRow) and deliberately not
+      // touched here, so saving this form never clobbers it.
       this._store.updateNodeConfig(node.id, {
         assigneeUserId: data.assigneeUserId || null,
         assigneeRole: data.assigneeRole || '',
         dueRule: data.dueRule || '',
         escalationRule: data.escalationRule || '',
         instructions: data.instructions || '',
-        requiredForm: data.requiredForm || '',
         notifyByEmail: !!$('[name="notifyByEmail"]', form)?.checked,
       });
       return;
@@ -322,6 +352,17 @@ export class ProcessInspectorElement extends HTMLElement {
     if (isDefault) branches.forEach((b, i) => { b.isDefault = i === idx; });
     else branches[idx].isDefault = false;
     this._store.updateNodeConfig(node.id, { branches });
+  }
+
+  applyFormFieldRow(node, row) {
+    const idx = Number(row.dataset.formFieldIndex);
+    const formFields = structuredClone(node.config?.formFields || []);
+    if (!formFields[idx]) return;
+    formFields[idx].label = $('[data-form-field="label"]', row)?.value || '';
+    formFields[idx].type = $('[data-form-field="type"]', row)?.value || 'text';
+    formFields[idx].options = $('[data-form-field="options"]', row)?.value || '';
+    formFields[idx].required = !!$('[data-form-field="required"]', row)?.checked;
+    this._store.updateNodeConfig(node.id, { formFields });
   }
 }
 customElements.define('pb-process-inspector', ProcessInspectorElement);

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `automation` — One shared step-form component drives visual + form views
 - **Added** `automation` — Wire Phase 3 real CenterStage handlers for Event Booking
 - **Added** `automation
 executable engine` — Add the Phase 2 process runtime (executable engine)

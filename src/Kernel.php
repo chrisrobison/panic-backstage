@@ -404,11 +404,15 @@ final class Kernel
         //   GET        /api/processes/{id}/audit
         //   GET        /api/process-tasks                       cross-process task inbox
         //   POST       /api/process-tasks/{id}/complete
+        //   GET        /api/process-instances?entityType=&entityId=  instances linked to a real record (any page can embed this)
         if ($segments[0] === 'process-tasks') {
             return [Processes\Tasks::class, [
                 'taskId' => $this->intOrNull($segments[1] ?? null),
                 'action' => $segments[2] ?? null,
             ]];
+        }
+        if ($segments[0] === 'process-instances') {
+            return [Processes\EntityInstances::class, []];
         }
         if ($segments[0] === 'processes') {
             $processId = $this->intOrNull($segments[1] ?? null);
