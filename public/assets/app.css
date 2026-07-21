@@ -662,7 +662,14 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
   color: #3d4450;
   box-shadow: 0 3px 10px rgba(20,25,32,.05);
 }
-.calendar-shell { padding: 0; }
+/* .panel's default overflow:hidden (it clips content to its rounded corners)
+   would otherwise disable position:sticky for any descendant — sticky needs
+   every ancestor up to the actual scroll container (#app on desktop, the
+   viewport on mobile) to leave overflow visible. The sticky head below
+   supplies its own matching top corner radius so the rounded-card look is
+   preserved even though the panel itself no longer clips. */
+.calendar-shell { padding: 0; overflow: visible; }
+.calendar-sticky-head { position: sticky; top: 0; z-index: 5; background: var(--panel, #fff); border-radius: 8px 8px 0 0; }
 .calendar-toolbar {
   min-height: 62px;
   display: grid;
@@ -674,6 +681,22 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
 .calendar-toolbar h2 { margin: 0; text-align: center; }
 .calendar-controls, .calendar-actions { display: flex; gap: 8px; align-items: center; }
 .calendar-actions { justify-content: flex-end; }
+/* Continuous-scroll month grid (Grid view) — see EventCalendar in
+   event-views.js. The weekday row is repeated once, sticky right below the
+   sticky toolbar, rather than once per stacked month. */
+.calendar-weekdays-sticky { border-bottom: 1px solid var(--line); }
+.calendar-scroll { display: flex; flex-direction: column; }
+.calendar-month-block + .calendar-month-block { border-top: 2px solid var(--line); }
+.calendar-month-heading { margin: 16px 16px 4px; font-size: 15px; font-weight: 800; color: var(--muted); }
+.calendar-load-sentinel { display: flex; align-items: center; justify-content: center; min-height: 36px; }
+.calendar-load-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent, #2563eb);
+  animation: spin .8s linear infinite;
+}
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(120px, 1fr));

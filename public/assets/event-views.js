@@ -42,6 +42,12 @@ function eventSpansDay(event, iso) {
   return event.date <= iso && (event.end_date || event.date) >= iso;
 }
 
+// Stable key for a calendar month, used to identify which months are already
+// loaded/rendered in the calendar's continuous-scroll month stack.
+function monthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
 // ── Quick-create event modal ─────────────────────────────────────────────────
 //
 // Friction-reducing entry point for new events: opened from a calendar day
@@ -441,9 +447,31 @@ class EventCalendar extends PanicElement {
     this.selectedDate = isoDate(new Date());
     // Default to agenda view on mobile, grid on desktop.
     this.viewMode = window.matchMedia('(max-width: 860px)').matches ? 'agenda' : 'grid';
-    await this.load();
+    // Grid mode's continuous-scroll state — see the "Grid view" section below.
+    // Agenda mode doesn't use these; it keeps the original single-window
+    // this._events/_start model via load(), unchanged.
+    this._monthBlocks = [];
+    this._loadingMonths = new Set();
+    this._scrollWired = false;
+    if (this.viewMode === 'grid') {
+      this.setLoading('Loading calendar');
+      try {
+        this._monthBlocks = [await this._fetchMonthWindow(this.month)];
+        this.render();
+      } catch (error) {
+        this.showError(error);
+      }
+    } else {
+      await this.load();
+    }
   }
 
+  // Legacy single-42-day-window fetch — still used by Agenda mode, whose
+  // mini-calendar + day-agenda only ever need one window centered on
+  // `this.month`. Grid mode uses _fetchMonthWindow() below instead: one call
+  // per month, returned rather than stored, so it can be spliced into an
+  // open-ended, continuously scrollable stack instead of replacing whatever
+  // is already loaded.
   async load() {
     this.setLoading('Loading calendar');
     const first = new Date(this.month.getFullYear(), this.month.getMonth(), 1);
@@ -462,6 +490,21 @@ class EventCalendar extends PanicElement {
     } catch (error) {
       this.showError(error);
     }
+  }
+
+  // Fetches one calendar month's 6-week (42-day) grid window — same date math
+  // as load() above, for an arbitrary month, returned as a plain block object
+  // rather than stored on `this`.
+  async _fetchMonthWindow(monthDate) {
+    const first = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+    const start = addDays(first, -first.getDay());
+    const end = addDays(start, 41);
+    const data = await api(`/events?start_date=${isoDate(start)}&end_date=${isoDate(end)}`);
+    this.canCreate = Boolean(data?.capabilities?.create_events);
+    this._venues = data.venues || [];
+    this._resources = data.resources || [];
+    this._zoneMap = resourceZoneMap(this._resources);
+    return { key: monthKey(first), monthDate: first, start, events: data.events || [] };
   }
 
   // ── Shared helpers ────────────────────────────────────────────────────────
@@ -498,71 +541,125 @@ class EventCalendar extends PanicElement {
     const monthLabel = this.month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
     this.innerHTML = `<section class="calendar-page">
       <article class="panel calendar-shell">
-        <div class="calendar-toolbar">
-          <div class="calendar-controls">
-            <button class="secondary small" data-prev>&lt;</button>
-            <button class="secondary small" data-next>&gt;</button>
-            <button class="secondary small" data-today>Today</button>
-          </div>
-          <h2>${esc(monthLabel)}</h2>
-          <div class="calendar-actions">
-            <div class="cal-view-toggle" role="group" aria-label="Calendar view">
-              <button class="secondary small${this.viewMode === 'grid' ? ' active' : ''}" data-view="grid" title="Month grid">
-                <i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>
-                <span class="cal-view-label"> Grid</span>
-              </button>
-              <a class="button secondary small" href="#dashboard" title="Back to dashboard">
-                <i class="fa-solid fa-list" aria-hidden="true"></i>
-                <span class="cal-view-label"> List</span>
-              </a>
-              <button class="secondary small${this.viewMode === 'agenda' ? ' active' : ''}" data-view="agenda" title="Agenda view">
-                <i class="fa-solid fa-bars" aria-hidden="true"></i>
-                <span class="cal-view-label"> Agenda</span>
-              </button>
+        <div class="calendar-sticky-head">
+          <div class="calendar-toolbar">
+            <div class="calendar-controls">
+              <button class="secondary small" data-prev>&lt;</button>
+              <button class="secondary small" data-next>&gt;</button>
+              <button class="secondary small" data-today>Today</button>
             </div>
-            <a class="button secondary small" href="#pipeline">Pipeline</a>
-            ${this.canCreate ? '<button class="button small" data-action="quick-new" type="button" title="New event" aria-label="New event"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>' : ''}
+            <h2 data-month-label>${esc(monthLabel)}</h2>
+            <div class="calendar-actions">
+              <div class="cal-view-toggle" role="group" aria-label="Calendar view">
+                <button class="secondary small${this.viewMode === 'grid' ? ' active' : ''}" data-view="grid" title="Month grid">
+                  <i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>
+                  <span class="cal-view-label"> Grid</span>
+                </button>
+                <a class="button secondary small" href="#dashboard" title="Back to dashboard">
+                  <i class="fa-solid fa-list" aria-hidden="true"></i>
+                  <span class="cal-view-label"> List</span>
+                </a>
+                <button class="secondary small${this.viewMode === 'agenda' ? ' active' : ''}" data-view="agenda" title="Agenda view">
+                  <i class="fa-solid fa-bars" aria-hidden="true"></i>
+                  <span class="cal-view-label"> Agenda</span>
+                </button>
+              </div>
+              <a class="button secondary small" href="#pipeline">Pipeline</a>
+              ${this.canCreate ? '<button class="button small" data-action="quick-new" type="button" title="New event" aria-label="New event"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>' : ''}
+            </div>
           </div>
+          ${this.viewMode === 'grid' ? `<div class="calendar-grid calendar-weekdays-sticky">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d) => `<div class="weekday">${d}</div>`).join('')}</div>` : ''}
         </div>
-        ${this.viewMode === 'grid' ? this._renderGrid() : this._renderAgenda()}
+        ${this.viewMode === 'grid' ? this._renderGridScroll() : this._renderAgenda()}
       </article>
     </section>`;
 
-    // Common navigation
+    // Common navigation. Grid mode scrolls the continuous month stack
+    // (fetching an adjacent month first if it isn't loaded yet); agenda mode
+    // still reloads its single 42-day window the original way.
     $('[data-prev]', this).addEventListener('click', () => {
-      this.month = new Date(this.month.getFullYear(), this.month.getMonth() - 1, 1);
-      this.load();
+      if (this.viewMode === 'grid') {
+        this._goToMonth(new Date(this.month.getFullYear(), this.month.getMonth() - 1, 1));
+      } else {
+        this.month = new Date(this.month.getFullYear(), this.month.getMonth() - 1, 1);
+        this.load();
+      }
     });
     $('[data-next]', this).addEventListener('click', () => {
-      this.month = new Date(this.month.getFullYear(), this.month.getMonth() + 1, 1);
-      this.load();
+      if (this.viewMode === 'grid') {
+        this._goToMonth(new Date(this.month.getFullYear(), this.month.getMonth() + 1, 1));
+      } else {
+        this.month = new Date(this.month.getFullYear(), this.month.getMonth() + 1, 1);
+        this.load();
+      }
     });
     $('[data-today]', this).addEventListener('click', () => {
-      this.month = new Date();
       this.selectedDate = isoDate(new Date());
-      this.load();
+      if (this.viewMode === 'grid') {
+        const now = new Date();
+        this._goToMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+      } else {
+        this.month = new Date();
+        this.load();
+      }
     });
     $('[data-action="quick-new"]', this)?.addEventListener('click', () => openEventQuickCreate());
 
-    // View toggle
+    // View toggle — switching into grid mode lazily fetches its first month
+    // if it hasn't been loaded yet (e.g. started in agenda on mobile);
+    // switching into agenda does the same via the legacy load().
     $$('[data-view]', this).forEach((btn) => {
-      btn.addEventListener('click', () => { this.viewMode = btn.dataset.view; this.render(); });
+      btn.addEventListener('click', async () => {
+        this.viewMode = btn.dataset.view;
+        if (this.viewMode === 'grid' && !this._monthBlocks.length) {
+          this.setLoading('Loading calendar');
+          try {
+            this._monthBlocks = [await this._fetchMonthWindow(this.month)];
+          } catch (error) {
+            this.showError(error);
+            return;
+          }
+        } else if (this.viewMode === 'agenda' && !this._events) {
+          await this.load(); // load() renders itself
+          return;
+        }
+        this.render();
+      });
     });
 
     if (this.viewMode === 'grid') {
       this._wireGrid();
+      this._wireScroll();
     } else {
       this._wireAgenda();
     }
   }
 
-  // ── Grid view ────────────────────────────────────────────────────────────
+  // ── Grid view (continuous scroll across months) ─────────────────────────
+  //
+  // Instead of one 42-day window replaced on every Prev/Next click, grid mode
+  // keeps a stack of month blocks (`this._monthBlocks`, chronologically
+  // sorted, one entry per loaded month) mounted in the DOM at once. Scrolling
+  // near the top/bottom of that stack fetches the adjacent month and splices
+  // it in (see _wireScroll()/_handleScroll()/_loadAdjacentMonth() below)
+  // without touching the months already on screen — the only place the
+  // scroll position is deliberately adjusted is to compensate for content
+  // inserted/removed *above* the viewport, so it never visually jumps.
 
-  _renderGrid() {
-    const events = this._events;
-    const days   = Array.from({ length: 42 }, (_, i) => addDays(this._start, i));
+  _renderGridScroll() {
+    return `${this._legend()}
+      <div class="calendar-scroll" data-calendar-scroll>
+        <div class="calendar-load-sentinel" data-sentinel="top"><span class="calendar-load-spinner" hidden></span></div>
+        ${this._monthBlocks.map((b) => this._renderMonthBlockHtml(b)).join('')}
+        <div class="calendar-load-sentinel" data-sentinel="bottom"><span class="calendar-load-spinner" hidden></span></div>
+      </div>`;
+  }
+
+  _renderMonthBlockHtml(block) {
+    const days = Array.from({ length: 42 }, (_, i) => addDays(block.start, i));
+    const today = isoDate(new Date());
     const createable = this.canCreate ? ' calendar-clickable' : '';
-    const today  = isoDate(new Date());
+    const monthLabel = block.monthDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
     // `iso` is the day cell this mini-event chip is being rendered into — for
     // a multi-day event that's every day from event.date through event.end_date,
@@ -598,26 +695,260 @@ class EventCalendar extends PanicElement {
         + `<div class="cell-zone zone-down" data-floor="Downstairs (21+)">${down.map(render).join('')}</div>`;
     };
 
-    return `${this._legend()}
+    return `<section class="calendar-month-block" data-month-key="${esc(block.key)}">
+      <h3 class="calendar-month-heading" data-month-heading>${esc(monthLabel)}</h3>
       <div class="calendar-grid calendar-split">
-        ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d) => `<div class="weekday">${d}</div>`).join('')}
         ${days.map((date) => {
           const iso = isoDate(date);
-          const dayEvents = events.filter((e) => eventSpansDay(e, iso));
+          const dayEvents = block.events.filter((e) => eventSpansDay(e, iso));
           const isToday = iso === today ? ' cal-today' : '';
           const clickAttr = this.canCreate ? ` data-create-date="${esc(iso)}" role="button" tabindex="0"` : '';
           return `<div class="calendar-day${createable}${isToday}"${clickAttr}><span class="day-num">${date.getDate()}</span>${dayCellBody(dayEvents, iso)}</div>`;
         }).join('')}
-      </div>`;
+      </div>
+    </section>`;
   }
 
-  _wireGrid() {
+  // `root` scopes wiring to just a newly-inserted month block when called
+  // from _appendMonthBlock()/_prependMonthBlock() — re-scanning the whole
+  // component every time would stack duplicate click handlers onto cells
+  // that were already wired by an earlier call.
+  _wireGrid(root = this) {
     if (!this.canCreate) return;
-    $$('[data-create-date]', this).forEach((cell) => {
+    $$('[data-create-date]', root).forEach((cell) => {
       const open = () => openEventQuickCreate({ date: cell.dataset.createDate });
       cell.addEventListener('click', (e) => { if (e.target.closest('a, button')) return; open(); });
       cell.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
     });
+  }
+
+  // ── Continuous-scroll wiring ─────────────────────────────────────────────
+
+  // The calendar's own elements never scroll internally — the app shell's
+  // <main id="app"> does on desktop (overflow-y: auto), while on mobile the
+  // whole document scrolls instead. Walk up from this component to find
+  // whichever ancestor actually establishes the scroll box, falling back to
+  // the window if none does.
+  _findScrollHost() {
+    let el = this.parentElement;
+    while (el && el !== document.documentElement) {
+      const overflowY = getComputedStyle(el).overflowY;
+      if (overflowY === 'auto' || overflowY === 'scroll') return el;
+      el = el.parentElement;
+    }
+    return window;
+  }
+
+  _getScrollMetrics() {
+    const host = this._scrollHostEl;
+    if (host === window) {
+      return { scrollTop: window.scrollY, scrollHeight: document.documentElement.scrollHeight, clientHeight: window.innerHeight };
+    }
+    return { scrollTop: host.scrollTop, scrollHeight: host.scrollHeight, clientHeight: host.clientHeight };
+  }
+
+  _wireScroll() {
+    if (!this._scrollWired) {
+      this._scrollWired = true;
+      this._hasScrolled = false;
+      this._scrollHostEl = this._findScrollHost();
+      let ticking = false;
+      const onScroll = () => {
+        this._hasScrolled = true;
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => { ticking = false; this._handleScroll(); });
+      };
+      // `this.abort.signal` (from PanicElement) auto-removes this listener
+      // when the calendar is navigated away from — #app persists across
+      // routes, so without this the listener would otherwise leak and keep
+      // firing forever against a detached component.
+      this._scrollHostEl.addEventListener('scroll', onScroll, { passive: true, signal: this.abort.signal });
+    }
+    this._handleScroll(); // always re-check after a grid render — content/viewport may not fill the screen yet
+  }
+
+  _handleScroll() {
+    if (this.viewMode !== 'grid' || !this._monthBlocks.length) return;
+    const { scrollTop, scrollHeight, clientHeight } = this._getScrollMetrics();
+    const EDGE = 600; // px — start fetching a bit before the literal edge so it feels seamless
+    const nearBottom = scrollHeight - scrollTop - clientHeight < EDGE;
+    // Only treat "near the top" as a request to load an earlier month once
+    // the user has actually scrolled. scrollTop is naturally 0 right after
+    // mount, before a single loaded month even overflows the viewport — if
+    // this ran unconditionally, the very first check would immediately
+    // prepend a month nobody scrolled to, ahead of "just the current month"
+    // the calendar is supposed to start on.
+    const nearTop = this._hasScrolled && scrollTop < EDGE;
+    // Load at most one edge per check. Forward-filling alone has no downside
+    // running unconditionally (it appends off-screen below), but if very
+    // little content is loaded — e.g. right after a prepend, or a fast
+    // scroll-fling landing near both edges at once — nearBottom and nearTop
+    // can both be true simultaneously; loading both concurrently risks their
+    // scroll-position compensation (see _prependMonthBlock) interleaving
+    // against each other. Prefer whichever edge is actually closer; the
+    // other gets its turn on the next tick regardless, since a successful
+    // load re-triggers this check itself.
+    if (nearBottom && nearTop) {
+      const distTop = scrollTop;
+      const distBottom = scrollHeight - scrollTop - clientHeight;
+      this._loadAdjacentMonth(distTop <= distBottom ? 'prev' : 'next');
+    } else if (nearBottom) {
+      this._loadAdjacentMonth('next');
+    } else if (nearTop) {
+      this._loadAdjacentMonth('prev');
+    }
+    this._updateVisibleMonthLabel();
+  }
+
+  async _loadAdjacentMonth(direction) {
+    const edgeBlock = direction === 'next' ? this._monthBlocks[this._monthBlocks.length - 1] : this._monthBlocks[0];
+    if (!edgeBlock) return;
+    const targetMonth = new Date(edgeBlock.monthDate.getFullYear(), edgeBlock.monthDate.getMonth() + (direction === 'next' ? 1 : -1), 1);
+    const key = monthKey(targetMonth);
+    if (this._loadingMonths.has(key) || this._monthBlocks.some((b) => b.key === key)) return;
+    this._loadingMonths.add(key);
+    this._setEdgeLoading(direction, true);
+    try {
+      const block = await this._fetchMonthWindow(targetMonth);
+      if (direction === 'next') {
+        this._monthBlocks.push(block);
+        this._appendMonthBlock(block);
+        this._pruneIfNeeded('next');
+      } else {
+        this._monthBlocks.unshift(block);
+        this._prependMonthBlock(block);
+        this._pruneIfNeeded('prev');
+      }
+      this._handleScroll(); // keep filling if the viewport still doesn't overflow
+    } catch (error) {
+      publish('toast.show', { message: error.message || 'Could not load that month.', tone: 'error' });
+    } finally {
+      this._loadingMonths.delete(key);
+      this._setEdgeLoading(direction, false);
+    }
+  }
+
+  _appendMonthBlock(block) {
+    const scrollEl = $('[data-calendar-scroll]', this);
+    const bottomSentinel = $('[data-sentinel="bottom"]', scrollEl);
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = this._renderMonthBlockHtml(block);
+    const node = wrapper.firstElementChild;
+    scrollEl.insertBefore(node, bottomSentinel);
+    this._wireGrid(node);
+  }
+
+  // Inserting content *above* the current scroll position would otherwise
+  // jump the viewport visually (everything the user was looking at gets
+  // pushed further down) — measure the height delta and compensate scrollTop
+  // by exactly that amount so what's on screen doesn't move.
+  _prependMonthBlock(block) {
+    const scrollEl = $('[data-calendar-scroll]', this);
+    const topSentinel = $('[data-sentinel="top"]', scrollEl);
+    const host = this._scrollHostEl;
+    const before = host === window ? document.documentElement.scrollHeight : host.scrollHeight;
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = this._renderMonthBlockHtml(block);
+    const node = wrapper.firstElementChild;
+    topSentinel.after(node);
+    this._wireGrid(node);
+    const after = host === window ? document.documentElement.scrollHeight : host.scrollHeight;
+    const delta = after - before;
+    if (host === window) window.scrollBy(0, delta); else host.scrollTop += delta;
+  }
+
+  // Bounds how many months stay mounted at once during a very long scroll
+  // session — cheap per month (a few hundred DOM nodes for a typical show
+  // calendar), but unbounded growth over, say, a year of scrolling in one
+  // sitting is still worth capping. Prunes from whichever end just grew past
+  // the cap, with the same scroll-position compensation as prepend.
+  _pruneIfNeeded(grewDirection) {
+    const MAX_MONTHS = 18;
+    if (this._monthBlocks.length <= MAX_MONTHS) return;
+    if (grewDirection === 'next') {
+      this._removeMonthBlockDom(this._monthBlocks.shift().key, true);
+    } else {
+      this._removeMonthBlockDom(this._monthBlocks.pop().key, false);
+    }
+  }
+
+  _removeMonthBlockDom(key, adjustScroll) {
+    const node = $(`[data-month-key="${key}"]`, this);
+    if (!node) return;
+    if (!adjustScroll) { node.remove(); return; }
+    const host = this._scrollHostEl;
+    const h = node.offsetHeight;
+    node.remove();
+    if (host === window) window.scrollBy(0, -h); else host.scrollTop -= h;
+  }
+
+  _setEdgeLoading(direction, isLoading) {
+    const sentinel = $(`[data-sentinel="${direction === 'next' ? 'bottom' : 'top'}"]`, this);
+    const spinner = sentinel && $('.calendar-load-spinner', sentinel);
+    if (spinner) spinner.hidden = !isLoading;
+  }
+
+  // Scrollspy: keeps the toolbar's month label honest as the user scrolls
+  // through the stack, via a direct text update rather than a full re-render
+  // (which would blow away scroll position). Picks the last month heading
+  // that's scrolled up past a thin band near the top of the scroll host.
+  _updateVisibleMonthLabel() {
+    const headings = $$('[data-month-heading]', this);
+    if (!headings.length) return;
+    const host = this._scrollHostEl;
+    const hostTop = host === window ? 0 : host.getBoundingClientRect().top;
+    const BAND = 80;
+    let current = headings[0];
+    for (const h of headings) {
+      if (h.getBoundingClientRect().top - hostTop <= BAND) current = h; else break;
+    }
+    const key = current.closest('[data-month-key]')?.dataset.monthKey;
+    if (!key || key === this._visibleMonthKey) return;
+    this._visibleMonthKey = key;
+    const [y, m] = key.split('-').map(Number);
+    this.month = new Date(y, m - 1, 1);
+    const labelEl = $('[data-month-label]', this);
+    if (labelEl) labelEl.textContent = this.month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  }
+
+  // Prev/Next/Today in grid mode: scroll to the target month, loading it
+  // first if needed. Three cases: already loaded (just scroll to it),
+  // exactly adjacent to the stack's current top/bottom edge (fetch + splice
+  // in, same as a scroll-triggered load), or a non-contiguous jump — e.g.
+  // "Today" after scrolling far away — which resets the stack to just that
+  // month.
+  async _goToMonth(targetMonth) {
+    const key = monthKey(targetMonth);
+    if (this._monthBlocks.some((b) => b.key === key)) { this._scrollMonthIntoView(key); return; }
+
+    const first = this._monthBlocks[0];
+    const last = this._monthBlocks[this._monthBlocks.length - 1];
+    const isNextAdjacent = last && monthKey(new Date(last.monthDate.getFullYear(), last.monthDate.getMonth() + 1, 1)) === key;
+    const isPrevAdjacent = first && monthKey(new Date(first.monthDate.getFullYear(), first.monthDate.getMonth() - 1, 1)) === key;
+
+    if (isNextAdjacent || isPrevAdjacent) {
+      await this._loadAdjacentMonth(isNextAdjacent ? 'next' : 'prev');
+      this._scrollMonthIntoView(key);
+      return;
+    }
+
+    this.setLoading('Loading calendar');
+    try {
+      this._monthBlocks = [await this._fetchMonthWindow(targetMonth)];
+      // Back to a single fresh month — reset the "has the user scrolled"
+      // flag too, or _handleScroll()'s very first post-render check would
+      // see scrollTop back at 0 and immediately prepend the prior month
+      // again (see the comment in _handleScroll()).
+      this._hasScrolled = false;
+      this.render();
+    } catch (error) {
+      this.showError(error);
+    }
+  }
+
+  _scrollMonthIntoView(key) {
+    $(`[data-month-key="${key}"]`, this)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
   // ── Agenda view ──────────────────────────────────────────────────────────

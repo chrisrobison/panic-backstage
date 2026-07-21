@@ -3,6 +3,15 @@
 // the floor — On Broadway (upstairs) above the divider, The Mab (downstairs)
 // below it. The old per-event status badge is gone (status moved to the dot +
 // hover tooltip).
+//
+// Grid mode is a continuous scroll across months (see EventCalendar in
+// event-views.js) — on first mount it keeps fetching+appending adjacent
+// months until the viewport overflows, which on a tall headless viewport can
+// mean several months load in the background right after the first paint.
+// Assertions below scope counts to the *first* .calendar-month-block (the
+// current month) rather than the whole page, so they're deterministic
+// regardless of how many additional months have finished loading by the
+// time they run — the first block's own content never changes once painted.
 import { test, assert } from './harness.mjs';
 
 test('calendar shows a status legend with coloured dots', async (page) => {
@@ -46,15 +55,16 @@ test('Grid|Agenda toggle has a middle List button that returns to the dashboard'
 
 test('events carry a status dot and the cell is split into floor zones', async (page) => {
   await page.goto('#calendar');
-  await page.until(`document.querySelector('.calendar-grid')`);
-  const events = await page.count('.mini-event');
+  await page.until(`document.querySelector('.calendar-month-block')`);
+  const scope = '.calendar-month-block:first-of-type';
+  const events = await page.count(`${scope} .mini-event`);
   // Each event title leads with a status dot; the legacy badge is gone.
-  assert.equal(await page.count('.mini-event .status-dot'), events, 'every event title has a status dot');
-  assert.equal(await page.count('.mini-event .badge'), 0, 'no per-event status badge remains');
+  assert.equal(await page.count(`${scope} .mini-event .status-dot`), events, 'every event title has a status dot');
+  assert.equal(await page.count(`${scope} .mini-event .badge`), 0, 'no per-event status badge remains');
   if (events > 0) {
     // A day with any events renders both floor zones (upstairs + downstairs),
     // so the dividing line is always present on a populated cell.
-    assert.atLeast(await page.count('.calendar-day .zone-up'), 1, 'upstairs (On Broadway) zone exists');
-    assert.atLeast(await page.count('.calendar-day .zone-down'), 1, 'downstairs (The Mab) zone exists');
+    assert.atLeast(await page.count(`${scope} .calendar-day .zone-up`), 1, 'upstairs (On Broadway) zone exists');
+    assert.atLeast(await page.count(`${scope} .calendar-day .zone-down`), 1, 'downstairs (The Mab) zone exists');
   }
 });
