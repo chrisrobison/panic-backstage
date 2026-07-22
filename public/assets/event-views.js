@@ -492,19 +492,34 @@ class EventCalendar extends PanicElement {
     }
   }
 
-  // Fetches one calendar month's 6-week (42-day) grid window — same date math
-  // as load() above, for an arbitrary month, returned as a plain block object
-  // rather than stored on `this`.
+  // Fetches one calendar month's grid window, for an arbitrary month, returned
+  // as a plain block object rather than stored on `this`.
+  //
+  // The window is *not* a fixed 42 days (6 weeks) — it runs from the Sunday
+  // on/before the 1st of this month through the day *before* the Sunday
+  // on/before the 1st of the *next* month. That second boundary is the same
+  // Sunday the next month's own block would start its grid on, so two
+  // adjacent blocks always meet exactly there: this block keeps its natural
+  // leading days from the previous month (the usual dimmed lead-in), but
+  // never renders into the next month, which is that month's own block's job.
+  // A fixed 42-day window rendered both blocks over the shared boundary
+  // week(s) independently, showing every day in it twice — see issue "big
+  // calendar duplicates 2 rows when scrolling down". Length still always
+  // comes out a whole number of weeks (both boundaries are Sundays), so the
+  // grid never ends on a partial row.
   async _fetchMonthWindow(monthDate) {
     const first = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
     const start = addDays(first, -first.getDay());
-    const end = addDays(start, 41);
+    const nextFirst = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
+    const nextStart = addDays(nextFirst, -nextFirst.getDay());
+    const end = addDays(nextStart, -1);
+    const days = Math.round((end - start) / 86400000) + 1;
     const data = await api(`/events?start_date=${isoDate(start)}&end_date=${isoDate(end)}`);
     this.canCreate = Boolean(data?.capabilities?.create_events);
     this._venues = data.venues || [];
     this._resources = data.resources || [];
     this._zoneMap = resourceZoneMap(this._resources);
-    return { key: monthKey(first), monthDate: first, start, events: data.events || [] };
+    return { key: monthKey(first), monthDate: first, start, days, events: data.events || [] };
   }
 
   // ── Shared helpers ────────────────────────────────────────────────────────
@@ -656,7 +671,7 @@ class EventCalendar extends PanicElement {
   }
 
   _renderMonthBlockHtml(block) {
-    const days = Array.from({ length: 42 }, (_, i) => addDays(block.start, i));
+    const days = Array.from({ length: block.days }, (_, i) => addDays(block.start, i));
     const today = isoDate(new Date());
     const createable = this.canCreate ? ' calendar-clickable' : '';
     const monthLabel = block.monthDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });

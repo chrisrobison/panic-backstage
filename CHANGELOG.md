@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `calendar` — Stop the Grid view from duplicating 1-2 weeks at month boundaries
 - **Added** `tasks` — Add a visual icon picker to the New Task Document modal
 - **Added** `calendar` — Flag room double-bookings in red across calendar/agenda/dashboard
 - **Added** `tasks
