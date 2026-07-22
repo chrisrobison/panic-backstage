@@ -31,6 +31,7 @@ import './processes/process-list.js';
 import './processes/process-designer.js';
 import './processes/process-tasks-list.js';
 import './processes/automation-placeholder.js';
+import './tasks/tasks-shell.js';
 
 
 class AppShell extends PanicElement {
@@ -318,6 +319,7 @@ class AppShell extends PanicElement {
     if (route === 'outbox') return 'outbox';
     if (route === 'new-event') return 'events';
     if (route.startsWith('automation-process-')) return 'automation-processes';
+    if (route === 'tasks' || route.startsWith('tasks-')) return 'tasks';
     return route;
   }
 
@@ -397,6 +399,10 @@ class AppShell extends PanicElement {
     if (route === 'automation-tasks') return this.mount(outlet, 'pb-process-tasks-list');
     if (route === 'automation-activity') return this.mount(outlet, 'pb-automation-placeholder', { page: 'activity' });
     if (route === 'automation-connections') return this.mount(outlet, 'pb-automation-placeholder', { page: 'connections' });
+    if (route === 'tasks' || route.startsWith('tasks-')) {
+      const documentId = route.startsWith('tasks-') ? Number(route.slice(6)) : null;
+      return this.mount(outlet, 'pb-tasks-app', { documentId: documentId || null });
+    }
     return this.mount(outlet, 'pb-dashboard');
   }
 

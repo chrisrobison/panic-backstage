@@ -88,15 +88,17 @@ abstract class BaseEndpoint implements Endpoint
             'manage_settings',
             'manage_processes',
             'view_processes',
+            'manage_tasks_app',
+            'view_tasks_app',
         ],
-        'event_owner' => ['view_leads'],
+        'event_owner' => ['view_leads', 'manage_tasks_app', 'view_tasks_app'],
         'promoter' => [],
         'band' => [],
         'artist' => [],
         'designer' => [],
-        'staff' => ['view_leads', 'view_processes'],
+        'staff' => ['view_leads', 'view_processes', 'manage_tasks_app', 'view_tasks_app'],
         'viewer' => [],
-        'global_viewer' => ['view_all_events', 'view_leads', 'view_reports', 'view_processes'],
+        'global_viewer' => ['view_all_events', 'view_leads', 'view_reports', 'view_processes', 'view_tasks_app'],
     ];
 
     private array $eventAccessCache = [];

@@ -442,6 +442,30 @@ final class Kernel
             return [Processes::class, ['processId' => $processId]];
         }
 
+        // Standalone Tasks app (tasks-ui.png) — independent of events; see
+        // database/migrations/069_add_tasks_app.sql and src/Tasks/*.php.
+        //   GET/POST     /api/task-documents[/{id}]
+        //   PATCH/DELETE /api/task-documents/{id}
+        //   GET/POST     /api/task-documents/{docId}/tasks[/{id}]
+        //   PATCH/DELETE /api/task-documents/{docId}/tasks/{id}
+        //   GET          /api/task-documents/{docId}/tasks/{id}/activity
+        //   POST         /api/task-documents/{docId}/tasks/{id}/comments
+        if ($segments[0] === 'task-documents') {
+            $documentId = $this->intOrNull($segments[1] ?? null);
+            if (($segments[2] ?? null) === 'tasks') {
+                $taskId = $this->intOrNull($segments[3] ?? null);
+                $sub = $segments[4] ?? null;
+                if ($sub === 'activity') {
+                    return [Tasks\Activity::class, ['documentId' => $documentId, 'taskId' => $taskId]];
+                }
+                if ($sub === 'comments') {
+                    return [Tasks\Activity::class, ['documentId' => $documentId, 'taskId' => $taskId]];
+                }
+                return [Tasks\Items::class, ['documentId' => $documentId, 'taskId' => $taskId]];
+            }
+            return [Tasks\Documents::class, ['documentId' => $documentId]];
+        }
+
         // Nav items — app shell main navigation structure (Admin > Navigation manager).
         //   GET    /api/nav-items            list (any authenticated user — the shell needs it)
         //   POST   /api/nav-items            create (manage_navigation)

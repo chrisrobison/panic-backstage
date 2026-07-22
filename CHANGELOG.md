@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `tasks
+documents, subtasks, board/timeline/calendar` — Add standalone Tasks app (documents, subtasks, board/timeline/calendar)
 - **Added** `automation` — One shared step-form component drives visual + form views
 - **Added** `automation` — Wire Phase 3 real CenterStage handlers for Event Booking
 - **Added** `automation

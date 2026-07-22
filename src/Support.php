@@ -82,6 +82,20 @@ function log_contact_activity(Database $db, int $contactId, ?int $userId, string
 }
 
 /**
+ * Same shape as log_contact_activity() above, but for the standalone Tasks
+ * app's per-task audit trail (task_activity — see database/migrations/
+ * 069_add_tasks_app.sql), shown in the task detail panel's Activity feed
+ * alongside task_comments rows.
+ */
+function log_task_activity(Database $db, int $taskId, ?int $userId, string $action, array $details = []): void
+{
+    $db->run(
+        'INSERT INTO task_activity (task_id, user_id, action, details_json) VALUES (?, ?, ?, ?)',
+        [$taskId, $userId, $action, $details ? json_encode($details) : null]
+    );
+}
+
+/**
  * Audit trail for the process-graph designer (see database/migrations/
  * 066_add_process_automation.sql). Every draft save, publish, and manual
  * instance intervention writes one row here — it's what backs the History

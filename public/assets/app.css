@@ -748,6 +748,17 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
 /* Pipeline card — private events get a faint tint */
 .pipe-card-private { border-left: 3px solid var(--muted); opacity: 0.9; }
 
+/* Room conflict: two events booked into the same room with overlapping
+   times (see roomConflictIds()/roomConflictDates() in core.js). Uses
+   --danger rather than --red, which already means "canceled" elsewhere on
+   the calendar, so a conflict reads as its own, more urgent signal. */
+.calendar-day.has-conflict {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 45%, transparent);
+}
+.calendar-day.has-conflict .day-num { color: var(--danger); font-weight: 800; }
+.mini-event-conflict { box-shadow: inset 0 0 0 1px var(--danger); border-radius: 4px; }
+
 /* Status colour key above the grid (dot colour = event status). */
 .calendar-legend {
   display: flex;
@@ -1662,6 +1673,9 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   color: var(--accent, #2563eb);
   font-weight: 700;
 }
+/* Room conflict on this day — see .calendar-day.has-conflict above. */
+.cal-mini-day.has-conflict { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.cal-mini-day.has-conflict .cal-mini-num { box-shadow: inset 0 0 0 2px var(--danger); }
 .cal-mini-dots {
   display: flex;
   gap: 2px;
@@ -1757,6 +1771,20 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
 }
 .cal-agenda-row:last-child { border-bottom: 0; }
 .cal-agenda-row:hover { background: #f6f8fc; }
+/* Room conflict — see .calendar-day.has-conflict above. */
+.cal-day-header-conflict { background: color-mix(in srgb, var(--danger) 8%, #fff); }
+.cal-day-conflict-flag {
+  margin: 0;
+  padding: 8px 16px;
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 700;
+  border-bottom: 1px solid var(--line);
+}
+.cal-agenda-row-conflict { background: color-mix(in srgb, var(--danger) 7%, transparent); }
+.cal-agenda-row-conflict:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.cal-agenda-conflict-icon { color: var(--danger); font-size: 12px; }
 .cal-agenda-time {
   font-size: 12px;
   font-weight: 700;
@@ -4545,7 +4573,8 @@ pb-messages-archive,
 pb-messages-sent,
 pb-msg-campaigns,
 pb-msg-lists,
-pb-listmaster {
+pb-listmaster,
+pb-tasks-app {
   flex: 1 1 0;
   min-height: 0;
   display: flex;
@@ -6602,6 +6631,267 @@ pb-listmaster { --lm-accent: var(--blue); background: var(--bg); }
   .lm-main { overflow-y: visible; }
 }
 
+/* ── Tasks App (public/assets/tasks/*.js) ─────────────────────────────────────
+   Standalone ClickUp/Asana-style task manager (tasks-ui.png): sidebar of
+   task documents, a hierarchical task table / board / timeline / calendar,
+   and a task detail slide-over. Reuses this app's #app.workspace-outbox
+   full-bleed shell (see the pb-tasks-app rules above) and several existing
+   generic classes (.badge/.status-*, .calendar-grid/.weekday/.calendar-day,
+   .tabs, .pill) rather than duplicating them — only genuinely new markup
+   gets a `tk-` prefixed class here. Structurally this mirrors ListMaster's
+   sidebar+main+detail layout (the `.lm-*` block above) one section up. */
+
+pb-tasks-app { background: var(--bg); }
+
+.tk-body { flex: 1 1 auto; min-height: 0; display: flex; overflow: hidden; }
+
+/* ── Sidebar: task documents ─────────────────────────────────────────────── */
+.tk-sidebar {
+  flex: 0 0 250px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+  padding: 16px 12px;
+}
+.tk-sidebar-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 6px 10px; }
+.tk-sidebar-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.tk-icon-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: 1px solid var(--line); border-radius: 7px;
+  padding: 4px 9px; font-size: 12px; font-weight: 700; color: var(--ink); cursor: pointer;
+}
+.tk-icon-btn:hover { background: var(--soft); }
+
+.tk-doc-nav { display: flex; flex-direction: column; gap: 2px; }
+.tk-doc-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; border: none; background: none;
+  color: var(--ink); font-size: 13.5px; font-weight: 600; text-align: left; cursor: pointer; width: 100%;
+}
+.tk-doc-item:hover { background: var(--soft); }
+.tk-doc-item.active { background: #e9f0fd; color: var(--blue); }
+.tk-doc-item i:first-child { width: 16px; text-align: center; flex-shrink: 0; }
+.tk-doc-item-archived { opacity: .55; }
+.tk-doc-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-doc-count { font-size: 12px; font-weight: 700; color: var(--muted); }
+.tk-doc-item.active .tk-doc-count { color: var(--blue); }
+.tk-doc-star { color: #d99100; font-size: 11px; }
+.tk-empty-sidebar { padding: 10px 8px; }
+
+.tk-archived-toggle {
+  margin-top: 10px; background: none; border: 1px dashed var(--line); border-radius: 8px;
+  padding: 8px 10px; font-size: 12.5px; font-weight: 700; color: var(--muted); cursor: pointer;
+  display: flex; align-items: center; gap: 8px;
+}
+.tk-archived-toggle:hover { color: var(--ink); border-color: var(--muted); }
+
+/* ── Main pane: document header + tabs + active view ─────────────────────── */
+.tk-main { flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 20px 26px 40px; }
+
+.tk-empty-main { padding: 70px 20px; text-align: center; color: var(--muted); }
+.tk-empty-main i { font-size: 32px; color: var(--line); display: block; margin-bottom: 12px; }
+.tk-empty-main h2 { margin: 0 0 6px; color: var(--ink); }
+.tk-empty-main .button { margin-top: 14px; }
+
+.tk-doc-header { border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 18px; }
+.tk-doc-header-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tk-doc-header-top h1 { margin: 0; font-size: 23px; }
+.tk-star-btn { background: none; border: none; color: var(--line); font-size: 16px; cursor: pointer; padding: 2px; }
+.tk-star-btn.active, .tk-star-btn:hover { color: #d99100; }
+.tk-doc-status-select { width: auto; font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 5px 10px; }
+.tk-doc-header-actions { margin-left: auto; display: flex; gap: 8px; }
+
+.tk-doc-progress-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 12.5px; color: var(--muted); font-weight: 700; }
+.tk-progress-bar { flex: 1 1 240px; max-width: 320px; height: 7px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.tk-progress-fill { height: 100%; background: var(--green); border-radius: 4px; }
+.tk-doc-progress-count { white-space: nowrap; }
+
+.tk-tabs { margin-top: 14px; }
+
+.tk-view-wrap { min-width: 0; }
+
+/* ── List (hierarchical table) view ───────────────────────────────────────── */
+/* Own (scoped) horizontal-scroll wrapper — unlike the plain `.table-scroll`
+   class other panels use as a marker with no CSS behind it yet, this table's
+   inline selects/date inputs have a real minimum readable width (below), so
+   the wrapper needs to actually scroll rather than let the browser clip
+   their text when the main pane is narrower than the table wants to be. */
+.tk-list-scroll { margin-bottom: 10px; overflow-x: auto; }
+.tk-task-table { min-width: 760px; }
+.tk-task-table .tk-col-wbs { width: 44px; text-align: right; padding-right: 10px; }
+.tk-task-table .tk-col-actions { width: 34px; }
+.tk-task-table select, .tk-task-table input[type="date"] {
+  border: 1px solid transparent; background: none; font-size: 12.5px; font-weight: 600; color: var(--ink);
+  border-radius: 6px; padding: 4px 6px; width: 100%; min-width: 108px;
+}
+.tk-task-table select:hover, .tk-task-table input[type="date"]:hover,
+.tk-task-table select:focus, .tk-task-table input[type="date"]:focus { border-color: var(--line); background: var(--panel); }
+.tk-date-overdue { color: var(--danger); font-weight: 800; }
+
+.tk-row-name { display: flex; align-items: center; gap: 6px; min-width: 220px; }
+.tk-row-toggle, .tk-row-toggle-spacer { width: 18px; flex-shrink: 0; }
+.tk-row-toggle { background: none; border: none; color: var(--muted); cursor: pointer; padding: 2px; font-size: 11px; }
+.tk-row-icon { width: 16px; text-align: center; flex-shrink: 0; color: var(--muted); }
+.tk-row-icon-folder { color: var(--blue); }
+.tk-row-status-icon { background: none; border: none; padding: 0; width: 16px; flex-shrink: 0; cursor: pointer; color: var(--line); font-size: 15px; }
+.tk-row-status-icon .tk-icon-done, .tk-icon-done { color: var(--green); }
+.tk-row-title { color: var(--ink); font-weight: 700; text-decoration: none; }
+.tk-row-title:hover { text-decoration: underline; color: var(--blue); }
+.tk-row-add-child { background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; opacity: 0; }
+tr[data-row]:hover .tk-row-add-child { opacity: 1; }
+.tk-row-add-child:hover { color: var(--blue); }
+
+.tk-add-row td { background: var(--soft); }
+.tk-add-input { width: 100%; border: none; background: none; font-size: 13.5px; font-weight: 600; outline: none; padding: 4px 0; }
+
+.tk-add-task-btn {
+  display: inline-flex; align-items: center; gap: 8px; background: none; border: 1px dashed var(--line);
+  border-radius: 8px; padding: 8px 12px; color: var(--blue); font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.tk-add-task-btn:hover { background: #e9f0fd; }
+.tk-list-empty { padding: 40px 10px; text-align: center; }
+.tk-list-empty .button { margin-top: 10px; }
+
+/* ── Priority flag ─────────────────────────────────────────────────────────── */
+.tk-priority { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.tk-priority-low { color: var(--muted); }
+.tk-priority-medium { color: #1466bd; }
+.tk-priority-high { color: #a06400; }
+.tk-priority-urgent { color: var(--danger); }
+select.tk-priority-select { font-weight: 700; }
+select.tk-priority-low { color: var(--muted); }
+select.tk-priority-medium { color: #1466bd; }
+select.tk-priority-high { color: #a06400; }
+select.tk-priority-urgent { color: var(--danger); }
+
+/* ── Avatars ───────────────────────────────────────────────────────────────── */
+.tk-avatar {
+  width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; color: #fff; flex-shrink: 0; text-transform: uppercase;
+}
+.tk-avatar-lg { width: 44px; height: 44px; font-size: 15px; }
+.tk-avatar-unassigned { background: var(--soft); color: var(--muted); border: 1px dashed var(--line); }
+
+/* ── Board (Kanban) view ───────────────────────────────────────────────────── */
+.tk-board { display: flex; gap: 14px; align-items: flex-start; overflow-x: auto; padding-bottom: 6px; }
+.tk-board-col { flex: 0 0 270px; background: var(--soft); border-radius: 10px; display: flex; flex-direction: column; max-height: calc(100vh - 320px); }
+.tk-board-col-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; font-size: 13px; font-weight: 800; }
+.tk-board-col-body { flex: 1; overflow-y: auto; padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px; min-height: 60px; border-radius: 8px; }
+.tk-board-col-body.drag-over { background: #e9f0fd; outline: 2px dashed var(--blue); outline-offset: -2px; }
+.tk-board-empty { text-align: center; padding: 16px 4px; }
+
+.tk-card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px; cursor: grab; box-shadow: none;
+}
+.tk-card:hover { border-color: var(--blue); }
+.tk-card.dragging { opacity: .45; }
+.tk-card-parent { display: flex; align-items: center; gap: 5px; }
+.tk-card-title { color: var(--ink); font-weight: 700; text-decoration: none; font-size: 13.5px; }
+.tk-card-title:hover { color: var(--blue); text-decoration: underline; }
+.tk-card-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tk-card-due { font-size: 11.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.tk-card-avatar { margin-left: auto; }
+
+/* ── Timeline (Gantt) view ─────────────────────────────────────────────────── */
+.tk-timeline { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.tk-gantt-header { display: flex; position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--line); z-index: 1; }
+.tk-gantt-label-spacer { flex: 0 0 220px; }
+.tk-gantt-track-header { position: relative; flex: 1 1 auto; min-width: 560px; height: 32px; }
+.tk-gantt-tick { position: absolute; top: 0; padding: 8px 0 0 6px; font-size: 11px; color: var(--muted); border-left: 1px solid var(--line); height: 100%; white-space: nowrap; }
+.tk-gantt-today { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); }
+.tk-gantt-body { display: flex; flex-direction: column; }
+.tk-gantt-row { display: flex; align-items: center; border-top: 1px solid var(--line); }
+.tk-gantt-label { flex: 0 0 220px; padding: 9px 10px; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-gantt-label a { color: var(--ink); text-decoration: none; font-weight: 600; }
+.tk-gantt-label a:hover { color: var(--blue); text-decoration: underline; }
+.tk-gantt-track { position: relative; flex: 1 1 auto; min-width: 560px; height: 38px; }
+.tk-gantt-bar { position: absolute; top: 9px; height: 20px; border-radius: 5px; border: none; cursor: pointer; padding: 0; }
+.tk-gantt-not_started { background: var(--line); }
+.tk-gantt-in_progress { background: #ffd784; }
+.tk-gantt-done { background: var(--green); }
+
+/* ── Calendar view ─────────────────────────────────────────────────────────── */
+.tk-cal-toolbar { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.tk-cal-toolbar h2 { margin: 0; font-size: 17px; }
+.calendar-day.other-month { opacity: .45; }
+.tk-cal-task { font-size: 11.5px; font-weight: 700; margin-top: 3px; padding: 2px 5px; border-radius: 5px; border-left: 3px solid var(--line); overflow: hidden; }
+.tk-cal-task a { color: var(--ink); text-decoration: none; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-cal-task-not_started { border-left-color: var(--muted); background: var(--soft); }
+.tk-cal-task-in_progress { border-left-color: #d99100; background: #fff6e2; }
+.tk-cal-task-done { border-left-color: var(--green); background: #eafaf0; }
+.tk-cal-more { margin-top: 2px; }
+
+/* ── Task detail slide-over ───────────────────────────────────────────────── */
+.tk-detail {
+  flex: 0 0 400px; min-width: 0; background: var(--panel); border-left: 1px solid var(--line);
+  overflow-y: auto; display: flex; flex-direction: column;
+}
+.tk-detail[hidden] { display: none; }
+.tk-detail-head { position: relative; padding: 18px 42px 14px 18px; border-bottom: 1px solid var(--line); }
+.tk-detail-close { position: absolute; top: 14px; right: 14px; background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; padding: 4px; }
+.tk-detail-close:hover { color: var(--ink); }
+.tk-detail-breadcrumb { margin-bottom: 6px; }
+.tk-detail-title-input { width: 100%; border: none; outline: none; background: none; font-size: 18px; font-weight: 800; color: var(--ink); padding: 2px 0; }
+.tk-detail-title-input:focus { border-bottom: 1px solid var(--blue); }
+
+.tk-detail-body { padding: 16px 18px 28px; flex: 1; }
+.tk-detail-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-bottom: 18px; }
+.tk-detail-meta-grid label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.tk-detail-meta-grid select, .tk-detail-meta-grid input { font-size: 13px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--ink); }
+
+.tk-detail-section { margin-bottom: 22px; }
+.tk-detail-section-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin: 0 0 10px; }
+.tk-detail-section-label .pill { background: var(--soft); color: var(--muted); font-weight: 700; }
+
+.tk-detail-desc { width: 100%; min-height: 80px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 13.5px; font-family: inherit; resize: vertical; }
+
+.tk-checklist { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tk-checklist-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tk-checklist-item label { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.tk-checklist-done { text-decoration: line-through; color: var(--muted); }
+.tk-checklist-remove { background: none; border: none; color: var(--muted); cursor: pointer; padding: 2px; }
+.tk-checklist-remove:hover { color: var(--danger); }
+.tk-checklist-add input { width: 100%; border: 1px dashed var(--line); border-radius: 7px; padding: 7px 10px; font-size: 13px; background: none; }
+
+.tk-tags-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tk-tag-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--soft); color: var(--ink); }
+.tk-tag-pill i { cursor: pointer; opacity: .6; font-size: 10px; }
+.tk-tag-pill i:hover { opacity: 1; color: var(--danger); }
+.tk-add-tag-btn { background: none; border: 1px dashed var(--line); border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; color: var(--muted); cursor: pointer; }
+.tk-add-tag-btn:hover { color: var(--blue); border-color: var(--blue); }
+
+.tk-dep-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tk-dep-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.tk-dep-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-dep-row button { background: none; border: none; color: var(--muted); cursor: pointer; }
+.tk-dep-row button:hover { color: var(--danger); }
+.tk-add-dep-select { width: 100%; font-size: 12.5px; }
+
+.tk-comment-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.tk-comment-form textarea { width: 100%; min-height: 60px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; resize: vertical; }
+.tk-comment-form button { align-self: flex-end; }
+
+.tk-activity-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.tk-activity-item { display: flex; gap: 10px; }
+.tk-activity-icon { width: 26px; height: 26px; border-radius: 50%; background: var(--soft); color: var(--blue); display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; margin-top: 1px; }
+.tk-activity-message { font-size: 13px; }
+.tk-activity-time { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+@media (max-width: 980px) {
+  .tk-sidebar { flex-basis: 210px; }
+  .tk-detail { position: fixed; inset: 0; z-index: 60; flex-basis: auto; width: 100%; }
+}
+@media (max-width: 720px) {
+  .tk-body { flex-direction: column; overflow-y: auto; overflow-x: hidden; }
+  .tk-sidebar { flex: 0 0 auto; max-height: 240px; border-right: none; border-bottom: 1px solid var(--line); }
+  .tk-main { overflow-y: visible; }
+  .tk-detail-meta-grid { grid-template-columns: 1fr; }
+}
+
 /* ── Upcoming Events (Events ▸ Upcoming card list) ─────────────────────────── */
 
 .upcoming-page { display: flex; flex-direction: column; gap: 18px; }
@@ -6626,6 +6916,10 @@ pb-listmaster { --lm-accent: var(--blue); background: var(--bg); }
 }
 .upcoming-card:hover { border-color: var(--blue); }
 .upcoming-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+/* Room conflict — see .calendar-day.has-conflict above. */
+.upcoming-card.has-conflict { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 6%, var(--panel)); }
+.upcoming-card.has-conflict:hover { border-color: var(--danger); }
+.upcoming-conflict-icon { color: var(--danger); font-size: 14px; }
 .upcoming-date { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
 .upcoming-dow { font-size: 11px; font-weight: 760; color: var(--muted); letter-spacing: .04em; }
 .upcoming-mon { font-size: 12px; font-weight: 760; color: var(--blue); }
