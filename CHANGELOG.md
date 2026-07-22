@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Stop the full-row PATCH path from blanking omitted fields
 - **Added** `docs` — Make the intake report live and editable in place
 - **Changed** `docs` — Redesign intake report as a patch-bay line check, not a blog page
 - **Added** `docs` — Track contract-on-file status in the intake readiness report

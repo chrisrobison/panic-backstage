@@ -540,6 +540,27 @@ final class Events extends BaseEndpoint
         if (!$old) {
             return $this->notFound();
         }
+        // These seven columns used to be read straight off $body with no
+        // `?? $old[...]` fallback anywhere below, unlike every other field on
+        // this row. That's fine as long as every caller re-sends the whole
+        // form (the main app's edit form always does) — but it means any
+        // caller that PATCHes a single other field (e.g. just booker_email)
+        // silently blanks title/event_type/status/date and resets
+        // walkthrough_done/public_visibility/owner_user_id to falsy/null.
+        // Resolve them once up front, the same way every other column
+        // already does, so omitting them from the body means "leave alone"
+        // rather than "clear".
+        $updateTitle       = $body['title'] ?? $old['title'];
+        $updateEventType   = $body['event_type'] ?? $old['event_type'];
+        $updateStatus      = $body['status'] ?? $old['status'];
+        $updateDate        = $body['date'] ?? $old['date'];
+        $updateWalkthrough = boolish($body['walkthrough_done'] ?? $old['walkthrough_done']) ? 1 : 0;
+        // owner_user_id follows the same array_key_exists convention as
+        // resource_id below: omit the key to leave it alone, send '' or null
+        // to explicitly clear it.
+        $updateOwnerUserId = array_key_exists('owner_user_id', $body)
+            ? self::nullableInt($body['owner_user_id'])
+            : self::nullableInt($old['owner_user_id'] ?? null);
         // Validate status transition when the status is being changed
         if (isset($body['status']) && $body['status'] !== ($old['status'] ?? '')) {
             $merged = array_merge($old, array_filter((array) $body, fn ($v) => $v !== null && $v !== ''));
@@ -562,35 +583,33 @@ final class Events extends BaseEndpoint
             }
         }
         // Room conflict check for committed bookings
-        $checkStatus = $body['status'] ?? $old['status'];
-        if (in_array($checkStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
-            $checkDate     = $body['date'] ?? $old['date'];
-            $checkEndDate  = self::nullableDate($body['end_date'] ?? $old['end_date'] ?? null, $checkDate);
+        if (in_array($updateStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
+            $checkEndDate  = self::nullableDate($body['end_date'] ?? $old['end_date'] ?? null, $updateDate);
             $checkDoors    = date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null);
             $checkEnd      = date_or_null($body['end_time']   ?? $old['end_time']   ?? null);
-            if ($conflict = $this->checkRoomConflict($updateVenueId, $checkDate, $checkDoors, $checkEnd, $id, $checkEndDate, $updateResourceId)) {
+            if ($conflict = $this->checkRoomConflict($updateVenueId, $updateDate, $checkDoors, $checkEnd, $id, $checkEndDate, $updateResourceId)) {
                 return $conflict;
             }
         }
-        $slug = (($old['title'] ?? '') !== ($body['title'] ?? '') || ($old['date'] ?? '') !== ($body['date'] ?? ''))
-            ? $this->uniqueSlug(($body['title'] ?? $old['title']) . '-' . ($body['date'] ?? $old['date']), $id)
+        $slug = ($old['title'] !== $updateTitle || $old['date'] !== $updateDate)
+            ? $this->uniqueSlug($updateTitle . '-' . $updateDate, $id)
             : $old['slug'];
         $wasStatus = (string) $old['status'];
-        $isPrivate = ($body['event_type'] ?? $old['event_type'] ?? '') === 'private_event';
+        $isPrivate = $updateEventType === 'private_event';
         // Private events are never publicly visible.
-        $updatePublicVis = $isPrivate ? 0 : (boolish($body['public_visibility'] ?? false) ? 1 : 0);
-        $updateEndDate = self::nullableDate($body['end_date'] ?? $old['end_date'] ?? null, $body['date']);
-        if ($err = self::endDateBeforeStartError($updateEndDate, $body['date'])) {
+        $updatePublicVis = $isPrivate ? 0 : (boolish($body['public_visibility'] ?? $old['public_visibility']) ? 1 : 0);
+        $updateEndDate = self::nullableDate($body['end_date'] ?? $old['end_date'] ?? null, $updateDate);
+        if ($err = self::endDateBeforeStartError($updateEndDate, $updateDate)) {
             return $err;
         }
 
         $this->db->run(
             'UPDATE events SET venue_id=?, resource_id=?, title=?, slug=?, event_type=?, status=?, description_public=?, description_internal=?, av_requirements=?, catering_notes=?, date=?, end_date=?, doors_time=?, show_time=?, end_time=?, load_in_time=?, age_restriction=?, ticket_price=?, deposit_amount=?, potential_revenue=?, ticket_url=?, ticket_system=?, contract_url=?, venue_contract_url=?, walkthrough_done=?, settlement_doc_url=?, capacity=?, estimated_guests=?, public_visibility=?, owner_user_id=?, promoter_name=?, promoter_email=?, promoter_phone=?, client_org=?, booker_name=?, booker_email=?, booker_phone=? WHERE id=?',
-            [$updateVenueId, $updateResourceId, $body['title'], $slug, $body['event_type'], $body['status'], $isPrivate ? null : ($body['description_public'] ?? $old['description_public']), $body['description_internal'] ?? $old['description_internal'], self::nullableString($body['av_requirements'] ?? $old['av_requirements']), self::nullableString($body['catering_notes'] ?? $old['catering_notes']), $body['date'], $updateEndDate, date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null), date_or_null($body['show_time'] ?? $old['show_time'] ?? null), date_or_null($body['end_time'] ?? $old['end_time'] ?? null), date_or_null($body['load_in_time'] ?? $old['load_in_time'] ?? null), $body['age_restriction'] ?? $old['age_restriction'], $isPrivate ? 0 : (float) ($body['ticket_price'] ?? $old['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? $old['deposit_amount']), self::nullableDecimal($body['potential_revenue'] ?? $old['potential_revenue']), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? $old['ticket_url']), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? $old['ticket_system']), self::nullableString($body['contract_url'] ?? $old['contract_url']), self::nullableString($body['venue_contract_url'] ?? $old['venue_contract_url']), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? $old['settlement_doc_url']), ($body['capacity'] ?? $old['capacity']) ?: null, isset($body['estimated_guests']) && $body['estimated_guests'] !== '' ? (int) $body['estimated_guests'] : ($old['estimated_guests'] ?? null), $updatePublicVis, ($body['owner_user_id'] ?? null) ?: null, self::nullableString($body['promoter_name'] ?? $old['promoter_name']), self::nullableString($body['promoter_email'] ?? $old['promoter_email']), self::nullableString($body['promoter_phone'] ?? $old['promoter_phone']), self::nullableString($body['client_org'] ?? $old['client_org']), $isPrivate ? null : self::nullableString($body['booker_name'] ?? $old['booker_name']), $isPrivate ? null : self::nullableString($body['booker_email'] ?? $old['booker_email']), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? $old['booker_phone']), $id]
+            [$updateVenueId, $updateResourceId, $updateTitle, $slug, $updateEventType, $updateStatus, $isPrivate ? null : ($body['description_public'] ?? $old['description_public']), $body['description_internal'] ?? $old['description_internal'], self::nullableString($body['av_requirements'] ?? $old['av_requirements']), self::nullableString($body['catering_notes'] ?? $old['catering_notes']), $updateDate, $updateEndDate, date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null), date_or_null($body['show_time'] ?? $old['show_time'] ?? null), date_or_null($body['end_time'] ?? $old['end_time'] ?? null), date_or_null($body['load_in_time'] ?? $old['load_in_time'] ?? null), $body['age_restriction'] ?? $old['age_restriction'], $isPrivate ? 0 : (float) ($body['ticket_price'] ?? $old['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? $old['deposit_amount']), self::nullableDecimal($body['potential_revenue'] ?? $old['potential_revenue']), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? $old['ticket_url']), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? $old['ticket_system']), self::nullableString($body['contract_url'] ?? $old['contract_url']), self::nullableString($body['venue_contract_url'] ?? $old['venue_contract_url']), $updateWalkthrough, self::nullableString($body['settlement_doc_url'] ?? $old['settlement_doc_url']), ($body['capacity'] ?? $old['capacity']) ?: null, isset($body['estimated_guests']) && $body['estimated_guests'] !== '' ? (int) $body['estimated_guests'] : ($old['estimated_guests'] ?? null), $updatePublicVis, $updateOwnerUserId, self::nullableString($body['promoter_name'] ?? $old['promoter_name']), self::nullableString($body['promoter_email'] ?? $old['promoter_email']), self::nullableString($body['promoter_phone'] ?? $old['promoter_phone']), self::nullableString($body['client_org'] ?? $old['client_org']), $isPrivate ? null : self::nullableString($body['booker_name'] ?? $old['booker_name']), $isPrivate ? null : self::nullableString($body['booker_email'] ?? $old['booker_email']), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? $old['booker_phone']), $id]
         );
-        if (isset($body['status']) && $body['status'] !== $wasStatus) {
-            $this->notifyStatusChange($id, $wasStatus, $body['status']);
-            if ($body['status'] === 'published') {
+        if ($updateStatus !== $wasStatus) {
+            $this->notifyStatusChange($id, $wasStatus, $updateStatus);
+            if ($updateStatus === 'published') {
                 $this->maybeAutoPublish($id);
             }
         }
