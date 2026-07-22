@@ -1388,6 +1388,7 @@ class PublicEventPage extends PanicElement {
               <h2><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> The Venue</h2>
               <p class="pev-venue-name">${esc(event.venue_name)}</p>
               ${event.address ? `<p class="muted">${esc(event.address)}<br>${esc([event.city, event.state].filter(Boolean).join(', '))}</p>` : ''}
+              <div class="pev-venue-map" data-venue-map></div>
               <a class="pev-directions" href="${esc(mapsHref)}" target="_blank" rel="noopener">Get Directions <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>
               ${event.venue_phone ? `<p class="muted"><a href="tel:${esc(event.venue_phone)}">${esc(event.venue_phone)}</a></p>` : ''}
               ${event.venue_website ? `<p class="muted"><a href="${esc(event.venue_website)}" target="_blank" rel="noopener">Visit website</a></p>` : ''}
@@ -1423,6 +1424,32 @@ class PublicEventPage extends PanicElement {
           flashCopied(event2.currentTarget);
         } catch { /* clipboard unavailable — quietly ignore */ }
       });
+
+      // Venue map — geocode the address client-side (OpenStreetMap Nominatim,
+      // no API key) and drop a Leaflet marker. No stored lat/lng for venues
+      // today, so this is best-effort: silently drop the map box if Leaflet
+      // hasn't loaded yet, the address is missing, or geocoding comes up empty.
+      const mapEl = this.querySelector('[data-venue-map]');
+      if (mapEl && mapQuery) {
+        (async () => {
+          try {
+            if (!window.L) throw new Error('Leaflet unavailable');
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(mapQuery)}`);
+            const hits = await res.json();
+            const hit = hits?.[0];
+            if (!hit) throw new Error('No geocoding match');
+            const lat = Number(hit.lat), lon = Number(hit.lon);
+            const map = L.map(mapEl, { scrollWheelZoom: false }).setView([lat, lon], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+              maxZoom: 19,
+            }).addTo(map);
+            L.marker([lat, lon]).addTo(map).bindPopup(esc(event.venue_name));
+          } catch { mapEl.remove(); /* no map — quietly fall back to the directions link */ }
+        })();
+      } else {
+        mapEl?.remove();
+      }
     } catch (error) {
       this.showError(error);
     }
