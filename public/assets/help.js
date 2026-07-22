@@ -44,6 +44,16 @@ export const HELP_SECTIONS = [
     ],
   },
   {
+    group: 'Tasks',
+    key: 'tasks-app',
+    icon: 'fa-solid fa-list-check',
+    items: [
+      { slug: 'tasks-app',           title: 'The Tasks app' },
+      { slug: 'tasks-app-documents', title: 'Task documents &amp; subtasks' },
+      { slug: 'tasks-app-views',     title: 'Board, timeline &amp; calendar views' },
+    ],
+  },
+  {
     group: 'Running an Event',
     key: 'running',
     icon: 'fa-solid fa-calendar-check',
@@ -104,6 +114,17 @@ export const HELP_SECTIONS = [
       { slug: 'admin-db',       title: 'Database browser' },
       { slug: 'admin-db-history', title: 'Database history &amp; undo' },
       { slug: 'admin-navigation', title: 'Navigation manager' },
+    ],
+  },
+  {
+    group: 'Automation',
+    key: 'automation',
+    icon: 'fa-solid fa-diagram-project',
+    items: [
+      { slug: 'automation-overview',       title: 'What is Automation?' },
+      { slug: 'automation-designer',       title: 'Building a process' },
+      { slug: 'automation-cases',          title: 'Running &amp; monitoring cases' },
+      { slug: 'automation-event-booking',  title: 'The Event Booking process' },
     ],
   },
   {
@@ -294,6 +315,9 @@ const HELP_CONTENT = {
     </ul>
     <p>The legend below the calendar toolbar always reflects whatever rooms are actually configured, so it updates automatically if a room is renamed, added, or archived. An event with no room selected shows in the default (red/"down") slot.</p>
 
+    <h3>Room double-bookings</h3>
+    <p>If two events share the same room on overlapping dates (or overlapping times, on the same day), both are flagged in red: the day cell's background and date number turn red on the Grid, the event chip gets a red outline with a "⚠ Room conflict" note in its tooltip, and the Agenda view adds a red banner and a warning icon on each affected row. This is a visual warning, not a hard block by itself — the app already refuses to save two <em>confirmed</em> bookings that conflict, so in practice this flag mostly catches two tentative <strong>Holds</strong> placed on the same room, which the system deliberately allows until one of them is confirmed.</p>
+
     <h3>Times on chips</h3>
     <p>Each calendar chip shows the Doors time (or Show time if no Doors time is set) as a small badge on the right. Hovering the chip shows a tooltip with Status · Room · Doors time · Load-In time.</p>
 
@@ -345,6 +369,7 @@ const HELP_CONTENT = {
     </ul>
     <p>Sales badges only appear once an event has been announced or later in its lifecycle — early-pipeline holds and drafts show their ordinary status badge instead.</p>
     <p>Click anywhere on a card to open that event's workspace, or use the <strong>&hellip;</strong> menu at the right of a card for <em>Open event</em> or <em>Promote</em> without leaving the list.</p>
+    <p>A card whose room is double-booked against another event gets a red border/background tint, a warning icon before the title, and a tooltip explaining the conflict — see <a href="#help-calendar">Calendar &rarr; Room double-bookings</a>.</p>
 
     <h3>Filters sidebar</h3>
     <ul>
@@ -386,6 +411,55 @@ const HELP_CONTENT = {
       <li>Click <em>Create event</em>. You are taken straight into the new event.</li>
     </ol>
     <p>The event is created with all of the template's seeded tasks, schedule items, and open items already in place, so you only have to fill in lineup-specific details.</p>
+  `,
+
+  'tasks-app': `
+    <h2>The Tasks app</h2>
+    <p><strong>Tasks</strong> in the left sidebar is a standalone, ClickUp/Asana-style project manager — completely separate from the <a href="#help-tasks">Tasks tab inside an event</a>. It has no connection to events at all: no event picker, no event-scoped data, nothing. Use it for work that doesn't belong to a single show — a marketing campaign, a season-long project, a cross-event initiative, an admin to-do list.</p>
+    <p class="help-tip">⚠️ <strong>Two things are both called "Tasks."</strong> The <a href="#help-tasks">Tasks tab</a> you'll find inside an individual event (door count, load-in checklist, etc.) and the <strong>Tasks app</strong> you'll find as its own item in the sidebar are unrelated features with different data, different fields, and different permissions. If someone says "check the tasks," confirm which one they mean.</p>
+    <h3>Getting there</h3>
+    <p>Click <strong>Tasks</strong> in the sidebar (URL <code>#tasks</code>). Opening a specific document directly uses <code>#tasks-&lt;id&gt;</code>. If you don't see Tasks in the sidebar at all, your account doesn't have the capability — ask a venue admin.</p>
+    <h3>Who sees it</h3>
+    <p>Access is global, not per-document and not per-event: venue admins and staff can view and edit every task document in the system, whoever created it. There's no owner-only privacy — anyone with access to the app sees everything in it. Bands, artists, promoters, designers, and viewers do not get this nav item at all.</p>
+  `,
+
+  'tasks-app-documents': `
+    <h2>Task documents &amp; subtasks</h2>
+    <p>A <strong>task document</strong> is the container you actually work inside — the sidebar's list of documents is the top level of the app, similar to a "project" or "list" in other task tools. Each document holds its own set of tasks and its own progress bar.</p>
+    <h3>Creating a document</h3>
+    <p>Click <strong>+ New</strong> in the sidebar (or <strong>+ New Document</strong> on the empty state). The modal asks for:</p>
+    <ul>
+      <li><strong>Name</strong> — required, e.g. "Q3 Marketing Campaign."</li>
+      <li><strong>Icon</strong> — pick from a grid of about 30 curated icons (Checklist, Briefcase, Rocket, Team, Venue, Contract, and so on), or type any FontAwesome class directly into the field underneath the grid if none of the presets fit. A live preview swatch shows the icon in your chosen color.</li>
+      <li><strong>Color</strong> — a color swatch used for the icon preview and document accents.</li>
+    </ul>
+    <p>The new document opens automatically once created. From its header you can star it (pins it to the top of the sidebar), set its status (<em>On Track / At Risk / Off Track / Complete</em>), archive it, or delete it outright — archiving and deleting both ask for confirmation first, and deleting a document permanently removes every task, comment, and activity entry inside it.</p>
+    <h3>Tasks &amp; subtasks</h3>
+    <p>Inside a document, click <strong>+ Add Task</strong> to create a top-level task, or the subtask button on any row to add a child underneath it. Nesting can go as deep as you want — a subtask can have its own subtasks. Backstage numbers them automatically (1, 1.1, 1.1.4…) based on where they sit in the tree; you never assign numbers yourself. Type the task title and press <strong>Enter</strong> to save, or <strong>Escape</strong> to cancel.</p>
+    <p>Deleting a task deletes its subtasks with it — there's no way to "promote" a subtask back to top-level, so double-check before deleting a parent with children underneath it.</p>
+    <h3>Opening a task's detail panel</h3>
+    <p>Click any task to open its full detail panel:</p>
+    <ul>
+      <li><strong>Assignee, due date, priority, status</strong> — the same fields available inline on the list row, editable here too.</li>
+      <li><strong>Checklist</strong> — a simple list of sub-items with their own checkboxes, separate from the subtask hierarchy — useful for a short "steps to do this one task" list that doesn't need its own rows in the tree.</li>
+      <li><strong>Tags</strong> — free-text labels you type in yourself. There's no shared tag list or autocomplete yet, so a stray "Marketing" vs. "marketing" will show up as two different tags — agree on spelling with your team.</li>
+      <li><strong>Dependencies</strong> — link a task to others in the same document that it depends on. This is informational only right now: marking a task done does <em>not</em> check whether the tasks it depends on are done, and there's no warning if you create a circular dependency.</li>
+      <li><strong>Comments &amp; activity</strong> — a combined feed of notes people leave and system-logged field changes. Only title, status, priority, and due-date changes are logged automatically; reassigning a task or editing its checklist/tags doesn't leave an activity entry.</li>
+    </ul>
+    <p class="help-tip">💡 A document's progress bar counts <em>every</em> task, parents included — so a parent left "Not Started" while all its subtasks are "Done" still drags the percentage down. Mark the parent done too once its children are finished.</p>
+  `,
+
+  'tasks-app-views': `
+    <h2>Board, timeline &amp; calendar views</h2>
+    <p>Every task document has four tabs across the top. All four show the same underlying tasks — switching tabs never filters anything out, it just changes how the same data is laid out.</p>
+    <ul>
+      <li><strong>Tasks</strong> — the default view: a hierarchical, WBS-numbered table. Expand/collapse any row with children, edit assignee/status/due date/priority inline, and use the small circle icon on a leaf task to mark it done in one click.</li>
+      <li><strong>Board</strong> — a 3-column kanban (<em>Not Started / In Progress / Done</em>). Every task appears here as its own card regardless of nesting — a subtask's card shows a small "📁 parent title" breadcrumb so you can still tell what it belongs to. Drag a card to a different column to change its status.</li>
+      <li><strong>Timeline</strong> — a Gantt-style bar chart built from each task's start/due dates, with a vertical line marking today. Bars are click-to-open only — there's no drag-to-reschedule here, so change dates from the Tasks view or the detail panel instead.</li>
+      <li><strong>Calendar</strong> — a month grid plotting each task on its <strong>due date</strong> (start date isn't used here). Up to four task chips show per day before it collapses to a "+N more" link; click a chip to open that task.</li>
+    </ul>
+    <p>None of the four views has its own search or filter control — they always show the whole document. If you need to find one task in a large document, the Tasks view's expand/collapse is currently the fastest way to scan for it.</p>
+    <p class="help-tip">⏰ A task with a due date in the past that isn't marked Done is flagged in red across the Tasks list, Board cards, and Timeline bars — but not specially highlighted in the Calendar view.</p>
   `,
 
   'event-create': `
@@ -715,6 +789,7 @@ const HELP_CONTENT = {
   tasks: `
     <h2>Tasks</h2>
     <p>Tasks are anything a person has to do before the show. They appear on the dashboard's open-items metric and feed the "Next Recommended Action" hint.</p>
+    <p class="help-tip">⚠️ This tab is scoped to this one event only. For project work that isn't tied to a single show, use the standalone <a href="#help-tasks-app">Tasks app</a> in the sidebar — it's a separate feature with its own data, not connected to this tab.</p>
     <h3>Adding a task</h3>
     <p>Fill in the form at the bottom of the Tasks panel: a title (required), an assignee, a due date, a priority (low / normal / high / urgent), and details. Click <em>Add task</em>.</p>
     <h3>Updating a task</h3>
@@ -1104,6 +1179,9 @@ const HELP_CONTENT = {
   activity: `
     <h2>Activity log</h2>
     <p>The Activity panel at the bottom of every event lists every meaningful change — who saved what and when. Use it for forensic questions ("when did the doors time change?") and as a hand-off log between bookers and night-of-show staff.</p>
+    <h3>Undoing a recent change</h3>
+    <p>The <strong>Undo &#9662;</strong> button in the event header (next to Wizard/Print) opens a list of recent changes to this event — its own fields plus related records like tasks, staffing, guest list, and payments. Pick any entry (not just the most recent one) and confirm to revert it; already-undone entries are shown disabled. Anyone who can edit the event can use this — it doesn't require admin access.</p>
+    <p class="help-tip">💡 This is a lighter, event-scoped version of the venue-admin-only <a href="#help-admin-db-history">Database history &amp; undo</a> screen. Reach for the header Undo menu for a quick "put that back" on one event; reach for Database history when you need to search across the whole venue's data or trace a change made outside the app entirely.</p>
   `,
 
   admin: `
@@ -1130,7 +1208,7 @@ const HELP_CONTENT = {
     <p>The <strong>Venue</strong> admin tab has two parts: the venue's own profile, and the rooms within it.</p>
 
     <h3>Venue details</h3>
-    <p>Name, address, city/state, timezone, phone, and website. These appear on contracts, emails, and the public event page — fill them in early (the onboarding checklist links here).</p>
+    <p>Name, address, city/state, timezone, phone, and website. These appear on contracts, emails, and the public event page — fill them in early (the onboarding checklist links here). The address also drives a small interactive map on the public event page, placed under the venue's name and address — it's geocoded automatically from these fields, so there's nothing extra to configure.</p>
 
     <h3>Rooms</h3>
     <p>Rooms are the actual bookable spaces within the venue — e.g. a room per stage, floor, or sub-space. An event's <a href="#help-details">Room</a> field picks one of these. Each room has:</p>
@@ -1295,6 +1373,7 @@ const HELP_CONTENT = {
   'admin-db-history': `
     <h2>Database history &amp; undo</h2>
     <p>Admin &rarr; DB History (<code>#admin-db-history</code>) is an audit trail of every insert, update, and delete on this venue's database — no matter whether it came from the app, a background sync job, or someone at a terminal — with a one-click undo for any entry. Restricted to venue admins; this is more sensitive than the read-only <a href="#help-admin-db">Database browser</a>, so it has its own permission.</p>
+    <p class="help-tip">💡 For a quick revert scoped to one event, non-admins can use the <a href="#help-activity">Undo menu</a> in that event's own header instead of coming here.</p>
 
     <h3>Why this exists</h3>
     <p>Most edits already show up in an event's own activity log. But some writes — an automated sync, a data-fix script, a stray edit run directly against the database — never go through the app at all, so nothing records them anywhere else. Database history catches <em>every</em> write at the database level, so nothing that changes your data is invisible.</p>
@@ -1310,6 +1389,67 @@ const HELP_CONTENT = {
 
     <h3>What it can't do</h3>
     <p>History only covers the database itself — writes to disk (uploaded files, generated PDFs, sent email) aren't touched by an undo, so reverting a database change doesn't un-send an email or restore a deleted file. Entries older than 30 days are automatically pruned to keep the table from growing without bound; for recovery beyond that window, or for a whole-database point-in-time restore, ask whoever runs the server about the separate 5-minute snapshot backups.</p>
+  `,
+
+  // ── Automation ───────────────────────────────────────────────────────────────
+
+  'automation-overview': `
+    <h2>What is Automation?</h2>
+    <p><strong>Automation</strong> (sidebar group with sub-items Processes / Cases / Tasks / Activity / Connections) is a visual workflow builder: you draw a flowchart of the steps a piece of work goes through — a booking inquiry, for instance — and Backstage can then run that flowchart against a real event, stopping to ask a person for input where needed and, at a handful of steps, taking real actions against real data on its own.</p>
+    <p>The vocabulary:</p>
+    <ul>
+      <li><strong>Process</strong> — a named, reusable workflow definition (e.g. "Event Booking"). Editing a published process always creates a new draft version rather than changing the live one out from under any workflow currently running it.</li>
+      <li><strong>Step</strong> — one box in the flowchart: a trigger, an operation, a decision, a human task, a wait, or an end.</li>
+      <li><strong>Case</strong> (also called an <em>instance</em>) — one actual run of a process. Starting a case is always a manual action — nothing auto-starts a case from a real inquiry yet.</li>
+    </ul>
+    <p class="help-tip">💡 Three of the five sidebar items — <strong>Cases, Activity, and Connections</strong> — are explicitly marked "Planned — not yet built" inside the app itself. Only <strong>Processes</strong> (the designer + Live Cases) and <strong>Tasks</strong> (the cross-process human-task inbox) are functional today.</p>
+    <h3>Permissions</h3>
+    <p>Seeing the Automation nav group at all requires the <code>view_processes</code> capability (venue admins, staff, and read-only global viewers have it; per-event roles like promoter/band/designer/viewer do not). Building, publishing, starting, and operating a process requires <code>manage_processes</code> — venue admins and staff have it, global viewers can look but not touch. One exception: whoever a human-task step is assigned to can complete <em>that task</em> even without <code>manage_processes</code>.</p>
+  `,
+
+  'automation-designer': `
+    <h2>Building a process</h2>
+    <p>Open <strong>Automation &rarr; Processes</strong>, click <strong>+ New Process</strong> (name/description/category), and you land in the designer canvas for its first draft version.</p>
+    <h3>The canvas</h3>
+    <p>Drag a step off the palette onto the canvas, drag from its output dot to another step's input to connect them, and use the inspector panel on the right to configure whichever step is selected. Steps are grouped into five families in the palette: <strong>Triggers</strong>, <strong>Operations</strong>, <strong>Flow Control</strong> (decisions, parallel splits, waits, timers, subprocess, end), <strong>Human Work</strong> (approvals, assigned tasks, forms, contact-customer), and an optional <strong>AI</strong> group (classify text, AI decision, etc. — not wired to a real model yet, see <a href="#help-automation-event-booking">The Event Booking process</a>).</p>
+    <p>A <strong>Decision</strong> step branches by adding one or more named branches (each with a label and a free-text condition, one marked as the default/fallback) and dragging a separate connection out of each branch. If dragging isn't convenient, the inspector's Connections panel lets you wire two steps together by picking them from a list instead.</p>
+    <h3>Human-task steps &amp; the shared step form</h3>
+    <p>An Approval or Assigned Task step can declare its own form fields (label, type, required) in the inspector. The exact same field definitions are what a person sees when they actually work that step later — in the Live Cases detail view, the Automation Tasks inbox, or an "Automation" card on the linked event's own workspace page — so there's only one definition to maintain, not a separate design-time mock and a separate runtime form.</p>
+    <h3>Publishing</h3>
+    <p>A process must have exactly one trigger step before it can publish. Publishing locks that version — any further edits create a new draft, leaving cases already running on the published version untouched. Use the toolbar's "…" menu for publish, new-draft, rename, and import/export.</p>
+  `,
+
+  'automation-cases': `
+    <h2>Running &amp; monitoring cases</h2>
+    <h3>Starting a case</h3>
+    <p>From a published process, click <strong>Start Instance</strong> (in the Live Cases drawer). You can optionally link it to a real event by id — this is what allows the process's operation steps to act on real data; without a linked event, every operation step just logs what it <em>would</em> have done and moves on.</p>
+    <h3>Live Cases</h3>
+    <p>The Live Cases tab on a process lists every case with its status, current step, owner, and elapsed time. Open one to see its full timeline (one entry per step it passed through), its variables, and — when it's paused on a human task or wait — the same step form described in <a href="#help-automation-designer">Building a process</a>. Manual operator actions (Retry / Cancel / Pause / Resume) each require you to type a short note explaining why, which is kept with the case's history.</p>
+    <h3>Waits vs. human tasks</h3>
+    <p>A case pauses at a step in one of two ways: a <strong>wait</strong> pauses for an external event or a timeout (some waits — like "contract signed" — resume automatically the moment that really happens elsewhere in the app; others need an operator to resume them by hand); a <strong>human task</strong> is assigned to a specific person or role and sits in the cross-process <strong>Automation &rarr; Tasks</strong> inbox until they pick an outcome. A background job periodically checks for overdue waits and tasks and flags the case <em>overdue</em> — it never completes a task on your behalf.</p>
+    <p class="help-tip">⚠️ Don't confuse the Automation &rarr; Tasks inbox with the separate <a href="#help-tasks-app">Tasks app</a> in the main sidebar — same word, unrelated features. This inbox only lists human-task steps waiting on someone inside a running process.</p>
+  `,
+
+  'automation-event-booking': `
+    <h2>The Event Booking process</h2>
+    <p>Backstage ships with one pre-built process, <strong>Event Booking</strong> — inquiry through settlement for a new venue booking. It's a real, usable starting point (not just a demo), but it's worth knowing exactly which of its steps do something real versus simulate what they'd eventually do:</p>
+    <h3>Real, wired to live data (only when a case is linked to a real event)</h3>
+    <ul>
+      <li><strong>Check Availability</strong> — checks the real events table for a same-room, same-date conflict.</li>
+      <li><strong>Prepare Quote</strong> — drafts a real contract record (nothing is sent).</li>
+      <li><strong>Create Event / Event Complete</strong> steps — change the real event's status, through a deliberately conservative, hard-coded set of allowed transitions.</li>
+      <li><strong>Create Production Tasks</strong> — creates real event checklist tasks from the venue's own event templates.</li>
+      <li><strong>Send Proposal / Suggest Alternative Dates</strong> — builds a pre-filled Gmail compose link for you to review and send yourself. Nothing is emailed automatically.</li>
+      <li><strong>Await Signature</strong> — this wait resumes automatically the instant the linked event's contract is actually fully signed through the normal signing flow.</li>
+    </ul>
+    <h3>Simulated — logged, but no real-world effect (by design, for now)</h3>
+    <ul>
+      <li><strong>Collect Deposit</strong> — real deposit collection still happens through the existing payment-link flow on the event itself; this step doesn't call it.</li>
+      <li><strong>Settlement</strong> — there's no settlement action to call yet.</li>
+      <li>Any AI step (classify inquiry, AI decision, etc.) — not connected to a real model.</li>
+    </ul>
+    <p>Every step's execution record is tagged as real or simulated, so the case timeline always shows you which is which — a simulated step's entry says plainly that no real side effect happened.</p>
+    <p class="help-tip">💡 The "Date Available?" decision currently has no way, from the designer UI, to actually read the real availability check's result — until that's wired up, it falls through to its default branch regardless of what Check Availability found. Don't rely on that branch choosing correctly yet; review it manually.</p>
   `,
 
   // ── Messages: Campaigns & Lists ─────────────────────────────────────────────

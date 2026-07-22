@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** — Cover the Tasks app, Automation module, and other recent changes
 - **Fixed** `docs` — Sort intake status list by soonest event date first
 - **Changed** `add` — (add) web component that renders a ticket with a familiar look
 - **Changed** `docs` — Stop sending 7 unchanged fields on every intake-report edit
