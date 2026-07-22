@@ -698,7 +698,15 @@
     min-height: 100vh;
   }
 
+  /* On screen, each chapter's own dark .chapter-hero (with its "Chapter N"
+     arabic numeral) already restates the same title right below this, so
+     showing both reads as a duplicate heading. Kept in the DOM (not deleted)
+     because the print stylesheet below turns .part-break back on as a real
+     "Part N" divider page — a page of its own before each chapter's title
+     page, the way a printed book or manual is bound. See the @media print
+     override a few hundred lines down. */
   .part-break {
+    display: none;
     background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
     color: white;
     padding: 56px 60px;
@@ -1117,7 +1125,7 @@
     <a href="#cover" class="chapter">How to use this manual</a>
 
     <div class="nav-section">Part I — Lead Pipeline</div>
-    <a href="#leads-part" class="chapter">Lead Pipeline</a>
+    <a href="#leads" class="chapter">Lead Pipeline</a>
     <a href="#lead-inbox" class="section">The Leads Inbox</a>
     <a href="#lead-create" class="section">Creating a lead</a>
     <a href="#lead-pipeline" class="section">Moving through the pipeline</a>
@@ -1170,7 +1178,7 @@
     <a href="#activity-log" class="section">The Activity Log</a>
 
     <div class="nav-section">Part V — Closeout</div>
-    <a href="#closeout-part" class="chapter">Closeout &amp; Billing</a>
+    <a href="#closeout" class="chapter">Closeout &amp; Billing</a>
     <a href="#closeout-overview" class="section">Closeout overview</a>
     <a href="#closeout-ledger" class="section">The financial ledger</a>
     <a href="#closeout-checklist" class="section">The closeout checklist</a>
@@ -1215,6 +1223,26 @@
     <a href="#msg-lists" class="section">Mailing lists</a>
     <a href="#msg-segments" class="section">Smart (segment) lists</a>
     <a href="#msg-listmaster" class="section">ListMaster</a>
+
+    <div class="nav-section">Part X — Tasks</div>
+    <a href="#tasks-app" class="chapter">Chapter 10: The Tasks App</a>
+    <a href="#tasks-overview" class="section">What is the Tasks app?</a>
+    <a href="#tasks-documents" class="section">Task documents</a>
+    <a href="#tasks-hierarchy" class="section">Tasks, subtasks &amp; WBS numbers</a>
+    <a href="#tasks-views" class="section">Board, Timeline &amp; Calendar</a>
+    <a href="#tasks-fields" class="section">Assignees, dates &amp; priority</a>
+    <a href="#tasks-vs-event-tasks" class="section">Vs. an event's Tasks tab</a>
+
+    <div class="nav-section">Part XI — Automation</div>
+    <a href="#automation" class="chapter">Chapter 11: Process Automation</a>
+    <a href="#automation-overview" class="section">What Automation does</a>
+    <a href="#automation-concepts" class="section">Processes, versions &amp; cases</a>
+    <a href="#automation-designer" class="section">Building a process</a>
+    <a href="#automation-running" class="section">Starting &amp; running a case</a>
+    <a href="#automation-tasks-inbox" class="section">Human tasks &amp; waits</a>
+    <a href="#automation-event-booking" class="section">The Event Booking process</a>
+    <a href="#automation-status" class="section">Real vs. simulated vs. planned</a>
+    <a href="#automation-permissions" class="section">Permissions</a>
 
     <div class="nav-section">Quick Reference</div>
     <a href="#roles" class="chapter">Roles &amp; Who Does What</a>
@@ -1590,6 +1618,11 @@
     </ul>
 
     <p>The calendar's Grid view scrolls continuously across months, the same way the macOS Calendar app does — it opens on the current month, and scrolling down or up fetches and appends the next or previous month automatically as you reach the edge of what's loaded, with no page reload and no limit on how far back or forward you can go. The month label pinned at the top updates live to whatever month is currently in view; the <span class="ui-label button">Today</span> button jumps straight back to the current month from anywhere in the stack.</p>
+
+    <div class="callout warn">
+      <span class="callout-title">🚩 Spotting a double-booked room</span>
+      <p>If two events land on the same room with overlapping dates (or overlapping times, same day), Backstage flags both of them in red — the day cell on the Grid, the event's chip outline and tooltip, the day banner and row on the Agenda view, and the card on the Upcoming (card) list all pick up a red warning treatment. This is a visual heads-up, not a new hard rule: the system already refuses to save two <em>confirmed</em> bookings that conflict (see the Room conflicts callout under <a href="#multi-day-events">Multi-day events</a>), so in practice this flag is mostly catching two tentative <strong>Holds</strong> parked on the same room — which the system deliberately allows, since a Hold isn't a commitment yet. Treat a red flag as your cue to resolve it before either Hold turns into a real booking.</p>
+    </div>
 
     <div class="callout warn">
       <span class="callout-title">⚠️ Holds are not promises</span>
@@ -2925,6 +2958,12 @@
 
     <p>For settlement disputes or accounting questions, the activity log on the event is the first place to check. You can see exactly when the settlement was filed, who filed it, and what the numbers were at the time.</p>
 
+    <h3 id="event-undo">Undoing a recent change</h3>
+
+    <p>Next to the <span class="ui-label button">Wizard</span> and <span class="ui-label button">Print</span> buttons in the event header is an <span class="ui-label button">Undo ▾</span> menu. It lists recent changes to this event — its own fields plus a fixed set of related records (tasks, staffing, guest list, payments, execution records, and more) — and lets you pick <em>any</em> entry, not only the most recent one, and revert it with a confirmation. Entries already undone are shown disabled so you can't undo the same change twice.</p>
+
+    <p>Anyone who can edit the event can use this menu — it doesn't require admin access, unlike the venue-wide <a href="#admin-db-history">Database history &amp; undo</a> screen described in the Admin chapter. Reach for the header Undo menu for a fast "put that back" on the event you're already looking at; reach for Database history when you need to search across the whole venue's data, or trace a write that didn't come through the app at all.</p>
+
     <hr>
 
     <div class="summary-box">
@@ -3653,7 +3692,7 @@
 
     <h3>Venue details</h3>
 
-    <p>Name, address, city/state, timezone, phone, and website. These fields appear on contracts, automated emails, and the public event page — fill them in early. The onboarding checklist links directly here for that reason.</p>
+    <p>Name, address, city/state, timezone, phone, and website. These fields appear on contracts, automated emails, and the public event page — fill them in early. The onboarding checklist links directly here for that reason. The address also drives a small interactive map shown under the venue name on the public event page — it's geocoded automatically from what's entered here, so there's no separate map setup step.</p>
 
     <h3>Rooms</h3>
 
@@ -3927,6 +3966,11 @@
 
     <p>Admin → DB History is an audit trail of every insert, update, and delete made to this venue's database, with a one-click undo for any individual entry. It exists to answer a question the rest of the app can't: <em>something changed and I don't know why — what happened, and can I get it back?</em></p>
 
+    <div class="callout note">
+      <span class="callout-title">💡 There's also a lighter, per-event version</span>
+      <p>For a quick revert scoped to one event, anyone who can edit that event can use the <a href="#event-undo">Undo menu</a> in its own header — no admin access needed. Come here instead when you need to search across the whole venue's data, or trace a write that didn't come through the app at all.</p>
+    </div>
+
     <h3>Why this exists</h3>
 
     <p>Most edits made through the app show up in an event's own activity log. But that log only covers writes made <em>through the app's own code paths</em>. A background sync job, a one-off data-repair script, or someone connecting to the database directly all bypass it completely — which means the edit that actually caused a problem can be the one piece of history nowhere else records. Database history is implemented at the database level (triggers on every table, not application code), so it catches every write regardless of where it came from.</p>
@@ -4133,6 +4177,355 @@
   </div><!-- /book-content -->
 </div><!-- /chapter 9 -->
 
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- PART X: TASKS APP                                                           -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<div class="part-break" id="tasks-app-part">
+  <div class="part-num">Part X</div>
+  <h2>Tasks</h2>
+  <p>A standalone project manager, independent of any single show.</p>
+</div>
+
+<div id="tasks-app" class="chapter-page">
+  <div class="chapter-hero">
+    <span class="chapter-num">Chapter 10</span>
+    <h1>The Tasks App</h1>
+    <p class="lead">Not every to-do belongs to one show. The Tasks app is a ClickUp/Asana-style project manager that lives entirely outside the event workflow — for marketing campaigns, season-long projects, and anything else that spans, or has nothing to do with, a specific booking.</p>
+  </div>
+
+  <div class="book-content">
+
+    <!-- OVERVIEW ─────────────────────────────────────────────────────────── -->
+    <h2 id="tasks-overview">What is the Tasks app?</h2>
+
+    <p><strong>Tasks</strong> is its own item in the main sidebar — not nested under anything — separate from, and with zero data overlap with, the Tasks tab you already know from inside an individual event. Click it and you land in a sidebar-of-documents layout: pick a document on the left, work its tasks in the main pane.</p>
+
+    <p>It has no concept of an event at all. There's no event picker, no "attach this to a show" option, nothing linking a task document back to a booking. If the work you're tracking really is tied to one specific event — day-of-show logistics, a load-in checklist — that belongs on the event's own <span class="ui-label tab">Tasks</span> tab instead; see <a href="#tasks-vs-event-tasks">Vs. an event's Tasks tab</a> at the end of this chapter.</p>
+
+    <div class="callout warn">
+      <span class="callout-title">⚠️ Same word, two features</span>
+      <p>Both this app and the tab inside an event are simply labeled "Tasks" on screen — nothing distinguishes them visually. When someone on your team says "check the tasks," confirm which one they mean before you go looking.</p>
+    </div>
+
+    <!-- TASK DOCUMENTS ───────────────────────────────────────────────────── -->
+    <h2 id="tasks-documents">Task documents</h2>
+
+    <p>A <strong>task document</strong> is the container you actually work inside — the sidebar's list of documents is the top level of the app, roughly equivalent to a "project" or "list" in other task-management tools. Each document has its own set of tasks, its own progress bar, and its own status.</p>
+
+    <h3>Creating a document</h3>
+    <p>Click <span class="ui-label button">+ New</span> in the sidebar. The dialog asks for:</p>
+
+    <div class="field-ref">
+      <div class="field-ref-title">New Task Document</div>
+      <div class="field-row">
+        <div class="field-name">Name</div>
+        <div class="field-desc">Required. E.g. "Q3 Marketing Campaign."</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Icon</div>
+        <div class="field-desc">Pick from a grid of about 30 curated icons — Checklist, Briefcase, Rocket, Team, Venue, Contract, and more — or type any FontAwesome class into the field beneath the grid if none of the presets fit. A live preview swatch shows the icon in your chosen color as you pick.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Color</div>
+        <div class="field-desc">A single accent color used for the icon preview and document styling.</div>
+      </div>
+    </div>
+
+    <p>The new document opens automatically. From its header you can star it (pins it to the top of the sidebar list), set a status — <em>On Track / At Risk / Off Track / Complete</em> — or archive it. Archiving hides it from the sidebar without deleting anything; a "Show Archived" toggle brings it back into view. Deleting a document is permanent and cascades: every task, subtask, comment, and activity entry inside it goes with it.</p>
+
+    <!-- HIERARCHY / WBS ──────────────────────────────────────────────────── -->
+    <h2 id="tasks-hierarchy">Tasks, subtasks &amp; WBS numbers</h2>
+
+    <p>Inside a document, <span class="ui-label button">+ Add Task</span> creates a top-level task; every task also gets its own subtask button. Nesting goes as deep as you like — a subtask can have its own subtasks. Type a title and press <strong>Enter</strong> to save it, or <strong>Escape</strong> to back out.</p>
+
+    <p>Backstage numbers the tree for you automatically — 1, 1.1, 1.1.4, and so on — based purely on where a task sits in the hierarchy. You never assign or edit these numbers directly; they recompute on every render.</p>
+
+    <div class="callout danger">
+      <span class="callout-title">🗑️ Deleting a parent takes its children with it</span>
+      <p>There's no way to "promote" a subtask back to the top level. Deleting a task that has subtasks underneath deletes all of them in the same action — double-check before deleting a task you know has children.</p>
+    </div>
+
+    <!-- VIEWS ────────────────────────────────────────────────────────────── -->
+    <h2 id="tasks-views">Board, Timeline &amp; Calendar</h2>
+
+    <p>Every document has four tabs across the top. All four are different views onto the exact same tasks — switching tabs never filters anything out.</p>
+
+    <div class="field-ref">
+      <div class="field-ref-title">The four views</div>
+      <div class="field-row">
+        <div class="field-name">Tasks</div>
+        <div class="field-desc">The default: a hierarchical, WBS-numbered table. Expand or collapse any row with children, edit assignee/status/due date/priority inline, and use the small circle icon on a leaf task to mark it done in one click.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Board</div>
+        <div class="field-desc">A 3-column kanban — <em>Not Started / In Progress / Done</em>. Every task shows up as its own card here regardless of nesting; a subtask's card carries a small "📁 parent title" breadcrumb so you can still place it. Drag a card to a new column to change its status.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Timeline</div>
+        <div class="field-desc">A Gantt-style bar chart built from each task's start and due dates, with a line marking today. Bars open the task on click — there's no drag-to-reschedule here, so change dates from the Tasks view or the task's own detail panel instead.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Calendar</div>
+        <div class="field-desc">A month grid plotting each task on its <strong>due date</strong> only (start date isn't used here). Up to four chips show per day before collapsing to a "+N more" link.</div>
+      </div>
+    </div>
+
+    <p>None of the four views has its own search or filter — they always show the whole document. For a large document, the Tasks view's expand/collapse is currently the fastest way to scan for one specific task.</p>
+
+    <!-- FIELDS ───────────────────────────────────────────────────────────── -->
+    <h2 id="tasks-fields">Assignees, dates &amp; priority</h2>
+
+    <p>Click any task to open its detail panel — the fields available inline on the list row, plus a few that only live here:</p>
+
+    <div class="field-ref">
+      <div class="field-ref-title">Task Fields</div>
+      <div class="field-row">
+        <div class="field-name">Assignee</div>
+        <div class="field-desc">One person per task — no multi-assignee. Editable inline on the list row, the board card, and the detail panel.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Status</div>
+        <div class="field-desc"><em>Not Started / In Progress / Done</em> — a simpler three-state scheme than the event Tasks tab's five statuses. Marking a task Done stamps a completion time; un-marking it clears that time.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Priority</div>
+        <div class="field-desc"><em>Low / Medium / High / Urgent</em>, shown as a flag icon. Defaults to Medium.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Start &amp; Due dates</div>
+        <div class="field-desc">Plain dates, no time of day. Start date only matters to the Timeline view; due date drives overdue flagging and the Calendar view.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Checklist</div>
+        <div class="field-desc">A short list of sub-items with their own checkboxes, separate from the subtask hierarchy — handy for "steps to finish this one task" that don't need their own row in the tree.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Tags</div>
+        <div class="field-desc">Free-text labels you type in yourself. There's no shared tag list or autocomplete yet, so agree on spelling with your team — "Marketing" and "marketing" show up as two different tags.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Dependencies</div>
+        <div class="field-desc">Link a task to others in the same document that it depends on. This is informational only: marking a task done doesn't check whether what it depends on is done, and there's no warning on a circular dependency.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Comments &amp; activity</div>
+        <div class="field-desc">A combined feed of notes people leave and system-logged field changes. Only title, status, priority, and due-date changes are logged automatically — reassigning a task or editing its checklist/tags leaves no activity entry.</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">💡 The progress bar counts parents too</span>
+      <p>A document's percent-complete counts <em>every</em> task, parents included. Leave a parent task "Not Started" while all its subtasks are "Done" and it will still drag the percentage down — mark the parent done too once its children are finished.</p>
+    </div>
+
+    <!-- VS EVENT TASKS ───────────────────────────────────────────────────── -->
+    <h2 id="tasks-vs-event-tasks">Vs. an event's Tasks tab</h2>
+
+    <p>These are genuinely separate features that happen to share a name, not two views onto the same data:</p>
+
+    <div style="overflow-x:auto; margin:24px 0;">
+      <table style="min-width:600px;">
+        <tr><th></th><th>Event Tasks tab</th><th>Tasks app</th></tr>
+        <tr><td><strong>Scope</strong></td><td>One event only</td><td>Global — every document, to anyone with access</td></tr>
+        <tr><td><strong>Statuses</strong></td><td><code>todo / in_progress / blocked / done / canceled</code></td><td><code>not_started / in_progress / done</code></td></tr>
+        <tr><td><strong>Structure</strong></td><td>Flat list, one inline form</td><td>Documents → nested tasks/subtasks, 4 views</td></tr>
+        <tr><td><strong>Who can access</strong></td><td>Gated per-event — bands/artists see only their own assigned tasks</td><td>A global capability — venue admins &amp; staff; not visible to bands, artists, promoters, designers, or viewers</td></tr>
+        <tr><td><strong>Reached from</strong></td><td>Inside an event's own workspace</td><td>Top-level <strong>Tasks</strong> item in the sidebar</td></tr>
+      </table>
+    </div>
+
+    <p>Nothing links one to the other — there's no way to jump from an event's checklist into the standalone app for "the same" work, because they were never the same work. Keep event-scoped logistics (door count, load-in) on the event's own tab; use the Tasks app for anything broader.</p>
+
+  </div><!-- /book-content -->
+</div><!-- /chapter 10 -->
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- PART XI: AUTOMATION                                                         -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<div class="part-break" id="automation-part">
+  <div class="part-num">Part XI</div>
+  <h2>Automation</h2>
+  <p>A visual workflow builder that can run a real process against a real booking.</p>
+</div>
+
+<div id="automation" class="chapter-page">
+  <div class="chapter-hero">
+    <span class="chapter-num">Chapter 11</span>
+    <h1>Process Automation</h1>
+    <p class="lead">Automation lets you draw a flowchart of the steps a piece of work goes through — a booking inquiry, for instance — and then actually run it against a real event: stopping to ask a person for input where it needs to, and at a handful of steps, taking real action on its own.</p>
+  </div>
+
+  <div class="book-content">
+
+    <!-- OVERVIEW ─────────────────────────────────────────────────────────── -->
+    <h2 id="automation-overview">What Automation does</h2>
+
+    <p>Find it under <strong>Automation</strong> in the sidebar — a group of five: Processes, Cases, Tasks, Activity, and Connections.</p>
+
+    <div class="callout warn">
+      <span class="callout-title">🚧 Three of five aren't built yet</span>
+      <p><strong>Cases</strong>, <strong>Activity</strong>, and <strong>Connections</strong> are explicit placeholders — the app itself labels them "Planned — not yet built" rather than hiding them. Only <strong>Processes</strong> (the designer, plus its own Live Cases drawer) and <strong>Tasks</strong> (the cross-process human-task inbox) are functional today. Everything in this chapter describes what those two actually do.</p>
+    </div>
+
+    <p>This solves a specific problem: instead of a manager mentally tracking which booking is waiting on what, a running process tracks itself. It shows exactly which step it's on, and drops a task into a shared inbox the moment a human needs to act.</p>
+
+    <!-- CONCEPTS ─────────────────────────────────────────────────────────── -->
+    <h2 id="automation-concepts">Processes, versions &amp; cases</h2>
+
+    <div class="field-ref">
+      <div class="field-ref-title">Vocabulary</div>
+      <div class="field-row">
+        <div class="field-name">Process</div>
+        <div class="field-desc">A named, reusable workflow definition — e.g. "Event Booking." What you see in the <strong>Processes</strong> list.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Version</div>
+        <div class="field-desc">The actual flowchart (steps, connections, variables) for one process. A <em>published</em> version is locked — any edit creates a new draft rather than changing a workflow that's already running underneath someone.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Step</div>
+        <div class="field-desc">One box in the flowchart: a trigger, an operation, a decision, a wait, a human task, or an end.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Case (instance)</div>
+        <div class="field-desc">One actual run of a process. Starting a case is always a manual action today — nothing auto-starts one from a real inquiry.</div>
+      </div>
+    </div>
+
+    <div class="callout note">
+      <span class="callout-title">What "CenterStage" means here</span>
+      <p>You may see "CenterStage" in step names or developer notes — it isn't a separate outside system. It's just the internal name for this app's own venue/event/contract data, kept clearly apart from the generic, venue-agnostic engine that runs the flowchart itself. "The real CenterStage handlers" means "the steps wired up to touch your real events and contracts," as opposed to generic engine logic that knows nothing about venues at all.</p>
+    </div>
+
+    <!-- DESIGNER ─────────────────────────────────────────────────────────── -->
+    <h2 id="automation-designer">Building a process</h2>
+
+    <p>Open <strong>Automation → Processes</strong> and click <span class="ui-label button">+ New Process</span> (name, description, category) to land in the designer for its first draft.</p>
+
+    <h3>The canvas</h3>
+    <p>Drag a step off the palette onto the canvas; drag from its output dot to another step's input to connect them. The palette groups steps into five families:</p>
+    <ul>
+      <li><strong>Triggers</strong> — how a case would start (manual, or a CenterStage event such as "Booking Inquiry Created" — present in the palette, but nothing in the app fires it automatically yet).</li>
+      <li><strong>Operations</strong> — send email, create a contract, request a deposit, update event status, add an event task, an HTTP request, a run-script step.</li>
+      <li><strong>Flow Control</strong> — decisions (branches), parallel split/join, wait, timer, delay, subprocess, end/failure end.</li>
+      <li><strong>Human Work</strong> — approval, assign task, complete a form, contact the customer, resolve an exception.</li>
+      <li><strong>AI</strong> (optional) — classify text, AI-assisted decision, and similar. Not connected to a real model — see <a href="#automation-status">Real vs. simulated vs. planned</a>.</li>
+    </ul>
+
+    <p>A <strong>Decision</strong> step branches by adding named branches (label, free-text condition, one marked as the default) and dragging a connection out of each. If you'd rather not drag, the inspector panel's Connections list wires two steps together by picking them from a list instead.</p>
+
+    <h3>Human-task steps use one shared form</h3>
+    <p>An Approval or Assigned Task step can declare its own form fields — label, type, required — right in the inspector. That exact same definition is what a person fills in later, wherever they encounter the step: the Live Cases detail view, the Automation Tasks inbox, or an "Automation" card that appears directly on the linked event's own workspace page. There's one definition to maintain, not a design-time mock and a separate runtime form that can drift apart.</p>
+
+    <h3>Publishing</h3>
+    <p>A process needs exactly one trigger step before it can publish. Publishing locks that version; further edits open a new draft automatically, and any case still running on the published version is unaffected. Publish, start-a-new-draft, rename, and import/export all live in the toolbar's <strong>…</strong> menu.</p>
+
+    <!-- RUNNING ──────────────────────────────────────────────────────────── -->
+    <h2 id="automation-running">Starting &amp; running a case</h2>
+
+    <p>From a published process, click <span class="ui-label button">Start Instance</span>. You can optionally link the case to a real event by id — this is what lets its operation steps act on real data. Without a linked event, every operation step logs what it <em>would</em> have done and moves on without touching anything.</p>
+
+    <p>The <strong>Live Cases</strong> drawer on a process lists every case with its status, current step, owner, and elapsed time. Open one for its full timeline — one entry per step it passed through — its current variables, and, when it's paused, the same step form described above. Manual operator actions (Retry / Cancel / Pause / Resume) each require a short note explaining why; that note is kept with the case permanently.</p>
+
+    <!-- HUMAN TASKS & WAITS ──────────────────────────────────────────────── -->
+    <h2 id="automation-tasks-inbox">Human tasks &amp; waits</h2>
+
+    <p>A case pauses at a step in one of two ways:</p>
+
+    <div class="two-col">
+      <div class="callout note" style="margin:0">
+        <span class="callout-title">⏳ Wait</span>
+        <p>Pauses for an external event or a timeout. Some waits — like "contract signed" — resume automatically the instant that really happens elsewhere in the app; others need an operator to resume them by hand. A background job flags an overdue wait but never resumes it for you.</p>
+      </div>
+      <div class="callout note" style="margin:0">
+        <span class="callout-title">🙋 Human task</span>
+        <p>Assigned to a specific person or role, and sits in the cross-process <strong>Automation → Tasks</strong> inbox until they pick an outcome. Only the assignee, or someone with full process-management access, can complete it.</p>
+      </div>
+    </div>
+
+    <div class="callout warn" style="margin-top:20px">
+      <span class="callout-title">⚠️ Not the Tasks app</span>
+      <p>The Automation → Tasks inbox and the standalone <a href="#tasks-app">Tasks app</a> (Part X of this manual) share a word and nothing else. This inbox only ever lists human-task steps from a running process, waiting on a specific person.</p>
+    </div>
+
+    <!-- EVENT BOOKING PROCESS ────────────────────────────────────────────── -->
+    <h2 id="automation-event-booking">The Event Booking process</h2>
+
+    <p>Backstage ships with one pre-built process: <strong>Event Booking</strong>, covering inquiry through settlement for a new booking. It's meant as a real, usable starting point — not merely a demo — but several of its steps are honestly simulated rather than fully wired up. Know which is which before you rely on it:</p>
+
+    <div class="field-ref">
+      <div class="field-ref-title">Real — touches live data (when the case is linked to a real event)</div>
+      <div class="field-row">
+        <div class="field-name">Check Availability</div>
+        <div class="field-desc">Reads the real events table for a same-room, same-date conflict.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Prepare Quote</div>
+        <div class="field-desc">Drafts a real contract record. Nothing is sent.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Create Event / Event Complete</div>
+        <div class="field-desc">Changes the real event's status, through a deliberately conservative, hard-coded set of allowed transitions — not the app's full status-transition rules.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Create Production Tasks</div>
+        <div class="field-desc">Creates real event-checklist tasks from the venue's own event templates.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Send Proposal / Suggest Alternative Dates</div>
+        <div class="field-desc">Builds a pre-filled Gmail compose link for a human to review and send. Never sends anything by itself.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Await Signature</div>
+        <div class="field-desc">Resumes automatically the instant the linked event's contract is actually fully signed through the normal signing flow.</div>
+      </div>
+    </div>
+
+    <div class="field-ref">
+      <div class="field-ref-title">Simulated — logged, no real-world effect (deliberately, for now)</div>
+      <div class="field-row">
+        <div class="field-name">Collect Deposit</div>
+        <div class="field-desc">Real deposit collection still runs through the event's existing payment-link flow; this step doesn't call it.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Settlement</div>
+        <div class="field-desc">There's no settlement action for it to call yet.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Any AI step</div>
+        <div class="field-desc">Classify Inquiry and similar steps exist in the flowchart but aren't connected to a real model.</div>
+      </div>
+    </div>
+
+    <p>Every step's execution record is tagged real or simulated, so a case's timeline always tells you which happened — a simulated entry says plainly that no real side effect occurred.</p>
+
+    <div class="callout danger">
+      <span class="callout-title">⚠️ The availability decision doesn't read the real result yet</span>
+      <p>The "Date Available?" decision has no way, from the designer, to actually read Check Availability's real outcome — until that wiring is added, it falls through to its default branch regardless of what the availability check found. Review that branch manually; don't trust it to route correctly on its own yet.</p>
+    </div>
+
+    <!-- STATUS SUMMARY ───────────────────────────────────────────────────── -->
+    <h2 id="automation-status">Real vs. simulated vs. planned</h2>
+
+    <p>A quick-reference summary of this chapter's honesty callouts, so you don't have to hunt for them later:</p>
+    <ul>
+      <li><strong>Parallel Split / Join / Subprocess</strong> steps exist in the palette but the engine doesn't actually fan work out and back in, or step into a nested process — it takes the first path forward and logs that the rest was skipped.</li>
+      <li><strong>No automatic trigger.</strong> Every case is started by a person clicking Start Instance (or an equivalent API call) — nothing creates one from a real inquiry on its own yet.</li>
+      <li><strong>Email steps never auto-send</strong> anywhere in Automation — every "send" step produces a link a human has to click.</li>
+      <li><strong>Deposits, settlement, and AI</strong> stay simulated across every process, not just Event Booking, until those integrations exist.</li>
+      <li><strong>Cases, Activity, and Connections</strong> (three of the five Automation nav items) are not built — see <a href="#automation-overview">What Automation does</a>.</li>
+    </ul>
+
+    <!-- PERMISSIONS ──────────────────────────────────────────────────────── -->
+    <h2 id="automation-permissions">Permissions</h2>
+
+    <p>Seeing the Automation nav group at all requires <code>view_processes</code>. Venue admins, staff, and read-only global viewers have it; per-event roles — promoter, band, artist, designer, viewer — do not see this nav group at all.</p>
+
+    <p>Building, publishing, starting, and operating a process (Retry / Cancel / Pause / Resume) requires <code>manage_processes</code> — venue admins and staff have it; global viewers can look but not touch. One exception: whoever a human task is assigned to can complete that specific task even without <code>manage_processes</code>.</p>
+
+  </div><!-- /book-content -->
+</div><!-- /chapter 11 -->
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- QUICK REFERENCE: ROLES & WHO DOES WHAT                                     -->
