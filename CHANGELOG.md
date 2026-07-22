@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** `add` — (add) web component that renders a ticket with a familiar look
 - **Changed** `docs` — Stop sending 7 unchanged fields on every intake-report edit
 - **Fixed** `events` — Stop the full-row PATCH path from blanking omitted fields
 - **Added** `docs` — Make the intake report live and editable in place

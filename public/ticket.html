@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Concert Ticket Web Component</title>
+
+  <!-- No build step. These two tiny libraries generate a real QR code and Code 128 barcode. -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: system-ui, sans-serif;
+      background: #e8e8e8;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      box-sizing: border-box;
+    }
+
+    .demo {
+      width: min(1500px, 100%);
+    }
+
+    concert-ticket {
+      display: block;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <main class="demo">
+    <concert-ticket
+      data-title="CONCERT TICKET"
+      data-event="LIVE IN CONCERT"
+      data-venue="GRAND ARENA"
+      data-date="FRI AUG 23 2026"
+      data-time="8:00 PM"
+      data-section="SEC A"
+      data-row="12"
+      data-seat="34"
+      data-admission="GENERAL ADMISSION"
+      data-price="$45.00"
+      data-order="ORD 104582"
+      data-stub-title="ADMIT ONE"
+      data-qr="https://example.com/tickets/ORD-104582"
+      data-barcode="45167234567890123"
+      data-accent="#a62c22"
+      data-paper="#f4efe5">
+    </concert-ticket>
+  </main>
+
+  <script>
+    class ConcertTicket extends HTMLElement {
+      static observedAttributes = [
+        "data-title",
+        "data-event",
+        "data-venue",
+        "data-date",
+        "data-time",
+        "data-section",
+        "data-row",
+        "data-seat",
+        "data-admission",
+        "data-price",
+        "data-order",
+        "data-stub-title",
+        "data-qr",
+        "data-barcode",
+        "data-accent",
+        "data-paper"
+      ];
+
+      constructor() {
+        super();
+        this.attachShadow({ mode: "open" });
+        this._renderQueued = false;
+      }
+
+      connectedCallback() {
+        this.render();
+      }
+
+      attributeChangedCallback() {
+        if (!this.isConnected || this._renderQueued) return;
+
+        this._renderQueued = true;
+        queueMicrotask(() => {
+          this._renderQueued = false;
+          this.render();
+        });
+      }
+
+      value(name, fallback = "") {
+        const value = this.getAttribute(`data-${name}`);
+        return value === null ? fallback : value;
+      }
+
+      escape(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      render() {
+        const ticket = {
+          title: this.value("title", "CONCERT TICKET"),
+          event: this.value("event", "LIVE IN CONCERT"),
+          venue: this.value("venue", "GRAND ARENA"),
+          date: this.value("date", "FRI AUG 23 2026"),
+          time: this.value("time", "8:00 PM"),
+          section: this.value("section", "SEC A"),
+          row: this.value("row", "12"),
+          seat: this.value("seat", "34"),
+          admission: this.value("admission", "GENERAL ADMISSION"),
+          price: this.value("price", "$45.00"),
+          order: this.value("order", "ORD 104582"),
+          stubTitle: this.value("stub-title", "ADMIT ONE"),
+          qr: this.value("qr", ""),
+          barcode: this.value("barcode", ""),
+          accent: this.value("accent", "#a62c22"),
+          paper: this.value("paper", "#f4efe5")
+        };
+
+        const e = value => this.escape(value);
+        const stubLines = ticket.stubTitle.trim().split(/\s+/);
+        const stubHtml = stubLines.map(line => `<span>${e(line)}</span>`).join("");
+
+        this.shadowRoot.innerHTML = `
+          <style>
+            :host {
+              --ticket-accent: ${e(ticket.accent)};
+              --ticket-paper: ${e(ticket.paper)};
+              --ticket-ink: #111;
+              display: block;
+              contain: content;
+            }
+
+            * {
+              box-sizing: border-box;
+            }
+
+            .viewport {
+              width: 100%;
+              overflow-x: auto;
+              overflow-y: hidden;
+              padding: 18px 8px 30px;
+            }
+
+            .ticket {
+              position: relative;
+              display: grid;
+              grid-template-columns: 22% 56% 22%;
+              width: 1400px;
+              max-width: none;
+              aspect-ratio: 3 / 1;
+              margin: 0 auto;
+              color: var(--ticket-ink);
+              background:
+                radial-gradient(circle at 15% 20%, rgb(255 255 255 / .38), transparent 25%),
+                repeating-linear-gradient(
+                  7deg,
+                  rgb(0 0 0 / .018) 0,
+                  rgb(0 0 0 / .018) 1px,
+                  transparent 1px,
+                  transparent 5px
+                ),
+                var(--ticket-paper);
+              border: 1px solid rgb(0 0 0 / .18);
+              border-radius: 8px;
+              box-shadow:
+                0 18px 28px rgb(0 0 0 / .24),
+                inset 0 0 34px rgb(85 54 25 / .10);
+              overflow: hidden;
+              font-family: "Arial Narrow", "Roboto Condensed", "Helvetica Neue", Arial, sans-serif;
+            }
+
+            .ticket::after {
+              content: "";
+              pointer-events: none;
+              position: absolute;
+              inset: 0;
+              opacity: .22;
+              mix-blend-mode: multiply;
+              background:
+                repeating-radial-gradient(
+                  circle at 30% 20%,
+                  transparent 0 3px,
+                  rgb(75 45 20 / .11) 4px,
+                  transparent 5px 11px
+                );
+            }
+
+            .qr-panel,
+            .main,
+            .stub {
+              position: relative;
+              z-index: 1;
+            }
+
+            .qr-panel {
+              display: grid;
+              place-items: center;
+              border-right: 4px solid var(--ticket-accent);
+              padding: 46px 28px;
+            }
+
+            .qr-panel::before,
+            .qr-panel::after {
+              position: absolute;
+              left: 50%;
+              color: var(--ticket-accent);
+              font-size: 30px;
+              line-height: 1;
+              transform: translateX(-50%);
+            }
+
+            .qr-panel::before {
+              content: "▼";
+              top: 24px;
+            }
+
+            .qr-panel::after {
+              content: "▲";
+              bottom: 24px;
+            }
+
+            .qr {
+              width: min(255px, 82%);
+              aspect-ratio: 1;
+              display: grid;
+              place-items: center;
+              padding: 10px;
+              background: #fff;
+            }
+
+            .qr canvas,
+            .qr img {
+              width: 100% !important;
+              height: 100% !important;
+              image-rendering: pixelated;
+            }
+
+            .qr-fallback {
+              display: grid;
+              place-items: center;
+              width: 100%;
+              height: 100%;
+              border: 7px solid var(--ticket-ink);
+              font: 900 54px/1 Impact, sans-serif;
+            }
+
+            .main {
+              display: grid;
+              grid-template-rows: 22% 1fr 22%;
+              min-width: 0;
+            }
+
+            .facts {
+              display: grid;
+              grid-template-columns: .9fr .65fr .65fr 1.7fr .85fr;
+              background: #121212;
+              color: #fff;
+            }
+
+            .fact {
+              display: grid;
+              grid-template-rows: auto 1fr;
+              min-width: 0;
+              text-align: center;
+            }
+
+            .fact-label {
+              padding: 11px 6px 9px;
+              font-size: 19px;
+              font-weight: 900;
+              letter-spacing: .045em;
+              white-space: nowrap;
+            }
+
+            .fact-value {
+              display: grid;
+              place-items: center;
+              min-width: 0;
+              padding: 9px 7px 12px;
+              color: var(--ticket-ink);
+              background: var(--ticket-paper);
+              border-bottom: 2px solid var(--ticket-accent);
+              font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+              font-size: 35px;
+              letter-spacing: .015em;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+
+            .fact-value.admission {
+              font-size: 29px;
+            }
+
+            .hero {
+              display: grid;
+              align-content: center;
+              gap: 14px;
+              min-width: 0;
+              padding: 12px 38px;
+              text-align: center;
+            }
+
+            .title {
+              margin: 0;
+              font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+              font-size: 88px;
+              line-height: .92;
+              letter-spacing: .035em;
+              white-space: nowrap;
+              text-transform: uppercase;
+              transform: scaleY(1.08);
+              text-shadow: 1px 0 0 rgb(0 0 0 / .15);
+            }
+
+            .banner {
+              display: grid;
+              grid-template-columns: 1fr auto 1fr;
+              align-items: center;
+              gap: 17px;
+              height: 52px;
+              padding: 0 22px;
+              color: #fff;
+              background: var(--ticket-accent);
+              clip-path: polygon(
+                2% 0, 98% 0, 96% 50%, 98% 100%,
+                2% 100%, 4% 50%
+              );
+              font-size: 28px;
+              font-weight: 800;
+              letter-spacing: .13em;
+              white-space: nowrap;
+            }
+
+            .banner::before,
+            .banner::after {
+              content: "━━ ★";
+              font-size: 22px;
+              letter-spacing: .05em;
+              opacity: .95;
+            }
+
+            .banner::after {
+              content: "★ ━━";
+            }
+
+            .venue {
+              font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+              font-size: 42px;
+              letter-spacing: .12em;
+              text-transform: uppercase;
+            }
+
+            .bottom {
+              display: grid;
+              grid-template-columns: 1.35fr .75fr 1fr;
+              border-top: 1px solid rgb(0 0 0 / .22);
+            }
+
+            .bottom-item {
+              min-width: 0;
+              padding: 12px 23px 10px;
+            }
+
+            .bottom-item + .bottom-item {
+              border-left: 2px solid rgb(0 0 0 / .24);
+            }
+
+            .bottom-label {
+              color: var(--ticket-accent);
+              font-size: 20px;
+              font-weight: 900;
+              letter-spacing: .04em;
+            }
+
+            .bottom-value {
+              margin-top: 3px;
+              font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+              font-size: 33px;
+              letter-spacing: .04em;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+
+            .stub {
+              display: grid;
+              grid-template-rows: 50px 1fr auto 112px 48px;
+              min-width: 0;
+              padding-left: 28px;
+              border-left: 3px dashed #1a1a1a;
+            }
+
+            .stars {
+              display: grid;
+              place-items: center;
+              color: #fff;
+              background: var(--ticket-accent);
+              font-size: 27px;
+              letter-spacing: .28em;
+              overflow: hidden;
+              white-space: nowrap;
+            }
+
+            .stub-title {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              padding: 8px 12px 4px;
+              font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+              font-size: 75px;
+              line-height: .9;
+              letter-spacing: .025em;
+              text-align: center;
+              text-transform: uppercase;
+            }
+
+            .stub-fields {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 5px;
+              padding: 11px 10px 10px;
+              border-top: 2px solid var(--ticket-accent);
+              text-align: center;
+            }
+
+            .stub-label {
+              color: var(--ticket-accent);
+              font-size: 18px;
+              font-weight: 900;
+            }
+
+            .stub-value {
+              margin-top: 5px;
+              font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+              font-size: 28px;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+
+            .barcode-wrap {
+              display: grid;
+              place-items: center;
+              min-width: 0;
+              padding: 4px 16px 8px;
+            }
+
+            .barcode {
+              width: 100%;
+              height: 78px;
+            }
+
+            .barcode-fallback {
+              font: 700 17px/1.2 ui-monospace, monospace;
+              letter-spacing: .15em;
+              overflow-wrap: anywhere;
+              text-align: center;
+            }
+
+            @media (max-width: 1450px) {
+              .ticket {
+                transform-origin: top left;
+              }
+            }
+
+            @media print {
+              .viewport {
+                overflow: visible;
+                padding: 0;
+              }
+
+              .ticket {
+                width: 11in;
+                box-shadow: none;
+                break-inside: avoid;
+              }
+            }
+          </style>
+
+          <div class="viewport" part="viewport">
+            <article class="ticket" part="ticket" aria-label="${e(ticket.event)} ticket">
+              <section class="qr-panel" part="qr-panel">
+                <div class="qr" part="qr" aria-label="Ticket QR code"></div>
+              </section>
+
+              <section class="main" part="main">
+                <div class="facts">
+                  ${this.fact("SECTION", ticket.section)}
+                  ${this.fact("ROW", ticket.row)}
+                  ${this.fact("SEAT", ticket.seat)}
+                  ${this.fact("ADMISSION", ticket.admission, "admission")}
+                  ${this.fact("PRICE", ticket.price)}
+                </div>
+
+                <div class="hero">
+                  <h2 class="title">${e(ticket.title)}</h2>
+                  <div class="banner">${e(ticket.event)}</div>
+                  <div class="venue">${e(ticket.venue)}</div>
+                </div>
+
+                <div class="bottom">
+                  ${this.bottomItem("DATE", ticket.date)}
+                  ${this.bottomItem("TIME", ticket.time)}
+                  ${this.bottomItem("ORDER NO.", ticket.order)}
+                </div>
+              </section>
+
+              <aside class="stub" part="stub">
+                <div class="stars">★ ★ ★ ★ ★ ★ ★</div>
+                <div class="stub-title">${stubHtml}</div>
+
+                <div class="stub-fields">
+                  ${this.stubField("SEC", ticket.section)}
+                  ${this.stubField("ROW", ticket.row)}
+                  ${this.stubField("SEAT", ticket.seat)}
+                </div>
+
+                <div class="barcode-wrap">
+                  <svg class="barcode" aria-label="Ticket barcode"></svg>
+                </div>
+
+                <div class="stars">★ ★ ★ ★ ★ ★ ★</div>
+              </aside>
+            </article>
+          </div>
+        `;
+
+        this.renderQr(ticket.qr);
+        this.renderBarcode(ticket.barcode);
+      }
+
+      fact(label, value, extraClass = "") {
+        return `
+          <div class="fact">
+            <div class="fact-label">${this.escape(label)}</div>
+            <div class="fact-value ${extraClass}">${this.escape(value)}</div>
+          </div>
+        `;
+      }
+
+      bottomItem(label, value) {
+        return `
+          <div class="bottom-item">
+            <div class="bottom-label">${this.escape(label)}</div>
+            <div class="bottom-value">${this.escape(value)}</div>
+          </div>
+        `;
+      }
+
+      stubField(label, value) {
+        return `
+          <div>
+            <div class="stub-label">${this.escape(label)}</div>
+            <div class="stub-value">${this.escape(value)}</div>
+          </div>
+        `;
+      }
+
+      renderQr(value) {
+        const target = this.shadowRoot.querySelector(".qr");
+        target.replaceChildren();
+
+        if (!value || typeof QRCode === "undefined") {
+          target.innerHTML = `<div class="qr-fallback">QR</div>`;
+          return;
+        }
+
+        new QRCode(target, {
+          text: value,
+          width: 300,
+          height: 300,
+          colorDark: "#111111",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      }
+
+      renderBarcode(value) {
+        const target = this.shadowRoot.querySelector(".barcode");
+        const wrapper = this.shadowRoot.querySelector(".barcode-wrap");
+
+        if (!value || typeof JsBarcode === "undefined") {
+          wrapper.innerHTML =
+            `<div class="barcode-fallback">${this.escape(value || "BARCODE")}</div>`;
+          return;
+        }
+
+        try {
+          JsBarcode(target, value, {
+            format: "CODE128",
+            displayValue: true,
+            background: "transparent",
+            lineColor: "#111111",
+            width: 1.55,
+            height: 54,
+            margin: 0,
+            font: "Arial",
+            fontSize: 16
+          });
+        } catch {
+          wrapper.innerHTML =
+            `<div class="barcode-fallback">${this.escape(value)}</div>`;
+        }
+      }
+    }
+
+    customElements.define("concert-ticket", ConcertTicket);
+  </script>
+</body>
+</html>
