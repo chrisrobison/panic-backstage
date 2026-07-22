@@ -266,6 +266,13 @@ final class Kernel
             ]];
         }
 
+        // Public booking-inquiry intake (unauthenticated; embeddable widget):
+        //   POST    /api/public/inquiries   -> create a lead (source=website)
+        //   OPTIONS /api/public/inquiries   -> CORS preflight
+        if ($segments[0] === 'public' && ($segments[1] ?? '') === 'inquiries') {
+            return [PublicInquiry::class, []];
+        }
+
         // Payment provider webhooks (unauthenticated; verified by signature):
         //   POST /api/webhooks/stripe       → ticketing (online checkout)
         //   POST /api/webhooks/square       → ticketing (online checkout)
@@ -724,6 +731,7 @@ final class Kernel
             Invites::class,
             Me::class,                  // returns null user gracefully when unauthenticated
             PublicTickets::class,        // public ticket browse + checkout
+            PublicInquiry::class,        // public booking-inquiry widget intake; answers its own CORS preflight
             Webhooks::class,            // payment provider webhooks (ticketing), authenticated by signature
             PosWebhook::class,          // Square POS webhook (bar/merch ledger), authenticated by signature
             Portal::class,              // Client portal — public view gated by signed token (no JWT)

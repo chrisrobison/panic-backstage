@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>panic-booking-inquiry — widget demo &amp; docs · Panic Backstage</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root{
+    --void:#0c0b0f;
+    --panel:#17151b;
+    --panel-2:#1f1c24;
+    --ink:#f2efe6;
+    --muted:#948f9c;
+    --pink:#ff2d78;
+    --yellow:#ffcc33;
+    --line:#000;
+    --hairline: rgba(242,239,230,.12);
+    --mono: 'SF Mono', 'Fira Code', Consolas, 'Liberation Mono', monospace;
+    --display: Impact, Haettenschweiler, 'Arial Narrow Bold', 'Franklin Gothic Bold', sans-serif;
+    --body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(255,45,120,.12), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 0%, rgba(255,204,51,.08), transparent 55%),
+      var(--void);
+    color:var(--ink);
+    font-family:var(--body);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--pink);}
+  code{font-family:var(--mono); background:#0a090c; border:1px solid var(--hairline); border-radius:4px; padding:.1em .4em; font-size:.86em;}
+  ::selection{background:var(--pink); color:#fff;}
+
+  /* ── Masthead ─────────────────────────────────────────────────────────── */
+  .masthead{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 28px; border-bottom:1px solid var(--hairline);
+    position:sticky; top:0; z-index:20;
+    background:rgba(12,11,15,.85); backdrop-filter:blur(10px);
+  }
+  .wordmark{display:flex; align-items:baseline; gap:10px;}
+  .wordmark b{font-family:var(--display); letter-spacing:.02em; font-size:1.15rem; text-transform:uppercase;}
+  .wordmark .tag{
+    font-family:var(--mono); font-size:.68rem; letter-spacing:.08em; color:var(--void);
+    background:var(--yellow); padding:2px 8px; border-radius:2px; text-transform:uppercase;
+  }
+  .mast-nav{display:flex; gap:20px; font-family:var(--mono); font-size:.76rem;}
+  .mast-nav a{color:var(--muted); text-decoration:none;}
+  .mast-nav a:hover{color:var(--ink);}
+
+  /* ── Hero / explainer ─────────────────────────────────────────────────── */
+  .wrap{max-width:1040px; margin:0 auto; padding:0 28px;}
+  .hero{padding:64px 0 40px;}
+  .eyebrow{font-family:var(--mono); font-size:.75rem; letter-spacing:.12em; color:var(--pink); text-transform:uppercase; margin:0 0 14px;}
+  h1{
+    font-family:var(--display); text-transform:uppercase; font-weight:400;
+    font-size:clamp(2.1rem, 5vw, 3.2rem); line-height:1.03; letter-spacing:.01em;
+    margin:0 0 20px; max-width:20ch;
+  }
+  h1 em{font-style:normal; color:var(--pink);}
+  .lede{font-size:1.05rem; color:#d8d4e0; max-width:60ch; margin:0 0 8px;}
+  .lede + .lede{color:var(--muted);}
+
+  h2{
+    font-family:var(--display); text-transform:uppercase; font-weight:400; letter-spacing:.01em;
+    font-size:1.5rem; margin:64px 0 8px; padding-top:28px; border-top:1px solid var(--hairline);
+  }
+  h2 .num{color:var(--pink); margin-right:10px;}
+  .section-lede{color:var(--muted); max-width:64ch; margin:0 0 28px; font-size:.95rem;}
+
+  .flow{display:grid; grid-template-columns:1fr auto 1fr auto 1fr; gap:14px; align-items:stretch; margin:40px 0;}
+  .flow .node{
+    background:var(--panel); border:1px solid var(--hairline); border-radius:6px;
+    padding:16px; font-family:var(--mono); font-size:.78rem;
+  }
+  .flow .node .k{color:var(--yellow); text-transform:uppercase; letter-spacing:.06em; font-size:.68rem; display:block; margin-bottom:6px;}
+  .flow .arrow{display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:1.2rem;}
+  @media (max-width:820px){
+    .flow{grid-template-columns:1fr; }
+    .flow .arrow{transform:rotate(90deg); padding:2px 0;}
+  }
+
+  .snippet{
+    background:#0a090c; border:1px solid var(--hairline); border-radius:8px;
+    padding:18px 20px; font-family:var(--mono); font-size:.82rem; color:#c9f2c9;
+    overflow-x:auto; margin:8px 0 32px; white-space:pre;
+  }
+  .snippet .tg{color:#ff8fb8;} .snippet .at{color:var(--yellow);} .snippet .str{color:#9fd0ff;} .snippet .cm{color:var(--muted);}
+
+  /* ── "Browser chrome" frame around the live embed ────────────────────── */
+  .frame-label{font-family:var(--mono); font-size:.75rem; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; margin:24px 0 10px;}
+  .browser{
+    border:1px solid rgba(242,239,230,.14); border-radius:10px; overflow:hidden;
+    box-shadow:0 30px 80px -30px rgba(255,45,120,.25), 0 0 0 1px rgba(0,0,0,.4);
+    margin-bottom:24px;
+  }
+  .browser-bar{
+    display:flex; align-items:center; gap:10px; padding:10px 14px;
+    background:#1b1920; border-bottom:1px solid var(--hairline);
+  }
+  .browser-bar .dots{display:flex; gap:6px;}
+  .browser-bar .dots span{width:10px; height:10px; border-radius:50%; background:#3a3742;}
+  .browser-bar .url{
+    flex:1; font-family:var(--mono); font-size:.78rem; color:var(--muted);
+    background:#111015; border-radius:5px; padding:6px 12px; text-align:center;
+  }
+  .browser-bar .url b{color:var(--ink); font-weight:600;}
+  .stage{
+    padding:48px 20px 60px;
+    background:#efe9de;
+    background-image: radial-gradient(ellipse 500px 300px at 50% 0%, rgba(122,32,54,.08), transparent 70%);
+  }
+  .stage.dark-stage{ background:#100c10; }
+  .stage-inner{max-width:640px; margin:0 auto;}
+  .status{display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:.72rem; color:var(--muted); margin-top:14px; justify-content:center;}
+  .status .dot{width:7px; height:7px; border-radius:50%; background:var(--muted); transition:background .3s;}
+  .status .dot.ok{background:#38d97a; box-shadow:0 0 8px #38d97a;}
+  .status .dot.err{background:#ff4d4d; box-shadow:0 0 8px #ff4d4d;}
+
+  /* ── Reference tables ─────────────────────────────────────────────────── */
+  table{width:100%; border-collapse:collapse; margin:0 0 32px; font-size:.86rem;}
+  caption{text-align:left; font-family:var(--mono); font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; color:var(--yellow); margin-bottom:8px;}
+  th, td{text-align:left; padding:10px 14px; border-bottom:1px solid var(--hairline); vertical-align:top;}
+  th{font-family:var(--mono); font-size:.7rem; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:500;}
+  td code{white-space:nowrap;}
+  .table-wrap{overflow-x:auto; margin-bottom:32px;}
+  .table-wrap table{margin-bottom:0;}
+
+  .pillbar{display:flex; gap:8px; flex-wrap:wrap; margin:0 0 28px;}
+  .pill{font-family:var(--mono); font-size:.72rem; color:var(--ink); background:var(--panel-2); border:1px solid var(--hairline); border-radius:999px; padding:5px 12px;}
+
+  .callout{
+    background:var(--panel); border:1px solid var(--hairline); border-left:3px solid var(--pink);
+    border-radius:6px; padding:16px 18px; margin:0 0 28px; font-size:.88rem; color:#d8d4e0;
+  }
+  .callout b{color:var(--ink);}
+
+  footer{padding:40px 28px 70px; border-top:1px solid var(--hairline); margin-top:20px;}
+  footer .wrap{display:flex; flex-wrap:wrap; gap:8px 28px; font-family:var(--mono); font-size:.78rem; color:var(--muted);}
+  footer a{color:var(--muted); text-decoration:none; border-bottom:1px dotted rgba(148,143,156,.5);}
+  footer a:hover{color:var(--pink); border-color:var(--pink);}
+</style>
+</head>
+<body>
+
+  <header class="masthead">
+    <div class="wordmark"><b>Panic Backstage</b><span class="tag">Widget Demo</span></div>
+    <nav class="mast-nav">
+      <a href="#reference">Reference</a>
+      <a href="#styling">Styling</a>
+      <a href="#server">Server behavior</a>
+      <a href="mab-events-demo.html">mab-events-carousel →</a>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <p class="eyebrow">panic-booking-inquiry · public/assets/panic-booking-inquiry.js</p>
+      <h1>A booking form your <em>website</em> can host, that <em>we</em> triage.</h1>
+      <p class="lede">Drop one custom element and one script tag into any page — your own marketing site, a promoter's landing page, anywhere — and inquiries land straight in Backstage's Leads pipeline, ready to triage, evaluate, and convert into a real event.</p>
+      <p class="lede">No API key, no backend of your own to run. The component posts directly to Backstage's public inquiry endpoint, which is open to any origin the same way a "contact us" form would be.</p>
+
+      <div class="flow">
+        <div class="node"><span class="k">01 · Embed</span>&lt;panic-booking-<br>inquiry&gt; on any domain</div>
+        <div class="arrow">→</div>
+        <div class="node"><span class="k">02 · Submit</span>POST /api/public/<br>inquiries (CORS-open)</div>
+        <div class="arrow">→</div>
+        <div class="node"><span class="k">03 · Triage</span>New lead, source=<br>website, in your pipeline</div>
+      </div>
+
+      <p class="frame-label">The exact snippet you'd paste into your site — no configuration required:</p>
+      <div class="snippet">&lt;<span class="tg">panic-booking-inquiry</span> <span class="at">venue</span>=<span class="str">"Mabuhay Gardens"</span>&gt;&lt;/<span class="tg">panic-booking-inquiry</span>&gt;
+
+&lt;<span class="tg">script</span> <span class="at">src</span>=<span class="str">"https://panicbooking.com/backstage/assets/panic-booking-inquiry.js"</span>&gt;&lt;/<span class="tg">script</span>&gt;</div>
+    </section>
+
+    <p class="frame-label">Live embed — rendered by the real component, submitting to this environment's real API, staged on a fake foreign domain to make the point:</p>
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="dots"><span></span><span></span><span></span></div>
+        <div class="url">🔒 <b>themab.org</b> — Book the venue</div>
+      </div>
+      <div class="stage">
+        <div class="stage-inner">
+          <!-- No endpoint= attribute here on purpose: the component
+               auto-detects its own API base from this <script src>, the
+               same trick mab-events-carousel.js uses. -->
+          <panic-booking-inquiry
+            id="demo-light"
+            venue="Mabuhay Gardens"
+            fallback-email="booking@example.com"
+          ></panic-booking-inquiry>
+          <div class="status" id="status-light"><span class="dot" id="dot-light"></span><span id="text-light">waiting for a submission…</span></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="frame-label">Same component, reskinned with two attributes (<code>theme="dark"</code> + <code>accent</code>) to match a different host site — everything else about the markup is identical:</p>
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="dots"><span></span><span></span><span></span></div>
+        <div class="url">🔒 <b>a-different-venue.example</b> — Request a date</div>
+      </div>
+      <div class="stage dark-stage">
+        <div class="stage-inner">
+          <panic-booking-inquiry
+            id="demo-dark"
+            venue="The Other Room"
+            theme="dark"
+            accent="#3c8f7a"
+            heading="Request a date"
+            button-text="Check availability"
+          ></panic-booking-inquiry>
+          <div class="status" id="status-dark"><span class="dot" id="dot-dark"></span><span id="text-dark">waiting for a submission…</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      Both forms above are <b>fully live</b> — submitting one creates a real lead (source <code>website</code>) in this environment's Leads pipeline and emails the venue admins, exactly like a real embed would. Use an obviously-fake name/email when testing.
+    </div>
+
+    <h2 id="reference"><span class="num">01</span>Attribute reference</h2>
+    <p class="section-lede">Everything is optional — the component works with zero attributes, reading its own <code>&lt;script src&gt;</code> to find the API the same way <code>mab-events-carousel.js</code> does. Set what you need.</p>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Attribute</th><th>Default</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>endpoint</code></td><td><em>auto-detected</em></td><td>Full URL to POST to. Override only if the widget's own script tag can't be used to infer the API (e.g. it's bundled/proxied).</td></tr>
+        <tr><td><code>venue</code></td><td>—</td><td>Display name folded into the default eyebrow/heading/blurb copy.</td></tr>
+        <tr><td><code>heading</code></td><td><code>Tell us about your event</code></td><td>Overrides the whole heading text.</td></tr>
+        <tr><td><code>blurb</code></td><td><em>generated from <code>venue</code></em></td><td>Overrides the helper line under the heading.</td></tr>
+        <tr><td><code>button-text</code></td><td><code>Send inquiry</code></td><td>Overrides the submit button label.</td></tr>
+        <tr><td><code>theme</code></td><td><code>light</code></td><td><code>light</code> or <code>dark</code> — swaps the whole token set (see Styling below).</td></tr>
+        <tr><td><code>accent</code></td><td><em>theme default</em></td><td>Any CSS color. Shorthand for setting <code>--pbi-accent</code> without writing a <code>&lt;style&gt;</code> block.</td></tr>
+        <tr><td><code>event-types</code></td><td><em>all eight</em></td><td>Comma list restricting/reordering the "Event type" options. See allowed values below.</td></tr>
+        <tr><td><code>fallback-email</code></td><td>—</td><td>Shown as a <code>mailto:</code> link if the request fails outright, so a visitor is never left with a dead form.</td></tr>
+        <tr><td><code>redirect</code></td><td>—</td><td>URL to send the browser to on success, instead of the built-in inline thank-you panel — use this to send visitors to your own "thank you" page.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p class="section-lede"><code>event-types</code> accepts any subset of:</p>
+    <div class="pillbar">
+      <span class="pill">private_event</span><span class="pill">wedding</span><span class="pill">corporate</span>
+      <span class="pill">concert</span><span class="pill">comedy</span><span class="pill">community</span>
+      <span class="pill">fundraiser</span><span class="pill">other</span>
+    </div>
+
+    <div class="table-wrap">
+    <table>
+      <caption>Events dispatched</caption>
+      <thead><tr><th>Event</th><th>detail</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><td><code>panic-inquiry-submitted</code></td><td><code>{}</code></td><td>The lead was created successfully.</td></tr>
+        <tr><td><code>panic-inquiry-error</code></td><td><code>{status, message}</code></td><td>The request failed — <code>status</code> is <code>0</code> for a network error, otherwise the HTTP status code (e.g. <code>422</code> invalid input, <code>429</code> rate-limited).</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="section-lede">Both events bubble and cross the shadow boundary (<code>composed: true</code>), so a plain <code>addEventListener</code> on the element works:</p>
+    <div class="snippet"><span class="cm">// wire up your own analytics / confirmation UI</span>
+document.querySelector(<span class="str">'panic-booking-inquiry'</span>).addEventListener(<span class="str">'panic-inquiry-submitted'</span>, () =&gt; {
+  <span class="cm">// e.g. fire a conversion pixel</span>
+});</div>
+
+    <h2 id="styling"><span class="num">02</span>Styling</h2>
+    <p class="section-lede">The form renders into a shadow root, so your page's CSS can't accidentally break it — and its CSS can't leak out and break your page either. Reskin it entirely with custom properties set on the element (they're designed to pierce the shadow boundary):</p>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Property</th><th>Light default</th><th>Dark default</th></tr></thead>
+      <tbody>
+        <tr><td><code>--pbi-accent</code></td><td><code>#7a2036</code></td><td><code>#d9647e</code></td></tr>
+        <tr><td><code>--pbi-ink</code></td><td><code>#1c1a1e</code></td><td><code>#f1eef0</code></td></tr>
+        <tr><td><code>--pbi-muted</code></td><td><code>#726e73</code></td><td><code>#a79fa4</code></td></tr>
+        <tr><td><code>--pbi-paper</code></td><td><code>#ffffff</code></td><td><code>#201b1e</code></td></tr>
+        <tr><td><code>--pbi-field</code></td><td><code>#f5f3f4</code></td><td><code>#2b2429</code></td></tr>
+        <tr><td><code>--pbi-line</code></td><td><code>#e6e2e4</code></td><td><code>#3a3237</code></td></tr>
+        <tr><td><code>--pbi-radius</code></td><td colspan="2"><code>14px</code> — corner radius; every internal control derives from this.</td></tr>
+        <tr><td><code>--pbi-font</code></td><td colspan="2">Body/UI font stack (system-ui by default).</td></tr>
+        <tr><td><code>--pbi-font-display</code></td><td colspan="2">Heading font stack (a serif by default — see below).</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="snippet">panic-booking-inquiry {
+  --pbi-accent: #0f766e;
+  --pbi-radius: 4px;
+  --pbi-font-display: "Times New Roman", serif;
+}</div>
+    <p class="section-lede">For deeper surgery, three parts are exposed for <code>::part()</code> selectors: <code>card</code>, <code>heading</code>, <code>button</code>, <code>error</code>, and <code>success</code>.</p>
+
+    <h2 id="server"><span class="num">03</span>What happens on the server</h2>
+    <p class="section-lede">The component posts JSON to <code>POST /api/public/inquiries</code>, handled by <code>src/PublicInquiry.php</code> — the one write endpoint in Backstage built to accept unauthenticated, cross-origin requests.</p>
+    <div class="table-wrap">
+    <table>
+      <tbody>
+        <tr><td style="white-space:nowrap"><b>Where it lands</b></td><td>A row in the same <code>leads</code> table the internal Leads pipeline reads (<code>source = website</code>, <code>status = new</code>). There's no separate inbox — it shows up in <b>Leads</b> like any other inquiry, ready to triage, evaluate, and convert to an event.</td></tr>
+        <tr><td style="white-space:nowrap"><b>CORS</b></td><td>Wide open (<code>Access-Control-Allow-Origin: *</code>) — the endpoint answers its own preflight <code>OPTIONS</code> request. No cookies or credentials are read or sent, so this is the same trust model as any public "contact us" form.</td></tr>
+        <tr><td style="white-space:nowrap"><b>Notifications</b></td><td>Venue admins with email notifications enabled get an email the moment a lead comes in, linking straight into the Leads pipeline.</td></tr>
+        <tr><td style="white-space:nowrap"><b>Anti-spam</b></td><td>A honeypot field (invisible to people, irresistible to bots that fill every input), plus a per-IP and per-email rate limit. Neither is bulletproof, but both raise the bar past a copy-pasted script.</td></tr>
+        <tr><td style="white-space:nowrap"><b>Validation</b></td><td><code>contact_name</code>, a valid <code>contact_email</code>, and <code>message</code> are required; everything else is optional. Invalid submissions get a <code>422</code> with an <code>error</code> message the component surfaces inline.</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="section-lede">See <code>docs/openapi.yaml</code> (path <code>/public/inquiries</code>) for the full request/response schema, and <code>README.md</code> for how this sits alongside Backstage's other unauthenticated endpoints (public event pages, ticket checkout, the events feed that powers <code>&lt;mab-events-carousel&gt;</code>).</p>
+
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>Component: public/assets/panic-booking-inquiry.js</span>
+      <span>Endpoint: src/PublicInquiry.php</span>
+      <span>Lands in: Leads pipeline (src/Leads.php)</span>
+      <a href="mab-events-demo.html">Sibling widget: mab-events-carousel ↗</a>
+    </div>
+  </footer>
+
+  <script src="assets/panic-booking-inquiry.js"></script>
+  <script>
+    function wire(prefix) {
+      var el = document.getElementById('demo-' + prefix);
+      var dot = document.getElementById('dot-' + prefix);
+      var text = document.getElementById('text-' + prefix);
+      el.addEventListener('panic-inquiry-submitted', function () {
+        dot.className = 'dot ok';
+        text.textContent = 'inquiry received — check Leads';
+      });
+      el.addEventListener('panic-inquiry-error', function (e) {
+        dot.className = 'dot err';
+        text.textContent = 'error (' + e.detail.status + '): ' + e.detail.message;
+      });
+    }
+    wire('light');
+    wire('dark');
+  </script>
+</body>
+</html>

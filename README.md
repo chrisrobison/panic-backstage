@@ -41,6 +41,10 @@ PATCH  /api/events/{id}/assets/{id}    -> src/Events/Assets.php
 
 GET    /api/public/events/{slug}       -> src/PublicEvents.php
 
+# Public booking-inquiry widget intake (no JWT, CORS-open — powers panic-booking-inquiry):
+POST    /api/public/inquiries          -> src/PublicInquiry.php  (creates a lead, source=website)
+OPTIONS /api/public/inquiries          -> src/PublicInquiry.php  (CORS preflight)
+
 GET    /api/promote/events/{id}        -> src/Promote/CampaignForEvent.php
 POST   /api/promote/events/{id}/campaign
 GET    /api/promote/campaigns/{id}     -> src/Promote.php
@@ -619,6 +623,36 @@ backend/venue than the one implied by the script's own URL.
 
 See `public/mab-events-demo.html` for a live, working demo page (also serves
 as the component's smoke test).
+
+### Embeddable booking-inquiry widget (`<panic-booking-inquiry>`)
+
+`public/assets/panic-booking-inquiry.js` is a dependency-free web component
+that renders a full booking-inquiry form and POSTs submissions straight to
+`POST /api/public/inquiries` (`src/PublicInquiry.php`) — the one write
+endpoint in the app built to accept unauthenticated, cross-origin requests
+(it answers its own CORS preflight, since Kernel has no global CORS layer).
+Unlike `<mab-events-carousel>`, it renders into a **shadow root** so it
+looks the same regardless of the host page's CSS — the point is "drop it
+into any site and it already looks finished," reskinned via CSS custom
+properties (`--pbi-accent`, `--pbi-paper`, …) rather than by inheriting
+theme classes.
+
+```html
+<panic-booking-inquiry venue="Mabuhay Gardens"></panic-booking-inquiry>
+<script src="https://panicbooking.com/backstage/assets/panic-booking-inquiry.js"></script>
+```
+
+Every submission is created as a normal `leads` row (`source = website`,
+`status = new`) — it lands in the same **Leads** pipeline as any other
+inquiry, no separate inbox to check, and venue admins with email
+notifications enabled get pinged immediately. A honeypot field plus a
+per-IP/per-email rate limit (`src/RateLimiter.php`, the same mechanism the
+auth endpoints use) guard against spam.
+
+See `public/booking-inquiry-demo.html` for a live, working demo (two
+reskinned instances, wired to the real endpoint) plus the full attribute/
+event/styling reference, and `docs/openapi.yaml`'s `/public/inquiries` path
+for the request/response schema.
 
 ## Google Sheet Sync
 

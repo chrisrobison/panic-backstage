@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `public` — Add embeddable <panic-booking-inquiry> booking form widget
+- **Added** `public` — Add embeddable <panic-booking-inquiry> booking form widget
 - **Fixed** `docs` — Stop showing two headings per ops-manual chapter
 - **Documentation** — Cover the Tasks app, Automation module, and other recent changes
 - **Added** `public-event` — Add a Leaflet venue map to the public event page

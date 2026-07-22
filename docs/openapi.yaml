@@ -19457,6 +19457,110 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /public/inquiries:
+    post:
+      operationId: publicInquiry_create
+      summary: Submit a booking inquiry (embeddable widget intake)
+      description: >-
+        Unauthenticated, CORS-open intake for the <panic-booking-inquiry> web component (see
+        public/assets/panic-booking-inquiry.js and public/booking-inquiry-demo.html), meant to be
+        embedded on a page on a completely different domain. Creates a `leads` row
+        (source='website', status='new') identical in shape to one created via POST /leads, so it
+        flows into the normal Leads triage/evaluation/convert-to-event pipeline with no separate
+        inbox. Answers its own CORS preflight (OPTIONS) since there is no global CORS layer.
+        Applies a honeypot check (a `company` field a human never sees; tripping it silently
+        returns the same success response as a real submission) plus a per-IP and per-email rate
+        limit before validating required fields. Best-effort emails venue admins on success.
+      tags:
+        - Public Booking Inquiry
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contact_name, contact_email, message]
+              properties:
+                contact_name:
+                  type: string
+                  maxLength: 255
+                contact_email:
+                  type: string
+                  format: email
+                  maxLength: 255
+                contact_phone:
+                  type: string
+                  maxLength: 60
+                contact_org:
+                  type: string
+                  maxLength: 255
+                event_type:
+                  type: string
+                  enum: [private_event, wedding, corporate, concert, comedy, community, fundraiser, other]
+                event_name:
+                  type: string
+                  maxLength: 255
+                desired_date:
+                  type: string
+                  format: date
+                desired_date_alt:
+                  type: string
+                  format: date
+                projected_attendance:
+                  type: integer
+                  minimum: 0
+                  maximum: 100000
+                message:
+                  type: string
+                  maxLength: 4000
+                  description: The inquiry's free-text body. Stored as the lead's `notes`.
+                company:
+                  type: string
+                  description: >-
+                    Honeypot — must be left blank. The widget renders this field visually hidden
+                    and outside the tab order; a non-empty value is treated as a bot and silently
+                    dropped (still responds 200).
+      responses:
+        '200':
+          description: >-
+            Lead created (or silently dropped as spam via the honeypot — both cases respond
+            identically).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '405':
+          description: Method not allowed (only POST and OPTIONS are handled).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing contact_name/message, or contact_email is not a valid email address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many inquiries from this IP or email address recently.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    options:
+      operationId: publicInquiry_preflight
+      summary: CORS preflight for the booking-inquiry widget
+      description: Responds 204 with Access-Control-Allow-* headers. No body.
+      tags:
+        - Public Booking Inquiry
+      security: []
+      responses:
+        '204':
+          description: Preflight OK.
   /events/{eventId}/ticketing:
     get:
       operationId: ticketing_getDashboard

@@ -128,6 +128,17 @@ http_post() {
     fi
 }
 
+http_delete() {
+    local path="$1"
+    local auth
+    auth="$(_auth_header)"
+    if [ -n "$auth" ]; then
+        _curl -X DELETE -H "$auth" "$API_URL$path"
+    else
+        _curl -X DELETE "$API_URL$path"
+    fi
+}
+
 # Extract a value from a JSON document on stdin. Supports dotted paths
 # (e.g. "user.email"). Echoes the raw scalar, or compact JSON for arrays/objects.
 # Exit 1 if the key is missing.
