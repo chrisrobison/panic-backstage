@@ -698,7 +698,15 @@
     min-height: 100vh;
   }
 
+  /* On screen, each chapter's own dark .chapter-hero (with its "Chapter N"
+     arabic numeral) already restates the same title right below this, so
+     showing both reads as a duplicate heading. Kept in the DOM (not deleted)
+     because the print stylesheet below turns .part-break back on as a real
+     "Part N" divider page — a page of its own before each chapter's title
+     page, the way a printed book or manual is bound. See the @media print
+     override a few hundred lines down. */
   .part-break {
+    display: none;
     background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
     color: white;
     padding: 56px 60px;
@@ -1117,7 +1125,7 @@
     <a href="#cover" class="chapter">How to use this manual</a>
 
     <div class="nav-section">Part I — Lead Pipeline</div>
-    <a href="#leads-part" class="chapter">Lead Pipeline</a>
+    <a href="#leads" class="chapter">Lead Pipeline</a>
     <a href="#lead-inbox" class="section">The Leads Inbox</a>
     <a href="#lead-create" class="section">Creating a lead</a>
     <a href="#lead-pipeline" class="section">Moving through the pipeline</a>
@@ -1170,7 +1178,7 @@
     <a href="#activity-log" class="section">The Activity Log</a>
 
     <div class="nav-section">Part V — Closeout</div>
-    <a href="#closeout-part" class="chapter">Closeout &amp; Billing</a>
+    <a href="#closeout" class="chapter">Closeout &amp; Billing</a>
     <a href="#closeout-overview" class="section">Closeout overview</a>
     <a href="#closeout-ledger" class="section">The financial ledger</a>
     <a href="#closeout-checklist" class="section">The closeout checklist</a>

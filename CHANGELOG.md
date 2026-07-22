@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `docs` — Stop showing two headings per ops-manual chapter
 - **Documentation** — Cover the Tasks app, Automation module, and other recent changes
 - **Fixed** `docs` — Sort intake status list by soonest event date first
 - **Changed** `add` — (add) web component that renders a ticket with a familiar look
