@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** `docs` — Redesign intake report as a patch-bay line check, not a blog page
 - **Added** `docs` — Track contract-on-file status in the intake readiness report
 - **Added** `docs` — Add intake-readiness report for events in the next 90 days
 - **Fixed** `calendar` — Stop the Grid view from duplicating 1-2 weeks at month boundaries
