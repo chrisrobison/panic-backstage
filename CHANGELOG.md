@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** — Add Automation module completion plan
 - **Fixed** `docs` — Stop showing two headings per ops-manual chapter
 - **Documentation** — Cover the Tasks app, Automation module, and other recent changes
 - **Added** `public-event` — Add a Leaflet venue map to the public event page
