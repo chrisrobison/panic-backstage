@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `docs` — Make the intake report live and editable in place
 - **Changed** `docs` — Redesign intake report as a patch-bay line check, not a blog page
 - **Added** `docs` — Track contract-on-file status in the intake readiness report
 - **Added** `docs` — Add intake-readiness report for events in the next 90 days

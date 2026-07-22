@@ -380,6 +380,46 @@
     padding: 3rem 1rem; text-align: center; color: var(--ink-faint); font-family: var(--font-mono); font-size: .85rem;
   }
 
+  /* ---- Live-data status banner ---- */
+  .status-banner {
+    margin: 0 0 1.4rem;
+    padding: .8rem 1.05rem;
+    border-radius: 2px;
+    font-size: .85rem;
+    border: 1px solid var(--line);
+    background: var(--paper-raised);
+  }
+  .status-banner.loading { color: var(--ink-soft); font-family: var(--font-mono); }
+  .status-banner.error {
+    color: var(--velvet);
+    background: color-mix(in srgb, var(--velvet) 12%, var(--paper-raised));
+    border-color: color-mix(in srgb, var(--velvet) 45%, var(--line));
+  }
+  .status-banner a { color: inherit; text-decoration: underline; font-weight: 600; }
+
+  /* ---- Inline-editable field values ---- */
+  .editable {
+    cursor: pointer;
+    border-bottom: 1px dotted var(--ink-faint);
+    border-radius: 1px;
+    padding: 0 .15em;
+    margin: 0 -.15em;
+    transition: background-color .15s ease, border-color .15s ease;
+  }
+  .editable:hover { background: color-mix(in srgb, var(--marquee) 12%, transparent); border-bottom-color: var(--marquee); }
+  .editable:focus { outline: none; }
+  .editable.editing {
+    cursor: text;
+    background: var(--paper);
+    border-bottom: 1px solid var(--marquee);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--marquee) 35%, transparent);
+  }
+  .editable.saving { opacity: .55; cursor: wait; }
+  .editable.save-ok { background: color-mix(in srgb, var(--house) 30%, transparent); border-bottom-color: var(--house); }
+  .editable.save-error { background: color-mix(in srgb, var(--velvet) 25%, transparent); border-bottom-color: var(--velvet); }
+  .editable .placeholder { color: var(--ink-faint); font-style: italic; border-bottom: none; }
+  .detail-card .desc .editable { display: block; white-space: pre-wrap; padding: .3em; min-height: 1.4em; }
+
   @media (max-width: 640px) {
     .stagehead { padding: 2.25rem 1.1rem 1.75rem; }
     main.page { padding: 1.5rem 1.1rem 4rem; }
@@ -395,11 +435,13 @@
     <span class="kicker">Operations &middot; Intake Audit</span>
     <h1>Line Check</h1>
     <p>Same idea as a sound check before doors: confirm every channel is live before you trust it. This is that pass for paperwork — which of the next 90 days' bookings still have a dead channel somewhere in booker, producer, deposit, or the rest of the intake list.</p>
-    <p>Window: <code id="window-range">&mdash;</code> &middot; Snapshot generated <code id="generated-at">&mdash;</code> from the live database. This page does not auto-update — re-run the export for a fresh read.</p>
+    <p>Window: <code id="window-range">&mdash;</code> &middot; Live from the API, last pulled <code id="generated-at">&mdash;</code>. Click any value below to fix it in place — saves straight to the database.</p>
   </div>
 </div>
 
 <main class="page">
+
+  <div class="status-banner" id="status-banner" hidden></div>
 
   <div class="stats" id="stats"></div>
 
@@ -407,7 +449,7 @@
     <div class="item"><span class="bulb on"></span> <b>Set</b> &mdash; field has a value (email/phone also checked for valid format)</div>
     <div class="item"><span class="bulb off"></span> <b>Missing</b> &mdash; blocks Intake Complete</div>
     <div class="item"><span class="bulb secondary-off"></span> <b>Missing (optional)</b> &mdash; revenue / guests / capacity / contract, doesn't block</div>
-    <div class="item">Click any row for contact details &amp; exact gaps.</div>
+    <div class="item">Click a row to see contact details. Dotted values inside are editable.</div>
   </div>
 
   <div class="controls">
@@ -419,6 +461,7 @@
       <option value="">All rooms</option>
     </select>
     <button class="toggle-chip" id="incomplete-toggle" type="button" aria-pressed="false">Only incomplete</button>
+    <button class="toggle-chip" id="refresh-btn" type="button">&#8635; Refresh</button>
     <span class="spacer"></span>
     <span class="count" id="result-count"></span>
   </div>
@@ -458,17 +501,52 @@
 </main>
 
 <footer class="page-foot">
-  Mabuhay Backstage &middot; Intake readiness snapshot &middot; Criteria: booker + producer set with valid email &amp; phone, owner assigned, deposit amount entered, public description written, doors/show/end times set, age restriction defined. Contract on file (uploaded or generated), potential revenue, estimated guests and capacity are tracked but optional and don't block Intake Complete.
+  Mabuhay Backstage &middot; Intake readiness, live &middot; Criteria: booker + producer set with valid email &amp; phone, owner assigned, deposit amount entered, public description written, doors/show/end times set, age restriction defined. Contract on file (uploaded or generated), potential revenue, estimated guests and capacity are tracked but optional and don't block Intake Complete. Owner and contract details are shown for reference but edited from the event's own workspace, not here.
 </footer>
 
 <script>
-const EVENTS = [{"id":671644,"title":"The Hip Replacements","date":"2026-07-21","event_type":"special_event","status":"confirmed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Mabuhay Gardens","booker_email":"cdr@cdr2.com","booker_phone":"415-300-0180","promoter_name":"Christopher Robison","promoter_email":"cdr@cdr2.com","promoter_phone":"415-810-6991","owner_user_id":46988,"owner_name":"Christopher Robison","owner_email":"cdr@cdr2.com","owner_phone":"(415) 810-6991","deposit_amount":0,"deposit_status":"not_required","description_public":"This is a private band practice.","doors_time":"16:00:00","show_time":"16:00:00","end_time":"21:00:00","age_restriction":"21+","potential_revenue":0,"estimated_guests":20,"capacity":450,"contract_url":null,"venue_contract_url":null,"contract_id":77,"contract_status":"signed","contract_provider":"internal","contract_asset_id":null,"contract_title":"The Hip Replacements \u2014 Contract","contract_updated_at":"2026-07-21 12:02:30"},{"id":671398,"title":"Cat's Corner","date":"2026-07-22","event_type":"promoter_night","status":"confirmed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Tom Watson","booker_email":"tom@themab.org","booker_phone":"3476108477","promoter_name":"Cat's Corner","promoter_email":"info@catscornersf.com","promoter_phone":"+1 (415) 385-5929","owner_user_id":46988,"owner_name":"Christopher Robison","owner_email":"cdr@cdr2.com","owner_phone":"(415) 810-6991","deposit_amount":0,"deposit_status":"not_required","description_public":"A New Chapter at 435 Broadway. History, elegance, nightlife, and room to grow\u2014while continuing the tradition Catrine set in motion.","doors_time":"18:00:00","show_time":"19:00:00","end_time":"23:00:00","age_restriction":"21+","potential_revenue":null,"estimated_guests":150,"capacity":450,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":671301,"title":"Fear of Tradition","date":"2026-07-23","event_type":"live_music","status":"confirmed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Tom Watson","booker_email":"tom@themab.org","booker_phone":"(347) 610-8477","promoter_name":"Aaron Ludwig","promoter_email":"aaronludwig123@gmail.com","promoter_phone":"(915) 333-2908","owner_user_id":46988,"owner_name":"Christopher Robison","owner_email":"cdr@cdr2.com","owner_phone":"(415) 810-6991","deposit_amount":0,"deposit_status":"not_required","description_public":" Discover Your Next Favorite Band at the Legendary Mabuhay Gardens! \ud83c\udfb8\n\n\ud83d\udcc5 Thursday, July 23\n\ud83d\udeaa Doors: 6 PM     |    \ud83c\udfb6 Music: 7 PM\n\ud83d\udccd On Broadway Theater \u2013 435 Broadway, San Francisco\n\ud83d\udcb5 $12 Advance    |   $15 Door    |    All Ages\n\nLooking for your next favorite band? This lineup brings together some of the most exciting new names in the Bay Area DIY scene with touring guests from Texas.\n\n\ud83d\udd25 Fear of Tradition (TX)\nFresh off their new release, The Tragedy of Mo Se Fraux, Fear of Tradition blends soaring shoegaze guitars, emotional indie rock, and post-hardcore energy. If you love DIIV, Nothing, Superheaven, or Title Fight, don\u2019t miss their San Francisco stop.  \n\n\ud83c\udf3c HelloMrsWong\nA rising Bay Area indie act bringing melodic alternative rock and a fresh perspective to the local scene.\n\n\ud83c\udf3f Tangled Ends\nDreamy guitars, atmospheric textures, and indie rock vibes from one of the Bay\u2019s promising emerging bands.\n\n\ud83d\udc3e Little Critter\nDIY spirit, catchy hooks, and high-energy performances make Little Critter a band to keep an eye on.\n\n\ud83d\udfe3 Viola Swamp\nDark, noisy alternative rock with touches of shoegaze and post-punk\u2014perfect for fans who like music that\u2019s both beautiful and loud.\n\n\u26a1 Fatale\nOpening the night with moody alternative rock and post-punk influences to set the tone for an unforgettable evening.\n\nWhether you\u2019re into shoegaze, indie rock, emo revival, dream pop, or post-punk, this is one of those lineups where you\u2019ll probably discover your next favorite local band.\n\n\ud83c\udf9f\ufe0f Support independent music. Support touring artists. Support the Bay Area scene.\n\nSee you at the legendary Mabuhay Gardens!\n","doors_time":"18:00:00","show_time":"19:00:00","end_time":"23:00:00","age_restriction":"All Ages","potential_revenue":2000,"estimated_guests":200,"capacity":297,"contract_url":null,"venue_contract_url":null,"contract_id":46,"contract_status":"draft","contract_provider":"internal","contract_asset_id":null,"contract_title":"Fear of Tradition \u2014 Contract","contract_updated_at":"2026-07-06 23:16:35"},{"id":285443,"title":"Leestock 6","date":"2026-07-25","event_type":"live_music","status":"proposed","room_enum":"both","resource_id":4,"resource_name":"Both Rooms","resource_capacity":750,"booker_name":"Christopher Robison","booker_email":"cdr@cdr2.com","booker_phone":"4158106991","promoter_name":"Lee Hoffman","promoter_email":null,"promoter_phone":"510-859-7789","owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":0,"deposit_status":"not_required","description_public":"Support your local music scene! A $25 ticket gets you access to both stages for 110 musical acts and vendors. Noon \u2013 11pm.","doors_time":"12:00:00","show_time":"13:00:00","end_time":"23:00:00","age_restriction":"21+","potential_revenue":3000,"estimated_guests":500,"capacity":800,"contract_url":null,"venue_contract_url":null,"contract_id":75,"contract_status":"draft","contract_provider":"internal","contract_asset_id":null,"contract_title":"Leestock 6 \u2014 Contract","contract_updated_at":"2026-07-21 20:37:41"},{"id":135,"title":"Beautiful Freaks","date":"2026-07-26","event_type":"live_music","status":"proposed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":null,"doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":671409,"title":"Zinggflower","date":"2026-07-27","event_type":"live_music","status":"published","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"Presented by GamperDrums. Catch Zinggflower live tonight! Head into the downstairs space at The Mab to catch the show. 21+.","doors_time":null,"show_time":"18:30:00","end_time":null,"age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":136,"title":"Internship Conference","date":"2026-07-27","event_type":"live_music","status":"confirmed","room_enum":"upstairs","resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Tom Watson","booker_email":"tom@themab.org","booker_phone":"347-610-8477","promoter_name":"Cory Levy","promoter_email":"tom@themab.org","promoter_phone":"832-452-4216","owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":0,"deposit_status":"not_required","description_public":"","doors_time":"18:00:00","show_time":"19:00:00","end_time":"22:00:00","age_restriction":"18","potential_revenue":3500,"estimated_guests":null,"capacity":200,"contract_url":null,"venue_contract_url":null,"contract_id":59,"contract_status":"approved","contract_provider":"internal","contract_asset_id":null,"contract_title":"internship conference \u2014 Contract","contract_updated_at":"2026-07-16 00:27:00"},{"id":671399,"title":"Cat's Corner","date":"2026-07-29","event_type":"promoter_night","status":"proposed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Tom Watson","booker_email":"tom@themab.org","booker_phone":"3476108477","promoter_name":"Cat's Corner","promoter_email":"info@catscornersf.com","promoter_phone":"+1 (415) 385-5929","owner_user_id":46988,"owner_name":"Christopher Robison","owner_email":"cdr@cdr2.com","owner_phone":"(415) 810-6991","deposit_amount":null,"deposit_status":"not_required","description_public":"A New Chapter at 435 Broadway. History, elegance, nightlife, and room to grow\u2014while continuing the tradition Catrine set in motion.","doors_time":"18:00:00","show_time":"19:00:00","end_time":"23:00:00","age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":200,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":137,"title":"Pat Todd & The Rankoutsiders","date":"2026-07-31","event_type":"live_music","status":"proposed","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Rob Vastano + Daniel","promoter_email":null,"promoter_phone":null,"owner_user_id":43925,"owner_name":"Katrina Zanotto","owner_email":"kzanotto@stardustguild.co","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"LA punk legend Pat Todd joins three of the Bay's finest for a night of loud guitars, hooks, attitude, and no-frills rock at The Mab. Doors 7 PM. 21+.","doors_time":"19:00:00","show_time":null,"end_time":null,"age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":138,"title":"Union Jack & The Rippers","date":"2026-08-01","event_type":"live_music","status":"proposed","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Dylan + Max","promoter_email":null,"promoter_phone":null,"owner_user_id":43925,"owner_name":"Katrina Zanotto","owner_email":"kzanotto@stardustguild.co","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"A genre-crossing lineup of NWOBHM metal classics, East Bay skate punk legends, and heavy surf tunes with a dose of 90s insanity. Doors 7 PM. 21+.","doors_time":"19:00:00","show_time":null,"end_time":null,"age_restriction":"21+","potential_revenue":2000,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":671410,"title":"Karaoke Sunday","date":"2026-08-02","event_type":"karaoke","status":"published","room_enum":"upstairs","resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"Grab the mic! Be the star. Join us every Sunday upstairs at On Broadway for karaoke night.","doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":641068,"title":"Thrash/Death","date":"2026-08-02","event_type":"live_music","status":"proposed","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Cristina Helgoth","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":null,"show_time":"20:00:00","end_time":null,"age_restriction":"21+","potential_revenue":2000,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":671400,"title":"Cat's Corner - Swing Dance Classes","date":"2026-08-05","event_type":"special_event","status":"confirmed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Tom Watson","booker_email":"tom@themab.org","booker_phone":"3476108477","promoter_name":"Cat's Corner","promoter_email":"info@catscornersf.com","promoter_phone":"+1 (415) 385-5929","owner_user_id":46988,"owner_name":"Christopher Robison","owner_email":"cdr@cdr2.com","owner_phone":"(415) 810-6991","deposit_amount":0,"deposit_status":"not_required","description_public":"Cat\u2019s Corner is San Francisco\u2019s iconic Wednesday night swing dance party\u2014Swing & Lindy Hop classes, rotating live bands, and a cocktail-fueled room built for dancing, connection, and staying out longer than planned.\n\n","doors_time":"18:00:00","show_time":"19:00:00","end_time":"23:00:00","age_restriction":"21+","potential_revenue":1000,"estimated_guests":200,"capacity":450,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":139,"title":"Hersh Cohen","date":"2026-08-06","event_type":"live_music","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":null,"doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":36,"contract_status":"draft","contract_provider":"internal","contract_asset_id":null,"contract_title":"Close To Carl (Clown show + worksop) \u2014 Contract","contract_updated_at":"2026-06-28 16:49:40"},{"id":668814,"title":"[North Beach First Fridays] Comedy and Music ","date":"2026-08-07","event_type":"special_event","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":"katrina zanotto","booker_email":"kzanotto@stardustguild.co","booker_phone":"415 233 0734","promoter_name":"Roseblood Festival","promoter_email":"kzanotto@stardustguild.co","promoter_phone":"4152330734","owner_user_id":43925,"owner_name":"Katrina Zanotto","owner_email":"kzanotto@stardustguild.co","owner_phone":null,"deposit_amount":0,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":"20:30:00","show_time":"20:00:00","end_time":"02:00:00","age_restriction":"21+","potential_revenue":2000,"estimated_guests":null,"capacity":250,"contract_url":null,"venue_contract_url":null,"contract_id":76,"contract_status":"draft","contract_provider":"internal","contract_asset_id":null,"contract_title":"Roseblood Fest <-- no upload feature is available.","contract_updated_at":"2026-07-20 12:56:38"},{"id":670491,"title":"Lydia Breen","date":"2026-08-08","event_type":"special_event","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":"Tom Watson","booker_email":"tom@themab.org","booker_phone":"347-610-8477","promoter_name":"Lydia Breen","promoter_email":"lydiabreen@yahoo.com","promoter_phone":"773-593-0907","owner_user_id":47745,"owner_name":"Tom Watson","owner_email":"tom@themab.org","owner_phone":null,"deposit_amount":500,"deposit_status":"not_required","description_public":"","doors_time":"23:00:00","show_time":"12:00:00","end_time":"01:00:00","age_restriction":"all_ages","potential_revenue":1820,"estimated_guests":null,"capacity":100,"contract_url":null,"venue_contract_url":null,"contract_id":52,"contract_status":"sent","contract_provider":"internal","contract_asset_id":null,"contract_title":"Lydia Breen \u2014 Contract","contract_updated_at":"2026-07-17 23:10:50"},{"id":399720,"title":"blues workshop + live music event to Broadway Studios / Mabuhay Gardens.","date":"2026-08-08","event_type":"live_music","status":"proposed","room_enum":"upstairs","resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Lydia Breen","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"","doors_time":null,"show_time":"18:00:00","end_time":null,"age_restriction":"","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":18,"contract_status":"draft","contract_provider":"internal","contract_asset_id":null,"contract_title":"Soul On Fire Experience \u2014 Contract","contract_updated_at":"2026-06-11 17:06:15"},{"id":671464,"title":"General Event","date":"2026-08-11","event_type":"special_event","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":40333,"owner_name":"Colleen Piontek","owner_email":"this.that.comedy@gmail.com","owner_phone":"415-902-6936","deposit_amount":null,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":"18:00:00","show_time":"22:00:00","end_time":null,"age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":671401,"title":"Cats Corner Swings!","date":"2026-08-12","event_type":"promoter_night","status":"proposed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Tom Watson","booker_email":"tom@themab.org","booker_phone":"3476108477","promoter_name":"Cat's Corner","promoter_email":"info@catscornersf.com","promoter_phone":"+1 (415) 385-5929","owner_user_id":46988,"owner_name":"Christopher Robison","owner_email":"cdr@cdr2.com","owner_phone":"(415) 810-6991","deposit_amount":null,"deposit_status":"not_required","description_public":"Cat\u2019s Corner is San Francisco\u2019s iconic Wednesday night swing dance party\u2014Swing & Lindy Hop classes, rotating live bands, and a cocktail-fueled room built for dancing, connection, and staying out longer than planned.\n\n","doors_time":"18:00:00","show_time":"19:00:00","end_time":"23:00:00","age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":200,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":671537,"title":"Local Band Showcase","date":"2026-08-14","event_type":"live_music","status":"proposed","room_enum":null,"resource_id":null,"resource_name":null,"resource_capacity":null,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":26228,"owner_name":"Kathy Favognano","owner_email":"kathotrod@gmail.com","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"Three local bands, one loud night on Broadway.","doors_time":"19:00:00","show_time":"20:00:00","end_time":"23:30:00","age_restriction":"21+","potential_revenue":0,"estimated_guests":null,"capacity":275,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":668280,"title":"Biopunk S26 2050 Final Showcase","date":"2026-08-15","event_type":"special_event","status":"confirmed","room_enum":null,"resource_id":4,"resource_name":"Both Rooms","resource_capacity":750,"booker_name":"Colleen Piontek","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6936","promoter_name":"Elliot Roth// Write contract for Biopunk Community","promoter_email":"elliot@biopunk.house","promoter_phone":"703-232-6241","owner_user_id":40333,"owner_name":"Colleen Piontek","owner_email":"this.that.comedy@gmail.com","owner_phone":"415-902-6936","deposit_amount":2000,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":"14:00:00","show_time":"18:00:00","end_time":"18:30:00","age_restriction":"21+","potential_revenue":10000,"estimated_guests":500,"capacity":450,"contract_url":null,"venue_contract_url":null,"contract_id":60,"contract_status":"draft","contract_provider":"internal","contract_asset_id":null,"contract_title":"Biopunk S26 2050 Final Showcase \u2014 Contract","contract_updated_at":"2026-07-16 00:27:00"},{"id":647425,"title":"eg festival","date":"2026-08-16","event_type":"live_music","status":"proposed","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"chris hyde street","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":null,"doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":641067,"title":"Boneless Ones, Party Force, Violence Coersion, 3T (WA)","date":"2026-08-21","event_type":"live_music","status":"proposed","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Max Boneless","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":null,"show_time":"20:00:00","end_time":null,"age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":671559,"title":"Touring Band Showcase ","date":"2026-08-21","event_type":"live_music","status":"proposed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Colleen Piontek","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6936","promoter_name":"Sky Contreras","promoter_email":"spite.presents@gmail.com","promoter_phone":"000-000-000","owner_user_id":40333,"owner_name":"Colleen Piontek","owner_email":"this.that.comedy@gmail.com","owner_phone":"415-902-6936","deposit_amount":0,"deposit_status":"not_required","description_public":"Three local bands, one loud night on Broadway.","doors_time":"19:00:00","show_time":"20:00:00","end_time":"00:00:00","age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":66,"contract_status":"draft","contract_provider":"internal","contract_asset_id":null,"contract_title":"Touring Band Showcase  \u2014 Contract","contract_updated_at":"2026-07-17 14:36:27"},{"id":641049,"title":"Embryonic Devourment -Death Metal 4bands","date":"2026-08-22","event_type":"live_music","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":null,"doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":650886,"title":"Commedia Dell'Arte Workshop","date":"2026-08-22","event_type":"comedy","status":"confirmed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Colleen Piontek","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6936","promoter_name":"Jeff Raz","promoter_email":"jeffraz18@gmail.com","promoter_phone":"510.295.7567","owner_user_id":40333,"owner_name":"Colleen Piontek","owner_email":"this.that.comedy@gmail.com","owner_phone":"415-902-6936","deposit_amount":0,"deposit_status":"not_required","description_public":"In 16th century Italian marketplaces improvisation, comedy and masked performance came together in the Commedia dell\u2019Arte. Troupes of players skilled in improv, physical theater, dance, circus and music embodied archetypal characters, fleshing out classic scenarios with improvised dialogue and beautifully crafted routines called \u2018lazzi.\u2019\n \nIn this class we will explore many of the classic characters and their masks, improvise with these characters, learn some of their traditional \u2018lazzi\u2019 and create new routines. \n \nPlease wear clothes to move in and bring any props or instruments you use, or want to use, on stage.\n\nAbout Jeff Raz: Jeff has performed nationally and internationally with Cirque du Soleil, the Pickle Family Circus, Lincoln Center Theater and many others. He co-founded The Clown Conservatory at S.F. Circus Center and was the school's director for a decade. He has also co-founded five other arts organizations, and written twenty plays and four books, directed dozens of theater, puppet and circus productions, and worked globally as a communications consultant.\n\nAugust 22: 1:00-5:00\nAugust 23: 1:00-4:00","doors_time":"13:00:00","show_time":"17:00:00","end_time":"17:30:00","age_restriction":"All Ages","potential_revenue":0,"estimated_guests":null,"capacity":20,"contract_url":null,"venue_contract_url":null,"contract_id":37,"contract_status":"draft","contract_provider":"internal","contract_asset_id":null,"contract_title":"Comedia Del Arte (Workshop) \u2014 Contract","contract_updated_at":"2026-07-16 00:27:00"},{"id":641061,"title":"Thrash/Metal","date":"2026-08-30","event_type":"live_music","status":"proposed","room_enum":"upstairs","resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Zanni","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":null,"doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":142,"title":"State Line Empire","date":"2026-09-05","event_type":"live_music","status":"proposed","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Scott Proctor","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":null,"doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":"TIXR","venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":31896,"title":"Scott Proctor","date":"2026-09-05","event_type":"live_music","status":"proposed","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Scott Proctor","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":null,"doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":650906,"title":"Live Directing with Jeff Raz","date":"2026-09-06","event_type":"comedy","status":"confirmed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":"Colleen","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6936","promoter_name":"Jeff Raz","promoter_email":"jeffraz18@gmail.com","promoter_phone":"510.295.7567","owner_user_id":40333,"owner_name":"Colleen Piontek","owner_email":"this.that.comedy@gmail.com","owner_phone":"415-902-6936","deposit_amount":0,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":"13:00:00","show_time":"16:00:00","end_time":"17:00:00","age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":40,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":43442,"title":"Brazilian memorial","date":"2026-09-11","event_type":"live_music","status":"proposed","room_enum":"upstairs","resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Vic Doublelongo","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"","doors_time":null,"show_time":null,"end_time":null,"age_restriction":"","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":"TIXR","venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":659075,"title":"Promoter Night - Katrina","date":"2026-09-11","event_type":"promoter_night","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":43925,"owner_name":"Katrina Zanotto","owner_email":"kzanotto@stardustguild.co","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"A promoter-led bill with door terms and guest list rules confirmed in advance.","doors_time":"19:00:00","show_time":"20:00:00","end_time":null,"age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":143,"title":"Rock","date":"2026-09-12","event_type":"live_music","status":"proposed","room_enum":"upstairs","resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Lady Starbeast and Modern Monsters +1","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"","doors_time":"21:00:00","show_time":null,"end_time":"01:30:00","age_restriction":"","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":"TIXR","venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":671379,"title":"Punk rock war stories","date":"2026-09-12","event_type":"live_music","status":"confirmed","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Jeffrey and friends","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":null,"doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":649411,"title":"Eric Rubin (Musical Comedy)","date":"2026-09-13","event_type":"comedy","status":"confirmed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":"Colleen Piontek","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6936","promoter_name":"Eric Rubin","promoter_email":"rubinericp@gmail.com","promoter_phone":"415-504-4519","owner_user_id":40333,"owner_name":"Colleen Piontek","owner_email":"this.that.comedy@gmail.com","owner_phone":"415-902-6936","deposit_amount":0,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":"18:00:00","show_time":"19:00:00","end_time":"20:30:00","age_restriction":"21+","potential_revenue":0,"estimated_guests":null,"capacity":120,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":144,"title":"Karlie","date":"2026-09-16","event_type":"live_music","status":"proposed","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Karlie","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":null,"doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":145,"title":"Misc - HASF","date":"2026-09-18","event_type":"live_music","status":"proposed","room_enum":"upstairs","resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Partner w Haight Ashbury Street Fair","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":null,"doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":641057,"title":"25th marriage anniversary","date":"2026-09-19","event_type":"live_music","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"A special event honoring the venue history with invited guests and legacy performers.","doors_time":"20:00:00","show_time":"20:00:00","end_time":"01:00:00","age_restriction":"21+","potential_revenue":4000,"estimated_guests":null,"capacity":150,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":641053,"title":"Cartilage\nGoetia\nFrolic\nTBD","date":"2026-09-20","event_type":"live_music","status":"proposed","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Bitterend Bookings","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":null,"doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":"TIXR","venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":238336,"title":"Special Legacy Event","date":"2026-09-23","event_type":"live_music","status":"confirmed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":"Colleen","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6936","promoter_name":null,"promoter_email":"yesh@yeshmalik.com","promoter_phone":"415-694-9390","owner_user_id":40333,"owner_name":"Colleen Piontek","owner_email":"this.that.comedy@gmail.com","owner_phone":"415-902-6936","deposit_amount":0,"deposit_status":"not_required","description_public":"Hummusexual is a hilarious, stand-up hour of physical, character-driven comedy exploring the unmapped intersection of growing up gay and Iraqi, through a whirlwind of immigrant family characters and nakedly personal storytelling. The show asks one piercing question: \"How do you love the people that made you, when those people can't love you back?\"","doors_time":null,"show_time":"20:00:00","end_time":"21:30:00","age_restriction":"21+","potential_revenue":0,"estimated_guests":null,"capacity":120,"contract_url":null,"venue_contract_url":null,"contract_id":34,"contract_status":"approved","contract_provider":"internal","contract_asset_id":null,"contract_title":"(Hummusexual) Standup Comedy \u2014 Contract","contract_updated_at":"2026-06-28 13:19:09"},{"id":671392,"title":"Movie \"Love your neighbor\"","date":"2026-09-25","event_type":"special_event","status":"proposed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Liliana Bolanos","booker_email":null,"booker_phone":null,"promoter_name":"Liliana Bolanos","promoter_email":"LILIANA@brotherhoodmovie.com","promoter_phone":null,"owner_user_id":48297,"owner_name":"Bobby Fishkin","owner_email":"bobby@reframeit.com","owner_phone":null,"deposit_amount":250,"deposit_status":"not_required","description_public":"","doors_time":"18:30:00","show_time":"19:00:00","end_time":"09:00:00","age_restriction":"all ages","potential_revenue":null,"estimated_guests":null,"capacity":450,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":649878,"title":"Submarine Show ","date":"2026-09-25","event_type":"comedy","status":"confirmed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Colleen Piontek","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6936","promoter_name":"Krystal Harfert","promoter_email":"krystalharfert@gmail.com","promoter_phone":"269-876-1184","owner_user_id":40333,"owner_name":"Colleen Piontek","owner_email":"this.that.comedy@gmail.com","owner_phone":"415-902-6936","deposit_amount":0,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":"19:00:00","show_time":"20:00:00","end_time":"21:30:00","age_restriction":"All Ages","potential_revenue":0,"estimated_guests":null,"capacity":200,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":146,"title":"Hummusexual Standup Comedy","date":"2026-09-26","event_type":"comedy","status":"confirmed","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":"Colleen","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6936","promoter_name":"Yesh Malik","promoter_email":"yesh@yeshmalik.com","promoter_phone":"415-694-9390","owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":0,"deposit_status":"not_required","description_public":"Hummusexual is a hilarious, stand-up hour of physical, character-driven comedy exploring the unmapped intersection of growing up gay and Iraqi, through a whirlwind of immigrant family characters and nakedly personal storytelling. The show asks one piercing question: \"How do you love the people that made you, when those people can't love you back?\"","doors_time":"19:00:00","show_time":"20:00:00","end_time":"00:00:00","age_restriction":"21+","potential_revenue":0,"estimated_guests":null,"capacity":120,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":649883,"title":"Submarine Show","date":"2026-09-26","event_type":"comedy","status":"confirmed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Colleen","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6936","promoter_name":"Krystal Harfert","promoter_email":"krystalharfert@gmail.com","promoter_phone":"269-876-1184","owner_user_id":40333,"owner_name":"Colleen Piontek","owner_email":"this.that.comedy@gmail.com","owner_phone":"415-902-6936","deposit_amount":0,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":"19:00:00","show_time":"20:00:00","end_time":"21:30:00","age_restriction":"21+","potential_revenue":0,"estimated_guests":null,"capacity":200,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":649884,"title":"[Submarine] Mime workshop ","date":"2026-09-27","event_type":"comedy","status":"confirmed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Colleen","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6936","promoter_name":"Krystal Harfert","promoter_email":"krystalharfert@gmail.com","promoter_phone":"269-876-1184","owner_user_id":40333,"owner_name":"Colleen Piontek","owner_email":"this.that.comedy@gmail.com","owner_phone":"415-902-6936","deposit_amount":0,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":"10:00:00","show_time":"16:00:00","end_time":"17:00:00","age_restriction":"16+","potential_revenue":0,"estimated_guests":16,"capacity":16,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":671380,"title":"Stoner Rock/Doom show with KAL-EL, Volume and Temple of the Fuzz Witch and one local.","date":"2026-09-29","event_type":"live_music","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Cristina Helgoth","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":null,"doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":663162,"title":"Jon Q Rock + lookign for 2 more bands","date":"2026-10-02","event_type":"special_event","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"JJ Roetting","promoter_email":"jonqpublic.punkrock@gmail.com","promoter_phone":null,"owner_user_id":47745,"owner_name":"Tom Watson","owner_email":"tom@themab.org","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":"19:00:00","show_time":"20:00:00","end_time":null,"age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":667041,"title":"Garage punk revolution","date":"2026-10-03","event_type":"live_music","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":"Kathy Favognano","booker_email":"kathotrod@gmail.com","booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":26228,"owner_name":"Kathy Favognano","owner_email":"kathotrod@gmail.com","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"","doors_time":"19:00:00","show_time":"20:00:00","end_time":"23:00:00","age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":40,"contract_status":"draft","contract_provider":"internal","contract_asset_id":null,"contract_title":"undefined \u2014 Talent Buy","contract_updated_at":"2026-07-02 21:04:15"},{"id":419111,"title":"Laid Off","date":"2026-10-10","event_type":"comedy","status":"booked","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":"Colleen","booker_email":"this.that.comedy@gmail.com","booker_phone":"4159026936","promoter_name":"Ricci Armani","promoter_email":"rarmani253@gmail.com","promoter_phone":"253-359-0960","owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":0,"deposit_status":"not_required","description_public":"Ricci Armani, is a stand up comedian and the creator/cohost of the monthly sold out show \u201cMy Straight Friends\u201d playing out of The Comedy Store in LA . He has been featured in Forbes article \u201cTop AAPI Comedians To Watch\u201d and Business Insider to discuss why getting laid off was the best thing to happen to him. \n\nRicci\u2019s comedy performance is quick and witty. Covering topics about his life post lay off.\n\nHe has featured in comedy festivals including Just For Laughs in Montreal, MoonTower Comedy 2026 in Austin Texas and Netflix Is A Joke 2026 in LA.","doors_time":"19:00:00","show_time":"20:00:00","end_time":"00:00:00","age_restriction":"21+","potential_revenue":0,"estimated_guests":0,"capacity":100,"contract_url":"TIXR","venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":75383,"title":"Close To Carl (Clown show + workshop)","date":"2026-10-14","event_type":"comedy","status":"proposed","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":"Colleen","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6926","promoter_name":"Cam Porter","promoter_email":"closetocarl@gmail.com","promoter_phone":"847-899-0575","owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":0,"deposit_status":"not_required","description_public":"","doors_time":"19:00:00","show_time":"20:00:00","end_time":"21:30:00","age_restriction":"21+","potential_revenue":500,"estimated_guests":50,"capacity":100,"contract_url":"TIXR","venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":665345,"title":"Promoter Night","date":"2026-10-15","event_type":"promoter_night","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":43925,"owner_name":"Katrina Zanotto","owner_email":"kzanotto@stardustguild.co","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"A promoter-led bill with door terms and guest list rules confirmed in advance.","doors_time":"19:00:00","show_time":"20:00:00","end_time":null,"age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":641047,"title":"Close to Carl Workshop","date":"2026-10-15","event_type":"comedy","status":"confirmed","room_enum":"downstairs","resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":"Colleen","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6936","promoter_name":"Cam Porter","promoter_email":"closetocarl@gmail.com","promoter_phone":"847-899-0575","owner_user_id":40333,"owner_name":"Colleen Piontek","owner_email":"this.that.comedy@gmail.com","owner_phone":"415-902-6936","deposit_amount":0,"deposit_status":"not_required","description_public":"Ticket link:","doors_time":"19:00:00","show_time":"20:00:00","end_time":"22:45:00","age_restriction":"all ages","potential_revenue":100,"estimated_guests":15,"capacity":15,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":671403,"title":"General Event","date":"2026-10-16","event_type":"special_event","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":26228,"owner_name":"Kathy Favognano","owner_email":"kathotrod@gmail.com","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":"19:00:00","show_time":"20:00:00","end_time":null,"age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":671404,"title":"General Event","date":"2026-10-16","event_type":"special_event","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":26228,"owner_name":"Kathy Favognano","owner_email":"kathotrod@gmail.com","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":"19:00:00","show_time":"20:00:00","end_time":null,"age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":671405,"title":"Defiance Blind Illusion  Hemotoxin  HellHunter ","date":"2026-10-16","event_type":"special_event","status":"proposed","room_enum":null,"resource_id":2,"resource_name":"Downstairs (21+)","resource_capacity":350,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":null,"promoter_email":null,"promoter_phone":null,"owner_user_id":26228,"owner_name":"Kathy Favognano","owner_email":"kathotrod@gmail.com","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":"19:00:00","show_time":"20:00:00","end_time":null,"age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":641071,"title":"Metal","date":"2026-10-17","event_type":"live_music","status":"proposed","room_enum":"upstairs","resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":null,"booker_email":null,"booker_phone":null,"promoter_name":"Sinister | Cristine","promoter_email":null,"promoter_phone":null,"owner_user_id":1,"owner_name":"Mabuhay Admin","owner_email":"admin@mabuhay.local","owner_phone":null,"deposit_amount":null,"deposit_status":"not_required","description_public":null,"doors_time":null,"show_time":null,"end_time":null,"age_restriction":null,"potential_revenue":null,"estimated_guests":null,"capacity":null,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":650896,"title":"The Art and Joy of Clowning","date":"2026-10-17","event_type":"comedy","status":"confirmed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Colleen","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6936","promoter_name":"Jeff Raz","promoter_email":"jeffraz18@gmail.com","promoter_phone":"510.295.7567","owner_user_id":40333,"owner_name":"Colleen Piontek","owner_email":"this.that.comedy@gmail.com","owner_phone":"415-902-6936","deposit_amount":0,"deposit_status":"not_required","description_public":"\u200bThe Art and Joy of Clowning: This weekend workshop will explore clown structures, characters, and concepts. We will move our bodies and laugh a lot. All levels of experience welcome, from professionals to beginners, and all participants will receive a copy of The Secret Life of Clowns.\n\n\u200bBio: Jeff Raz has performed nationally and internationally with Cirque du Soleil, the Pickle Family Circus, Lincoln Center Theater and many others. He co-founded The Clown Conservatory at S.F. Circus Center and was the school's director for a decade. He has also co-founded five other arts organizations, and written twenty plays and four books, directed dozens of theater, puppet and circus productions, and worked globally as a communications consultant.\n\n","doors_time":"13:00:00","show_time":"17:00:00","end_time":"17:00:00","age_restriction":"All Ages","potential_revenue":null,"estimated_guests":null,"capacity":20,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null},{"id":650901,"title":"The Art and Joy of Clowning","date":"2026-10-18","event_type":"comedy","status":"confirmed","room_enum":null,"resource_id":3,"resource_name":"Upstairs (All Ages)","resource_capacity":450,"booker_name":"Colleen","booker_email":"this.that.comedy@gmail.com","booker_phone":"415-902-6936","promoter_name":"Jeff Raz","promoter_email":"jeffraz18@gmail.com","promoter_phone":"510.295.7567","owner_user_id":40333,"owner_name":"Colleen Piontek","owner_email":"this.that.comedy@gmail.com","owner_phone":"415-902-6936","deposit_amount":0,"deposit_status":"not_required","description_public":"A general-purpose template for one-off or uncategorized shows. Update the title, type, and schedule from the event page after creation.","doors_time":"16:00:00","show_time":"16:00:00","end_time":"17:00:00","age_restriction":"21+","potential_revenue":null,"estimated_guests":null,"capacity":20,"contract_url":null,"venue_contract_url":null,"contract_id":null,"contract_status":null,"contract_provider":null,"contract_asset_id":null,"contract_title":null,"contract_updated_at":null}];
-const GENERATED_AT = "2026-07-21 11:44 PM PT";
-const WINDOW_START = "2026-07-21";
-const WINDOW_END = "2026-10-21";
+// ---------- live data config ----------
+const TOKEN_KEY = 'backstage_access_token';
+const API_BASE = new URL('../api/', window.location.href).href;
 
-document.getElementById('generated-at').textContent = GENERATED_AT;
-document.getElementById('window-range').textContent = WINDOW_START + ' → ' + WINDOW_END;
+function getToken() { return localStorage.getItem(TOKEN_KEY); }
+
+async function apiFetch(path, opts) {
+  opts = opts || {};
+  const token = getToken();
+  const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(API_BASE + path, Object.assign({}, opts, { headers }));
+  let body = null;
+  try { body = await res.json(); } catch (_) { /* no/invalid JSON body */ }
+  if (!res.ok) {
+    const err = new Error((body && body.error) || `Request failed (${res.status})`);
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+  return body;
+}
+
+function isoDate(d) { return d.toISOString().slice(0, 10); }
+
+function computeWindow() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 3);
+  return { start: isoDate(start), end: isoDate(end) };
+}
+
+function showBanner(kind, html) {
+  const el = document.getElementById('status-banner');
+  el.className = 'status-banner ' + kind;
+  el.innerHTML = html;
+  el.hidden = false;
+}
+function hideBanner() {
+  document.getElementById('status-banner').hidden = true;
+}
 
 // ---------- validation helpers ----------
 function isNonBlank(v) { return v !== null && v !== undefined && String(v).trim() !== ''; }
@@ -493,6 +571,27 @@ function fmtDate(d) {
   const dt = new Date(d + 'T00:00:00');
   return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
+// Accepts "7:00 PM", "19:00", "7:00:00 pm", etc. Returns "HH:MM:SS", null for
+// a deliberately-cleared field, or undefined if the text couldn't be parsed.
+function parseTimeInput(s) {
+  s = (s || '').trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?$/);
+  if (!m) return undefined;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const sec = m[3] ? parseInt(m[3], 10) : 0;
+  const ap = m[4] ? m[4].toUpperCase() : null;
+  if (ap === 'PM' && h < 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+  if (!ap && h > 23) return undefined;
+  if (h > 23 || min > 59 || sec > 59) return undefined;
+  return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 const ROOM_LABELS = { downstairs: 'Downstairs', upstairs: 'Upstairs', both: 'Both Rooms' };
 const STATUS_LABELS = { proposed: 'Hold', confirmed: 'Intake Complete', booked: 'Booked', published: 'Published', needs_assets: 'Needs Assets', assets_approved: 'Assets Approved', ready_to_announce: 'Ready to Announce', advanced: 'Advanced', completed: 'Completed', settled: 'Settled' };
 const TERMINAL_CONTRACT_STATUSES = ['voided', 'canceled', 'declined', 'expired', 'superseded', 'error'];
@@ -541,9 +640,6 @@ function evaluate(e) {
   if (!ageOk) missingCore.push('Age restriction');
 
   // Contract — tracked for reference, doesn't block Intake Complete.
-  // "Exists" means an uploaded file (legacy contract_url/venue_contract_url,
-  // the "signed and attached" path) or a non-dead contracts row (draft counts
-  // as generated; voided/canceled/declined/expired/superseded/error do not).
   const hasUploadedUrl = isNonBlank(e.contract_url) || isNonBlank(e.venue_contract_url);
   const hasLiveContractRow = e.contract_id !== null && e.contract_id !== undefined && !TERMINAL_CONTRACT_STATUSES.includes(e.contract_status);
   const contractOk = hasUploadedUrl || hasLiveContractRow;
@@ -575,9 +671,162 @@ function evaluate(e) {
   };
 }
 
-const rows = EVENTS.map(e => ({ e, r: evaluate(e) }));
+// ---------- live state ----------
+let rows = [];
+let resourceById = {};
+let expandedId = null;
+const WINDOW = computeWindow();
+document.getElementById('window-range').textContent = WINDOW.start + ' → ' + WINDOW.end;
 
-// ---------- stats ----------
+// ---------- filters ----------
+const statusSel = document.getElementById('status-filter');
+const roomSel = document.getElementById('room-filter');
+const searchInput = document.getElementById('search');
+const incompleteToggle = document.getElementById('incomplete-toggle');
+const refreshBtn = document.getElementById('refresh-btn');
+
+incompleteToggle.addEventListener('click', () => {
+  const pressed = incompleteToggle.getAttribute('aria-pressed') === 'true';
+  incompleteToggle.setAttribute('aria-pressed', String(!pressed));
+  render();
+});
+statusSel.addEventListener('change', render);
+roomSel.addEventListener('change', render);
+searchInput.addEventListener('input', render);
+refreshBtn.addEventListener('click', () => loadEvents());
+
+function initFilters() {
+  const prevStatus = statusSel.value, prevRoom = roomSel.value;
+  statusSel.innerHTML = '<option value="">All statuses</option>';
+  [...new Set(rows.map(x => x.e.status))].forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s; opt.textContent = STATUS_LABELS[s] || s;
+    statusSel.appendChild(opt);
+  });
+  roomSel.innerHTML = '<option value="">All rooms</option>';
+  [...new Set(rows.map(x => x.e.resource_name).filter(Boolean))].forEach(rm => {
+    const opt = document.createElement('option');
+    opt.value = rm; opt.textContent = rm;
+    roomSel.appendChild(opt);
+  });
+  statusSel.value = prevStatus;
+  roomSel.value = prevRoom;
+}
+
+function bulb(ok, optional) {
+  if (ok) return '<span class="bulb on" title="Set"></span>';
+  return `<span class="bulb ${optional ? 'secondary-off' : 'off'}" title="Missing"></span>`;
+}
+
+// ---------- editable field rendering ----------
+// data-table/data-id/data-field/data-original per span, per the inline-edit
+// spec: click turns the span contenteditable, blur (or Enter, for
+// single-line fields) sends the change to the API using that metadata.
+function editable(e, field, type, displayText, isBad, isWarn, emptyHtml) {
+  const cls = ['v', 'editable'];
+  if (isBad) cls.push('bad'); else if (isWarn) cls.push('warn');
+  const shown = displayText ? displayText : `<span class="placeholder">${emptyHtml || '— click to add'}</span>`;
+  return `<span class="${cls.join(' ')}" data-table="events" data-id="${e.id}" data-field="${field}" data-type="${type}" data-original="${esc(displayText || '')}" tabindex="0">${shown}</span>`;
+}
+
+function contactCardHtml(label, prefix, e, r) {
+  const nameOk = isNonBlank(e[prefix + '_name']);
+  const emailOk = isValidEmail(e[prefix + '_email']);
+  const phoneOk = isValidPhone(e[prefix + '_phone']);
+  return `
+    <div class="detail-card" data-card="${prefix}">
+      <h4>${label}</h4>
+      <div class="row"><span class="k">Name</span>${editable(e, prefix + '_name', 'text', isNonBlank(e[prefix + '_name']) ? esc(e[prefix + '_name']) : '', !nameOk)}</div>
+      <div class="row"><span class="k">Email</span>${editable(e, prefix + '_email', 'email', isNonBlank(e[prefix + '_email']) ? esc(e[prefix + '_email']) : '', !emailOk)}</div>
+      <div class="row"><span class="k">Phone</span>${editable(e, prefix + '_phone', 'phone', isNonBlank(e[prefix + '_phone']) ? esc(e[prefix + '_phone']) : '', !phoneOk)}</div>
+    </div>`;
+}
+
+function ownerCardHtml(e, r) {
+  return `
+    <div class="detail-card" data-card="owner">
+      <h4>Owner <span style="font-weight:400; color:var(--ink-faint); text-transform:none; letter-spacing:0;">(reassign from the event's workspace)</span></h4>
+      <div class="row"><span class="k">Name</span><span class="v ${!r.ownerOk ? 'bad' : ''}">${isNonBlank(e.owner_name) ? esc(e.owner_name) : '— not assigned'}</span></div>
+    </div>`;
+}
+
+function logisticsCardHtml(e, r) {
+  const depositDisplay = r.depositOk ? esc(money(e.deposit_amount)) : '';
+  const depositNote = ` <span style="color:var(--ink-faint); font-size:.7rem;">(${esc((e.deposit_status || '').replace(/_/g, ' '))})</span>`;
+  return `
+    <div class="detail-card" data-card="logistics">
+      <h4>Logistics</h4>
+      <div class="row"><span class="k">Deposit</span><span>${editable(e, 'deposit_amount', 'number', depositDisplay, !r.depositOk)}${depositNote}</span></div>
+      <div class="row"><span class="k">Doors</span>${editable(e, 'doors_time', 'time', fmtTime(e.doors_time) || '', !isNonBlank(e.doors_time))}</div>
+      <div class="row"><span class="k">Show</span>${editable(e, 'show_time', 'time', fmtTime(e.show_time) || '', !isNonBlank(e.show_time))}</div>
+      <div class="row"><span class="k">End</span>${editable(e, 'end_time', 'time', fmtTime(e.end_time) || '', !isNonBlank(e.end_time))}</div>
+      <div class="row"><span class="k">Age restriction</span>${editable(e, 'age_restriction', 'text', isNonBlank(e.age_restriction) ? esc(e.age_restriction) : '', !r.ageOk)}</div>
+    </div>`;
+}
+
+function optionalCardHtml(e, r) {
+  const revenueDisplay = r.revenueOk ? esc(money(e.potential_revenue)) : '';
+  const guestsDisplay = r.guestsOk ? esc(String(e.estimated_guests)) : '';
+  const capacityDisplay = r.capacityOk ? esc(String(e.capacity)) : '';
+  return `
+    <div class="detail-card" data-card="optional">
+      <h4>Optional</h4>
+      <div class="row"><span class="k">Potential revenue</span>${editable(e, 'potential_revenue', 'number', revenueDisplay, !r.revenueOk, r.revenueOk && !r.revenueMatches && e.estimated_guests !== null)}</div>
+      <div class="row"><span class="k">Estimated guests</span>${editable(e, 'estimated_guests', 'int', guestsDisplay, !r.guestsOk)}</div>
+      <div class="row"><span class="k">Capacity</span>${editable(e, 'capacity', 'int', capacityDisplay, !r.capacityOk, r.capacityOk && !r.capacityMatches)}</div>
+      <div class="row"><span class="k">Room capacity</span><span class="v">${e.resource_capacity !== null && e.resource_capacity !== undefined ? e.resource_capacity : '—'} (${esc(e.resource_name || 'no room set')})</span></div>
+    </div>`;
+}
+
+function descCardHtml(e, r) {
+  const display = isNonBlank(e.description_public) ? esc(e.description_public) : '';
+  return `
+    <div class="detail-card" data-card="description" style="grid-column: 1 / -1;">
+      <h4>Public description ${!r.descOk ? '<span style="color:var(--velvet)">— missing</span>' : ''}</h4>
+      <div class="desc">${editable(e, 'description_public', 'multiline', display, !r.descOk, false, 'No public description yet — click to add one.')}</div>
+    </div>`;
+}
+
+function contractCardHtml(e, r) {
+  const contractUrl = isNonBlank(e.contract_url) ? e.contract_url : (isNonBlank(e.venue_contract_url) ? e.venue_contract_url : null);
+  const isDeadContract = e.contract_id !== null && e.contract_id !== undefined && TERMINAL_CONTRACT_STATUSES.includes(e.contract_status);
+  let statusText;
+  if (!e._contractsLoaded && e.contract_id == null && !r.hasUploadedUrl) {
+    statusText = 'Checking…';
+  } else if (r.hasUploadedUrl && (e.contract_id === null || e.contract_id === undefined)) {
+    statusText = 'Uploaded file on file';
+  } else if (e.contract_id !== null && e.contract_id !== undefined) {
+    statusText = (CONTRACT_STATUS_LABELS[e.contract_status] || e.contract_status) + (isDeadContract ? ' — needs a new contract' : '');
+  } else {
+    statusText = 'No contract on file';
+  }
+  return `
+    <div class="detail-card" data-card="contract">
+      <h4>Contract <span style="font-weight:400; color:var(--ink-faint); text-transform:none; letter-spacing:0;">(tracked for reference; edit from the Contracts tab)</span></h4>
+      <div class="row"><span class="k">Status</span><span class="v ${!r.contractOk && e._contractsLoaded ? 'bad' : ''}">${esc(statusText)}</span></div>
+      <div class="row"><span class="k">Source</span><span class="v">${r.contractOk ? (r.contractIsUploaded ? 'Uploaded file' : 'Generated in-app') : '—'}</span></div>
+      <div class="row"><span class="k">Title</span><span class="v">${isNonBlank(e.contract_title) ? esc(e.contract_title) : '—'}</span></div>
+      ${contractUrl ? `<div class="row"><span class="k">Link</span><span class="v"><a href="${esc(contractUrl)}" target="_blank" rel="noopener">Open file</a></span></div>` : ''}
+    </div>`;
+}
+
+function detailRow(e, r, idx) {
+  return `<tr class="detail-row" id="detail-${idx}">
+    <td colspan="13">
+      <div class="detail-grid">
+        ${contactCardHtml('Booker', 'booker', e, r)}
+        ${contactCardHtml('Producer', 'promoter', e, r)}
+        ${ownerCardHtml(e, r)}
+        ${logisticsCardHtml(e, r)}
+        ${contractCardHtml(e, r)}
+        ${optionalCardHtml(e, r)}
+        ${descCardHtml(e, r)}
+      </div>
+    </td>
+  </tr>`;
+}
+
+// ---------- render ----------
 function renderStats() {
   const total = rows.length;
   const ready = rows.filter(x => x.r.ready).length;
@@ -605,136 +854,12 @@ function renderStats() {
   `).join('');
 }
 
-// ---------- filters ----------
-const statusSel = document.getElementById('status-filter');
-const roomSel = document.getElementById('room-filter');
-const searchInput = document.getElementById('search');
-const incompleteToggle = document.getElementById('incomplete-toggle');
-
-const statuses = [...new Set(EVENTS.map(e => e.status))];
-statuses.forEach(s => {
-  const opt = document.createElement('option');
-  opt.value = s;
-  opt.textContent = STATUS_LABELS[s] || s;
-  statusSel.appendChild(opt);
-});
-const rooms = [...new Set(EVENTS.map(e => e.resource_name).filter(Boolean))];
-rooms.forEach(r => {
-  const opt = document.createElement('option');
-  opt.value = r;
-  opt.textContent = r;
-  roomSel.appendChild(opt);
-});
-
-let onlyIncomplete = false;
-incompleteToggle.addEventListener('click', () => {
-  onlyIncomplete = !onlyIncomplete;
-  incompleteToggle.setAttribute('aria-pressed', String(onlyIncomplete));
-  render();
-});
-statusSel.addEventListener('change', render);
-roomSel.addEventListener('change', render);
-searchInput.addEventListener('input', render);
-
-function bulb(ok, optional) {
-  if (ok) return '<span class="bulb on" title="Set"></span>';
-  return `<span class="bulb ${optional ? 'secondary-off' : 'off'}" title="Missing"></span>`;
-}
-
-function detailRow(e, r, idx) {
-  const bookerBad = [];
-  if (!isNonBlank(e.booker_name)) bookerBad.push('name');
-  if (!isValidEmail(e.booker_email)) bookerBad.push('email');
-  if (!isValidPhone(e.booker_phone)) bookerBad.push('phone');
-  const producerBad = [];
-  if (!isNonBlank(e.promoter_name)) producerBad.push('name');
-  if (!isValidEmail(e.promoter_email)) producerBad.push('email');
-  if (!isValidPhone(e.promoter_phone)) producerBad.push('phone');
-
-  const contactCard = (label, name, email, phone, badParts) => `
-    <div class="detail-card">
-      <h4>${label}</h4>
-      <div class="row"><span class="k">Name</span><span class="v ${badParts.includes('name') ? 'bad' : ''}">${isNonBlank(name) ? esc(name) : '—'}</span></div>
-      <div class="row"><span class="k">Email</span><span class="v ${badParts.includes('email') ? 'bad' : ''}">${isNonBlank(email) ? esc(email) : '—'}</span></div>
-      <div class="row"><span class="k">Phone</span><span class="v ${badParts.includes('phone') ? 'bad' : ''}">${isNonBlank(phone) ? esc(phone) : '—'}</span></div>
-    </div>`;
-
-  const ownerCard = `
-    <div class="detail-card">
-      <h4>Owner</h4>
-      <div class="row"><span class="k">Name</span><span class="v ${!r.ownerOk ? 'bad' : ''}">${isNonBlank(e.owner_name) ? esc(e.owner_name) : '— not assigned'}</span></div>
-      <div class="row"><span class="k">Email</span><span class="v">${isNonBlank(e.owner_email) ? esc(e.owner_email) : '—'}</span></div>
-      <div class="row"><span class="k">Phone</span><span class="v">${isNonBlank(e.owner_phone) ? esc(e.owner_phone) : '—'}</span></div>
-    </div>`;
-
-  const logisticsCard = `
-    <div class="detail-card">
-      <h4>Logistics</h4>
-      <div class="row"><span class="k">Deposit</span><span class="v ${!r.depositOk ? 'bad' : ''}">${r.depositOk ? money(e.deposit_amount) + ' (' + e.deposit_status.replace('_',' ') + ')' : '— not set'}</span></div>
-      <div class="row"><span class="k">Doors</span><span class="v ${!isNonBlank(e.doors_time) ? 'bad' : ''}">${fmtTime(e.doors_time) || '—'}</span></div>
-      <div class="row"><span class="k">Show</span><span class="v ${!isNonBlank(e.show_time) ? 'bad' : ''}">${fmtTime(e.show_time) || '—'}</span></div>
-      <div class="row"><span class="k">End</span><span class="v ${!isNonBlank(e.end_time) ? 'bad' : ''}">${fmtTime(e.end_time) || '—'}</span></div>
-      <div class="row"><span class="k">Age restriction</span><span class="v ${!r.ageOk ? 'bad' : ''}">${isNonBlank(e.age_restriction) ? esc(e.age_restriction) : '—'}</span></div>
-    </div>`;
-
-  const optionalCard = `
-    <div class="detail-card">
-      <h4>Optional</h4>
-      <div class="row"><span class="k">Potential revenue</span><span class="v ${!r.revenueOk ? 'bad' : (!r.revenueMatches && e.estimated_guests !== null ? 'warn' : '')}">${r.revenueOk ? money(e.potential_revenue) : '—'}</span></div>
-      <div class="row"><span class="k">Estimated guests</span><span class="v ${!r.guestsOk ? 'bad' : ''}">${r.guestsOk ? e.estimated_guests : '—'}</span></div>
-      <div class="row"><span class="k">Capacity</span><span class="v ${!r.capacityOk ? 'bad' : (!r.capacityMatches ? 'warn' : '')}">${r.capacityOk ? e.capacity : '—'}</span></div>
-      <div class="row"><span class="k">Room capacity</span><span class="v">${e.resource_capacity !== null ? e.resource_capacity : '—'} (${esc(e.resource_name || 'no room set')})</span></div>
-    </div>`;
-
-  const descCard = `
-    <div class="detail-card" style="grid-column: 1 / -1;">
-      <h4>Public description ${!r.descOk ? '<span style="color:var(--velvet)">— missing</span>' : ''}</h4>
-      <div class="desc">${isNonBlank(e.description_public) ? esc(e.description_public) : '<em>No public description on file.</em>'}</div>
-    </div>`;
-
-  const contractUrl = isNonBlank(e.contract_url) ? e.contract_url : (isNonBlank(e.venue_contract_url) ? e.venue_contract_url : null);
-  const isDeadContract = e.contract_id !== null && e.contract_id !== undefined && TERMINAL_CONTRACT_STATUSES.includes(e.contract_status);
-  let contractStatusText;
-  if (r.hasUploadedUrl && (e.contract_id === null || e.contract_id === undefined)) {
-    contractStatusText = 'Uploaded file on file';
-  } else if (e.contract_id !== null && e.contract_id !== undefined) {
-    contractStatusText = (CONTRACT_STATUS_LABELS[e.contract_status] || e.contract_status) + (isDeadContract ? ' — needs a new contract' : '');
-  } else {
-    contractStatusText = 'No contract on file';
-  }
-  const contractCard = `
-    <div class="detail-card">
-      <h4>Contract <span style="font-weight:400; color:var(--ink-faint); text-transform:none; letter-spacing:0;">(tracked, doesn't block Intake Complete)</span></h4>
-      <div class="row"><span class="k">Status</span><span class="v ${!r.contractOk ? 'bad' : ''}">${esc(contractStatusText)}</span></div>
-      <div class="row"><span class="k">Source</span><span class="v">${r.contractOk ? (r.contractIsUploaded ? 'Uploaded file' : 'Generated in-app') : '—'}</span></div>
-      <div class="row"><span class="k">Title</span><span class="v">${isNonBlank(e.contract_title) ? esc(e.contract_title) : '—'}</span></div>
-      ${contractUrl ? `<div class="row"><span class="k">Link</span><span class="v"><a href="${esc(contractUrl)}" target="_blank" rel="noopener">Open file</a></span></div>` : ''}
-    </div>`;
-
-  return `<tr class="detail-row" id="detail-${idx}">
-    <td colspan="13">
-      <div class="detail-grid">
-        ${contactCard('Booker', e.booker_name, e.booker_email, e.booker_phone, bookerBad)}
-        ${contactCard('Producer', e.promoter_name, e.promoter_email, e.promoter_phone, producerBad)}
-        ${ownerCard}
-        ${logisticsCard}
-        ${contractCard}
-        ${optionalCard}
-        ${descCard}
-      </div>
-    </td>
-  </tr>`;
-}
-
-function esc(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
 function render() {
   renderStats();
   const q = searchInput.value.trim().toLowerCase();
   const statusVal = statusSel.value;
   const roomVal = roomSel.value;
+  const onlyIncomplete = incompleteToggle.getAttribute('aria-pressed') === 'true';
 
   const filtered = rows.filter(({ e, r }) => {
     if (onlyIncomplete && r.ready) return false;
@@ -751,7 +876,7 @@ function render() {
   document.getElementById('empty-state').style.display = filtered.length ? 'none' : 'block';
 
   const body = document.getElementById('grid-body');
-  body.innerHTML = filtered.map(({ e, r }, i) => {
+  body.innerHTML = filtered.map(({ e, r }) => {
     const missingText = r.missingCore.length
       ? esc(r.missingCore.join(', '))
       : '<span class="ok">✓ ready</span>';
@@ -782,21 +907,297 @@ function render() {
   }).join('');
 
   body.querySelectorAll('tr[data-idx]').forEach(tr => {
-    tr.addEventListener('click', () => {
+    tr.addEventListener('click', (ev) => {
+      if (ev.target.closest('.editable')) return; // let the field-edit handler deal with it
       const idx = tr.getAttribute('data-idx');
       const detail = document.getElementById(`detail-${idx}`);
       const isShown = detail.classList.contains('show');
       body.querySelectorAll('tr.detail-row.show').forEach(d => d.classList.remove('show'));
       body.querySelectorAll('tr[data-idx].expanded').forEach(d => d.classList.remove('expanded'));
+      expandedId = null;
       if (!isShown) {
         detail.classList.add('show');
         tr.classList.add('expanded');
+        expandedId = Number(idx);
       }
     });
   });
+
+  // Re-apply expansion across a data refresh/edit re-render so an open
+  // detail panel doesn't silently collapse out from under the user.
+  if (expandedId !== null) {
+    const tr = body.querySelector(`tr[data-idx="${expandedId}"]`);
+    const detail = document.getElementById(`detail-${expandedId}`);
+    if (tr && detail) {
+      tr.classList.add('expanded');
+      detail.classList.add('show');
+    } else {
+      expandedId = null;
+    }
+  }
 }
 
-render();
+// ---------- targeted post-edit refresh (no full re-render, keeps the open
+// detail panel and any other in-progress edits on the page intact) ----------
+function refreshRowIndicators(eventId) {
+  const item = rows.find(x => x.e.id === eventId);
+  if (!item) return;
+  const tr = document.querySelector(`tr[data-idx="${eventId}"]`);
+  if (!tr) return;
+  const { r } = item;
+  const cells = tr.querySelectorAll('td');
+  cells[1].innerHTML = bulb(r.bookerOk);
+  cells[2].innerHTML = bulb(r.producerOk);
+  cells[3].innerHTML = bulb(r.ownerOk);
+  cells[4].innerHTML = bulb(r.depositOk);
+  cells[5].innerHTML = bulb(r.descOk);
+  cells[6].innerHTML = bulb(r.timesOk);
+  cells[7].innerHTML = bulb(r.ageOk);
+  cells[8].innerHTML = bulb(r.contractOk, true);
+  cells[9].innerHTML = bulb(r.revenueOk && r.revenueMatches !== false, true);
+  cells[10].innerHTML = bulb(r.guestsOk, true);
+  cells[11].innerHTML = bulb(r.capacityOk && r.capacityMatches !== false, true);
+  cells[12].innerHTML = r.missingCore.length ? esc(r.missingCore.join(', ')) : '<span class="ok">✓ ready</span>';
+  renderStats();
+}
+
+function cardBuilderFor(field) {
+  if (field.startsWith('booker_')) return { key: 'booker', build: (e, r) => contactCardHtml('Booker', 'booker', e, r) };
+  if (field.startsWith('promoter_')) return { key: 'promoter', build: (e, r) => contactCardHtml('Producer', 'promoter', e, r) };
+  if (['deposit_amount', 'doors_time', 'show_time', 'end_time', 'age_restriction'].includes(field)) return { key: 'logistics', build: logisticsCardHtml };
+  if (['potential_revenue', 'estimated_guests', 'capacity'].includes(field)) return { key: 'optional', build: optionalCardHtml };
+  if (field === 'description_public') return { key: 'description', build: descCardHtml };
+  return null;
+}
+
+// ---------- saving edits ----------
+// Fields the full-row PATCH path (Events::update() in src/Events.php) will
+// silently overwrite if they're missing from the request body — most fields
+// there fall back to the existing DB value when omitted, but title,
+// event_type, status, date, walkthrough_done, public_visibility and
+// owner_user_id do not (some default to null/false instead). Always resend
+// these unchanged alongside any single-field edit so this page can't quietly
+// blank the owner, flip public visibility off, or corrupt the record.
+const PATCH_SAFETY_FIELDS = ['title', 'event_type', 'status', 'date', 'walkthrough_done', 'public_visibility', 'owner_user_id'];
+// These fields DO get a safe single-key PATCH server-side (see the
+// `$partialAllowlist` in Events::update()) — no safety bundle needed.
+const ALLOWLIST_PATCH_FIELDS = new Set(['deposit_amount', 'potential_revenue', 'estimated_guests']);
+
+async function saveField(e, field, value) {
+  const body = {};
+  if (!ALLOWLIST_PATCH_FIELDS.has(field)) {
+    PATCH_SAFETY_FIELDS.forEach(f => { body[f] = e[f]; });
+  }
+  body[field] = value;
+  await apiFetch(`events/${e.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+  e[field] = value;
+}
+
+const FIELD_PARSERS = {
+  text: (s) => s.trim() || null,
+  email: (s) => s.trim() || null,
+  phone: (s) => s.trim() || null,
+  multiline: (s) => s.trim() || null,
+  time: (s) => parseTimeInput(s),
+  number: (s) => {
+    const cleaned = s.replace(/[^0-9.\-]/g, '').trim();
+    if (cleaned === '') return null;
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : undefined;
+  },
+  int: (s) => {
+    const cleaned = s.replace(/[^0-9\-]/g, '').trim();
+    if (cleaned === '') return null;
+    const n = parseInt(cleaned, 10);
+    return Number.isFinite(n) ? n : undefined;
+  },
+};
+
+function selectAllText(el) {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function flashError(span, message) {
+  span.classList.add('save-error');
+  span.title = message;
+  setTimeout(() => { span.classList.remove('save-error'); span.removeAttribute('title'); }, 4000);
+}
+
+function onEditKeydown(ev) {
+  const span = ev.currentTarget;
+  const multiline = span.dataset.type === 'multiline';
+  if (ev.key === 'Enter' && !multiline) {
+    ev.preventDefault();
+    span.blur();
+  } else if (ev.key === 'Escape') {
+    ev.preventDefault();
+    span.textContent = span.dataset.original || '';
+    span.blur();
+  }
+}
+
+async function onEditBlur(ev) {
+  const span = ev.currentTarget;
+  span.removeEventListener('keydown', onEditKeydown);
+  span.classList.remove('editing');
+  span.contentEditable = 'false';
+
+  const field = span.dataset.field;
+  const eventId = Number(span.dataset.id);
+  const type = span.dataset.type || 'text';
+  const item = rows.find(x => x.e.id === eventId);
+  if (!item) return;
+  const e = item.e;
+
+  const typed = span.textContent;
+  const parserKey = FIELD_PARSERS[type] ? type : 'text';
+  const parsed = FIELD_PARSERS[parserKey](typed);
+
+  if (parsed === undefined) {
+    span.textContent = span.dataset.original || '';
+    flashError(span, "Couldn't understand that value — reverted.");
+    return;
+  }
+
+  const current = e[field] === undefined ? null : e[field];
+  const isNumeric = parserKey === 'number' || parserKey === 'int';
+  const changed = isNumeric
+    ? !((current === null || current === undefined) && parsed === null) && Number(current) !== Number(parsed)
+    : String(current == null ? '' : current) !== String(parsed == null ? '' : parsed);
+
+  if (!changed) {
+    // Restore the nicely-formatted display (user may have typed a
+    // differently-formatted but equivalent value, e.g. "7pm" vs "7:00 PM").
+    span.textContent = span.dataset.original || '';
+    return;
+  }
+
+  span.classList.add('saving');
+  try {
+    await saveField(e, field, parsed);
+    span.classList.remove('saving');
+    span.classList.add('save-ok');
+    item.r = evaluate(e);
+    refreshRowIndicators(eventId);
+    setTimeout(() => {
+      const cb = cardBuilderFor(field);
+      if (cb) {
+        const detailTr = document.getElementById(`detail-${eventId}`);
+        const cardEl = detailTr && detailTr.querySelector(`[data-card="${cb.key}"]`);
+        if (cardEl) {
+          const tmp = document.createElement('div');
+          tmp.innerHTML = cb.build(e, item.r).trim();
+          cardEl.replaceWith(tmp.firstElementChild);
+        }
+      }
+    }, 650);
+  } catch (err) {
+    span.classList.remove('saving');
+    span.textContent = span.dataset.original || '';
+    flashError(span, err.message || 'Save failed');
+  }
+}
+
+function startEdit(span) {
+  if (!getToken()) {
+    flashError(span, 'Log in to the app first, then reload this page, to edit.');
+    return;
+  }
+  span.classList.add('editing');
+  span.contentEditable = 'true';
+  const placeholder = span.querySelector('.placeholder');
+  if (placeholder) span.textContent = '';
+  span.focus();
+  selectAllText(span);
+  span.addEventListener('keydown', onEditKeydown);
+  span.addEventListener('blur', onEditBlur, { once: true });
+}
+
+document.addEventListener('click', (ev) => {
+  const span = ev.target.closest('.editable');
+  if (!span || span.classList.contains('editing') || span.classList.contains('saving')) return;
+  startEdit(span);
+});
+
+// ---------- loading contract status (background, throttled) ----------
+async function loadContracts() {
+  const CONCURRENCY = 6;
+  const rank = ['fully_executed','signed','countersigned','signed_by_client','partially_signed','sent','viewed','ready_to_send','approved','needs_review','draft','expired','superseded','declined','canceled','voided','error'];
+  let i = 0;
+  async function worker() {
+    while (i < rows.length) {
+      const item = rows[i++];
+      try {
+        const data = await apiFetch(`events/${item.e.id}/contracts`);
+        const list = (data.contracts || []).slice().sort((a, b) =>
+          rank.indexOf(a.status) - rank.indexOf(b.status) || new Date(b.updated_at) - new Date(a.updated_at));
+        const best = list[0];
+        if (best) {
+          Object.assign(item.e, {
+            contract_id: best.id, contract_status: best.status, contract_provider: best.provider,
+            contract_asset_id: best.asset_id, contract_title: best.title, contract_updated_at: best.updated_at,
+          });
+        }
+      } catch (_) {
+        // non-fatal — this event's contract card just stays "no data"
+      }
+      item.e._contractsLoaded = true;
+      item.r = evaluate(item.e);
+    }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  render();
+}
+
+// ---------- bootstrap ----------
+async function loadEvents() {
+  showBanner('loading', 'Loading live data from the API…');
+  if (!getToken()) {
+    showBanner('error', 'Not logged in in this browser. Open <a href="../">Backstage</a>, log in, then reload this page to see live data and edit fields.');
+    document.getElementById('stats').innerHTML = '';
+    document.getElementById('grid-body').innerHTML = '';
+    return;
+  }
+  let data;
+  try {
+    data = await apiFetch(`events?start_date=${WINDOW.start}&end_date=${WINDOW.end}`);
+  } catch (err) {
+    if (err.status === 401) {
+      showBanner('error', 'Your session has expired. Open <a href="../">Backstage</a>, log in again, then reload this page.');
+    } else {
+      showBanner('error', 'Could not load events: ' + esc(err.message));
+    }
+    return;
+  }
+  hideBanner();
+
+  resourceById = {};
+  (data.resources || []).forEach(r => { resourceById[r.id] = r; });
+
+  const events = (data.events || [])
+    .filter(e => e.status !== 'canceled')
+    .map(e => {
+      const resource = e.resource_id != null ? resourceById[e.resource_id] : null;
+      return Object.assign({}, e, {
+        resource_name: resource ? resource.name : null,
+        contract_id: null, contract_status: null, contract_provider: null,
+        contract_asset_id: null, contract_title: null, contract_updated_at: null,
+        _contractsLoaded: false,
+      });
+    });
+
+  rows = events.map(e => ({ e, r: evaluate(e) }));
+  document.getElementById('generated-at').textContent = new Date().toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  initFilters();
+  render();
+  loadContracts();
+}
+
+loadEvents();
 </script>
 </body>
 </html>
