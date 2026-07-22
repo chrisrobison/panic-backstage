@@ -2,7 +2,7 @@
 // Dashboard, Calendar, Pipeline, Events list, Template picker, and the two
 // public/unauthenticated pages (public event page + invite acceptance). Also
 // owns the quick-create event modal (shared by the calendar and the topbar).
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, setAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, mdToHtml, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, setAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, mdToHtml, roomConflictIds, roomConflictDates, $, $$ } from './core.js';
 // Registers <paint-splat> — reused here as the generative "no flyer yet"
 // placeholder on the public event page (same treatment the event workspace
 // summary card uses for the same situation).
@@ -660,6 +660,10 @@ class EventCalendar extends PanicElement {
     const today = isoDate(new Date());
     const createable = this.canCreate ? ' calendar-clickable' : '';
     const monthLabel = block.monthDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    // Room double-bookings within this block's window — flags the day cell
+    // red and the individual conflicting event chips.
+    const conflictIds = roomConflictIds(block.events);
+    const conflictDates = roomConflictDates(block.events);
 
     // `iso` is the day cell this mini-event chip is being rendered into — for
     // a multi-day event that's every day from event.date through event.end_date,
@@ -672,9 +676,10 @@ class EventCalendar extends PanicElement {
       const time = this._fmtTime(event.doors_time || event.show_time);
       const loadIn = event.load_in_time ? `Load-in ${this._fmtTime(event.load_in_time)}` : '';
       const isPrivate = event.event_type === 'private_event';
+      const hasConflict = conflictIds.has(event.id);
       const rangeLabel = isMultiDay ? `${shortDate(new Date(event.date + 'T12:00:00'))} – ${shortDate(new Date(event.end_date + 'T12:00:00'))}` : null;
-      const tip = [isPrivate ? '🔒 Private' : null, statusLabel(event.status), meta.label, rangeLabel, time, loadIn].filter(Boolean).join(' · ');
-      return `<a class="mini-event${isPrivate ? ' mini-event-private' : ''}${isContinuation ? ' mini-event-continued' : ''}" href="#event-${esc(event.id)}" title="${esc(tip)}">`
+      const tip = [isPrivate ? '🔒 Private' : null, hasConflict ? '⚠ Room conflict' : null, statusLabel(event.status), meta.label, rangeLabel, time, loadIn].filter(Boolean).join(' · ');
+      return `<a class="mini-event${isPrivate ? ' mini-event-private' : ''}${isContinuation ? ' mini-event-continued' : ''}${hasConflict ? ' mini-event-conflict' : ''}" href="#event-${esc(event.id)}" title="${esc(tip)}">`
         + `<span class="status-dot ${roomTone(meta.zone)}"></span>`
         + (isPrivate ? '<span class="mini-event-lock" aria-hidden="true">🔒</span>' : '')
         + (isContinuation ? '<span class="mini-event-continues" aria-hidden="true">&#8618;</span>' : '')
@@ -702,8 +707,10 @@ class EventCalendar extends PanicElement {
           const iso = isoDate(date);
           const dayEvents = block.events.filter((e) => eventSpansDay(e, iso));
           const isToday = iso === today ? ' cal-today' : '';
+          const hasConflict = conflictDates.has(iso) ? ' has-conflict' : '';
           const clickAttr = this.canCreate ? ` data-create-date="${esc(iso)}" role="button" tabindex="0"` : '';
-          return `<div class="calendar-day${createable}${isToday}"${clickAttr}><span class="day-num">${date.getDate()}</span>${dayCellBody(dayEvents, iso)}</div>`;
+          const conflictAttr = hasConflict ? ' title="Room conflict: two events booked in the same room at overlapping times"' : '';
+          return `<div class="calendar-day${createable}${isToday}${hasConflict}"${clickAttr}${conflictAttr}><span class="day-num">${date.getDate()}</span>${dayCellBody(dayEvents, iso)}</div>`;
         }).join('')}
       </div>
     </section>`;
@@ -957,6 +964,7 @@ class EventCalendar extends PanicElement {
     const events = this._events;
     const days   = Array.from({ length: 42 }, (_, i) => addDays(this._start, i));
     const today  = isoDate(new Date());
+    const conflictDates = roomConflictDates(events);
 
     const miniGrid = `<div class="cal-mini">
       <div class="cal-mini-weekdays">
@@ -969,9 +977,10 @@ class EventCalendar extends PanicElement {
           const isToday   = iso === today;
           const isSel     = iso === this.selectedDate;
           const isCurMo   = date.getMonth() === this.month.getMonth();
+          const hasConflict = conflictDates.has(iso);
           const zones     = [...new Set(dayEvts.map((e) => this._zoneOf(e).zone))];
           const dots      = zones.map((z) => `<i class="cal-dot cal-dot-${z}"></i>`).join('');
-          return `<button class="cal-mini-day${isToday ? ' is-today' : ''}${isSel ? ' is-selected' : ''}${!isCurMo ? ' other-month' : ''}" data-select-date="${esc(iso)}" type="button" aria-label="${iso}${isToday ? ' (today)' : ''}${isSel ? ' (selected)' : ''}">
+          return `<button class="cal-mini-day${isToday ? ' is-today' : ''}${isSel ? ' is-selected' : ''}${!isCurMo ? ' other-month' : ''}${hasConflict ? ' has-conflict' : ''}" data-select-date="${esc(iso)}" type="button" aria-label="${iso}${isToday ? ' (today)' : ''}${isSel ? ' (selected)' : ''}${hasConflict ? ' (room conflict)' : ''}">
             <span class="cal-mini-num">${date.getDate()}</span>
             <span class="cal-mini-dots">${dots}</span>
           </button>`;
@@ -992,21 +1001,24 @@ class EventCalendar extends PanicElement {
     const up   = dayEvents.filter((e) => this._zoneOf(e).zone === 'up');
     const both = dayEvents.filter((e) => this._zoneOf(e).zone === 'both');
     const down = dayEvents.filter((e) => this._zoneOf(e).zone === 'down');
+    const conflictIds = roomConflictIds(events);
+    const dayHasConflict = dayEvents.some((e) => conflictIds.has(e.id));
 
     const agendaRow = (event) => {
       const isMultiDay = Boolean(event.end_date && event.end_date !== event.date);
       const isContinuation = isMultiDay && selectedDate !== event.date;
       const time = isContinuation ? '' : this._fmtTime(event.doors_time || event.show_time);
       const isPrivate = event.event_type === 'private_event';
+      const hasConflict = conflictIds.has(event.id);
       const dayNum = isMultiDay
         ? Math.round((new Date(selectedDate + 'T12:00:00') - new Date(event.date + 'T12:00:00')) / 86400000) + 1
         : null;
       const dayCount = isMultiDay
         ? Math.round((new Date(event.end_date + 'T12:00:00') - new Date(event.date + 'T12:00:00')) / 86400000) + 1
         : null;
-      return `<a class="cal-agenda-row${isContinuation ? ' cal-agenda-row-continued' : ''}" href="#event-${esc(event.id)}">
+      return `<a class="cal-agenda-row${isContinuation ? ' cal-agenda-row-continued' : ''}${hasConflict ? ' cal-agenda-row-conflict' : ''}" href="#event-${esc(event.id)}"${hasConflict ? ' title="Room conflict: two events booked in the same room at overlapping times"' : ''}>
         <span class="cal-agenda-time">${esc(time)}</span>
-        <span class="cal-agenda-title">${isPrivate ? '<span aria-hidden="true">🔒</span> ' : ''}${esc(event.title)}${isMultiDay ? ` <span class="cal-agenda-daynum muted">(Day ${dayNum}/${dayCount})</span>` : ''}</span>
+        <span class="cal-agenda-title">${isPrivate ? '<span aria-hidden="true">🔒</span> ' : ''}${hasConflict ? '<i class="fa-solid fa-triangle-exclamation cal-agenda-conflict-icon" aria-hidden="true"></i> ' : ''}${esc(event.title)}${isMultiDay ? ` <span class="cal-agenda-daynum muted">(Day ${dayNum}/${dayCount})</span>` : ''}</span>
         ${badge(event.status)}
       </a>`;
     };
@@ -1022,11 +1034,12 @@ class EventCalendar extends PanicElement {
         : `<div class="cal-available"><span class="program-night">${this.canCreate ? '+ Available' : 'Available'}</span></div>`}
     </div>`;
 
-    return `<div class="cal-day-header">
+    return `<div class="cal-day-header${dayHasConflict ? ' cal-day-header-conflict' : ''}">
       <button class="icon-btn" data-day-prev type="button" aria-label="Previous day"><i class="fa-solid fa-chevron-left"></i></button>
       <h2>${esc(dayLabel)}</h2>
       <button class="icon-btn" data-day-next type="button" aria-label="Next day"><i class="fa-solid fa-chevron-right"></i></button>
     </div>
+    ${dayHasConflict ? '<p class="cal-day-conflict-flag"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Room conflict — two events are booked in the same room at overlapping times.</p>' : ''}
     ${section('Upstairs', up, 'up')}
     ${both.length ? section('Both Rooms', both, 'both') : ''}
     ${section('Downstairs', down, 'down')}`;

@@ -227,6 +227,84 @@ function timeLabel(value) {
 }
 
 
+// True if two time-of-day values (HH:MM strings, possibly null/empty) overlap
+// once a 30-minute buffer is applied between them. Mirrors the server-side
+// rule in EventRowHelpers::timesOverlap (src/Events/EventRowHelpers.php) so
+// the conflict highlighting below never disagrees with what booking a room
+// would actually block.
+function timesOverlap(startA, endA, startB, endB) {
+  if ((!startA && !endA) || (!startB && !endB)) return true; // no times on either side → full-day → always conflicts
+  const mins = (t) => {
+    if (!t) return 0;
+    const [h, m] = t.split(':');
+    return (Number(h) || 0) * 60 + (Number(m) || 0);
+  };
+  const buffer = 30;
+  const sA = mins(startA);
+  let eA = endA ? mins(endA) : sA + 300; // fallback 5h show
+  const sB = mins(startB);
+  let eB = endB ? mins(endB) : sB + 300;
+  if (eA <= sA) eA += 1440; // past-midnight wrap
+  if (eB <= sB) eB += 1440;
+  return !(eA + buffer <= sB || eB + buffer <= sA);
+}
+
+
+// Ids of events double-booked into the same room (resource_id) as another
+// active event on an overlapping date + time window — the same rule the
+// backend enforces on create/update (see checkRoomConflict()), computed here
+// so the calendar/agenda/dashboard can flag a conflict without an extra
+// round trip. Canceled/empty events and events with no assigned room never
+// count.
+function roomConflictIds(events) {
+  const byRoom = new Map();
+  (events || []).forEach((event) => {
+    if (event.resource_id == null || ['canceled', 'empty'].includes(event.status)) return;
+    const key = Number(event.resource_id);
+    if (!byRoom.has(key)) byRoom.set(key, []);
+    byRoom.get(key).push(event);
+  });
+  const conflicts = new Set();
+  byRoom.forEach((roomEvents) => {
+    for (let i = 0; i < roomEvents.length; i++) {
+      for (let j = i + 1; j < roomEvents.length; j++) {
+        const a = roomEvents[i];
+        const b = roomEvents[j];
+        const aEnd = a.end_date || a.date;
+        const bEnd = b.end_date || b.date;
+        if (a.date > bEnd || b.date > aEnd) continue; // no date overlap
+        const aMulti = Boolean(a.end_date && a.end_date !== a.date);
+        const bMulti = Boolean(b.end_date && b.end_date !== b.date);
+        if (aMulti || bMulti || timesOverlap(a.doors_time, a.end_time, b.doors_time, b.end_time)) {
+          conflicts.add(a.id);
+          conflicts.add(b.id);
+        }
+      }
+    }
+  });
+  return conflicts;
+}
+
+
+// Every ISO date (YYYY-MM-DD) touched by a conflicting event — includes every
+// day of a multi-day conflicting booking, not just its start date. Used to
+// paint a calendar day cell red.
+function roomConflictDates(events) {
+  const conflictIds = roomConflictIds(events);
+  const dates = new Set();
+  (events || []).forEach((event) => {
+    if (!conflictIds.has(event.id)) return;
+    let cursor = event.date;
+    const end = event.end_date || event.date;
+    while (cursor <= end) {
+      dates.add(cursor);
+      cursor = isoDate(addDays(new Date(`${cursor}T12:00:00`), 1));
+    }
+  });
+  return dates;
+}
+
+
 function money(value) {
   return `$${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -622,4 +700,4 @@ function mdToHtml(text) {
   }).join('\n');
 }
 
-export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox, openAssetFileViewer, openModal };
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox, openAssetFileViewer, openModal, timesOverlap, roomConflictIds, roomConflictDates };

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `calendar` — Flag room double-bookings in red across calendar/agenda/dashboard
 - **Added** `tasks
 documents, subtasks, board/timeline/calendar` — Add standalone Tasks app (documents, subtasks, board/timeline/calendar)
 - **Added** `automation` — One shared step-form component drives visual + form views

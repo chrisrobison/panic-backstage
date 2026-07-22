@@ -6,7 +6,7 @@
 // capacity). Reuses the same `/events` endpoint as List/Dashboard/Calendar —
 // see Events::index()'s attachListExtras()/upcomingStats() on the backend —
 // just opts into the extra per-event ticketing fields via `with_stats=1`.
-import { esc, titleCase, assetUrl, publish, subscribe, api, eventDate, longDate, isoDate, addDays, timeLabel, money, badge, statusLabel, emptyState, PanicElement, $, $$ } from './core.js';
+import { esc, titleCase, assetUrl, publish, subscribe, api, eventDate, longDate, isoDate, addDays, timeLabel, money, badge, statusLabel, emptyState, PanicElement, roomConflictIds, $, $$ } from './core.js';
 import { openEventQuickCreate } from './event-views.js';
 
 const SALES_LABELS = { on_sale: 'On Sale', low_tickets: 'Low Tickets', sold_out: 'Sold Out', free: 'Free Event' };
@@ -238,6 +238,9 @@ class EventsUpcoming extends PanicElement {
   renderList() {
     const cardsEl = $('[data-cards]', this);
     if (!cardsEl) return;
+    // Room double-bookings across the currently loaded range — flags each
+    // conflicting card red, mirroring the same check on the calendar.
+    this._conflictIds = roomConflictIds(this.data.events || []);
     const filtered = this.filteredEvents();
     const visible = filtered.slice(0, this.visibleCount);
     const remaining = filtered.length - visible.length;
@@ -313,13 +316,14 @@ class EventsUpcoming extends PanicElement {
       ? (event.price_min === event.price_max ? money(event.price_min) : `${money(event.price_min)} – ${money(event.price_max)}`)
       : '';
     const venueLine = [event.venue_name, [event.venue_city, event.venue_state].filter(Boolean).join(', ')].filter(Boolean).join(' • ');
+    const hasConflict = this._conflictIds?.has(event.id);
 
-    return `<article class="upcoming-card" data-event-card="${esc(event.id)}" tabindex="0" role="link" aria-label="Open ${esc(event.title)}">
+    return `<article class="upcoming-card${hasConflict ? ' has-conflict' : ''}" data-event-card="${esc(event.id)}" tabindex="0" role="link" aria-label="Open ${esc(event.title)}"${hasConflict ? ' title="Room conflict: two events booked in the same room at overlapping times"' : ''}>
       <div class="upcoming-date${endD ? ' upcoming-date-range' : ''}" title="${esc(badgeTitle)}"><span class="upcoming-dow">${esc(badgeDow)}</span><span class="upcoming-mon">${esc(badgeMon)}</span><span class="upcoming-day">${esc(badgeDay)}</span></div>
       <div class="upcoming-thumb">${thumb}</div>
       <div class="upcoming-body">
         <div class="upcoming-time muted small">${esc(timeLabel(event.show_time))}</div>
-        <h3><a href="#event-${esc(event.id)}">${esc(event.title)}</a></h3>
+        <h3>${hasConflict ? '<i class="fa-solid fa-triangle-exclamation upcoming-conflict-icon" aria-hidden="true"></i> ' : ''}<a href="#event-${esc(event.id)}">${esc(event.title)}</a></h3>
         ${subtitle ? `<p class="muted upcoming-sub">${esc(subtitle)}</p>` : ''}
         ${venueLine ? `<p class="upcoming-venue muted small"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> ${esc(venueLine)}</p>` : ''}
       </div>
