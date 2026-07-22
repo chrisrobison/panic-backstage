@@ -50,7 +50,12 @@ test('Tasks app: create document, add task + subtask, WBS numbers, detail panel,
     await page.until(`document.querySelector('${DOC_MODAL}')`);
     await page.setValue(`${DOC_MODAL} [name="name"]`, DOC_NAME);
     await page.click(`${DOC_MODAL} button[type="submit"]`);
-    await page.until(`document.querySelector('.tk-doc-header-top h1')`);
+    // Wait for the header to actually contain the new document's name, not
+    // just for an <h1> to exist — on an account that already has documents
+    // (the common case outside a fresh test DB), an <h1> from whichever
+    // document was selected on load is already present, so a plain
+    // existence check races the async create+select and can read stale text.
+    await page.until(`document.querySelector('.tk-doc-header-top h1')?.textContent.includes(${JSON.stringify(DOC_NAME)})`);
     assert.includes(await page.text('.tk-doc-header-top h1'), DOC_NAME, 'new document becomes the selected document');
 
     docId = await page.eval(`Number(document.querySelector('.tk-doc-item.active')?.dataset.docId || 0)`);

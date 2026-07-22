@@ -6688,6 +6688,27 @@ pb-tasks-app { background: var(--bg); }
 }
 .tk-archived-toggle:hover { color: var(--ink); border-color: var(--muted); }
 
+/* ── "New task document" modal: visual icon picker ────────────────────────── */
+.tk-icon-field-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.tk-icon-field-label { font-weight: 760; }
+.tk-icon-preview {
+  width: 30px; height: 30px; border-radius: 8px; background: var(--soft);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 14px;
+}
+.tk-icon-picker {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; margin-bottom: 8px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
+  max-height: 148px; overflow-y: auto;
+}
+.tk-icon-swatch {
+  width: 34px; height: 34px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--muted);
+  font-size: 14px; cursor: pointer;
+}
+.tk-icon-swatch:hover { border-color: var(--blue); color: var(--blue); }
+.tk-icon-swatch.selected { border-color: var(--blue); background: #e9f0fd; color: var(--blue); }
+.tk-icon-custom-input { font-size: 12.5px; }
+
 /* ── Main pane: document header + tabs + active view ─────────────────────── */
 .tk-main { flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 20px 26px 40px; }
 

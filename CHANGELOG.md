@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `tasks` — Add a visual icon picker to the New Task Document modal
 - **Added** `calendar` — Flag room double-bookings in red across calendar/agenda/dashboard
 - **Added** `tasks
 documents, subtasks, board/timeline/calendar` — Add standalone Tasks app (documents, subtasks, board/timeline/calendar)

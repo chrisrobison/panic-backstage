@@ -14,7 +14,7 @@
 // (see the CSS block in app.css starting "── Tasks App ──"), same mechanism
 // ListMaster (listmaster.js) uses for its own sidebar+main+detail layout.
 import { esc, api, publish, formData, openModal, PanicElement, $, $$ } from '../core.js';
-import { DOC_STATUSES, docStatusLabel, progressOf } from './task-shared.js';
+import { DOC_STATUSES, docStatusLabel, progressOf, DOCUMENT_ICONS } from './task-shared.js';
 import './task-list-view.js';
 import './task-board-view.js';
 import './task-timeline-view.js';
@@ -262,17 +262,47 @@ class TasksApp extends PanicElement {
 
   // ── Document CRUD ─────────────────────────────────────────────────────────
   openCreateDocModal() {
+    const defaultIcon = 'fa-solid fa-list-check';
+    const iconGrid = DOCUMENT_ICONS.map(([cls, label]) => `<button type="button" class="tk-icon-swatch${cls === defaultIcon ? ' selected' : ''}" data-icon-choice="${esc(cls)}" title="${esc(label)}" aria-label="${esc(label)}"><i class="${esc(cls)}" aria-hidden="true"></i></button>`).join('');
+
     const { dialog, close } = openModal({
       title: 'New task document',
       bodyHtml: `<form class="grid-form padded" data-form="new-doc">
         <label class="wide">Name <span class="req">*</span><input type="text" name="name" required placeholder="Q3 Marketing Campaign"></label>
-        <label>Icon class<input type="text" name="icon" value="fa-solid fa-list-check"></label>
-        <label>Color<input type="color" name="color" value="#2563eb"></label>
+        <div class="wide tk-icon-field">
+          <div class="tk-icon-field-head">
+            <span class="tk-icon-field-label">Icon</span>
+            <span class="tk-icon-preview" data-icon-preview><i class="${esc(defaultIcon)}" aria-hidden="true" data-icon-preview-i></i></span>
+          </div>
+          <div class="tk-icon-picker" data-icon-picker>${iconGrid}</div>
+          <input type="text" name="icon" value="${esc(defaultIcon)}" data-icon-input class="tk-icon-custom-input" placeholder="or type a FontAwesome class, e.g. fa-solid fa-star">
+        </div>
+        <label>Color<input type="color" name="color" value="#2563eb" data-color-input></label>
         <div class="wide"><button type="submit">Create</button></div>
       </form>`,
       focus: '[name="name"]',
     });
     const form = $('[data-form="new-doc"]', dialog);
+    const iconInput = $('[data-icon-input]', form);
+    const previewIcon = $('[data-icon-preview-i]', form);
+    const colorInput = $('[data-color-input]', form);
+
+    const syncPreview = () => {
+      previewIcon.className = iconInput.value.trim() || 'fa-solid fa-list-check';
+      previewIcon.style.color = colorInput.value;
+    };
+    const syncSelection = () => {
+      $$('[data-icon-choice]', form).forEach((btn) => btn.classList.toggle('selected', btn.dataset.iconChoice === iconInput.value.trim()));
+    };
+    $$('[data-icon-choice]', form).forEach((btn) => btn.addEventListener('click', () => {
+      iconInput.value = btn.dataset.iconChoice;
+      syncSelection();
+      syncPreview();
+    }));
+    iconInput.addEventListener('input', () => { syncSelection(); syncPreview(); });
+    colorInput.addEventListener('input', syncPreview);
+    syncPreview();
+
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const fd = formData(form);

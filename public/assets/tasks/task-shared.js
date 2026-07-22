@@ -7,6 +7,46 @@
 // the app.
 import { esc, titleCase } from '../core.js';
 
+// Curated icon choices for a task document's sidebar glyph — same idea as
+// nav-manager.js's ICONS list (a short, pre-vetted set so a document's icon
+// stays visually consistent with the rest of the app instead of every user
+// picking an arbitrary FontAwesome class), rendered as an actual clickable
+// icon grid in the "New task document" modal rather than a text dropdown.
+// The free-text `icon` field stays available alongside it for anything not
+// in this list.
+export const DOCUMENT_ICONS = [
+  ['fa-solid fa-list-check', 'Checklist'],
+  ['fa-solid fa-clipboard-list', 'Clipboard'],
+  ['fa-solid fa-table-list', 'Table'],
+  ['fa-solid fa-diagram-project', 'Project'],
+  ['fa-solid fa-briefcase', 'Briefcase'],
+  ['fa-solid fa-rocket', 'Rocket'],
+  ['fa-solid fa-bullhorn', 'Marketing'],
+  ['fa-solid fa-chart-line', 'Chart'],
+  ['fa-solid fa-calendar-days', 'Calendar'],
+  ['fa-solid fa-users', 'Team'],
+  ['fa-solid fa-people-group', 'People'],
+  ['fa-solid fa-building', 'Venue'],
+  ['fa-solid fa-file-signature', 'Contract'],
+  ['fa-solid fa-envelope', 'Email'],
+  ['fa-solid fa-headset', 'Support'],
+  ['fa-solid fa-code', 'Engineering'],
+  ['fa-solid fa-paintbrush', 'Design'],
+  ['fa-solid fa-camera', 'Photo'],
+  ['fa-solid fa-video', 'Video'],
+  ['fa-solid fa-music', 'Music'],
+  ['fa-solid fa-utensils', 'Catering'],
+  ['fa-solid fa-plane', 'Travel'],
+  ['fa-solid fa-truck', 'Logistics'],
+  ['fa-solid fa-box', 'Inventory'],
+  ['fa-solid fa-dollar-sign', 'Finance'],
+  ['fa-solid fa-shield-halved', 'Security'],
+  ['fa-solid fa-lightbulb', 'Ideas'],
+  ['fa-solid fa-star', 'Star'],
+  ['fa-solid fa-flag', 'Flag'],
+  ['fa-solid fa-bolt', 'Urgent'],
+];
+
 export const TASK_STATUSES = ['not_started', 'in_progress', 'done'];
 const TASK_STATUS_LABELS = { not_started: 'Not Started', in_progress: 'In Progress', done: 'Done' };
 // Reuses this app's existing .badge.status-* hue vocabulary (see app.css)
