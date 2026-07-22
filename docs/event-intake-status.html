@@ -1179,6 +1179,13 @@ async function loadEvents() {
       });
     });
 
+  events.sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    const at = a.show_time || '';
+    const bt = b.show_time || '';
+    return at < bt ? -1 : at > bt ? 1 : 0;
+  });
+
   rows = events.map(e => ({ e, r: evaluate(e) }));
   document.getElementById('generated-at').textContent = new Date().toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   initFilters();
