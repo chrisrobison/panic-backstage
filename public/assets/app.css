@@ -2120,6 +2120,8 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
 .pev-lineup-body span { font-size: 12.5px; color: var(--pev-muted); }
 
 .pev-venue-name { font-weight: 800; margin: 0 0 4px; }
+.pev-venue-map { height: 180px; margin: 12px 0 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--pev-border); background: var(--pev-panel-2); }
+.pev-venue-map:empty { display: none; }
 .pev-directions { display: inline-flex; align-items: center; gap: 6px; margin: 10px 0; color: var(--pev-cyan); font-weight: 700; font-size: 13.5px; text-decoration: none; }
 .pev-directions:hover { text-decoration: underline; }
 
