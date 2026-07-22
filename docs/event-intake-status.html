@@ -971,25 +971,14 @@ function cardBuilderFor(field) {
 }
 
 // ---------- saving edits ----------
-// Fields the full-row PATCH path (Events::update() in src/Events.php) will
-// silently overwrite if they're missing from the request body — most fields
-// there fall back to the existing DB value when omitted, but title,
-// event_type, status, date, walkthrough_done, public_visibility and
-// owner_user_id do not (some default to null/false instead). Always resend
-// these unchanged alongside any single-field edit so this page can't quietly
-// blank the owner, flip public visibility off, or corrupt the record.
-const PATCH_SAFETY_FIELDS = ['title', 'event_type', 'status', 'date', 'walkthrough_done', 'public_visibility', 'owner_user_id'];
-// These fields DO get a safe single-key PATCH server-side (see the
-// `$partialAllowlist` in Events::update()) — no safety bundle needed.
-const ALLOWLIST_PATCH_FIELDS = new Set(['deposit_amount', 'potential_revenue', 'estimated_guests']);
-
+// Every field on the events row now falls back to its existing DB value
+// server-side when omitted from a PATCH body (see Events::update() in
+// src/Events.php — title/event_type/status/date/walkthrough_done/
+// public_visibility/owner_user_id used to be the exception, fixed 2026-07-22),
+// so a single-field body is always safe to send: no need to resend the rest
+// of the row just to keep them from being blanked.
 async function saveField(e, field, value) {
-  const body = {};
-  if (!ALLOWLIST_PATCH_FIELDS.has(field)) {
-    PATCH_SAFETY_FIELDS.forEach(f => { body[f] = e[f]; });
-  }
-  body[field] = value;
-  await apiFetch(`events/${e.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+  await apiFetch(`events/${e.id}`, { method: 'PATCH', body: JSON.stringify({ [field]: value }) });
   e[field] = value;
 }
 

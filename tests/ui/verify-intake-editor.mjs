@@ -163,7 +163,7 @@ async function main() {
     ['booker_phone', afterEvent.booker_phone === '415-555-0100'],
     ['deposit_amount', Number(afterEvent.deposit_amount) === 250],
     ['doors_time survived the invalid edit unchanged', afterEvent.doors_time === beforeEvent.doors_time],
-    ['owner_user_id unchanged (not nulled by the safety-bundle)', afterEvent.owner_user_id === beforeEvent.owner_user_id],
+    ['owner_user_id unchanged (single-field PATCH did not null it out)', afterEvent.owner_user_id === beforeEvent.owner_user_id],
     ['public_visibility unchanged', Number(afterEvent.public_visibility) === Number(beforeEvent.public_visibility)],
     ['status unchanged', afterEvent.status === beforeEvent.status],
     ['title unchanged', afterEvent.title === beforeEvent.title],
