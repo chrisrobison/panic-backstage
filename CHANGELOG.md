@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `seed` — Guard database/seed.php against ever truncating production again
 - **Fixed** `auth` — Abort conditional passkey request before explicit passkey login
 - **Added** `leads` — Add budget field to booking inquiries
 - **Fixed** `ticketing` — Store sales_start/sales_end as true UTC instants
