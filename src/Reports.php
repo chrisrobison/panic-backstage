@@ -42,9 +42,153 @@ final class Reports extends BaseEndpoint
         }
 
         return match ($this->params['action'] ?? '') {
-            'settlements' => $this->settlements($request),
-            default       => $this->overview($request),
+            'settlements'    => $this->settlements($request),
+            'booking-inbox'  => $this->bookingInbox($request),
+            default          => $this->overview($request),
         };
+    }
+
+    // ── Booking Inbox ─────────────────────────────────────────────────────────
+
+    /**
+     * GET /api/reports/booking-inbox?from=&to=
+     *
+     * Kept in this same Reports endpoint (same view_reports gate, same
+     * /api/reports/* URL family, same date-range convention) rather than a
+     * separate reporting surface — see the spec's reporting list under the
+     * Booking Inbox module; every figure here is derived straight from
+     * `leads`/`lead_status_history`/`lead_claims`/`lead_assignments`/
+     * `lead_classifications`/`lead_audit_log`, no separate rollup tables.
+     */
+    private function bookingInbox(Request $request): Response
+    {
+        $from = (string) $request->query('from', '');
+        $to   = (string) $request->query('to', '');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from)) {
+            $from = date('Y-m-d', strtotime('-3 months'));
+        }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+            $to = date('Y-m-d');
+        }
+        $range = [$from . ' 00:00:00', $to . ' 23:59:59'];
+
+        $totals = $this->db->one(
+            "SELECT
+                COUNT(*) new_inquiries,
+                SUM(status = 'onboarded') onboarded,
+                SUM(status IN ('lost','declined')) lost,
+                SUM(status IN ('spam')) spam,
+                SUM(first_response_at IS NULL AND status NOT IN ('onboarded','converted','booked','lost','declined','spam','duplicate','archived','canceled')) unanswered,
+                AVG(CASE WHEN claimed_at IS NOT NULL AND assigned_at IS NOT NULL THEN TIMESTAMPDIFF(MINUTE, assigned_at, claimed_at) END) avg_claim_minutes,
+                AVG(CASE WHEN first_response_at IS NOT NULL THEN TIMESTAMPDIFF(MINUTE, created_at, first_response_at) END) avg_response_minutes,
+                SUM(budget) budget_total
+             FROM leads WHERE created_at BETWEEN ? AND ?",
+            $range
+        );
+
+        $bySource = $this->db->all(
+            "SELECT source, COUNT(*) n FROM leads WHERE created_at BETWEEN ? AND ? GROUP BY source ORDER BY n DESC",
+            $range
+        );
+        $byCategory = $this->db->all(
+            "SELECT COALESCE(event_category, event_type, 'unclassified') category, COUNT(*) n
+             FROM leads WHERE created_at BETWEEN ? AND ? GROUP BY category ORDER BY n DESC",
+            $range
+        );
+
+        $expiredClaims = (int) ($this->db->one(
+            "SELECT COUNT(*) n FROM lead_claims WHERE status = 'expired' AND claimed_at BETWEEN ? AND ?", $range
+        )['n'] ?? 0);
+
+        $toursScheduled = (int) ($this->db->one(
+            "SELECT COUNT(DISTINCT lead_id) n FROM lead_status_history WHERE to_status = 'tour_scheduled' AND created_at BETWEEN ? AND ?", $range
+        )['n'] ?? 0);
+        $proposalsSent = (int) ($this->db->one(
+            "SELECT COUNT(DISTINCT lead_id) n FROM lead_status_history WHERE to_status = 'proposal_sent' AND created_at BETWEEN ? AND ?", $range
+        )['n'] ?? 0);
+
+        $declineReasons = $this->db->all(
+            "SELECT reason, COUNT(*) n FROM lead_status_history
+             WHERE to_status IN ('declined','lost') AND reason IS NOT NULL AND reason != '' AND created_at BETWEEN ? AND ?
+             GROUP BY reason ORDER BY n DESC LIMIT 10",
+            $range
+        );
+
+        $activityByBooker = $this->db->all(
+            "SELECT u.id, u.name,
+                SUM(l.assigned_to_user_id = u.id) assigned_count,
+                SUM(l.owner_user_id = u.id) owned_count,
+                SUM(l.owner_user_id = u.id AND l.status = 'onboarded') onboarded_count
+             FROM users u
+             JOIN leads l ON (l.assigned_to_user_id = u.id OR l.owner_user_id = u.id) AND l.created_at BETWEEN ? AND ?
+             GROUP BY u.id, u.name HAVING assigned_count > 0 OR owned_count > 0 ORDER BY owned_count DESC LIMIT 20",
+            $range
+        );
+
+        $routingPerformance = $this->db->all(
+            "SELECT rr.name rule_name, COUNT(*) assignments,
+                SUM(l.status = 'onboarded') onboarded
+             FROM lead_assignments la
+             JOIN routing_rule_versions rv ON rv.id = la.routing_rule_version_id
+             JOIN routing_rules rr ON rr.id = rv.routing_rule_id
+             JOIN leads l ON l.id = la.lead_id
+             WHERE la.created_at BETWEEN ? AND ?
+             GROUP BY rr.id, rr.name ORDER BY assignments DESC",
+            $range
+        );
+
+        $classification = $this->db->one(
+            "SELECT
+                SUM(c.source = 'ai') ai_count,
+                SUM(c.source = 'human_correction') corrected_count
+             FROM lead_classifications c
+             JOIN leads l ON l.id = c.lead_id
+             WHERE l.created_at BETWEEN ? AND ?",
+            $range
+        );
+        $aiCount = (int) ($classification['ai_count'] ?? 0);
+        $correctedCount = (int) ($classification['corrected_count'] ?? 0);
+
+        $manualCorrections = (int) ($this->db->one(
+            "SELECT COUNT(*) n FROM lead_audit_log WHERE action IN ('reassigned','manually_assigned') AND created_at BETWEEN ? AND ?", $range
+        )['n'] ?? 0);
+
+        $newInquiries = (int) ($totals['new_inquiries'] ?? 0);
+        $onboarded = (int) ($totals['onboarded'] ?? 0);
+
+        return $this->ok(['report' => [
+            'range' => ['from' => $from, 'to' => $to],
+            'totals' => [
+                'new_inquiries' => $newInquiries,
+                'onboarded' => $onboarded,
+                'lost' => (int) ($totals['lost'] ?? 0),
+                'spam' => (int) ($totals['spam'] ?? 0),
+                'unanswered' => (int) ($totals['unanswered'] ?? 0),
+                'expired_claims' => $expiredClaims,
+                'tours_scheduled' => $toursScheduled,
+                'proposals_sent' => $proposalsSent,
+                'avg_claim_minutes' => round((float) ($totals['avg_claim_minutes'] ?? 0), 1),
+                'avg_response_minutes' => round((float) ($totals['avg_response_minutes'] ?? 0), 1),
+                'conversion_rate_pct' => $newInquiries > 0 ? round(($onboarded / $newInquiries) * 100, 1) : 0.0,
+                'booked_budget_total' => (float) ($totals['budget_total'] ?? 0),
+            ],
+            'by_source' => $bySource,
+            'by_category' => $byCategory,
+            'decline_reasons' => $declineReasons,
+            'activity_by_booker' => $activityByBooker,
+            'routing_rule_performance' => $routingPerformance,
+            'classifier' => [
+                'classified_count' => $aiCount,
+                'human_corrections' => $correctedCount,
+                'accuracy_pct' => $aiCount > 0 ? round((1 - $correctedCount / $aiCount) * 100, 1) : null,
+            ],
+            'manual_routing_corrections' => $manualCorrections,
+            // Informational only — see Leads\AnomalyScanner's doc comment.
+            // Restricted to venue admins even though the rest of this report
+            // is visible to global_viewer too, since these name individual
+            // bookers.
+            'anomalies' => $this->isVenueAdmin() ? \Panic\Leads\AnomalyScanner::scan($this->db) : [],
+        ]]);
     }
 
     // ── Shared filter parsing ─────────────────────────────────────────────────
