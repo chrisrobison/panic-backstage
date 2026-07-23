@@ -22,6 +22,7 @@ import './events.js';
 import './event-upcoming.js';
 import './event-wizard.js';
 import './leads.js';
+import './inbox/inbox-shell.js';
 import './asset-library.js';
 import './reports.js';
 import './event-report.js';
@@ -372,6 +373,16 @@ class AppShell extends PanicElement {
     if (route === 'dashboard-metrics') return this.mount(outlet, 'pb-dashboard');
     if (route === 'asset-library') return this.mount(outlet, 'pb-asset-library');
     if (route === 'leads')       return this.mount(outlet, 'pb-leads-page');
+    // Booking Inbox — the five saved-view nav links seeded in
+    // 077_add_booking_inbox_tasks_link_and_nav.sql, plus a generic
+    // 'inbox-view-<name>' escape hatch for the in-page view switcher
+    // (incoming-ui.png's "Unassigned ▾" dropdown) to deep-link any of the
+    // extra saved views (Inbox::list()'s full view set) without needing a
+    // nav_items row for each one.
+    const INBOX_VIEW_ROUTES = { 'inbox-mine': 'mine', 'inbox-unassigned': 'unassigned', 'inbox-all': 'all', 'inbox-followup': 'follow_up', 'inbox-archived': 'archived' };
+    if (INBOX_VIEW_ROUTES[route]) return this.mount(outlet, 'pb-inbox-app', { view: INBOX_VIEW_ROUTES[route] });
+    const inboxViewMatch = route.match(/^inbox-view-(.+)$/);
+    if (inboxViewMatch) return this.mount(outlet, 'pb-inbox-app', { view: inboxViewMatch[1] });
     if (route === 'contacts')    return this.mount(outlet, 'pb-contacts-page');
     if (route === 'templates')   return this.mount(outlet, 'pb-template-picker');
     if (route === 'account')     return this.mount(outlet, 'pb-account-settings');

@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `booking-inbox
+matches incoming-ui.png` — Add Phase 6 Inbox workspace UI (matches incoming-ui.png)
 - **Added** `booking-inbox` — Add Phase 5 API endpoints
 - **Added** `booking-inbox` — Add Phase 4 routing engine, claims, and SLA automation
 - **Added** `booking-inbox` — Add Phase 3 ingestion, AI classification, and auto-ack
