@@ -40,6 +40,7 @@ use Panic\Env;
 use Panic\LeadEmailParser;
 use Panic\Leads\Acknowledgment;
 use Panic\Leads\Classifier;
+use Panic\Leads\RoutingEngine;
 
 Env::load($root . '/.env');
 
@@ -198,6 +199,19 @@ try {
         }
     } catch (\Throwable $e) {
         $log("Classification failed for lead #{$leadId}: " . $e->getMessage());
+    }
+
+    // Deterministic routing runs after classification (if any) so it can use
+    // the extracted fields, but never depends on the classifier having
+    // succeeded — a rule matching on `source` alone, or the existing-
+    // customer-thread check, still works with zero AI involved.
+    try {
+        $freshLead = $db->one('SELECT * FROM leads WHERE id = ?', [$leadId]);
+        if ($freshLead !== null) {
+            (new RoutingEngine())->route($db, $freshLead);
+        }
+    } catch (\Throwable $e) {
+        $log("Routing failed for lead #{$leadId}: " . $e->getMessage());
     }
 
     try {

@@ -5,6 +5,7 @@ namespace Panic;
 
 use Panic\Leads\Acknowledgment;
 use Panic\Leads\Classifier;
+use Panic\Leads\RoutingEngine;
 
 /**
  * Public booking-inquiry intake (unauthenticated, cross-origin).
@@ -174,6 +175,15 @@ final class PublicInquiry extends BaseEndpoint
             }
         } catch (\Throwable $e) {
             @error_log("public-inquiry classification failed for lead {$leadId}: {$e->getMessage()}");
+        }
+
+        try {
+            $lead = $this->db->one('SELECT * FROM leads WHERE id = ?', [$leadId]);
+            if ($lead !== null) {
+                (new RoutingEngine())->route($this->db, $lead);
+            }
+        } catch (\Throwable $e) {
+            @error_log("public-inquiry routing failed for lead {$leadId}: {$e->getMessage()}");
         }
 
         try {
