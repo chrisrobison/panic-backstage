@@ -90,15 +90,41 @@ abstract class BaseEndpoint implements Endpoint
             'view_processes',
             'manage_tasks_app',
             'view_tasks_app',
+            // Booking Inbox — Venue administrator: full pipeline control
+            'view_booking_inbox', 'manage_booking_inbox', 'manage_assigned_leads',
+            'claim_leads', 'override_lead_claims', 'manage_lead_routing',
+            'decline_high_value_leads', 'export_leads', 'view_lead_audit',
+            'manage_social_queue', 'view_social_queue', 'publish_social',
         ],
-        'event_owner' => ['view_leads', 'manage_tasks_app', 'view_tasks_app'],
-        'promoter' => [],
+        'event_owner' => [
+            'view_leads', 'manage_tasks_app', 'view_tasks_app',
+            // Booking Inbox — Trusted booker
+            'view_booking_inbox', 'manage_booking_inbox', 'claim_leads',
+            'decline_high_value_leads',
+            'view_social_queue', 'manage_social_queue', 'publish_social',
+        ],
+        'promoter' => [
+            // Booking Inbox — Restricted external booker: row-scoped (assigned/
+            // owned/watched only — enforced in SQL WHERE, not by this flag
+            // alone) claim + limited write access; no routing, no override,
+            // no export, no audit view, no unrestricted decline.
+            'view_booking_inbox', 'claim_leads', 'manage_assigned_leads',
+        ],
         'band' => [],
         'artist' => [],
         'designer' => [],
-        'staff' => ['view_leads', 'view_processes', 'manage_tasks_app', 'view_tasks_app'],
+        'staff' => [
+            'view_leads', 'view_processes', 'manage_tasks_app', 'view_tasks_app',
+            // Booking Inbox — Trusted booker
+            'view_booking_inbox', 'manage_booking_inbox', 'claim_leads',
+            'decline_high_value_leads',
+            'view_social_queue', 'manage_social_queue', 'publish_social',
+        ],
         'viewer' => [],
-        'global_viewer' => ['view_all_events', 'view_leads', 'view_reports', 'view_processes', 'view_tasks_app'],
+        'global_viewer' => [
+            'view_all_events', 'view_leads', 'view_reports', 'view_processes', 'view_tasks_app',
+            'view_booking_inbox', 'view_lead_audit', 'view_social_queue',
+        ],
     ];
 
     private array $eventAccessCache = [];
