@@ -338,7 +338,17 @@ class LoginPage extends PanicElement {
 
   // ── Passkey / password / magic-link handlers ──────────────────────────────
 
-  /** Browser-native passkey autocomplete on the email field. Silent, non-blocking. */
+  /**
+   * Browser-native passkey autocomplete on the email field. Silent, non-blocking.
+   *
+   * The browser only allows one `navigator.credentials.get()` call to be
+   * pending at a time per page. This conditional-mediation request sits
+   * pending indefinitely (until the user picks a credential from the
+   * autofill dropdown or it's aborted), so we keep the AbortController on
+   * `this._conditionalAbort` and abort it in passkeyLogin() before starting
+   * the explicit, modal request — otherwise the explicit call throws
+   * "InvalidStateError: A request is already pending."
+   */
   async startConditionalPasskey() {
     try {
       if (!window.PublicKeyCredential?.isConditionalMediationAvailable) return;
@@ -348,12 +358,25 @@ class LoginPage extends PanicElement {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
       }).then((r) => r.json());
       if (!opts.challenge) return;
-      const cred = await navigator.credentials.get({ publicKey: prepareGetOptions(opts), mediation: 'conditional' });
+      const controller = new AbortController();
+      this._conditionalAbort = controller;
+      const cred = await navigator.credentials.get({
+        publicKey: prepareGetOptions(opts),
+        mediation: 'conditional',
+        signal: controller.signal,
+      });
       if (cred) await this.finishPasskeyLogin(cred);
     } catch { /* cancelled or unsupported — silently ignore */ }
+    finally { this._conditionalAbort = null; }
   }
 
   async passkeyLogin(email = '') {
+    // Cancel the still-pending conditional (autofill) request, if any — the
+    // browser rejects a second concurrent navigator.credentials.get() call
+    // with "A request is already pending" otherwise.
+    this._conditionalAbort?.abort();
+    this._conditionalAbort = null;
+
     const btn = $('[data-action="passkey"]', this);
     if (btn) {
       btn.disabled = true;
