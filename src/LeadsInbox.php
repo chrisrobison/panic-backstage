@@ -486,13 +486,33 @@ final class LeadsInbox extends BaseEndpoint
 
     private function onboard(Request $request, array $lead): Response
     {
-        if ($request->method() !== 'POST') {
-            return Response::methodNotAllowed();
-        }
         if (!$this->canManage($lead)) {
             return $this->forbidden();
         }
-        return (new Leads($this->db, $this->auth, ['leadId' => (string) $lead['id'], 'child' => 'convert'], $this->root))
-            ->handle(new Request('POST', $request->path(), $request->query(), $request->body(), $request->files(), []));
+
+        // GET previews what the review dialog needs before the user commits
+        // (duplicate detection + a same-date availability check) — spec's
+        // "review dialog that shows all extracted info... checks
+        // availability... detects duplicates" steps, without side effects.
+        if ($request->method() === 'GET') {
+            $venues = $this->db->all('SELECT id FROM venues ORDER BY id LIMIT 1');
+            $venueId = (int) ($venues[0]['id'] ?? 1);
+            $date = (string) ($request->query('date') ?: ($lead['desired_date'] ?? date('Y-m-d', strtotime('+30 days'))));
+            return $this->ok([
+                'duplicates' => \Panic\Leads\Onboarding::findDuplicates($this->db, $lead),
+                'availability' => \Panic\Leads\Onboarding::checkAvailability($this->db, $venueId, $date),
+                'templates' => $this->db->all('SELECT id, name FROM event_templates ORDER BY name'),
+            ]);
+        }
+
+        if ($request->method() !== 'POST') {
+            return Response::methodNotAllowed();
+        }
+        try {
+            $result = \Panic\Leads\Onboarding::onboard($this->db, $lead, $request->body(), (int) $this->userId());
+        } catch (\RuntimeException $e) {
+            return Response::json(['error' => $e->getMessage()], 409);
+        }
+        return $this->ok($result);
     }
 }

@@ -11,6 +11,8 @@ a new empty [Unreleased] block above it.
 
 ## [Unreleased]
 - **Added** `booking-inbox
+duplicate/availability checks, task templates` — Add Phase 8 Onboard Lead depth (duplicate/availability checks, task templates)
+- **Added** `booking-inbox
 matches incoming-ui.png` — Add Phase 6 Inbox workspace UI (matches incoming-ui.png)
 - **Added** `booking-inbox` — Add Phase 5 API endpoints
 - **Added** `booking-inbox` — Add Phase 4 routing engine, claims, and SLA automation
