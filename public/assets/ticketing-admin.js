@@ -16,12 +16,40 @@ import { esc, titleCase, publish, api, formData, can, money, helpLink, PanicElem
 
 const moneyCents = (cents) => money(Number(cents || 0) / 100);
 
-// Format a stored datetime string ("2026-06-30 21:00:00") as a short, local
-// "Jun 30, 9:00 PM" label. Returns '' for empty values.
+// sales_start/sales_end come back from the API as UTC instants stored as
+// naive "Y-m-d H:i:s" strings (no offset) -- the DB session is pinned to UTC
+// (see Database.php / Ticketing.php seedDefaultTicketType). Parse them as UTC
+// explicitly rather than letting the browser assume local time, or every
+// display and edit here would drift by the browser's UTC offset.
+const parseStoredUtc = (value) => {
+  if (!value) return null;
+  const d = new Date(String(value).replace(' ', 'T') + 'Z');
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+// Convert a browser-local <input type="datetime-local"> value ("2026-07-23T00:00")
+// into the "Y-m-d H:i:s" UTC string the API expects.
+const localDateTimeToUtc = (value) => {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 19).replace('T', ' ');
+};
+
+// Convert a stored UTC "Y-m-d H:i:s" string into the local wall-clock value a
+// <input type="datetime-local"> expects ("2026-07-23T00:00"), for prefilling
+// the edit form.
+const utcToLocalDateTimeInput = (value) => {
+  const d = parseStoredUtc(value);
+  if (!d) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+// Format a stored UTC datetime string as a short, local "Jun 30, 9:00 PM"
+// label. Returns '' for empty/unparseable values.
 const shortDateTime = (value) => {
-  if (!value) return '';
-  const d = new Date(String(value).replace(' ', 'T'));
-  if (Number.isNaN(d.getTime())) return String(value);
+  const d = parseStoredUtc(value);
+  if (!d) return value ? String(value) : '';
   return d.toLocaleString(undefined, {
     month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
   });
@@ -259,8 +287,8 @@ class TicketingAdmin extends PanicElement {
         <label>Price (USD) <input name="price_dollars" type="number" step="0.01" min="0" value="${esc(dollars)}" placeholder="0.00"></label>
         <label>Quantity <input name="quantity_total" type="number" min="0" required value="${esc(t.quantity_total ?? '')}" placeholder="100"></label>
         <label>Status <select name="status">${TYPE_STATUSES.map((s) => `<option value="${s}" ${s === (t.status || 'draft') ? 'selected' : ''}>${esc(titleCase(s))}</option>`).join('')}</select></label>
-        <label>Sales start <input name="sales_start" type="datetime-local" value="${esc((t.sales_start || '').replace(' ', 'T').slice(0, 16))}"></label>
-        <label>Sales end <input name="sales_end" type="datetime-local" value="${esc((t.sales_end || '').replace(' ', 'T').slice(0, 16))}"></label>
+        <label>Sales start <input name="sales_start" type="datetime-local" value="${esc(utcToLocalDateTimeInput(t.sales_start))}"></label>
+        <label>Sales end <input name="sales_end" type="datetime-local" value="${esc(utcToLocalDateTimeInput(t.sales_end))}"></label>
         <label class="wide">Description <input name="description" value="${esc(t.description || '')}" placeholder="What’s included (optional)"></label>
         <div class="wide form-actions"><button type="submit">${isEdit ? 'Save ticket type' : 'Add ticket type'}</button><button type="button" class="secondary" data-close>Cancel</button>${isEdit ? `<button type="button" class="link danger delete-tier" data-del-tier="${esc(t.id)}">Delete ticket type</button>` : ''}</div>
         <p class="error-text wide" data-error></p>
@@ -458,8 +486,13 @@ class TicketingAdmin extends PanicElement {
       price_cents: Math.round(Number(values.price_dollars || 0) * 100),
       quantity_total: Number(values.quantity_total || 0),
       status: values.status,
-      sales_start: values.sales_start ? values.sales_start.replace('T', ' ') + ':00' : null,
-      sales_end: values.sales_end ? values.sales_end.replace('T', ' ') + ':00' : null,
+      // <input type="datetime-local"> yields a browser-local wall-clock string
+      // with no offset. The DB session is pinned to UTC (see Database.php), so
+      // this must be converted to a UTC instant before it's sent — otherwise
+      // the naive string gets reinterpreted as UTC on write and the sale
+      // window silently shifts by the local UTC offset.
+      sales_start: values.sales_start ? localDateTimeToUtc(values.sales_start) : null,
+      sales_end: values.sales_end ? localDateTimeToUtc(values.sales_end) : null,
     };
     const id = e.target.dataset.tierId;
     const path = id ? `/events/${this.eventId}/ticketing/types/${id}` : `/events/${this.eventId}/ticketing`;

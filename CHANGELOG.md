@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `ticketing` — Store sales_start/sales_end as true UTC instants
 - **Added** `public` — Add embeddable <panic-booking-inquiry> booking form widget
 - **Fixed** `docs` — Stop showing two headings per ops-manual chapter
 - **Documentation** — Cover the Tasks app, Automation module, and other recent changes

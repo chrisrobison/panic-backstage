@@ -765,7 +765,12 @@ final class Ticketing extends BaseEndpoint
             return false;
         }
 
-        $event = $this->db->one('SELECT ticket_price, capacity, `date` FROM events WHERE id = ?', [$eventId]);
+        $event = $this->db->one(
+            'SELECT e.ticket_price, e.capacity, e.`date`, v.timezone AS venue_timezone
+               FROM events e LEFT JOIN venues v ON v.id = e.venue_id
+              WHERE e.id = ?',
+            [$eventId]
+        );
         if ($event === null) {
             return false;
         }
@@ -782,17 +787,30 @@ final class Ticketing extends BaseEndpoint
         $advanceQty = intdiv($sellable, 2) + ($sellable % 2); // odd seat goes to Advance
         $doorQty    = intdiv($sellable, 2);
 
+        // sales_start/sales_end are stored as true UTC instants (the DB session
+        // is pinned to UTC, per Database.php), so every wall-clock boundary here
+        // must be built in the venue's local timezone and converted to UTC
+        // before formatting for insertion -- mirrors Feed::eventBounds().
+        try {
+            $tz = new \DateTimeZone((string) ($event['venue_timezone'] ?: 'America/Los_Angeles'));
+        } catch (\Exception) {
+            $tz = new \DateTimeZone('America/Los_Angeles');
+        }
+        $utc = new \DateTimeZone('UTC');
+        $toUtc = fn(string $localDateTime): string =>
+            (new \DateTime($localDateTime, $tz))->setTimezone($utc)->format('Y-m-d H:i:s');
+
         // Sales open yesterday (so the tier is unambiguously live the moment the
         // operator flips ticketing on, regardless of timezone) and stay open
         // until the day after the event, leaving a buffer for at-the-door sales.
-        $salesStart = date('Y-m-d', strtotime('yesterday')) . ' 00:00:00';
+        $salesStart = $toUtc(date('Y-m-d', strtotime('yesterday')) . ' 00:00:00');
         $salesEnd   = !empty($event['date'])
-            ? date('Y-m-d', strtotime($event['date'] . ' +1 day')) . ' 23:59:59'
+            ? $toUtc(date('Y-m-d', strtotime($event['date'] . ' +1 day')) . ' 23:59:59')
             : null;
         // Door sales default to opening the day of the event (fall back to the
         // shared start if the event has no date yet).
         $doorSalesStart = !empty($event['date'])
-            ? date('Y-m-d', strtotime($event['date'])) . ' 00:00:00'
+            ? $toUtc(date('Y-m-d', strtotime($event['date'])) . ' 00:00:00')
             : $salesStart;
 
         $insertType = fn(string $name, ?string $desc, int $cents, int $qty, ?string $start, ?string $end, string $status, int $sort): int =>
