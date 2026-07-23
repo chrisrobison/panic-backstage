@@ -1131,6 +1131,11 @@
     <a href="#lead-pipeline" class="section">Moving through the pipeline</a>
     <a href="#lead-evaluator" class="section">The Deal Evaluator</a>
     <a href="#lead-convert" class="section">Converting to an event</a>
+    <a href="#inbox-overview" class="section">The Booking Inbox</a>
+    <a href="#inbox-claim" class="section">Claiming, assigning &amp; ownership</a>
+    <a href="#inbox-conversation" class="section">Replying &amp; internal notes</a>
+    <a href="#inbox-routing" class="section">Understanding routing</a>
+    <a href="#inbox-onboard" class="section">Onboarding from the Inbox</a>
 
     <div class="nav-section">Part II — Booking</div>
     <a href="#booking" class="chapter">Chapter 2: Booking a Show</a>
@@ -1581,6 +1586,41 @@
     <div class="callout note">
       <span class="callout-title">The lead lives on</span>
       <p>Converting a lead does not delete it. A venue admin can always navigate back to the original lead from the event workspace to see what the deal looked like at evaluation time — useful for post-show retrospectives comparing projected vs. actual margin.</p>
+    </div>
+
+    <!-- BOOKING INBOX ─────────────────────────────────────────────────────── -->
+    <h2 id="inbox-overview">The Booking Inbox</h2>
+
+    <p>The Leads Inbox (above) is where you evaluate a deal. The <strong>Booking Inbox</strong> — a separate <span class="ui-label">Inbox</span> item in the left nav — is where you actually work an inquiry day to day: read the messages, claim it so nobody else steps on it, reply, and hand it off when it's ready to become an event. Both views are the same underlying inquiry; Inbox is just the working desk, not a second database.</p>
+
+    <p>Inquiries arrive automatically from the <code>bookings@themab.org</code> mailbox and the public inquiry form, get an instant neutral acknowledgment reply, and are read by an AI classifier that fills in event type, genre, dates, attendance, and a spam score — nobody has to type that in by hand. A routing rule (set up by a venue admin, see below) then either points the inquiry at a specific person or drops it in the shared unassigned queue.</p>
+
+    <h3 id="inbox-claim">Claiming, assigning &amp; ownership</h3>
+    <p>These are three different things in the Inbox, on purpose:</p>
+    <ul>
+      <li><strong>Assigned</strong> — the routing rules (or a manager) pointed this inquiry at you or your team. Nobody's actually started working it yet.</li>
+      <li><strong>Claimed</strong> — you clicked <span class="ui-label button">Claim</span> and are actively on it right now. Only one person can hold the claim at a time, so two people can't accidentally send conflicting replies to the same booker.</li>
+      <li><strong>Owned</strong> — set automatically once the inquiry is onboarded into a real event; it survives any later claim changes.</li>
+    </ul>
+    <p>Every claim has a countdown. Doing anything that counts as real progress — sending a reply, logging a call, sending availability or a proposal, scheduling a tour — automatically extends it. Sitting on a claim without acting on it lets the countdown run out and returns the inquiry to the shared queue so someone else can pick it up.</p>
+
+    <div class="callout tip">
+      <span class="callout-title">Why you can't just leave it claimed forever</span>
+      <p>A silent, indefinitely-held claim is exactly how an inquiry gets lost — the booker thinks someone's on it, and nobody actually is. The countdown (and the specific list of actions that reset it) exists so "claimed" always means "actively being worked," not "reserved."</p>
+    </div>
+
+    <h3 id="inbox-conversation">Replying &amp; internal notes</h3>
+    <p>Each inquiry has one conversation thread — inbound messages, your replies, and internal notes only your team can see, all in one place, plus a system log of status changes and reassignments. If a teammate has a draft reply open, you'll see a banner saying so before you start typing your own, so two people don't send two different answers to the same email.</p>
+
+    <h3 id="inbox-routing">Understanding how an inquiry got routed</h3>
+    <p>Open the Details tab on any inquiry to see the AI's read on it (category, genre, dates, budget, confidence) and, if a routing rule matched, a plain-English explanation like "Routed to Kathy because: genre contains punk/ska (94% confidence)." If nothing matched confidently enough, it lands in the unassigned queue for a person to route by hand — the AI never assigns, deletes, or declines anything on its own; it only fills in fields for a human (or the deterministic routing rules) to act on.</p>
+
+    <h3 id="inbox-onboard">Onboarding a lead from the Inbox</h3>
+    <p>When an inquiry is ready to become a real booking, <span class="ui-label button">Onboard Lead</span> walks through duplicate-event and date-conflict checks, lets you pick the room/template/owner, and drops in a starter task checklist — then creates the event at <strong>Proposed</strong> status, the same as converting a lead from the pipeline view. Onboarding is a handoff into the normal booking workflow (Part II), not a shortcut that marks anything as booked.</p>
+
+    <div class="callout warn">
+      <span class="callout-title">Declining a high-value inquiry</span>
+      <p>If an inquiry is above your venue's high-value threshold, a restricted booker can't unilaterally decline/lose/archive it — that action instead files an approval request for a manager, so a promising booking can't be quietly turned away.</p>
     </div>
 
   </div><!-- /book-content -->

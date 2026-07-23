@@ -90,15 +90,24 @@ const DEST_SUBMISSION_INFO = {
   dothebay:         { url: 'https://dothebay.com/submit', label: 'DoTheBay Submission Form' },
 };
 
-const POST_STATUSES = ['draft', 'approved', 'scheduled', 'sent', 'archived'];
+// Social Queue workflow (spec, src/Promote/Posts.php::STATUSES): Draft ->
+// Needs Assets -> Ready for Review -> Changes Requested -> Approved ->
+// Scheduled -> Awaiting Manual Publish -> Published -> Verified -> Archived.
+// 'sent' is kept for backward compat with posts created before this workflow.
+const POST_STATUSES = [
+  'draft', 'needs_assets', 'ready_for_review', 'changes_requested', 'approved',
+  'scheduled', 'awaiting_manual_publish', 'sent', 'published', 'verified', 'archived',
+];
 
 const VARIANT_STATUSES = ['draft', 'ready', 'needs_review', 'approved'];
 
 // Tone for post status badges
 function postStatusTone(status) {
+  if (status === 'changes_requested') return 'warning';
   if (status === 'approved') return 'success';
   if (status === 'scheduled') return 'info';
-  if (status === 'sent') return 'success';
+  if (status === 'awaiting_manual_publish') return 'warning';
+  if (status === 'sent' || status === 'published' || status === 'verified') return 'success';
   if (status === 'archived') return 'warning';
   return '';
 }
@@ -563,6 +572,29 @@ class PromotePostList extends PanicElement {
       });
     });
 
+    $$('[data-approve-post]', this).forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const postId = Number(btn.dataset.approvePost);
+        btn.disabled = true;
+        try {
+          const result = await api(`/promote/events/${this.eventId}/posts/${postId}/approve`, { method: 'POST' });
+          publish('toast.show', { message: 'Post approved.', tone: 'success' });
+          publish('promote.post.updated', { post: result.post, eventId: this.eventId });
+        } catch (error) {
+          publish('toast.show', { message: error.message || 'Approve failed.', tone: 'error' });
+          btn.disabled = false;
+        }
+      });
+    });
+
+    $$('[data-mark-published]', this).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const postId = Number(btn.dataset.markPublished);
+        const post = posts.find((p) => String(p.id) === String(postId));
+        this.openMarkPublishedDialog(post);
+      });
+    });
+
     $$('[data-delete-post]', this).forEach((btn) => {
       btn.addEventListener('click', async () => {
         const postId = Number(btn.dataset.deletePost);
@@ -581,6 +613,8 @@ class PromotePostList extends PanicElement {
   postCard(post, assets) {
     const asset = assets.find((a) => String(a.id) === String(post.asset_id));
     const tone = postStatusTone(post.status);
+    const canApprove = ['ready_for_review', 'changes_requested', 'needs_assets', 'draft'].includes(post.status);
+    const canMarkPublished = post.status === 'awaiting_manual_publish' || post.status === 'published';
     return `<div class="promote-post-card">
       <div class="promote-post-thumb">${assetThumb(asset)}</div>
       <div class="promote-post-body">
@@ -589,8 +623,11 @@ class PromotePostList extends PanicElement {
           <span class="badge ${esc(tone)}">${esc(titleCase(post.status))}</span>
         </div>
         ${post.master_text ? `<p class="promote-post-preview muted">${esc(post.master_text.slice(0, 100))}${post.master_text.length > 100 ? '&hellip;' : ''}</p>` : ''}
+        ${post.public_post_url ? `<p class="promote-post-url"><a href="${esc(post.public_post_url)}" target="_blank" rel="noopener">${esc(post.public_post_url)}</a></p>` : ''}
         <div class="promote-post-actions">
           <button class="small secondary" data-edit-post="${esc(String(post.id))}">Edit</button>
+          ${canApprove ? `<button class="small primary" data-approve-post="${esc(String(post.id))}"><i class="fa-solid fa-check" aria-hidden="true"></i> Approve</button>` : ''}
+          ${canMarkPublished ? `<button class="small secondary" data-mark-published="${esc(String(post.id))}"><i class="fa-solid fa-link" aria-hidden="true"></i> ${post.status === 'published' ? 'Verify link' : 'Mark published'}</button>` : ''}
           <button class="small secondary" data-broadcast-post="${esc(String(post.id))}"><i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> Broadcast</button>
           <button class="small danger" data-delete-post="${esc(String(post.id))}">Delete</button>
         </div>
@@ -604,6 +641,61 @@ class PromotePostList extends PanicElement {
     editor.post = post || null;
     editor.assets = this.assets || [];
     document.body.appendChild(editor);
+  }
+
+  // Records the public URL for a manual (no-API) platform once someone has
+  // actually clicked publish (or confirms an API-published one is live) —
+  // POST .../mark-published, see src/Promote/Posts.php::markPublished().
+  openMarkPublishedDialog(post) {
+    if (!post) return;
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-backdrop';
+    dialog.innerHTML = `<div class="modal-card">
+      <div class="section-head padded">
+        <h2>Mark Published</h2>
+        <button class="small secondary" data-close type="button">Close</button>
+      </div>
+      <form class="grid-form padded" data-mark-published-form>
+        <label class="wide">Public post URL
+          <input type="url" name="public_post_url" value="${esc(post.public_post_url || '')}" placeholder="https://...">
+        </label>
+        <label class="wide check-label">
+          <input type="checkbox" name="verified" ${post.status === 'published' ? 'checked' : ''}>
+          I've confirmed this post is actually live
+        </label>
+        <div class="wide form-actions">
+          <button type="submit" class="primary">Save</button>
+          <button type="button" class="secondary" data-close>Cancel</button>
+        </div>
+        <p class="error-text wide" data-error></p>
+      </form>
+    </div>`;
+    document.body.appendChild(dialog);
+
+    const close = () => dialog.remove();
+    $$('[data-close]', dialog).forEach((btn) => btn.addEventListener('click', close));
+    dialog.addEventListener('click', (event) => { if (event.target === dialog) close(); });
+
+    $('[data-mark-published-form]', dialog).addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const submit = $('button[type="submit"]', event.target);
+      submit.disabled = true;
+      const body = {
+        public_post_url: event.target.public_post_url.value.trim(),
+        verified: event.target.verified.checked,
+      };
+      try {
+        const result = await api(`/promote/events/${this.eventId}/posts/${post.id}/mark-published`, {
+          method: 'POST', body: JSON.stringify(body),
+        });
+        publish('toast.show', { message: 'Post marked as published.', tone: 'success' });
+        publish('promote.post.updated', { post: result.post, eventId: this.eventId });
+        close();
+      } catch (error) {
+        $('[data-error]', event.target).textContent = error.message || 'Save failed.';
+        submit.disabled = false;
+      }
+    });
   }
 }
 

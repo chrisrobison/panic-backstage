@@ -3791,6 +3791,7 @@ button.link.danger { color: var(--danger); }
 }
 .promote-post-title { font-size: 15px; }
 .promote-post-preview { font-size: 13px; margin: 0 0 8px; line-height: 1.4; color: var(--muted); }
+.promote-post-url { font-size: 13px; margin: 0 0 8px; overflow-wrap: anywhere; }
 .promote-post-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
 /* ── Thumbnails ───────────────────────────────────────────────────────────── */

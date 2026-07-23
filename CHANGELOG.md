@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `booking-inbox` — Finish Phase 10 Social Queue and add Phase 12 docs
 - **Changed** — Added original UI mockups for posterity
 - **Added** `booking-inbox` — Add Phase 9 reporting and anomaly alerts
 - **Added** `booking-inbox
