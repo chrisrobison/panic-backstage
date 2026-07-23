@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** — Added original UI mockups for posterity
 - **Added** `booking-inbox` — Add Phase 9 reporting and anomaly alerts
 - **Added** `booking-inbox
 duplicate/availability checks, task templates` — Add Phase 8 Onboard Lead depth (duplicate/availability checks, task templates)
