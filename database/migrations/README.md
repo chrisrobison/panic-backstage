@@ -22,8 +22,8 @@ is a genuinely different schema with its own baseline and migrations folder:
   migration written before it was last regenerated has been squashed into it,
   so a brand-new database starts with **zero** pending migrations.
 - New schema changes go here as `NNN_short_description.sql`, numbered in
-  ascending order. **Next number: `064`** (migrations 001–063 were squashed
-  into `../schema.sql` on 2026-07-16).
+  ascending order. **Next number: `070`** (migrations 001–069 were squashed
+  into `../schema.sql` on 2026-07-23).
 - Apply pending migrations with the runner:
 
   ```bash
