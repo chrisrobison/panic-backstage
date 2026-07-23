@@ -345,6 +345,9 @@ class LeadModal extends PanicElement {
           <label class="field-label">Projected Attendance
             <input type="number" name="projected_attendance" value="${esc(lead.projected_attendance != null ? String(lead.projected_attendance) : '')}" min="0" placeholder="e.g. 200">
           </label>
+          <label class="field-label">Budget
+            <input type="number" name="budget" value="${esc(lead.budget != null ? String(lead.budget) : '')}" min="0" step="0.01" placeholder="e.g. 5000">
+          </label>
         </div>
         <label class="field-label" style="display:flex;flex-direction:column;margin-bottom:16px">Notes
           <textarea name="notes" rows="3">${esc(lead.notes || '')}</textarea>
@@ -664,6 +667,7 @@ class LeadModal extends PanicElement {
   // ── Actions ─────────────────────────────────────────────────────────────────
   async _saveDetails() {
     const rawAttendance = $('[name="projected_attendance"]', this)?.value;
+    const rawBudget = $('[name="budget"]', this)?.value;
     const payload = {
       event_name:             $('[name="event_name"]',             this)?.value,
       event_type:             $('[name="event_type"]',             this)?.value,
@@ -673,6 +677,7 @@ class LeadModal extends PanicElement {
       contact_email:          $('[name="contact_email"]',          this)?.value,
       band_name:              $('[name="band_name"]',              this)?.value || null,
       projected_attendance:   rawAttendance !== '' && rawAttendance != null ? Number(rawAttendance) : null,
+      budget:                 rawBudget !== '' && rawBudget != null ? Number(rawBudget) : null,
       notes:                  $('[name="notes"]',                  this)?.value,
     };
     // Drop undefined keys (fields not in DOM on this tab)

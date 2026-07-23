@@ -1309,6 +1309,7 @@ CREATE TABLE `leads` (
   `desired_date_alt` date DEFAULT NULL,
   `rooms_requested` varchar(255) DEFAULT NULL,
   `projected_attendance` int(11) DEFAULT NULL,
+  `budget` decimal(10,2) DEFAULT NULL,
   `is_private` tinyint(1) NOT NULL DEFAULT 0,
   `alcohol_plan` varchar(120) DEFAULT NULL,
   `notes` text DEFAULT NULL,

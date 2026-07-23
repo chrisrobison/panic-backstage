@@ -4278,6 +4278,10 @@ components:
         projected_attendance:
           type: integer
           nullable: true
+        budget:
+          type: number
+          format: float
+          nullable: true
         is_private:
           type: boolean
         alcohol_plan:
@@ -4364,6 +4368,9 @@ components:
           type: string
         projected_attendance:
           type: integer
+        budget:
+          type: number
+          format: float
         is_private:
           type: boolean
           default: false
@@ -4407,6 +4414,9 @@ components:
           type: string
         projected_attendance:
           type: integer
+        budget:
+          type: number
+          format: float
         is_private:
           type: boolean
         alcohol_plan:
@@ -19511,6 +19521,11 @@ paths:
                   type: integer
                   minimum: 0
                   maximum: 100000
+                budget:
+                  type: number
+                  format: float
+                  minimum: 0
+                  maximum: 99999999.99
                 message:
                   type: string
                   maxLength: 4000
