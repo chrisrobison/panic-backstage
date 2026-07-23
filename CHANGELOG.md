@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `booking-inbox` — Add Phase 1 schema for claim/assign/own, conversation, routing, and audit
 - **Fixed** `seed` — Guard database/seed.php against ever truncating production again
 - **Fixed** `auth` — Abort conditional passkey request before explicit passkey login
 - **Added** `leads` — Add budget field to booking inquiries
