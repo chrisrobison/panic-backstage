@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `booking-inbox` — Add Phase 3 ingestion, AI classification, and auto-ack
 - **Added** `booking-inbox` — Add Phase 2 permissions and audit infrastructure
 - **Added** `booking-inbox` — Add Phase 1 schema for claim/assign/own, conversation, routing, and audit
 - **Fixed** `seed` — Guard database/seed.php against ever truncating production again

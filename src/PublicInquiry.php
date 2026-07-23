@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use Panic\Leads\Acknowledgment;
+use Panic\Leads\Classifier;
+
 /**
  * Public booking-inquiry intake (unauthenticated, cross-origin).
  *
@@ -140,9 +143,47 @@ final class PublicInquiry extends BaseEndpoint
             [$id, "Submitted via embedded booking-inquiry widget from {$origin} (IP {$ip})"]
         );
 
+        // Booking Inbox conversation feed — same message the widget submitted,
+        // normalized, so it renders in the Conversation tab like any other
+        // inbound message (see database/migrations/072_add_booking_inbox_messages.sql).
+        $messageRowId = $this->db->insert(
+            'INSERT INTO lead_messages (lead_id, direction, channel, status, from_name, from_email, subject, body_text, checksum)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [$id, 'inbound', 'manual', 'received', $name, $email, 'Website booking inquiry', $message, hash('sha256', $message)]
+        );
+
+        $this->classifyAndAcknowledge($id, $message, $messageRowId);
         $this->notifyAdmins($id, $name, $email);
 
         return $this->respond(['ok' => true]);
+    }
+
+    /**
+     * Best-effort AI classification + auto-acknowledgment for a freshly
+     * created website inquiry. Never allowed to fail the request — a slow or
+     * unavailable Anthropic call, or a mail hiccup, must not turn a
+     * successful public submission into a 500 for the visitor.
+     */
+    private function classifyAndAcknowledge(int $leadId, string $message, int $messageRowId): void
+    {
+        try {
+            $apiKey = getenv('ANTHROPIC_API_KEY') ?: null;
+            $classifier = new Classifier($apiKey);
+            if ($classifier->isEnabled()) {
+                $classifier->classify($this->db, $leadId, $message, 'Website booking inquiry', $messageRowId);
+            }
+        } catch (\Throwable $e) {
+            @error_log("public-inquiry classification failed for lead {$leadId}: {$e->getMessage()}");
+        }
+
+        try {
+            $lead = $this->db->one('SELECT * FROM leads WHERE id = ?', [$leadId]);
+            if ($lead !== null) {
+                (new Acknowledgment($this->root))->maybeSend($this->db, $lead);
+            }
+        } catch (\Throwable $e) {
+            @error_log("public-inquiry auto-acknowledgment failed for lead {$leadId}: {$e->getMessage()}");
+        }
     }
 
     /** Best-effort admin alert so a public inquiry doesn't sit unseen in the pipeline. Never throws. */

@@ -168,6 +168,12 @@ final class LeadEmailParser
                 'subject'       => $subject ?: null,
                 'received_at'   => $receivedAt,
                 'summary'       => $lead['summary'],
+                // Normalized body — added for the Booking Inbox conversation
+                // feed (lead_messages, see scripts/ingest-booking-email.php),
+                // which wants the human-readable text/HTML the parser already
+                // derived rather than re-deriving it from the raw MIME again.
+                'body_text'     => $bodyText,
+                'body_html'     => $msg['html'] !== '' ? $msg['html'] : null,
             ],
         ];
     }

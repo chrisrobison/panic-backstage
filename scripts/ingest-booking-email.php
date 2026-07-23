@@ -38,6 +38,8 @@ require $root . '/src/bootstrap.php';
 use Panic\Database;
 use Panic\Env;
 use Panic\LeadEmailParser;
+use Panic\Leads\Acknowledgment;
+use Panic\Leads\Classifier;
 
 Env::load($root . '/.env');
 
@@ -129,7 +131,7 @@ try {
         ]
     );
 
-    $db->insert(
+    $intakeEmailId = $db->insert(
         'INSERT INTO lead_intake_emails
          (lead_id, channel, message_id, from_name, from_email, reply_to, to_recipients,
           subject, parse_method, status, parsed_json, raw_email, received_at)
@@ -163,8 +165,50 @@ try {
         ]
     );
 
+    // Booking Inbox conversation feed: the same message, normalized, so the
+    // Conversation tab renders it alongside replies/notes/system events —
+    // see database/migrations/072_add_booking_inbox_messages.sql. The raw
+    // message stays the permanent record in lead_intake_emails above; this
+    // row is what the UI actually displays.
+    $checksum = hash('sha256', (string) ($meta['body_text'] ?? ''));
+    $messageRowId = $db->insert(
+        'INSERT INTO lead_messages
+         (lead_id, direction, channel, status, from_name, from_email, to_recipients, subject,
+          body_text, body_html, external_message_id, checksum, intake_email_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [
+            $leadId, 'inbound', 'email', 'received',
+            $meta['from_name'], $meta['from_email'], $meta['to_recipients'], $meta['subject'],
+            $meta['body_text'] ?? null, $meta['body_html'] ?? null,
+            $messageId, $checksum, $intakeEmailId,
+        ]
+    );
+
     $db->pdo()->commit();
     $log("Imported lead #{$leadId} from {$contact} (method={$meta['parse_method']}, msgid=" . ($messageId ?? '-') . ').');
+
+    // Classification and acknowledgment run *after* commit, each in its own
+    // try/catch — a slow/failed Anthropic call or a mail delivery hiccup must
+    // never cause this mail-pipe script to look like an ingestion failure
+    // (the lead is already safely committed either way).
+    try {
+        $classifier = new Classifier($apiKey, $model);
+        if ($classifier->isEnabled()) {
+            $classifier->classify($db, $leadId, (string) ($meta['body_text'] ?? ''), $meta['subject'] ?? null, $messageRowId);
+        }
+    } catch (\Throwable $e) {
+        $log("Classification failed for lead #{$leadId}: " . $e->getMessage());
+    }
+
+    try {
+        $freshLead = $db->one('SELECT * FROM leads WHERE id = ?', [$leadId]);
+        if ($freshLead !== null) {
+            (new Acknowledgment($root))->maybeSend($db, $freshLead);
+        }
+    } catch (\Throwable $e) {
+        $log("Auto-acknowledgment failed for lead #{$leadId}: " . $e->getMessage());
+    }
+
     exit(0);
 } catch (\Throwable $e) {
     if (isset($db) && $db->pdo()->inTransaction()) {
