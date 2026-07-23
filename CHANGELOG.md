@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `booking-inbox` — Add Phase 5 API endpoints
 - **Added** `booking-inbox` — Add Phase 4 routing engine, claims, and SLA automation
 - **Added** `booking-inbox` — Add Phase 3 ingestion, AI classification, and auto-ack
 - **Added** `booking-inbox` — Add Phase 2 permissions and audit infrastructure

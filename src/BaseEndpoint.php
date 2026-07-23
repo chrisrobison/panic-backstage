@@ -271,6 +271,29 @@ abstract class BaseEndpoint implements Endpoint
         ];
     }
 
+    /**
+     * SQL WHERE fragment + bound params restricting a `leads`-aliased query
+     * to rows a Restricted external booker may see (assigned/owned/claimed/
+     * watched) — same shape and purpose as eventScopeSql() above, for the
+     * Booking Inbox (src/LeadsInbox.php, src/Inbox.php). Venue admins,
+     * global viewers, and anyone with manage_booking_inbox (Trusted booker)
+     * see everything.
+     *
+     * @return array{0: string, 1: list<int>}
+     */
+    protected function leadScopeSql(string $leadAlias = 'l'): array
+    {
+        if ($this->isVenueAdmin() || $this->isGlobalViewer() || $this->hasGlobalCapability('manage_booking_inbox')) {
+            return ['1=1', []];
+        }
+        $me = (int) $this->userId();
+        return [
+            "($leadAlias.assigned_to_user_id = ? OR $leadAlias.owner_user_id = ? OR $leadAlias.claimed_by_user_id = ?"
+                . " OR $leadAlias.point_person_id = ? OR EXISTS (SELECT 1 FROM lead_watchers lw WHERE lw.lead_id = $leadAlias.id AND lw.user_id = ?))",
+            [$me, $me, $me, $me, $me],
+        ];
+    }
+
     protected function assignmentUsersForEvent(int $eventId): array
     {
         if ($this->isVenueAdmin()) {

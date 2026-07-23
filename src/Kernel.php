@@ -344,10 +344,42 @@ final class Kernel
 
         // Leads pipeline
         if ($segments[0] === 'leads') {
-            $leadId  = $this->intOrNull($segments[1] ?? null);
-            $child   = $segments[2] ?? null;
+            $leadId = $this->intOrNull($segments[1] ?? null);
+            $child  = $segments[2] ?? null;
+
+            // Booking Inbox sub-resources (src/LeadsInbox.php) — a distinct
+            // set of child names from the original Leads pipeline
+            // (notes/evaluation/convert, src/Leads.php, unchanged).
+            if (in_array($child, [
+                'claim', 'release-claim', 'assign', 'reassign', 'status',
+                'messages', 'drafts', 'presence', 'attachments',
+                'classification', 'onboard', 'audit',
+            ], true)) {
+                return [LeadsInbox::class, ['leadId' => $leadId, 'child' => $child]];
+            }
+
             $childId = $this->intOrNull($segments[3] ?? null);
             return [Leads::class, ['leadId' => $leadId, 'child' => $child, 'childId' => $childId]];
+        }
+
+        // Booking Inbox — cross-lead endpoints: GET /api/inbox/changes,
+        // GET /api/inbox/counts (src/Inbox.php).
+        if ($segments[0] === 'inbox') {
+            return [Inbox::class, ['action' => $segments[1] ?? null]];
+        }
+
+        // Booking Inbox — routing-rule administration (src/RoutingRules.php):
+        //   GET/POST      /api/routing-rules[/{id}]
+        //   PATCH         /api/routing-rules/{id}
+        //   POST          /api/routing-rules/{id}/versions
+        //   POST          /api/routing-rules/{id}/versions/{v}/publish
+        if ($segments[0] === 'routing-rules') {
+            return [RoutingRules::class, [
+                'ruleId' => $this->intOrNull($segments[1] ?? null),
+                'child' => $segments[2] ?? null,
+                'versionNumber' => $this->intOrNull($segments[3] ?? null),
+                'action' => $segments[4] ?? null,
+            ]];
         }
 
         // CRM profiles
