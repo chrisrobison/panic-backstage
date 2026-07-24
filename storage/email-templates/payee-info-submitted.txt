@@ -1,0 +1,12 @@
+Hi {{admin_name}},
+
+A payee has submitted their mailing address and W-9 for an upcoming payout.
+
+Event: {{event_title}}
+Payee: {{payee_name}}
+
+View the event in Backstage:
+{{event_url}}
+
+——
+Mabuhay Backstage

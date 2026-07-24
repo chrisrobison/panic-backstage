@@ -1,7 +1,7 @@
 // ── Event workspace shell ────────────────────────────────────────────────────
 // The event workspace (tabs, print menu, publish toggle) plus the read-only
 // summary/readiness/next-action bus cards and the autosaving details form.
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, openModal, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, apiUrl, assetUrl, getAppUser, getToken, publish, subscribe, api, formData, broadcastEventData, refreshSection, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, openModal, $, $$ } from './core.js';
 import { openPrintWindow } from './print.js';
 import './paint-splat.js';
 import './event-vendors.js';
@@ -1569,9 +1569,14 @@ class EventPayments extends PanicElement {
     const id = this._eventId;
     if (!id) return;
     try {
-      const res = await api(`/events/${id}/payments`);
+      const [res, payeeRes] = await Promise.all([
+        api(`/events/${id}/payments`),
+        api(`/events/${id}/payee`).catch(() => ({ payee: null, request: null })),
+      ]);
       this._paymentTypes = res.payment_types || PAYMENT_TYPES_FALLBACK;
       this._methods      = res.methods       || PAYMENT_METHODS_FALLBACK;
+      this._payee        = payeeRes.payee   || null;
+      this._payeeRequest = payeeRes.request || null;
       this._render(res);
     } catch (err) {
       this.innerHTML = `<section class="panel" id="payments"><div class="section-head padded"><h2>Payments</h2></div><p class="muted padded">Could not load payments.</p></section>`;
@@ -1652,7 +1657,8 @@ class EventPayments extends PanicElement {
             <tbody>${rows}</tbody>
           </table>
         </div>
-      </section>`;
+      </section>
+      ${this._payeeCardHtml(canManage)}`;
 
     $$('[data-send-link]', this).forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -1685,6 +1691,130 @@ class EventPayments extends PanicElement {
       btn.addEventListener('click', () => this._voidPayment(parseInt(btn.dataset.voidPayment, 10)));
     });
     $('[data-waive-deposit]', this)?.addEventListener('click', () => this._waiveDeposit());
+
+    $('[data-payee-request]', this)?.addEventListener('click', () => this._openPayeeRequestModal());
+    $('[data-payee-void]', this)?.addEventListener('click', () => this._voidPayeeRequest());
+    $('[data-payee-download]', this)?.addEventListener('click', () => this._downloadPayeeW9());
+  }
+
+  // ── Payee info (mailing address + W-9) ───────────────────────────────────
+  _payeeCardHtml(canManage) {
+    const payee   = this._payee;
+    const req     = this._payeeRequest;
+    const fmt     = (v) => v ? shortDate(new Date(String(v).replace(' ', 'T'))) : '';
+    const active  = req && ['pending', 'sent', 'viewed'].includes(req.status);
+
+    const addressLines = payee && (payee.mailing_address_line1 || payee.mailing_city)
+      ? [
+          payee.mailing_address_line1,
+          payee.mailing_address_line2,
+          [payee.mailing_city, payee.mailing_state, payee.mailing_zip].filter(Boolean).join(', '),
+          payee.mailing_country && payee.mailing_country !== 'US' ? payee.mailing_country : null,
+        ].filter(Boolean).map(esc).join('<br>')
+      : null;
+
+    const w9Row = payee?.has_w9
+      ? `<div class="summary-row"><span class="label">W-9</span><span class="value">On file${payee.w9_uploaded_at ? ` &middot; uploaded ${esc(fmt(payee.w9_uploaded_at))}` : ''} ${canManage ? '<button type="button" class="small secondary" data-payee-download>Download</button>' : ''}</span></div>`
+      : `<div class="summary-row"><span class="label">W-9</span><span class="value muted">Not on file yet</span></div>`;
+
+    const addressRow = addressLines
+      ? `<div class="summary-row"><span class="label">Mailing Address</span><span class="value">${addressLines}</span></div>`
+      : `<div class="summary-row"><span class="label">Mailing Address</span><span class="value muted">Not on file yet</span></div>`;
+
+    const REQUEST_STATUS_LABEL = { pending: 'Pending', sent: 'Sent', viewed: 'Viewed', submitted: 'Submitted', expired: 'Expired', voided: 'Voided' };
+    const requestRow = req
+      ? `<div class="summary-row"><span class="label">Last Request</span><span class="value">${esc(REQUEST_STATUS_LABEL[req.status] || titleCase(req.status))} to ${esc(req.recipient_name || req.recipient_email)}${req.sent_at ? ` &middot; ${esc(fmt(req.sent_at))}` : ''}</span></div>`
+      : '';
+
+    const actions = canManage ? `
+      <button type="button" class="small" data-payee-request>${active ? 'Resend Request' : 'Request W-9 &amp; Address'}</button>
+      ${active ? '<button type="button" class="small secondary" data-payee-void>Void</button>' : ''}
+    ` : '';
+
+    return `<section class="panel">
+      <div class="section-head padded">
+        <h2>Payee Info (W-9 &amp; Mailing Address)</h2>
+        <div class="section-head-actions">${actions}</div>
+      </div>
+      <div class="summary-block">
+        ${addressRow}
+        ${w9Row}
+        ${requestRow}
+      </div>
+    </section>`;
+  }
+
+  _openPayeeRequestModal() {
+    const event = this._data?.event || {};
+    const defaultName  = event.promoter_name  || event.booker_name  || '';
+    const defaultEmail = event.promoter_email || event.booker_email || '';
+    const { dialog, close } = openModal({
+      title: 'Request W-9 & Mailing Address',
+      bodyHtml: `<form class="grid-form padded" data-payee-request-form>
+        <label class="wide">Recipient name <input name="recipient_name" required value="${esc(defaultName)}"></label>
+        <label class="wide">Recipient email <input type="email" name="recipient_email" required value="${esc(defaultEmail)}"></label>
+        <p class="muted wide" style="margin:0">They'll get an emailed link to submit their mailing address and upload a completed W-9. If we already have anything on file for that email, it'll be pre-filled for them to confirm or update.</p>
+        <div class="wide form-actions">
+          <button type="submit" class="primary">Send Request</button>
+          <button type="button" class="secondary" data-close>Cancel</button>
+        </div>
+        <p class="error-text wide" data-error></p>
+      </form>`,
+    });
+    $('[data-payee-request-form]', dialog).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form  = e.target;
+      const errEl = $('[data-error]', form);
+      errEl.textContent = '';
+      const fd = formData(form);
+      const btn = $('button[type="submit"]', form);
+      btn.disabled = true;
+      try {
+        await api(`/events/${this._eventId}/payee`, {
+          method: 'POST',
+          body: JSON.stringify({ recipient_name: fd.recipient_name, recipient_email: fd.recipient_email }),
+        });
+        publish('toast.show', { message: 'Request sent.' });
+        close();
+        this._load();
+      } catch (err) {
+        errEl.textContent = err.message || 'Something went wrong.';
+        btn.disabled = false;
+      }
+    });
+  }
+
+  async _voidPayeeRequest() {
+    if (!confirm('Void the outstanding W-9/address request? The link in that email will stop working.')) return;
+    try {
+      await api(`/events/${this._eventId}/payee/void`, { method: 'POST' });
+      publish('toast.show', { message: 'Request voided.' });
+      this._load();
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Failed to void request.', tone: 'error' });
+    }
+  }
+
+  async _downloadPayeeW9() {
+    try {
+      const resp = await fetch(apiUrl(`events/${this._eventId}/payee/w9`), { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Server error ${resp.status}`);
+      }
+      const disposition = resp.headers.get('Content-Disposition') || '';
+      const match = /filename="([^"]+)"/.exec(disposition);
+      const filename = match ? match[1] : 'w9';
+      const blob = await resp.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Failed to download W-9.', tone: 'error' });
+    }
   }
 
   // ── Add / Edit payment modal ─────────────────────────────────────────────

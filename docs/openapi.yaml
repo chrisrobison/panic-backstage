@@ -13381,6 +13381,259 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /events/{eventId}/payee:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: eventPayee_view
+      summary: View the payee (mailing address + W-9) on file, and the latest request status
+      description: >-
+        Requires `read_event`. `payees` is a reusable profile keyed by email — the same
+        promoter/band playing a future event reuses whatever's already on file. The W-9 itself
+        is never parsed into structured tax-ID fields (no SSN/EIN in this schema); `has_w9`
+        just reflects whether a file has been uploaded. Download it via
+        `GET /events/{eventId}/payee/w9` (staff only — never a public URL).
+      tags:
+        - Event Payee (W-9)
+      responses:
+        '200':
+          description: Current payee-on-file (or null) and the latest request (or null)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payee:
+                    type: object
+                    nullable: true
+                    properties:
+                      id: { type: integer }
+                      name: { type: string }
+                      email: { type: string }
+                      phone: { type: string, nullable: true }
+                      company: { type: string, nullable: true }
+                      mailing_address_line1: { type: string, nullable: true }
+                      mailing_address_line2: { type: string, nullable: true }
+                      mailing_city: { type: string, nullable: true }
+                      mailing_state: { type: string, nullable: true }
+                      mailing_zip: { type: string, nullable: true }
+                      mailing_country: { type: string }
+                      has_w9: { type: boolean }
+                      w9_original_filename: { type: string, nullable: true }
+                      w9_uploaded_at: { type: string, nullable: true }
+                  request:
+                    type: object
+                    nullable: true
+                    properties:
+                      id: { type: integer }
+                      status: { type: string, enum: [pending, sent, viewed, submitted, expired, voided] }
+                      recipient_name: { type: string }
+                      recipient_email: { type: string }
+                      sent_at: { type: string, nullable: true }
+                      viewed_at: { type: string, nullable: true }
+                      submitted_at: { type: string, nullable: true }
+                      expires_at: { type: string, nullable: true }
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing read_event capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: eventPayee_request
+      summary: Send (or re-send) the W-9 / mailing-address request email
+      description: >-
+        Requires `manage_payments`. Body fields are optional — they default to the event's
+        promoter (falling back to booker) name/email. Voids any still-outstanding request for
+        this event, upserts the reusable `payees` profile by email, mints a single-use token
+        (default 14-day TTL, `PAYEE_REQUEST_TOKEN_TTL_HOURS`), and emails a link to
+        `/payee-request.html?token=...`.
+      tags:
+        - Event Payee (W-9)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                recipient_name:
+                  type: string
+                recipient_email:
+                  type: string
+      responses:
+        '200':
+          description: Request sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  id: { type: integer }
+        '403':
+          description: Missing manage_payments capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: No valid recipient email (none provided and none on the event)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /events/{eventId}/payee/void:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      operationId: eventPayee_void
+      summary: Void the current outstanding W-9/address request
+      description: Requires `manage_payments`. Invalidates the token in the last-sent email.
+      tags:
+        - Event Payee (W-9)
+      responses:
+        '200':
+          description: Voided
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        '422':
+          description: No outstanding request to void
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /events/{eventId}/payee/w9:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: eventPayee_downloadW9
+      summary: Download the payee's uploaded W-9 file
+      description: >-
+        Requires `manage_payments`. Streams the file server-side — never a public URL (see
+        the `storage/` block in `.htaccess`).
+      tags:
+        - Event Payee (W-9)
+      responses:
+        '200':
+          description: The W-9 file (PDF, JPG, or PNG)
+          content:
+            application/pdf: {}
+            image/jpeg: {}
+            image/png: {}
+        '404':
+          description: No W-9 on file for this event yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /payee-request/{token}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: payeeRequest_load
+      summary: Public — load the payee submission form
+      description: >-
+        Unauthenticated; authenticated by the token hash instead (mirrors `/signing/{token}`
+        for contracts). Marks the request 'viewed'. Pre-fills whatever's already on file for
+        that payee's email, minus the W-9 file itself (only `w9_on_file` + filename).
+      tags:
+        - Event Payee (W-9)
+      responses:
+        '200':
+          description: Form context
+          content:
+            application/json:
+              schema:
+                type: object
+        '410':
+          description: Link invalid, expired, or already used
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /payee-request/{token}/submit:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: payeeRequest_submit
+      summary: Public — submit mailing address + W-9 upload
+      description: >-
+        Unauthenticated; authenticated by the token hash. `multipart/form-data`: mailing
+        address fields (line1/city/state/zip required, line2/country optional) plus a `w9`
+        file (PDF/JPG/PNG, 10MB max) — required on first submission, optional afterward
+        (keeps the file already on record if omitted). Invalidates the token once submitted.
+      tags:
+        - Event Payee (W-9)
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                phone: { type: string }
+                company: { type: string }
+                mailing_address_line1: { type: string }
+                mailing_address_line2: { type: string }
+                mailing_city: { type: string }
+                mailing_state: { type: string }
+                mailing_zip: { type: string }
+                mailing_country: { type: string }
+                w9:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  message: { type: string }
+        '410':
+          description: Link invalid, expired, or already used
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing required address field, or missing W-9 on first submission
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /events/{eventId}/ledger:
     parameters:
       - name: eventId

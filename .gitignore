@@ -16,6 +16,9 @@ storage/backups/
 # regenerable on demand from contracts/contract_sections/contract_signers
 # (see scripts/regenerate-contract-pdf.php) if ever lost from disk.
 storage/contracts/
+# Uploaded W-9s — highly sensitive (SSN/EIN) PII; never committed. See
+# PayeeSubmissionEndpoint::storeW9() and the storage/ block in .htaccess.
+storage/payees/
 dns.log
 database/mabevents-import.sql
 # Ticketing "Fan View" export — real customer PII; import locally, never commit.

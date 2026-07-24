@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `payments` — Request promoter/band mailing address + W-9 via email
 - **Added** `events` — Add non-music flag to hide Doors/Load-in and relabel Show as Start
 - **Fixed** `seed` — Guard database/seed.php against ever truncating production again
 - **Fixed** `auth` — Abort conditional passkey request before explicit passkey login
