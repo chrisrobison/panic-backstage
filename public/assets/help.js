@@ -34,10 +34,11 @@ export const HELP_SECTIONS = [
     icon: 'fa-solid fa-compass',
     items: [
       { slug: 'navigation',   title: 'Main navigation' },
+      { slug: 'search',       title: 'Search' },
       { slug: 'dashboard',    title: 'Dashboard' },
       { slug: 'calendar',     title: 'Calendar' },
       { slug: 'pipeline',     title: 'Pipeline board' },
-      { slug: 'events-list',  title: 'Events list &amp; search' },
+      { slug: 'events-list',  title: 'Events list' },
       { slug: 'events-upcoming', title: 'Upcoming events (card view)' },
       { slug: 'asset-library', title: 'Asset library' },
       { slug: 'templates',    title: 'Templates' },
@@ -283,10 +284,31 @@ const HELP_CONTENT = {
     </ul>
     <p>The topbar holds:</p>
     <ul>
-      <li><strong>Search</strong> — type to filter the Events list by title.</li>
+      <li><strong>Search</strong> — opens a dedicated results page and updates live as you type. See <a href="#help-search">Search</a>.</li>
       <li><strong>Account</strong> — passkey and password management.</li>
       <li><strong>Logout</strong> — clears tokens and returns to the login page.</li>
     </ul>
+  `,
+
+  search: `
+    <h2>Search</h2>
+    <p>The box at the top of every screen searches across your events — not just the page you're currently on. Start typing and it takes you straight to a dedicated <strong>Search Results</strong> page in the main pane; keep typing and the results update live, with no need to press Enter.</p>
+
+    <h3>What it searches</h3>
+    <p>A search matches against, for every event you have access to:</p>
+    <ul>
+      <li><strong>Event ID</strong> — the internal numeric ID (exact match) and the human-readable code shown on the event, e.g. <code>EVT-214</code> (partial match).</li>
+      <li><strong>Title</strong></li>
+      <li><strong>Public description</strong> and <strong>Internal notes</strong></li>
+      <li><strong>Producer/Artist</strong> and <strong>Booker</strong> — both name and email</li>
+      <li><strong>Organization</strong> (private-event client/company name)</li>
+    </ul>
+    <p>Type at least 2 characters — anything shorter would match nearly every event and isn't a useful result yet. Results are capped at 50 and sorted by date (most recent first), same as the plain Events list.</p>
+
+    <h3>Reading the results</h3>
+    <p>Each row is one event: ID, date, title, status, main issue, and owner — the same columns as the <a href="#help-events-list">Events list</a>. When the match is somewhere other than the title (say, a word buried in Internal Notes), a small line under the title shows exactly where it was found and a short excerpt around it, so a hit is never a mystery. Click any row to open that event's workspace.</p>
+
+    <div class="tip"><strong>Only sees what you can see:</strong> search respects the same event-access rules as everywhere else in the app — a search never surfaces an event you couldn't otherwise open. Venue admins and global viewers search every event; other roles only search events they own or collaborate on.</div>
   `,
 
   dashboard: `
@@ -350,8 +372,9 @@ const HELP_CONTENT = {
   `,
 
   'events-list': `
-    <h2>Events list &amp; search</h2>
-    <p>The Events page shows every event you have access to. Use the topbar search to filter by title. Click any row to open the workspace. Admins see a <em>Create Event</em> button that links to <a href="#help-templates">Templates</a>.</p>
+    <h2>Events list</h2>
+    <p>The Events page shows every event you have access to as a sortable table — click a column header to sort by it. Click any row to open the workspace. Admins see a <em>Create Event</em> button that links to <a href="#help-templates">Templates</a>. Past events are hidden by default; check <strong>Show past events</strong> to bring them back.</p>
+    <p>To find one specific event rather than browse the whole list, use the <a href="#help-search">topbar search</a> instead — it searches title, description, internal notes, and contacts, not just what's visible in this table.</p>
   `,
 
   'events-upcoming': `

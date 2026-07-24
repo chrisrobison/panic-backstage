@@ -100,6 +100,37 @@ final class Events extends BaseEndpoint
             $where[] = 'e.date <= ?';
             $params[] = $request->query('end_date');
         }
+        // Global topbar search (see public/assets/search-results.js): substring
+        // match across the event's id/title/descriptions/internal notes/primary
+        // contacts — not fulltext, same LIKE-based approach ContactFilters
+        // already uses for contacts. Still passes through eventScopeSql() above,
+        // so a search never surfaces an event the requesting user/role couldn't
+        // otherwise see.
+        $q = trim((string) ($request->query('q') ?? ''));
+        if ($q !== '') {
+            $likeClauses = [
+                'e.title LIKE ?',
+                'e.external_id LIKE ?',
+                'e.description_public LIKE ?',
+                'e.description_internal LIKE ?',
+                'e.promoter_name LIKE ?',
+                'e.promoter_email LIKE ?',
+                'e.booker_name LIKE ?',
+                'e.booker_email LIKE ?',
+                'e.client_org LIKE ?',
+            ];
+            $like = '%' . $q . '%';
+            $likeParams = array_fill(0, count($likeClauses), $like);
+            // A purely-numeric query also matches the raw numeric id exactly —
+            // lets "123" find event id 123 even when external_id ("EVT-123")
+            // only picks it up as a LIKE substring above.
+            if (ctype_digit($q)) {
+                $likeClauses[] = 'e.id = ?';
+                $likeParams[] = (int) $q;
+            }
+            $where[] = '(' . implode(' OR ', $likeClauses) . ')';
+            $params = array_merge($params, $likeParams);
+        }
         $sql = "SELECT e.*, u.name owner_name, v.name venue_name, v.city venue_city, v.state venue_state, r.capacity resource_capacity,
                   (SELECT title FROM event_blockers b WHERE b.event_id = e.id AND b.status IN ('open','waiting') ORDER BY due_date, id LIMIT 1) primary_blocker,
                   (SELECT COUNT(*) FROM event_tasks t WHERE t.event_id = e.id AND t.status NOT IN ('done','canceled')) incomplete_tasks,
@@ -113,7 +144,10 @@ final class Events extends BaseEndpoint
         if ($where) {
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
-        $sql .= ' ORDER BY e.date DESC, e.show_time DESC LIMIT 250';
+        // A search hit is capped tighter than the plain listing — this is a
+        // "find the one show" tool, not a browsable page, and a short/common
+        // query against a LIKE '%...%' scan is the expensive case to keep cheap.
+        $sql .= ' ORDER BY e.date DESC, e.show_time DESC LIMIT ' . ($q !== '' ? 50 : 250);
         $events = $this->db->all($sql, $params);
         $events = $this->attachListExtras($events);
 

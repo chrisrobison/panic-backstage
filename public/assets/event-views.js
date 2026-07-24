@@ -2,7 +2,7 @@
 // Dashboard, Calendar, Pipeline, Events list, Template picker, and the two
 // public/unauthenticated pages (public event page + invite acceptance). Also
 // owns the quick-create event modal (shared by the calendar and the topbar).
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, setAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, mdToHtml, roomConflictIds, roomConflictDates, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, setAppUser, publish, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, mdToHtml, roomConflictIds, roomConflictDates, $, $$ } from './core.js';
 // Registers <paint-splat> — reused here as the generative "no flyer yet"
 // placeholder on the public event page (same treatment the event workspace
 // summary card uses for the same situation).
@@ -1193,12 +1193,12 @@ class PipelineBoard extends PanicElement {
 
 class EventsList extends PanicElement {
   async connect() {
-    this.query = '';
     this.showPast = false;
     const sortPref = getAppUser()?.events_sort;
     this.sort = { key: 'date', dir: (sortPref === 'asc' || sortPref === 'desc') ? sortPref : 'asc' };
-    publish('page.context', { title: 'Events', blurb: 'Search, open, and advance every show.' });
-    subscribe('events.search', ({ query }) => { this.query = query.toLowerCase(); this.render(this.data); }, this.abort.signal);
+    // The topbar box now opens its own dedicated results page instead of
+    // filtering this list in place — see search-results.js.
+    publish('page.context', { title: 'Events', blurb: 'Open and advance every show.' });
     this.setLoading('Loading events');
     try {
       this.data = await api('/events');
@@ -1225,7 +1225,6 @@ class EventsList extends PanicElement {
     const cutoff = isoDate(addDays(new Date(), -1));
     const all = data.events || [];
     const events = all
-      .filter((event) => !this.query || String(event.title).toLowerCase().includes(this.query))
       .filter((event) => this.showPast || !event.date || event.date >= cutoff);
     const hiddenPast = all.filter((event) => event.date && event.date < cutoff).length;
     this.innerHTML = `${data.capabilities?.manage_templates ? '<div class="page-head"><a class="button" href="#templates">Create Event</a></div>' : ''}<article class="panel"><div class="list-controls"><label class="checkbox-inline"><input type="checkbox" data-show-past ${this.showPast ? 'checked' : ''}> Show past events${hiddenPast && !this.showPast ? ` <span class="muted">(${hiddenPast} hidden)</span>` : ''}</label></div>${table(events, this.sort)}</article>`;

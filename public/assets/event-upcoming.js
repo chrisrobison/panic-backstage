@@ -6,7 +6,7 @@
 // capacity). Reuses the same `/events` endpoint as List/Dashboard/Calendar —
 // see Events::index()'s attachListExtras()/upcomingStats() on the backend —
 // just opts into the extra per-event ticketing fields via `with_stats=1`.
-import { esc, titleCase, assetUrl, publish, subscribe, api, eventDate, longDate, isoDate, addDays, timeLabel, money, badge, statusLabel, emptyState, PanicElement, roomConflictIds, $, $$ } from './core.js';
+import { esc, titleCase, assetUrl, publish, api, eventDate, longDate, isoDate, addDays, timeLabel, money, badge, statusLabel, emptyState, PanicElement, roomConflictIds, $, $$ } from './core.js';
 import { openEventQuickCreate } from './event-views.js';
 
 const SALES_LABELS = { on_sale: 'On Sale', low_tickets: 'Low Tickets', sold_out: 'Sold Out', free: 'Free Event' };
@@ -59,7 +59,10 @@ class EventsUpcoming extends PanicElement {
       eventType: '',
       status: Object.fromEntries(STATUS_FILTERS.map((f) => [f.key, f.defaultOn])),
     };
-    subscribe('events.search', ({ query }) => { this.filters.search = query || ''; this.visibleCount = CARD_PAGE_SIZE; this.renderList(); }, this.abort.signal);
+    // Note: this page's own "Search filters…" box (below) is a separate,
+    // purely client-side filter over already-loaded cards. The topbar search
+    // used to also feed it via an `events.search` bus event, but that box now
+    // opens its own dedicated results page instead (search-results.js).
     document.addEventListener('click', (e) => this.closeMenus(e), { signal: this.abort.signal });
     await this.load();
   }

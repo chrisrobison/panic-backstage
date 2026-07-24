@@ -10929,7 +10929,8 @@ paths:
         Returns events visible to the caller (venue_admin/global_viewer see all； others see events
         they own or collaborate on), plus lookup data for the calendar/board UI. Requires the
         `read_event` capability on each returned event (enforced via row-level scoping, not a
-        per-event 403). Results are capped at 250 rows, ordered by date/show_time descending.
+        per-event 403). Results are capped at 250 rows (50 when `q` is set), ordered by
+        date/show_time descending.
       tags:
         - Events
       parameters:
@@ -10970,6 +10971,18 @@ paths:
             type: string
             format: date
           description: Only events whose date is on/before this date.
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: >-
+            Free-text search (backs the topbar search box — see
+            public/assets/search-results.js). Substring match (not fulltext) across id
+            (exact, when q is purely numeric), external_id, title, description_public,
+            description_internal, promoter_name, promoter_email, booker_name,
+            booker_email, and client_org. Combines with the other filters above (AND),
+            still scoped by the caller's row-level event visibility, and caps results at
+            50 instead of the usual 250.
       responses:
         '200':
           description: Event list with lookup data.
