@@ -692,6 +692,14 @@ const HELP_CONTENT = {
       <li><strong>Paid deposit</strong> — the deposit amount confirmed received. Required to advance past Intake Complete.</li>
     </ul>
 
+    <h3>Workshop / Comedy / Non-Music events</h3>
+    <p>Check <strong>Workshop / Comedy / Non-Music event</strong> for a show where "Doors" and "Load-In / Tech" don't really apply — a workshop, class, comedy night, or similar. Checking it:</p>
+    <ul>
+      <li>Hides the <strong>Load-In / Tech</strong> and <strong>Doors</strong> fields from this form (and from the workspace summary's fact row) — their existing values, if any, are left alone in the database, just no longer shown or editable.</li>
+      <li>Relabels <strong>Show</strong> to <strong>Start</strong> everywhere it appears for this event, including the public page (which shows a single "Start 7:30 PM" instead of "Doors 6:30 PM · Show 7:30 PM").</li>
+    </ul>
+    <p>Because Doors is hidden, the Hold-status requirement and the Run Sheet readiness check both switch to requiring <strong>Start</strong> (Show) instead for a non-music event — you're never blocked waiting on a field the form no longer shows you. Room-conflict detection also falls back to Start when Doors is empty, so scheduling checks stay accurate.</p>
+
     <h3>Public show fields</h3>
     <ul>
       <li><strong>Ticket price</strong> — base ticket price. Used on the public page and for in-house ticketing setup.</li>
@@ -1887,6 +1895,17 @@ const HELP_CONTENT = {
 
     <h3>Send Invoice Link</h3>
     <p>For any <em>pending</em> or <em>invoiced</em> payment, click <strong>Send Invoice Link</strong> to generate a one-time Stripe Payment Link for that exact amount. Backstage creates the link, copies it to your clipboard, and marks the record <em>invoiced</em> — from there you paste it into an email, text, or however you reach the payer. This requires <code>STRIPE_SECRET_KEY</code> to be configured for the venue (see <a href="#help-admin-payments">Payment providers</a>); if it isn't, the button will show an error explaining Stripe isn't set up.</p>
+
+    <h3>Payee Info (W-9 &amp; mailing address)</h3>
+    <p>Below the payment table, the <strong>Payee Info</strong> card is where you collect what you need to actually pay out and 1099 a promoter or band: their current mailing address and a completed W-9. Click <strong>Request W-9 &amp; Address</strong> to open a small form pre-filled with the event's producer/artist contact — edit the name/email if you want it to go somewhere else — and send it.</p>
+    <ul>
+      <li>The recipient gets an emailed link to a page with no login required. They fill in their mailing address and upload their completed W-9 (PDF, JPG, or PNG).</li>
+      <li>The card shows the current status: <strong>Sent</strong>, <strong>Viewed</strong> (they opened the link), or <strong>Submitted</strong>, plus whatever's already on file (address, and whether a W-9 has been uploaded).</li>
+      <li><strong>Resend</strong> mints a fresh link and voids the old one — use it if the first email bounced or the link expired (links are valid 14 days by default).</li>
+      <li><strong>Void</strong> kills an outstanding request without sending a new one.</li>
+      <li><strong>Download</strong> next to the W-9 row fetches the file — this only works for staff with <code>manage_payments</code>; the file is never reachable by a plain URL.</li>
+    </ul>
+    <p>Payee profiles are reusable — they're keyed by email, not by event. If the same promoter or band plays again, a new request pre-fills whatever they already gave you last time, so most repeat performers just have to confirm it's still correct rather than start over. The W-9 itself is stored as the uploaded file only; Backstage never reads or stores the SSN/EIN as data — it's exactly the same file the payee gave you, retrievable only through this card.</p>
   `,
 
   // ── Closeout &amp; Billing ───────────────────────────────────────────────────

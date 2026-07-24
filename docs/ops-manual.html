@@ -1157,6 +1157,7 @@
     <a href="#sheet-sync" class="section">Google Sheet sync</a>
     <a href="#deposit-gate" class="section">The deposit gate</a>
     <a href="#event-payments" class="section">The Payments tab</a>
+    <a href="#payee-w9" class="section">Payee Info: W-9 &amp; mailing address</a>
 
     <div class="nav-section">Part III — Night Of</div>
     <a href="#run-of-night" class="chapter">Chapter 3: Run of Night</a>
@@ -1946,6 +1947,11 @@
       <p>The <strong>Producer/Artist</strong> is the person putting on the show — the band, the DJ, the comedy promoter. The <strong>Booker</strong> is the person at the venue (or agent) who arranged the deal. These can be the same person. Both are required at Hold because the automatic email notifications need them.</p>
     </div>
 
+    <div class="callout tip">
+      <span class="callout-title">🎤 Workshops, comedy nights &amp; other non-music events</span>
+      <p>Check <span class="ui-label field">Workshop / Comedy / Non-Music event</span> on the Details tab for a show where "Doors" doesn't really apply. This hides <span class="ui-label field">Doors</span> and <span class="ui-label field">Load-In / Tech</span> from the form (their values, if any, are left alone — just no longer shown) and relabels <span class="ui-label field">Show</span> to <span class="ui-label field">Start</span> everywhere, including the public page. The Hold requirement above swaps accordingly: a non-music event needs <strong>Start</strong> filled in instead of <strong>Doors</strong>.</p>
+    </div>
+
     <p>Once the Hold is saved, the event appears on the calendar with a colored chip showing the event name and door time. Other staff can see the date is taken.</p>
 
     <!-- INTAKE COMPLETE ──────────────────────────────────────────────────── -->
@@ -2436,6 +2442,30 @@
 
     <h3>Send Invoice Link</h3>
     <p>For any <em>Pending</em> or <em>Invoiced</em> row, click <span class="ui-label button">Send Invoice Link</span> to generate a one-time Stripe Payment Link for that exact amount. Backstage creates the link, copies it to your clipboard, and marks the record <em>Invoiced</em> — from there, send it to the payer however you'd normally reach them (email, text). This needs <code>STRIPE_SECRET_KEY</code> configured for the venue — see <a href="#ticketing-payments">Payment provider setup</a> — and will show an error if Stripe isn't configured.</p>
+
+    <h3 id="payee-w9">Payee Info: collecting a W-9 &amp; mailing address</h3>
+    <p>Below the payment table, the <strong>Payee Info</strong> card is where you get what you need to actually pay out and 1099 a promoter or band: their current mailing address and a completed W-9. Click <span class="ui-label button">Request W-9 &amp; Address</span> — a small form opens, pre-filled with the event's Producer/Artist contact (edit the name/email if it should go to someone else) — and send it.</p>
+
+    <p>The recipient never needs a Backstage login. They get an email with a one-time link to a plain form where they enter their mailing address and upload their completed W-9 (PDF, JPG, or PNG). The card tracks progress the same way the e-signature flow does:</p>
+
+    <table>
+      <tr><th>Status</th><th>Meaning</th></tr>
+      <tr><td><strong>Sent</strong></td><td>The email went out; the link hasn't been opened yet.</td></tr>
+      <tr><td><strong>Viewed</strong></td><td>They opened the form but haven't submitted it.</td></tr>
+      <tr><td><strong>Submitted</strong></td><td>Address and W-9 are on file.</td></tr>
+      <tr><td><strong>Expired</strong></td><td>The link's 14-day window passed unused — click <span class="ui-label button">Resend Request</span> for a fresh one.</td></tr>
+      <tr><td><strong>Voided</strong></td><td>Cancelled from this side before it was used.</td></tr>
+    </table>
+
+    <div class="callout tip">
+      <span class="callout-title">🔁 Repeat promoters &amp; bands only do this once</span>
+      <p>Payee profiles are keyed by the recipient's email, not by event — they're reusable. If the same promoter or band comes back for another show, a new request pre-fills whatever they already gave you, so most repeat performers just confirm it's still correct instead of re-typing an address and re-uploading a W-9 from scratch.</p>
+    </div>
+
+    <div class="callout note">
+      <span class="callout-title">🔒 Where the W-9 actually goes</span>
+      <p>Backstage never reads the SSN/EIN off the W-9 into the database — it stores the uploaded file, exactly as given, outside the web root. The only way to retrieve it is the <span class="ui-label button">Download</span> button on this card, which requires the <code>manage_payments</code> capability; there's no plain URL that reaches it.</p>
+    </div>
 
   </div><!-- /book-content -->
 </div><!-- /chapter 1 -->
