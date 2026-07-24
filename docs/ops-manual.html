@@ -1142,6 +1142,7 @@
     <a href="#pipeline" class="section">The status pipeline</a>
     <a href="#hold" class="section">Hold</a>
     <a href="#intake" class="section">Intake Complete</a>
+    <a href="#intake-readiness-report" class="section">Intake Readiness Report</a>
     <a href="#booked" class="section">Booked</a>
     <a href="#contract" class="section">The contract workflow</a>
     <a href="#counterparty" class="section">The counterparty</a>
@@ -1361,6 +1362,11 @@
     <h3>Lead sources</h3>
     <p>Each lead has a source that tracks where the inquiry originated. Available sources: <strong>Website, Promoter, Peerspace, Eventective, Giggster, Phone, Email, Manual</strong>. This data is preserved for reporting — over time you can see which channels generate the most bookable leads.</p>
 
+    <div class="callout note">
+      <span class="callout-title">🔌 Embeddable booking-inquiry widget</span>
+      <p>A <strong>Website</strong> lead doesn't require the venue's own web developer to build a form from scratch. Backstage ships a self-contained, no-login <code>&lt;panic-booking-inquiry&gt;</code> web component that can be dropped into any page on any domain (your own site, a Squarespace/Wix page, anywhere) and files submissions straight into this Leads inbox. Whoever manages the venue's website can find the embed snippet, styling options, and a live demo at <code>public/booking-inquiry-demo.html</code>.</p>
+    </div>
+
     <!-- CREATING A LEAD ───────────────────────────────────────────────────── -->
     <h2 id="lead-create">Creating a lead</h2>
 
@@ -1387,6 +1393,8 @@
     </div>
 
     <p>Optional fields: contact email, source, expected event date, description/notes. The lead starts in <code>new</code> status and appears at the top of the New tab immediately after saving.</p>
+
+    <p>Once the lead exists, open it and fill in the rest from its <strong>Details</strong> tab: <strong>Band(s)</strong>, <strong>Projected Attendance</strong>, and <strong>Budget</strong> (the prospect's stated budget, if one was given). None of these block creating the lead — they're there to give the Deal Evaluator more to work with.</p>
 
     <!-- PIPELINE ─────────────────────────────────────────────────────────── -->
     <h2 id="lead-pipeline">Moving through the pipeline</h2>
@@ -1986,6 +1994,16 @@
     <div class="callout tip">
       <span class="callout-title">💡 Load-in time</span>
       <p>While not strictly required for Intake Complete, this is a good time to confirm and enter the <span class="ui-label field">Load-In / Tech</span> time. The band's crew and sound tech need to know their call time, and it shows on the calendar chip so operations staff can see it at a glance.</p>
+    </div>
+
+    <!-- INTAKE READINESS REPORT ──────────────────────────────────────────── -->
+    <h2 id="intake-readiness-report">The Intake Readiness Report</h2>
+
+    <p>Everything above is checked one event at a time, from inside that event's own workspace. To see gaps across <em>every</em> upcoming show at once — every event missing a booker or producer contact, a deposit, show times, an age restriction, and so on — open the Intake Readiness Report at <code>docs/event-intake-status.html</code>. It's a plain page (not part of the main app), but it reads live from the same API and same login session as Backstage itself, covering every non-canceled event from today through the next three months.</p>
+
+    <div class="callout note">
+      <span class="callout-title">📋 How to use it</span>
+      <p>Bookmark <code>docs/event-intake-status.html</code> — you need to already be signed in to Backstage in the same browser for it to load any data (it shows a "Not logged in" banner otherwise). Filter by status, room, or search; expand a row for the exact contact info and gaps on that event. Every field it shows — booker/producer contact, deposit, public description, doors/show/end times, age restriction, potential revenue, estimated guests, capacity — is editable right there: click a value, type the correction, and it saves straight to the live database. Owner and contract status are read-only and link back to the event's own workspace instead.</p>
     </div>
 
     <!-- BOOKED ────────────────────────────────────────────────────────────── -->

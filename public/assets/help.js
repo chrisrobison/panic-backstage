@@ -1580,6 +1580,8 @@ const HELP_CONTENT = {
 
     <h3>Notes</h3>
     <p>Status transitions are validated by the server — some forward moves require certain fields to be filled (e.g. you cannot advance to Booked without a contract). The pipeline and calendar display the current status for every event.</p>
+
+    <div class="tip"><strong>Checking a whole book of shows at once:</strong> the per-event workspace only shows you one event's gaps at a time. For a single view across every upcoming event — who's missing a booker/producer contact, a deposit, show times, an age restriction, and more — see the Intake Readiness Report at <code>docs/event-intake-status.html</code>. It reads live from the same API this app uses (you need to already be logged in to Backstage) and every field shown is directly editable in place.</div>
   `,
 
   workflow: `
@@ -1673,6 +1675,7 @@ const HELP_CONTENT = {
       <li><strong>Email</strong> — direct email inquiry.</li>
       <li><strong>Manual entry</strong> — created by staff directly in Backstage.</li>
     </ul>
+    <p>"Website form" leads can arrive two ways: someone filling out a form on the venue's own site, or the drop-in <code>&lt;panic-booking-inquiry&gt;</code> widget — a self-contained, no-login web component (<code>public/assets/panic-booking-inquiry.js</code>) that can be embedded on any page on any domain and files straight into this same Leads inbox as a <em>Website</em>-sourced lead. See <code>public/booking-inquiry-demo.html</code> for the embed snippet, styling hooks, and a live example — that page doubles as the setup instructions for whoever manages the marketing site.</p>
 
     <h3>Creating a lead</h3>
     <ol>
@@ -1680,6 +1683,7 @@ const HELP_CONTENT = {
       <li>Fill in the title, event type, venue, contact info, source, and requested date.</li>
       <li>Save. The lead is created with status <em>New</em>.</li>
     </ol>
+    <p>Once it's created, open the lead and fill in the rest from its <strong>Details</strong> tab: <strong>Band(s)</strong>, <strong>Projected Attendance</strong>, and <strong>Budget</strong> (the prospect's stated budget, if they gave one). None of these are required to create the lead, but they give the Deal Evaluator more to work with.</p>
 
     <h3>Moving a lead through statuses</h3>
     <p>Open a lead to see its detail panel. The status buttons along the top of the detail panel advance or revert the lead's status. Click the appropriate button to move it forward — for example from <em>Triage</em> to <em>Evaluating</em> once you've begun the deal evaluation.</p>
