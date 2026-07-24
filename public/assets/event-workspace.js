@@ -97,8 +97,8 @@ class EventSummary extends EventBusCard {
       </div>
       <div class="facts-grid">
         ${factCell('Date', eventDateRangeLabel(event))}
-        ${factCell('Doors', timeLabel(event.doors_time))}
-        ${factCell('Show', timeLabel(event.show_time))}
+        ${Number(event.is_non_music) ? '' : factCell('Doors', timeLabel(event.doors_time))}
+        ${factCell(Number(event.is_non_music) ? 'Start' : 'Show', timeLabel(event.show_time))}
         ${factCell('Status', badge(event.status))}
         ${factCell('Owner', esc(event.owner_name || 'Unassigned'))}
         ${factCell('Public Page', Number(event.public_visibility) ? 'Live' : 'Hidden')}
@@ -922,6 +922,9 @@ class EventDetailsForm extends HTMLElement {
     const editable = can(data, 'edit_event') && !isArchivedLocked;
     const disabled = editable ? '' : ' disabled';
     const isPrivate = event.event_type === 'private_event';
+    // Workshops/comedy/etc. — hides Doors & Load-In and renames Show to Start,
+    // both here and on the public event page (see PublicEventPage).
+    const isNonMusic = Number(event.is_non_music) === 1;
 
     // Status dropdown is filtered for private events to prevent invalid transitions.
     const availableStatuses = isPrivate ? PRIVATE_EVENT_STATUSES : statuses;
@@ -944,9 +947,10 @@ class EventDetailsForm extends HTMLElement {
           <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
           <label>Status ${statusSelect}</label>
           <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
-          <label>Load-In / Tech <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>
-          <label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>
-          <label>Show <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
+          <label class="check-label wide"><input type="checkbox" name="is_non_music" value="1" ${Number(event.is_non_music) ? 'checked' : ''}${disabled}> Workshop / Comedy / Non-Music event <span class="form-section-note">Hides Doors &amp; Load-In and renames Show to Start</span></label>
+          ${isNonMusic ? '' : `<label>Load-In / Tech <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>`}
+          ${isNonMusic ? '' : `<label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>`}
+          <label>${isNonMusic ? 'Start' : 'Show'} <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
           <label>End <input type="time" name="end_time" value="${esc(event.end_time || '')}"${disabled}></label>
           <label>Age restriction <input name="age_restriction" value="${esc(event.age_restriction || '')}"${disabled}></label>
           <label>Estimated guests <input type="number" name="estimated_guests" value="${esc(event.estimated_guests || '')}" placeholder="Expected headcount"${disabled}></label>
@@ -978,9 +982,10 @@ class EventDetailsForm extends HTMLElement {
         <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
         <label>Status ${statusSelect}</label>
         <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
-        <label>Load-In / Tech <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>
-        <label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>
-        <label>Show <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
+        <label class="check-label wide"><input type="checkbox" name="is_non_music" value="1" ${Number(event.is_non_music) ? 'checked' : ''}${disabled}> Workshop / Comedy / Non-Music event <span class="form-section-note">Hides Doors &amp; Load-In and renames Show to Start</span></label>
+        ${isNonMusic ? '' : `<label>Load-In / Tech <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>`}
+        ${isNonMusic ? '' : `<label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>`}
+        <label>${isNonMusic ? 'Start' : 'Show'} <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
         <label>End <input type="time" name="end_time" value="${esc(event.end_time || '')}"${disabled}></label>
         <label>Age <input name="age_restriction" value="${esc(event.age_restriction || '')}"${disabled}></label>
         <label>Ticket price <input type="number" step="0.01" name="ticket_price" value="${esc(event.ticket_price || 0)}"${disabled}></label>
@@ -1016,13 +1021,18 @@ class EventDetailsForm extends HTMLElement {
     // Fields mirrored in the workspace summary (pb-event-summary). When one of
     // these changes we re-broadcast fresh event data on the bus so the summary
     // facts update live; other fields skip the extra round-trip.
-    const summaryFields = new Set(['title', 'date', 'doors_time', 'show_time', 'status', 'owner_user_id', 'public_visibility']);
+    const summaryFields = new Set(['title', 'date', 'doors_time', 'show_time', 'status', 'owner_user_id', 'public_visibility', 'is_non_music']);
     const save = async (changedName) => {
       const body = formData(form);
       // Private events are never publicly visible — the hidden input sends 0,
       // but we double-enforce here in case of DOM manipulation.
       body.public_visibility = isPrivate ? 0 : (form.public_visibility?.checked ? 1 : 0);
       body.walkthrough_done  = form.walkthrough_done?.checked ? 1 : 0;
+      // Checkbox is only rendered when unchecked/checked in the DOM (not removed
+      // like Doors/Load-In), so it's always present — but be explicit the same
+      // way the other checkboxes are, since unchecked boxes are omitted from
+      // native FormData.
+      body.is_non_music      = form.is_non_music?.checked ? 1 : 0;
       setStatus('saving', 'Saving…');
       try {
         await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });

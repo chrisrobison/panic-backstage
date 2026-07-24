@@ -1156,6 +1156,7 @@ CREATE TABLE `events` (
   `show_time` time DEFAULT NULL,
   `end_time` time DEFAULT NULL,
   `load_in_time` time DEFAULT NULL,
+  `is_non_music` tinyint(1) NOT NULL DEFAULT 0,
   `age_restriction` varchar(80) DEFAULT NULL,
   `ticket_price` decimal(10,2) DEFAULT 0.00,
   `deposit_amount` decimal(10,2) DEFAULT NULL,

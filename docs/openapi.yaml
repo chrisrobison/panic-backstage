@@ -1372,6 +1372,13 @@ components:
         load_in_time:
           type: string
           nullable: true
+        is_non_music:
+          type: integer
+          enum: [0, 1]
+          description: >-
+            Workshop/comedy/non-music event. When true, the admin UI and the
+            public event page hide doors_time/load_in_time and label
+            show_time "Start" instead of "Show".
         age_restriction:
           type: string
           nullable: true
@@ -1582,6 +1589,15 @@ components:
         load_in_time:
           type: string
           nullable: true
+        is_non_music:
+          type: integer
+          enum: [0, 1]
+          default: 0
+          description: >-
+            Workshop/comedy/non-music event. When true, doors_time/load_in_time
+            are hidden in the UI and show_time is labeled "Start" instead of
+            "Show" — see Events::validateStatusTransition() for how the Hold
+            gate requires show_time instead of doors_time in that case.
         age_restriction:
           type: string
           nullable: true

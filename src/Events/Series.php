@@ -103,7 +103,7 @@ final class Series extends BaseEndpoint
             $conflict = $this->checkRoomConflict(
                 (int) $anchor['venue_id'],
                 $date,
-                $anchor['doors_time'],
+                $anchor['doors_time'] ?: $anchor['show_time'],
                 $anchor['end_time'],
                 null,
                 null,
@@ -173,17 +173,17 @@ final class Series extends BaseEndpoint
         $id = $this->db->insert(
             'INSERT INTO events
                 (venue_id, resource_id, title, slug, event_type, status, series_id, date,
-                 doors_time, show_time, end_time, load_in_time, age_restriction,
+                 doors_time, show_time, end_time, load_in_time, is_non_music, age_restriction,
                  ticket_price, capacity, public_visibility,
                  promoter_name, promoter_email, promoter_phone, client_org,
                  booker_name, booker_email, booker_phone,
                  av_requirements, catering_notes, description_public, ticket_system,
                  owner_user_id)
-             VALUES (?, ?, ?, ?, ?, \'proposed\', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+             VALUES (?, ?, ?, ?, ?, \'proposed\', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 (int) $anchor['venue_id'], $anchor['resource_id'] ?: null, $anchor['title'], $slug, $anchor['event_type'],
                 $seriesId, $date,
-                $anchor['doors_time'], $anchor['show_time'], $anchor['end_time'], $anchor['load_in_time'], $anchor['age_restriction'],
+                $anchor['doors_time'], $anchor['show_time'], $anchor['end_time'], $anchor['load_in_time'], (int) $anchor['is_non_music'], $anchor['age_restriction'],
                 (float) ($anchor['ticket_price'] ?? 0), $anchor['capacity'] ?: null, (int) $anchor['public_visibility'],
                 $anchor['promoter_name'], $anchor['promoter_email'], $anchor['promoter_phone'], $anchor['client_org'],
                 $anchor['booker_name'], $anchor['booker_email'], $anchor['booker_phone'],

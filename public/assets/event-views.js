@@ -1340,7 +1340,7 @@ class PublicEventPage extends PanicElement {
               <ul class="pev-facts">
                 <li><i class="fa-solid fa-calendar-day" aria-hidden="true"></i><span>${esc(eventDateRangeLabel(event))}</span></li>
                 <li><i class="fa-solid fa-location-dot" aria-hidden="true"></i><span>${esc(event.venue_name)}</span></li>
-                <li><i class="fa-solid fa-clock" aria-hidden="true"></i><span>Doors ${esc(timeLabel(event.doors_time))} &middot; Show ${esc(timeLabel(event.show_time))}</span></li>
+                <li><i class="fa-solid fa-clock" aria-hidden="true"></i><span>${Number(event.is_non_music) ? `Start ${esc(timeLabel(event.show_time))}` : `Doors ${esc(timeLabel(event.doors_time))} &middot; Show ${esc(timeLabel(event.show_time))}`}</span></li>
                 <li><i class="fa-solid fa-id-card" aria-hidden="true"></i><span>${esc(event.age_restriction || 'All ages')}</span></li>
                 <li><i class="fa-solid fa-tag" aria-hidden="true"></i><span>${esc(priceLabel)}</span></li>
               </ul>

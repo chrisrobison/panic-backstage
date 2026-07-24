@@ -29,6 +29,7 @@ final class Events extends BaseEndpoint
         'show_time'            => 'Show Time',
         'end_time'             => 'End Time',
         'load_in_time'         => 'Load-In Time',
+        'is_non_music'         => 'Non-Music Event',
         'age_restriction'      => 'Age Restriction',
         'capacity'             => 'Capacity',
         'estimated_guests'     => 'Estimated Guests',
@@ -407,14 +408,19 @@ final class Events extends BaseEndpoint
             return $resourceError;
         }
         if (in_array($newStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
-            if ($conflict = $this->checkRoomConflict((int) $body['venue_id'], $body['date'], date_or_null($body['doors_time'] ?? null), date_or_null($body['end_time'] ?? null), null, $newEndDate, $resourceId)) {
+            // Non-music events (workshops/comedy/etc.) hide Doors from the form, so
+            // fall back to Show/Start as the conflict window's start time — see
+            // timesOverlap()'s doc comment for why a null start would otherwise
+            // silently widen the window to midnight.
+            $conflictStart = date_or_null($body['doors_time'] ?? null) ?: date_or_null($body['show_time'] ?? null);
+            if ($conflict = $this->checkRoomConflict((int) $body['venue_id'], $body['date'], $conflictStart, date_or_null($body['end_time'] ?? null), null, $newEndDate, $resourceId)) {
                 return $conflict;
             }
         }
         $id = $this->db->insert(
-            'INSERT INTO events (venue_id, resource_id, title, slug, event_type, status, description_public, description_internal, av_requirements, catering_notes, date, end_date, doors_time, show_time, end_time, load_in_time, age_restriction, ticket_price, deposit_amount, potential_revenue, ticket_url, ticket_system, contract_url, venue_contract_url, walkthrough_done, settlement_doc_url, capacity, estimated_guests, public_visibility, owner_user_id, promoter_name, promoter_email, promoter_phone, client_org, booker_name, booker_email, booker_phone)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [(int) $body['venue_id'], $resourceId, $body['title'], $slug, $body['event_type'], $newStatus, $isPrivate ? null : self::nullableString($body['description_public'] ?? null), self::nullableString($body['description_internal'] ?? null), self::nullableString($body['av_requirements'] ?? null), self::nullableString($body['catering_notes'] ?? null), $body['date'], $newEndDate, date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), date_or_null($body['load_in_time'] ?? null), $body['age_restriction'] ?? null, $isPrivate ? 0 : (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), self::nullableString($body['venue_contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), ($body['capacity'] ?? null) ?: null, ($body['estimated_guests'] ?? null) ?: null, $publicVisibility, $ownerId, self::nullableString($body['promoter_name'] ?? null), self::nullableString($body['promoter_email'] ?? null), self::nullableString($body['promoter_phone'] ?? null), self::nullableString($body['client_org'] ?? null), $isPrivate ? null : self::nullableString($body['booker_name'] ?? null), $isPrivate ? null : self::nullableString($body['booker_email'] ?? null), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? null)]
+            'INSERT INTO events (venue_id, resource_id, title, slug, event_type, status, description_public, description_internal, av_requirements, catering_notes, date, end_date, doors_time, show_time, end_time, load_in_time, is_non_music, age_restriction, ticket_price, deposit_amount, potential_revenue, ticket_url, ticket_system, contract_url, venue_contract_url, walkthrough_done, settlement_doc_url, capacity, estimated_guests, public_visibility, owner_user_id, promoter_name, promoter_email, promoter_phone, client_org, booker_name, booker_email, booker_phone)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [(int) $body['venue_id'], $resourceId, $body['title'], $slug, $body['event_type'], $newStatus, $isPrivate ? null : self::nullableString($body['description_public'] ?? null), self::nullableString($body['description_internal'] ?? null), self::nullableString($body['av_requirements'] ?? null), self::nullableString($body['catering_notes'] ?? null), $body['date'], $newEndDate, date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), date_or_null($body['load_in_time'] ?? null), boolish($body['is_non_music'] ?? false) ? 1 : 0, $body['age_restriction'] ?? null, $isPrivate ? 0 : (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), self::nullableString($body['venue_contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), ($body['capacity'] ?? null) ?: null, ($body['estimated_guests'] ?? null) ?: null, $publicVisibility, $ownerId, self::nullableString($body['promoter_name'] ?? null), self::nullableString($body['promoter_email'] ?? null), self::nullableString($body['promoter_phone'] ?? null), self::nullableString($body['client_org'] ?? null), $isPrivate ? null : self::nullableString($body['booker_name'] ?? null), $isPrivate ? null : self::nullableString($body['booker_email'] ?? null), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? null)]
         );
         $this->assignEventCode($id);
         log_activity($this->db, $id, $this->userId(), 'event created', ['title' => $body['title']]);
@@ -479,7 +485,8 @@ final class Events extends BaseEndpoint
                 return $transitionError;
             }
             if (in_array($newStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
-                if ($conflict = $this->checkRoomConflict((int) $existing['venue_id'], $existing['date'], $existing['doors_time'], $existing['end_time'], $id, $existing['end_date'] ?? null, self::nullableInt($existing['resource_id'] ?? null))) {
+                $conflictStart = $existing['doors_time'] ?: $existing['show_time'];
+                if ($conflict = $this->checkRoomConflict((int) $existing['venue_id'], $existing['date'], $conflictStart, $existing['end_time'], $id, $existing['end_date'] ?? null, self::nullableInt($existing['resource_id'] ?? null))) {
                     return $conflict;
                 }
             }
@@ -555,6 +562,7 @@ final class Events extends BaseEndpoint
         $updateStatus      = $body['status'] ?? $old['status'];
         $updateDate        = $body['date'] ?? $old['date'];
         $updateWalkthrough = boolish($body['walkthrough_done'] ?? $old['walkthrough_done']) ? 1 : 0;
+        $updateIsNonMusic  = boolish($body['is_non_music'] ?? $old['is_non_music'] ?? false) ? 1 : 0;
         // owner_user_id follows the same array_key_exists convention as
         // resource_id below: omit the key to leave it alone, send '' or null
         // to explicitly clear it.
@@ -585,7 +593,11 @@ final class Events extends BaseEndpoint
         // Room conflict check for committed bookings
         if (in_array($updateStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
             $checkEndDate  = self::nullableDate($body['end_date'] ?? $old['end_date'] ?? null, $updateDate);
-            $checkDoors    = date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null);
+            // Non-music events hide Doors from the form and leave it null forever —
+            // fall back to Show/Start as the conflict window's start time (see
+            // timesOverlap()'s doc comment for why a null start would otherwise
+            // silently widen the window to midnight).
+            $checkDoors    = date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null) ?? date_or_null($body['show_time'] ?? $old['show_time'] ?? null);
             $checkEnd      = date_or_null($body['end_time']   ?? $old['end_time']   ?? null);
             if ($conflict = $this->checkRoomConflict($updateVenueId, $updateDate, $checkDoors, $checkEnd, $id, $checkEndDate, $updateResourceId)) {
                 return $conflict;
@@ -604,8 +616,8 @@ final class Events extends BaseEndpoint
         }
 
         $this->db->run(
-            'UPDATE events SET venue_id=?, resource_id=?, title=?, slug=?, event_type=?, status=?, description_public=?, description_internal=?, av_requirements=?, catering_notes=?, date=?, end_date=?, doors_time=?, show_time=?, end_time=?, load_in_time=?, age_restriction=?, ticket_price=?, deposit_amount=?, potential_revenue=?, ticket_url=?, ticket_system=?, contract_url=?, venue_contract_url=?, walkthrough_done=?, settlement_doc_url=?, capacity=?, estimated_guests=?, public_visibility=?, owner_user_id=?, promoter_name=?, promoter_email=?, promoter_phone=?, client_org=?, booker_name=?, booker_email=?, booker_phone=? WHERE id=?',
-            [$updateVenueId, $updateResourceId, $updateTitle, $slug, $updateEventType, $updateStatus, $isPrivate ? null : ($body['description_public'] ?? $old['description_public']), $body['description_internal'] ?? $old['description_internal'], self::nullableString($body['av_requirements'] ?? $old['av_requirements']), self::nullableString($body['catering_notes'] ?? $old['catering_notes']), $updateDate, $updateEndDate, date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null), date_or_null($body['show_time'] ?? $old['show_time'] ?? null), date_or_null($body['end_time'] ?? $old['end_time'] ?? null), date_or_null($body['load_in_time'] ?? $old['load_in_time'] ?? null), $body['age_restriction'] ?? $old['age_restriction'], $isPrivate ? 0 : (float) ($body['ticket_price'] ?? $old['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? $old['deposit_amount']), self::nullableDecimal($body['potential_revenue'] ?? $old['potential_revenue']), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? $old['ticket_url']), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? $old['ticket_system']), self::nullableString($body['contract_url'] ?? $old['contract_url']), self::nullableString($body['venue_contract_url'] ?? $old['venue_contract_url']), $updateWalkthrough, self::nullableString($body['settlement_doc_url'] ?? $old['settlement_doc_url']), ($body['capacity'] ?? $old['capacity']) ?: null, isset($body['estimated_guests']) && $body['estimated_guests'] !== '' ? (int) $body['estimated_guests'] : ($old['estimated_guests'] ?? null), $updatePublicVis, $updateOwnerUserId, self::nullableString($body['promoter_name'] ?? $old['promoter_name']), self::nullableString($body['promoter_email'] ?? $old['promoter_email']), self::nullableString($body['promoter_phone'] ?? $old['promoter_phone']), self::nullableString($body['client_org'] ?? $old['client_org']), $isPrivate ? null : self::nullableString($body['booker_name'] ?? $old['booker_name']), $isPrivate ? null : self::nullableString($body['booker_email'] ?? $old['booker_email']), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? $old['booker_phone']), $id]
+            'UPDATE events SET venue_id=?, resource_id=?, title=?, slug=?, event_type=?, status=?, description_public=?, description_internal=?, av_requirements=?, catering_notes=?, date=?, end_date=?, doors_time=?, show_time=?, end_time=?, load_in_time=?, is_non_music=?, age_restriction=?, ticket_price=?, deposit_amount=?, potential_revenue=?, ticket_url=?, ticket_system=?, contract_url=?, venue_contract_url=?, walkthrough_done=?, settlement_doc_url=?, capacity=?, estimated_guests=?, public_visibility=?, owner_user_id=?, promoter_name=?, promoter_email=?, promoter_phone=?, client_org=?, booker_name=?, booker_email=?, booker_phone=? WHERE id=?',
+            [$updateVenueId, $updateResourceId, $updateTitle, $slug, $updateEventType, $updateStatus, $isPrivate ? null : ($body['description_public'] ?? $old['description_public']), $body['description_internal'] ?? $old['description_internal'], self::nullableString($body['av_requirements'] ?? $old['av_requirements']), self::nullableString($body['catering_notes'] ?? $old['catering_notes']), $updateDate, $updateEndDate, date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null), date_or_null($body['show_time'] ?? $old['show_time'] ?? null), date_or_null($body['end_time'] ?? $old['end_time'] ?? null), date_or_null($body['load_in_time'] ?? $old['load_in_time'] ?? null), $updateIsNonMusic, $body['age_restriction'] ?? $old['age_restriction'], $isPrivate ? 0 : (float) ($body['ticket_price'] ?? $old['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? $old['deposit_amount']), self::nullableDecimal($body['potential_revenue'] ?? $old['potential_revenue']), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? $old['ticket_url']), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? $old['ticket_system']), self::nullableString($body['contract_url'] ?? $old['contract_url']), self::nullableString($body['venue_contract_url'] ?? $old['venue_contract_url']), $updateWalkthrough, self::nullableString($body['settlement_doc_url'] ?? $old['settlement_doc_url']), ($body['capacity'] ?? $old['capacity']) ?: null, isset($body['estimated_guests']) && $body['estimated_guests'] !== '' ? (int) $body['estimated_guests'] : ($old['estimated_guests'] ?? null), $updatePublicVis, $updateOwnerUserId, self::nullableString($body['promoter_name'] ?? $old['promoter_name']), self::nullableString($body['promoter_email'] ?? $old['promoter_email']), self::nullableString($body['promoter_phone'] ?? $old['promoter_phone']), self::nullableString($body['client_org'] ?? $old['client_org']), $isPrivate ? null : self::nullableString($body['booker_name'] ?? $old['booker_name']), $isPrivate ? null : self::nullableString($body['booker_email'] ?? $old['booker_email']), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? $old['booker_phone']), $id]
         );
         if ($updateStatus !== $wasStatus) {
             $this->notifyStatusChange($id, $wasStatus, $updateStatus);
@@ -729,6 +741,11 @@ final class Events extends BaseEndpoint
     {
         $openBlockers = array_filter($blockers, fn ($b) => in_array($b['status'], ['open', 'waiting'], true));
         $isPrivate    = ($event['event_type'] ?? '') === 'private_event';
+        // Non-music events hide Doors from the form, so their run sheet is
+        // "timed" once Show/Start (relabeled "Start" in the UI) is set instead.
+        $isNonMusic   = boolish($event['is_non_music'] ?? false);
+        $runSheetTime = $isNonMusic ? $event['show_time'] : $event['doors_time'];
+        $runSheetGap  = $isNonMusic ? 'Needs start time' : 'Needs doors';
 
         if ($isPrivate) {
             $hasClient = !empty($event['promoter_name']) && !empty($event['promoter_email']);
@@ -742,7 +759,7 @@ final class Events extends BaseEndpoint
             return [
                 ['label' => 'Client',       'state' => $hasClient ? 'On file' : 'Missing client contact', 'ok' => $hasClient],
                 ['label' => 'Guest count',  'state' => !empty($event['estimated_guests']) ? $event['estimated_guests'] . ' estimated' : 'Not set', 'ok' => !empty($event['estimated_guests'])],
-                ['label' => 'Run sheet',    'state' => $event['doors_time'] ? 'Timed' : 'Needs doors', 'ok' => (bool) $event['doors_time']],
+                ['label' => 'Run sheet',    'state' => $runSheetTime ? 'Timed' : $runSheetGap, 'ok' => (bool) $runSheetTime],
                 ['label' => 'Open items',   'state' => $openBlockers ? count($openBlockers) . ' open' : 'Clear', 'ok' => !$openBlockers],
                 ['label' => 'Contract',     'state' => $hasContract ? 'On file' : 'Not yet sent', 'ok' => (bool) $hasContract],
                 ['label' => 'Settlement',   'state' => $settlement ? 'Saved' : 'Not started', 'ok' => $event['status'] !== 'completed' || (bool) $settlement],
@@ -754,7 +771,7 @@ final class Events extends BaseEndpoint
         return [
             ['label' => 'Contacts',    'state' => $hasContacts ? 'On file' : 'Missing producer/booker', 'ok' => $hasContacts],
             ['label' => 'Lineup',      'state' => $lineup ? 'Ready' : 'Missing', 'ok' => (bool) $lineup],
-            ['label' => 'Run sheet',   'state' => $event['doors_time'] ? 'Timed' : 'Needs doors', 'ok' => (bool) $event['doors_time']],
+            ['label' => 'Run sheet',   'state' => $runSheetTime ? 'Timed' : $runSheetGap, 'ok' => (bool) $runSheetTime],
             ['label' => 'Open items',  'state' => $openBlockers ? count($openBlockers) . ' open' : 'Clear', 'ok' => !$openBlockers],
             ['label' => 'Flyer',       'state' => $hasApprovedFlyer ? 'Approved' : 'Needs approval', 'ok' => (bool) $hasApprovedFlyer],
             ['label' => 'Public page', 'state' => (int) $event['public_visibility'] ? 'Live' : 'Hidden', 'ok' => (bool) (int) $event['public_visibility']],
@@ -889,6 +906,12 @@ final class Events extends BaseEndpoint
     private function validateStatusTransition(string $newStatus, array $event): ?Response
     {
         $isPrivate = ($event['event_type'] ?? '') === 'private_event';
+        // Non-music events (workshops/comedy/etc.) hide Doors from the form —
+        // Show/Start (relabeled "Start" in the UI) is the only start-time field
+        // they can fill in, so require that one instead.
+        $isNonMusic = boolish($event['is_non_music'] ?? false);
+        $startField = $isNonMusic ? 'show_time' : 'doors_time';
+        $startLabel = $isNonMusic ? 'Start time' : 'Start time (Doors)';
 
         // Statuses that private events may never use
         $privateDisallowed = ['needs_assets', 'assets_approved', 'ready_to_announce', 'published', 'advanced'];
@@ -905,7 +928,7 @@ final class Events extends BaseEndpoint
                 'date'           => 'Date',
                 'event_type'     => 'Event type',
                 'venue_id'       => 'Venue / location',
-                'doors_time'     => 'Start time (Doors)',
+                $startField      => $startLabel,
                 'end_time'       => 'End time',
                 'promoter_name'  => 'Client name',
                 'promoter_email' => 'Client email',
@@ -917,7 +940,7 @@ final class Events extends BaseEndpoint
                 'date'           => 'Date',
                 'event_type'     => 'Event type',
                 'venue_id'       => 'Venue / location',
-                'doors_time'     => 'Start time (Doors)',
+                $startField      => $startLabel,
                 'end_time'       => 'End time',
                 'promoter_name'  => 'Producer/Artist name',
                 'promoter_email' => 'Producer/Artist email',

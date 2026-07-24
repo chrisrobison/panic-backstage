@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Add non-music flag to hide Doors/Load-in and relabel Show as Start
 - **Fixed** `seed` — Guard database/seed.php against ever truncating production again
 - **Fixed** `auth` — Abort conditional passkey request before explicit passkey login
 - **Added** `leads` — Add budget field to booking inquiries
