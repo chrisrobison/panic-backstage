@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Panic;
 
-use function Panic\slugify;
 use function Panic\boolish;
 use function Panic\date_or_null;
 
@@ -565,88 +564,23 @@ final class Leads extends BaseEndpoint
 
         $b = $request->body();
 
-        // Determine the venue ID for the new event
-        $venues  = $this->db->all('SELECT id FROM venues ORDER BY id LIMIT 1');
-        $venueId = isset($b['venue_id']) ? (int) $b['venue_id'] : (int) ($venues[0]['id'] ?? 1);
-
-        // Map lead → event fields
-        $title    = (string) ($b['title'] ?? $lead['event_name'] ?? 'Untitled Event');
-        $slug     = slugify($title) . '-' . date('Ymd') . '-' . $leadId;
-        $date     = (string) ($b['date'] ?? $lead['desired_date'] ?? date('Y-m-d', strtotime('+30 days')));
-        $type     = (string) ($b['event_type'] ?? $lead['event_type'] ?? 'private_event');
-        $isPrivate = boolish($lead['is_private']);
-
-        $validTypes = ['live_music','karaoke','open_mic','promoter_night','dj_night',
-                       'comedy','private_event','special_event'];
-        if (!in_array($type, $validTypes, true)) {
-            $type = 'special_event';
-        }
-
-        // Run inside a transaction — all-or-nothing
-        $pdo = $this->db->pdo();
-        $pdo->beginTransaction();
-
+        // The actual lead -> event mapping + transaction lives in
+        // Leads\Onboarding::createEventFromLead() — shared with the Booking
+        // Inbox's richer onboard() flow (src/LeadsInbox.php) so the two
+        // entry points can never map lead fields to event fields
+        // differently. This action keeps its own narrower precondition
+        // above (only from approved/evaluating/needs_review) and sets the
+        // lead's final status to 'converted', for backward compatibility
+        // with the existing Leads pipeline UI (public/assets/leads.js).
         try {
-            // Create the event
-            $eventId = $this->db->insert(
-                'INSERT INTO events
-                 (venue_id, title, slug, event_type, status, date, lead_id, is_private,
-                  promoter_name, promoter_email, promoter_phone,
-                  client_org, booker_name, booker_email, booker_phone,
-                  estimated_guests, description_internal, owner_user_id, created_at)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())',
-                [
-                    $venueId,
-                    $title,
-                    $slug,
-                    $type,
-                    'proposed',
-                    $date,
-                    $leadId,
-                    $isPrivate,
-                    $lead['contact_name'],
-                    $lead['contact_email'],
-                    $lead['contact_phone'],
-                    $lead['contact_org'],
-                    $lead['contact_name'],
-                    $lead['contact_email'],
-                    $lead['contact_phone'],
-                    $lead['projected_attendance'],
-                    $lead['notes'],
-                    $this->userId(),
-                ]
-            );
-
-            // Mark lead as converted
-            $this->db->run(
-                'UPDATE leads SET status=?, converted_event_id=?, converted_at=NOW() WHERE id=?',
-                ['converted', $eventId, $leadId]
-            );
-
-            // Audit note on the lead
-            $this->db->run(
-                "INSERT INTO lead_notes (lead_id, user_id, type, body) VALUES (?,?,?,?)",
-                [$leadId, $this->userId(), 'audit', "Converted to event #$eventId: \"$title\""]
-            );
-
-            // Activity log on the event
-            $this->db->run(
-                'INSERT INTO event_activity_log (event_id, user_id, action, details_json) VALUES (?,?,?,?)',
-                [$eventId, $this->userId(), 'event created from lead',
-                 json_encode(['lead_id' => $leadId, 'source' => $lead['source']])]
-            );
-
-            $pdo->commit();
-
-        } catch (\Throwable $e) {
-            $pdo->rollBack();
-            error_log("Lead convert failed: " . $e->getMessage());
-            return Response::json(['error' => 'Conversion failed: ' . $e->getMessage()], 500);
+            $result = \Panic\Leads\Onboarding::createEventFromLead($this->db, $lead, $b, $this->userId(), 'converted');
+        } catch (\RuntimeException $e) {
+            return Response::json(['error' => $e->getMessage()], 500);
         }
 
         return $this->ok([
-            'event_id'  => $eventId,
-            'event_url' => "#events/$eventId",
+            'event_id'  => $result['event_id'],
+            'event_url' => "#events/{$result['event_id']}",
         ]);
     }
 

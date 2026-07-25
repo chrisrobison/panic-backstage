@@ -186,6 +186,8 @@ class ReportsPage extends PanicElement {
     try {
       if (this.tab === 'settlements') {
         this.settlementsData = await api(`/reports/settlements${this.query()}`);
+      } else if (this.tab === 'booking-inbox') {
+        this.bookingInboxData = await api(`/reports/booking-inbox?from=${this.from}&to=${this.to}`);
       } else {
         this.overviewData = await api(`/reports/overview${this.query()}`);
       }
@@ -202,18 +204,20 @@ class ReportsPage extends PanicElement {
   }
 
   filterBarHtml() {
+    // The Booking Inbox tab has no notion of an event status, so it skips
+    // that filter rather than showing an irrelevant one.
     return `<div class="rpt-filter-bar">
       <label>Range
         <select data-preset>${PRESETS.map(([k, l]) => `<option value="${k}" ${k === this.preset ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
       </label>
       <label>From <input type="date" data-from value="${esc(this.from)}" ${this.preset !== 'custom' ? 'disabled' : ''}></label>
       <label>To <input type="date" data-to value="${esc(this.to)}" ${this.preset !== 'custom' ? 'disabled' : ''}></label>
-      <label>Status
+      ${this.tab === 'booking-inbox' ? '' : `<label>Status
         <select data-status>
           <option value="">All statuses</option>
           ${REPORT_STATUSES.map((s) => `<option value="${esc(s)}" ${s === this.status ? 'selected' : ''}>${esc(statusLabel(s))}</option>`).join('')}
         </select>
-      </label>
+      </label>`}
     </div>`;
   }
 
@@ -226,9 +230,10 @@ class ReportsPage extends PanicElement {
       <nav class="workspace-tabs tabs reports-tabs">
         <a data-rpt-tab="overview" href="#reports" class="${this.tab === 'overview' ? 'active' : ''}">Overview</a>
         <a data-rpt-tab="settlements" href="#reports" class="${this.tab === 'settlements' ? 'active' : ''}">Settlements</a>
+        <a data-rpt-tab="booking-inbox" href="#reports" class="${this.tab === 'booking-inbox' ? 'active' : ''}">Booking Inbox</a>
       </nav>
       ${this.filterBarHtml()}
-      <div class="rpt-outlet">${this.tab === 'settlements' ? this.settlementsHtml() : this.overviewHtml()}</div>
+      <div class="rpt-outlet">${this.tab === 'settlements' ? this.settlementsHtml() : this.tab === 'booking-inbox' ? this.bookingInboxHtml() : this.overviewHtml()}</div>
       ${this.styleBlock()}`;
     this.bind();
   }
@@ -322,6 +327,74 @@ class ReportsPage extends PanicElement {
         <tbody>${rows.length ? rows.map(row).join('') : `<tr><td colspan="8">${emptyState('No events in this range.')}</td></tr>`}</tbody>
       </table>
     </article>`;
+  }
+
+  bookingInboxHtml() {
+    const d = this.bookingInboxData?.report || {};
+    const t = d.totals || {};
+    const card = (icon, label, value, note, tone = '') => `<article class="metric-card ${tone}"><span class="icon-bubble ${tone}"><i class="fa-solid ${icon}" aria-hidden="true"></i></span><h3>${esc(label)}</h3><strong>${esc(value)}</strong><p>${esc(note)}</p></article>`;
+    const barList = (rows, key, tone) => rows.length
+      ? `<ul class="rpt-cat-list">${rows.map((r) => `<li><span class="rpt-cat-label">${esc(titleCase(String(r[key])))}</span><span class="rpt-cat-track"><span class="rpt-cat-fill" style="width:${Math.max(2, (r.n / (rows[0].n || 1)) * 100).toFixed(1)}%;background:${tone}"></span></span><span class="rpt-cat-value">${esc(String(r.n))}</span></li>`).join('')}</ul>`
+      : emptyState('No data in range.');
+
+    return `
+      <section class="metric-grid rpt-metric-grid">
+        ${card('fa-inbox', 'New Inquiries', t.new_inquiries ?? 0, `${d.range?.from ?? ''} – ${d.range?.to ?? ''}`)}
+        ${card('fa-user-check', 'Onboarded', t.onboarded ?? 0, `${t.conversion_rate_pct ?? 0}% conversion`, 'green')}
+        ${card('fa-hourglass-half', 'Avg Claim Time', t.avg_claim_minutes ? `${t.avg_claim_minutes}m` : '—', 'Assignment → claim')}
+        ${card('fa-reply', 'Avg Response Time', t.avg_response_minutes ? `${t.avg_response_minutes}m` : '—', 'Arrival → first reply')}
+        ${card('fa-triangle-exclamation', 'Unanswered', t.unanswered ?? 0, 'Currently open, no reply yet', (t.unanswered ?? 0) > 0 ? 'amber' : '')}
+        ${card('fa-clock-rotate-left', 'Expired Claims', t.expired_claims ?? 0, 'Released by the SLA sweep', (t.expired_claims ?? 0) > 0 ? 'amber' : '')}
+        ${card('fa-calendar-check', 'Tours Scheduled', t.tours_scheduled ?? 0, '')}
+        ${card('fa-file-lines', 'Proposals Sent', t.proposals_sent ?? 0, '')}
+      </section>
+
+      ${(d.anomalies || []).length ? `
+      <article class="panel">
+        <div class="section-head padded"><h2>Worth a Look</h2></div>
+        <div class="panel-body">
+          ${d.anomalies.map((a) => `<div class="ib-conflict-warning" style="margin-bottom:8px;">${esc(a.message)}</div>`).join('')}
+        </div>
+      </article>` : ''}
+
+      <section class="rpt-cat-grid">
+        <article class="panel">
+          <div class="section-head padded"><h2>Volume by Source</h2></div>
+          <div class="panel-body">${barList(d.by_source || [], 'source', 'var(--blue,#1268c7)')}</div>
+        </article>
+        <article class="panel">
+          <div class="section-head padded"><h2>Volume by Category</h2></div>
+          <div class="panel-body">${barList(d.by_category || [], 'category', 'var(--blue,#1268c7)')}</div>
+        </article>
+      </section>
+
+      <section class="rpt-cat-grid">
+        <article class="panel">
+          <div class="section-head padded"><h2>Activity by Booker</h2></div>
+          <table class="data-table"><thead><tr><th>Booker</th><th>Assigned</th><th>Owned</th><th>Onboarded</th></tr></thead>
+            <tbody>${(d.activity_by_booker || []).length ? d.activity_by_booker.map((r) => `<tr><td>${esc(r.name)}</td><td>${esc(String(r.assigned_count))}</td><td>${esc(String(r.owned_count))}</td><td>${esc(String(r.onboarded_count))}</td></tr>`).join('') : `<tr><td colspan="4">${emptyState('No activity in range.')}</td></tr>`}</tbody></table>
+        </article>
+        <article class="panel">
+          <div class="section-head padded"><h2>Routing Rule Performance</h2></div>
+          <table class="data-table"><thead><tr><th>Rule</th><th>Assignments</th><th>Onboarded</th></tr></thead>
+            <tbody>${(d.routing_rule_performance || []).length ? d.routing_rule_performance.map((r) => `<tr><td>${esc(r.rule_name)}</td><td>${esc(String(r.assignments))}</td><td>${esc(String(r.onboarded))}</td></tr>`).join('') : `<tr><td colspan="3">${emptyState('No routed assignments in range.')}</td></tr>`}</tbody></table>
+        </article>
+      </section>
+
+      <section class="rpt-cat-grid">
+        <article class="panel">
+          <div class="section-head padded"><h2>Decline / Lost Reasons</h2></div>
+          <div class="panel-body">${barList(d.decline_reasons || [], 'reason', 'var(--red,#ef4338)')}</div>
+        </article>
+        <article class="panel">
+          <div class="section-head padded"><h2>Classifier</h2></div>
+          <div class="panel-body">
+            <p>Classified: ${esc(String(d.classifier?.classified_count ?? 0))} &nbsp; Human corrections: ${esc(String(d.classifier?.human_corrections ?? 0))}</p>
+            <p>Estimated accuracy: ${d.classifier?.accuracy_pct != null ? esc(String(d.classifier.accuracy_pct)) + '%' : '—'}</p>
+            <p class="muted">Manual routing corrections (reassign/manual-assign): ${esc(String(d.manual_routing_corrections ?? 0))}</p>
+          </div>
+        </article>
+      </section>`;
   }
 
   bind() {

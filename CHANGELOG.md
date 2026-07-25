@@ -10,8 +10,18 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
-- **Added** `ai
-Phase 1` — Add read-only AI Assistant drawer (Phase 1)
+- **Documentation** — Document the Inbox/Routing/Reports API surface and add staff training material
+- **Added** `booking-inbox` — Finish Phase 10 Social Queue and add Phase 12 docs
+- **Changed** — Added original UI mockups for posterity
+- **Added** `booking-inbox` — Add Phase 9 reporting and anomaly alerts
+- **Added** `booking-inbox` — Add Phase 8 Onboard Lead depth (duplicate/availability checks, task templates)
+- **Added** `booking-inbox` — Add Phase 6 Inbox workspace UI (matches incoming-ui.png)
+- **Added** `booking-inbox` — Add Phase 5 API endpoints
+- **Added** `booking-inbox` — Add Phase 4 routing engine, claims, and SLA automation
+- **Added** `booking-inbox` — Add Phase 3 ingestion, AI classification, and auto-ack
+- **Added** `booking-inbox` — Add Phase 2 permissions and audit infrastructure
+- **Added** `booking-inbox` — Add Phase 1 schema for claim/assign/own, conversation, routing, and audit
+- **Added** `ai Phase 1` — Add read-only AI Assistant drawer (Phase 1)
 - **Added** `events` — Cap recurring-series occurrences to a 90-day booking horizon
 - **Documentation** — Plan AI assistant drawer + recurring-event 90-day horizon cap
 - **Added** `search` — Rebuild the topbar search into a live, full-text results page

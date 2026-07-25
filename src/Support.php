@@ -126,3 +126,31 @@ function log_process_audit(
         ]
     );
 }
+
+/**
+ * Append-only audit trail for the Booking Inbox (see database/migrations/
+ * 076_add_booking_inbox_audit.sql). One row per meaningful action —
+ * ingestion, viewing, assignment, claim, expiration, reassignment, response,
+ * draft create/edit, status change, classification + human correction,
+ * routing decision, manager override, onboarding, decline/archive,
+ * duplicate/spam marking, attachment access, export, automation
+ * execution/failure. No endpoint updates or deletes rows here — call this
+ * and nothing else writes to lead_audit_log.
+ *
+ * $leadId may be null for lead-independent actions (routing rule edits,
+ * bulk export attempts). $userId may be null when the actor is automation
+ * (the SLA sweep, auto-routing, auto-acknowledgment) rather than a person.
+ */
+function log_lead_activity(Database $db, ?int $leadId, ?int $userId, string $action, array $details = []): void
+{
+    $db->run(
+        'INSERT INTO lead_audit_log (lead_id, user_id, action, details_json, ip_address) VALUES (?, ?, ?, ?, ?)',
+        [
+            $leadId,
+            $userId,
+            $action,
+            $details ? json_encode($details, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null,
+            $_SERVER['REMOTE_ADDR'] ?? null,
+        ]
+    );
+}

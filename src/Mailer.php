@@ -38,10 +38,21 @@ final class Mailer
     private bool $skipInboxCopy = false;
 
     /**
-     * @param Database|null $db  When provided, each sent message is persisted
-     *                           to the outbox table so admins can browse it.
+     * @param Database|null $db            When provided, each sent message is
+     *                                     persisted to the outbox table so
+     *                                     admins can browse it.
+     * @param string|null   $fromAddress   Override the MAIL_FROM_ADDRESS env
+     *                                     default — used by the Booking Inbox's
+     *                                     outbound mail (auto-acknowledgment and
+     *                                     staff replies) so every message appears
+     *                                     to come from bookings@themab.org
+     *                                     regardless of which staff member sent
+     *                                     it, and Reply-To routes back to the
+     *                                     same address so replies re-enter
+     *                                     ingestion.
+     * @param string|null   $fromName      Override the MAIL_FROM_NAME env default.
      */
-    public function __construct(string $root, ?Database $db = null)
+    public function __construct(string $root, ?Database $db = null, ?string $fromAddress = null, ?string $fromName = null)
     {
         // Multi-tenant: write mail copies to clients/{slug}/mail/
         // Single-tenant fallback: storage/mail/ (unchanged behaviour)
@@ -51,8 +62,8 @@ final class Mailer
         // are checked first by resolveTemplate(); only templates a client has
         // explicitly customised need to be present there.
         $this->templateDir = $root . '/storage/email-templates';
-        $this->fromAddress = getenv('MAIL_FROM_ADDRESS') ?: ('noreply@' . (getenv('APP_HOST') ?: 'localhost'));
-        $this->fromName    = getenv('MAIL_FROM_NAME') ?: 'Backstage';
+        $this->fromAddress = $fromAddress ?: (getenv('MAIL_FROM_ADDRESS') ?: ('noreply@' . (getenv('APP_HOST') ?: 'localhost')));
+        $this->fromName    = $fromName ?: (getenv('MAIL_FROM_NAME') ?: 'Backstage');
         $this->bcc         = $this->parseBcc(getenv('MAIL_BCC') ?: '');
         $this->db          = $db;
 
