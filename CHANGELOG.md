@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** — Plan AI assistant drawer + recurring-event 90-day horizon cap
 - **Added** `search` — Rebuild the topbar search into a live, full-text results page
 - **Documentation** — Fill remaining gaps from the last 2 days of feature work
 - **Documentation** — Cover the non-music event flag and payee W-9/address request
