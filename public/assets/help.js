@@ -118,6 +118,14 @@ export const HELP_SECTIONS = [
     ],
   },
   {
+    group: 'AI Assistant',
+    key: 'ai-assistant',
+    icon: 'fa-solid fa-sparkles',
+    items: [
+      { slug: 'ai-assistant', title: 'AI Assistant' },
+    ],
+  },
+  {
     group: 'Automation',
     key: 'automation',
     icon: 'fa-solid fa-diagram-project',
@@ -285,6 +293,7 @@ const HELP_CONTENT = {
     <p>The topbar holds:</p>
     <ul>
       <li><strong>Search</strong> — opens a dedicated results page and updates live as you type. See <a href="#help-search">Search</a>.</li>
+      <li><strong>AI Assistant</strong> — venue admins only. Opens a non-blocking side panel to ask questions or propose changes. See <a href="#help-ai-assistant">AI Assistant</a>.</li>
       <li><strong>Account</strong> — passkey and password management.</li>
       <li><strong>Logout</strong> — clears tokens and returns to the login page.</li>
     </ul>
@@ -815,6 +824,7 @@ const HELP_CONTENT = {
     <h3>Managing an existing series</h3>
     <p>Open any occurrence's <a href="#help-scheduling">Scheduling</a> tab — the Recurrence panel lists every sibling in the series with its date and status, and links to jump straight to any of them. If one occurrence needs to drop out of the series (it was cancelled, moved to a different venue, whatever), use <strong>Remove this event from the series</strong> on that occurrence — it becomes a fully standalone event again and the rest of the series is unaffected.</p>
     <p class="help-tip">💡 There's no bulk edit across a series (no "change this and all future occurrences"). Each occurrence is a completely normal event once created — update its time, venue, staffing, or anything else the same way you would for any other show.</p>
+    <p class="help-tip">💡 Venue admins can also ask the <a href="#help-ai-assistant">AI Assistant</a> to set one up conversationally (e.g. "turn this into a weekly series for the next 8 weeks") — it runs through the exact same 52-occurrence/90-day/conflict checks as doing it by hand here, and proposes the series for you to review before anything is created.</p>
   `,
 
   tasks: `
@@ -1420,6 +1430,43 @@ const HELP_CONTENT = {
 
     <h3>What it can't do</h3>
     <p>History only covers the database itself — writes to disk (uploaded files, generated PDFs, sent email) aren't touched by an undo, so reverting a database change doesn't un-send an email or restore a deleted file. Entries older than 30 days are automatically pruned to keep the table from growing without bound; for recovery beyond that window, or for a whole-database point-in-time restore, ask whoever runs the server about the separate 5-minute snapshot backups.</p>
+  `,
+
+  // ── AI Assistant ─────────────────────────────────────────────────────────────
+
+  'ai-assistant': `
+    <h2>AI Assistant</h2>
+    <p>The AI Assistant is a slide-over panel from the right side of the screen — a chat, not a dialog box. It never darkens or blocks the rest of the app: everything behind it stays fully visible and clickable while it's open, so you can keep working and glance back at it. Close it with the <strong>×</strong> button or <kbd>Esc</kbd>.</p>
+    <p>Visible only to venue admins (the <code>use_ai_assistant</code> permission isn't granted to any other role today).</p>
+
+    <h3>Opening it</h3>
+    <ul>
+      <li><strong>Topbar</strong> — the <em>AI Assistant</em> button next to Search opens a general conversation, not scoped to any one event.</li>
+      <li><strong>An event workspace's "Ask AI" button</strong> — opens the same panel already scoped to that event, so "what's the status of this?" or "is this ready to publish?" works without naming the event. Switching to a different event's "Ask AI" button starts a fresh conversation — the transcript is tied to whichever event it was opened for.</li>
+    </ul>
+
+    <h3>What it can do</h3>
+    <p>Two kinds of thing, and nothing else:</p>
+    <ul>
+      <li><strong>Answer questions</strong> — about the event currently open, or events in general ("what's booked next month?", "who's the promoter on this show?", "any events still missing a contract?"). Answers are grounded in a real lookup against your data, not guessed — if it doesn't have access to something, it says so rather than making an answer up.</li>
+      <li><strong>Propose a change</strong> — two specific kinds, each ending in a proposal card in the chat with <strong>Apply</strong> / <strong>Discard</strong> buttons, never an immediate change:
+        <ul>
+          <li><em>Bulk booker/promoter info updates</em> — e.g. "update all Zingflower events with this new booker email," across up to 25 matching events at once. Only contact fields can change this way (promoter name/email/phone, client org, booker name/email/phone) — nothing else.</li>
+          <li><em>Recurring series</em> — e.g. "turn this into a weekly series for the next 8 weeks." Subject to the exact same rules as building one by hand in <a href="#help-recurring-events">Recurring events</a>: max 52 occurrences, none more than 90 days out, and every date is checked for room conflicts before anything is proposed.</li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>Nothing happens until you click Apply</h3>
+    <p>This is the whole safety model, in one sentence: the assistant can look things up and draft a proposal, but it can never make a change by itself. A proposal card shows exactly what would happen — a before/after list for a booker-info update, or the list of dates for a new series — and nothing is written to the database until a person reviews it and clicks <strong>Apply</strong> (which asks for one more confirmation first, the same as any other destructive action in the app). <strong>Discard</strong> throws the proposal away with no effect. An un-acted-on proposal also expires after 30 minutes, so a stale suggestion can't be clicked through later against data that's since changed.</p>
+    <p>There is no request the assistant can make that deletes an event, cancels a booking, changes a status, or sends an email — ask it to do any of those and it will tell you plainly that it can't, and that it has to be done in the app directly.</p>
+
+    <h3>Applied changes are still tracked like any other edit</h3>
+    <p>When you click Apply, the resulting write shows up in <a href="#help-admin-db-history">Database history</a> like any other change, attributed distinctly (as an AI-assisted edit rather than a plain user edit) so it's always clear how something changed — and it can be undone from there the same way any other write can.</p>
+
+    <h3>Conversations</h3>
+    <p>Within one open conversation, the assistant remembers what you've already discussed — a reply like "there's a conflict on that date" can be followed by "skip it and just do the other two" without repeating yourself. That memory doesn't reach back across separate conversations (e.g. closing the drawer and reopening it later, or switching which event it's scoped to), and it doesn't affect what the assistant is allowed to see or do — every lookup and every proposal still re-checks your permissions in the moment, regardless of what was said earlier.</p>
+    <p class="help-tip">💡 If you see "Too many AI requests" or "Too many AI apply actions," you've hit an hourly rate limit (separate limits for asking questions and for clicking Apply) — this protects the assistant's shared capacity across your whole team, not a per-person quota you're expected to track. Wait a bit and try again.</p>
   `,
 
   // ── Automation ───────────────────────────────────────────────────────────────

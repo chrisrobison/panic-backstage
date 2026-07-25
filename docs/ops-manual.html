@@ -1251,6 +1251,16 @@
     <a href="#automation-status" class="section">Real vs. simulated vs. planned</a>
     <a href="#automation-permissions" class="section">Permissions</a>
 
+    <div class="nav-section">Part XII — AI Assistant</div>
+    <a href="#ai-assistant" class="chapter">Chapter 12: AI Assistant</a>
+    <a href="#ai-overview" class="section">What it is</a>
+    <a href="#ai-asking" class="section">Asking questions</a>
+    <a href="#ai-proposing" class="section">Proposing changes</a>
+    <a href="#ai-apply" class="section">Apply, Discard &amp; expiry</a>
+    <a href="#ai-audit" class="section">Audit trail</a>
+    <a href="#ai-conversations" class="section">Multi-turn conversations</a>
+    <a href="#ai-permissions" class="section">Permissions &amp; rate limits</a>
+
     <div class="nav-section">Quick Reference</div>
     <a href="#roles" class="chapter">Roles &amp; Who Does What</a>
     <a href="#roles-global" class="section">Global roles</a>
@@ -4614,6 +4624,92 @@
 
   </div><!-- /book-content -->
 </div><!-- /chapter 11 -->
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- CHAPTER 12: AI ASSISTANT                                                    -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<div class="part-break" id="ai-part">
+  <div class="part-num">Part XII</div>
+  <h2>AI Assistant</h2>
+  <p>A conversational panel that can look things up and draft changes — never one that makes them by itself.</p>
+</div>
+
+<div id="ai-assistant" class="chapter-page">
+  <div class="chapter-hero">
+    <span class="chapter-num">Chapter 12</span>
+    <h1>AI Assistant</h1>
+    <p class="lead">A slide-over panel, open to venue admins from the topbar or from inside an event, that answers questions about your events and can draft two specific kinds of change for a human to review. It never has direct database, file, or shell access — only a small, fixed set of permission-checked lookups and proposal tools, and it can never apply a proposal itself.</p>
+  </div>
+
+  <div class="book-content">
+
+    <!-- OVERVIEW ─────────────────────────────────────────────────────────── -->
+    <h2 id="ai-overview">What it is</h2>
+
+    <p>The AI Assistant is a right-side panel, not a dialog box — it slides in without a backdrop, so the rest of the app stays fully visible and clickable while it's open. It's visible only to venue admins (the <code>use_ai_assistant</code> permission isn't granted to any other role today), and it runs through the venue's own local AI CLI session rather than a metered per-request API — there's no separate dollar cost per question, only a shared usage capacity across whoever on staff is using it (see <a href="#ai-permissions">Permissions &amp; rate limits</a>).</p>
+
+    <p>Two entry points open the same kind of session:</p>
+    <ul>
+      <li><strong>The topbar button</strong> opens a general conversation, not scoped to any one event.</li>
+      <li><strong>An event workspace's "Ask AI" button</strong> opens it pre-scoped to that event — questions like "what's the status of this?" resolve without naming the event. Opening it from a different event starts a fresh conversation.</li>
+    </ul>
+
+    <!-- ASKING ───────────────────────────────────────────────────────────── -->
+    <h2 id="ai-asking">Asking questions</h2>
+
+    <p>Plain lookups against real data — "what's booked next month?", "who's the promoter on this show?", "any events still missing a contract?" The assistant is instructed to always call a real lookup rather than guess, and to say plainly when it doesn't have access to something rather than inventing an answer. It only ever sees what the asking admin could already see by hand in the app — every lookup re-runs the exact same permission checks as the normal UI.</p>
+
+    <!-- PROPOSING ────────────────────────────────────────────────────────── -->
+    <h2 id="ai-proposing">Proposing changes</h2>
+
+    <p>Exactly two kinds of write exist, and both stop at a <em>proposal</em> — a diff card in the chat, never an immediate change:</p>
+
+    <div class="field-ref">
+      <div class="field-ref-title">The two proposal tools</div>
+      <div class="field-row">
+        <div class="field-name">Bulk booker/promoter update</div>
+        <div class="field-desc">E.g. "update all Zingflower events with this new booker email" — across up to 25 matching events at once, selected either by an explicit list or a promoter-name match. Only contact fields can change this way: promoter name/email/phone, client org, booker name/email/phone. Any other field named in the request (status, dates, financials, anything) is rejected before a proposal is even created.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Recurring series</div>
+        <div class="field-desc">E.g. "turn this into a weekly series for the next 8 weeks." Runs through the identical validation as building one by hand — see <a href="#recurring-events">Recurring events</a>: max 52 occurrences, none more than 90 days out, and every date checked for a room conflict. A pattern that would fail by hand fails here too, with the same explanation (which date conflicted, or which dates were beyond the booking horizon).</div>
+      </div>
+    </div>
+
+    <div class="callout danger">
+      <span class="callout-title">🛑 Everything else is refused, on purpose</span>
+      <p>There is no request that deletes an event, cancels a booking, changes a status, or sends an email. Ask for any of those and the assistant says plainly that it can't, and that it has to be done in the app directly. This isn't a prompt-level suggestion the model happens to follow — those tools simply don't exist for it to call, at any layer: no delete/cancel-capable tool, no raw-SQL tool, no shell/file tool is ever exposed, and every field an update touches is checked against a fixed allowlist on the server, not trusted from what the model says it changed.</p>
+    </div>
+
+    <!-- APPLY / DISCARD ──────────────────────────────────────────────────── -->
+    <h2 id="ai-apply">Apply, Discard, and expiry</h2>
+
+    <p>A proposal card shows exactly what would happen — a before/after list for a booker-info update, or the date list for a new series — with <span class="ui-label button">Apply</span> and <span class="ui-label button">Discard</span> buttons. Nothing is written until a person clicks Apply, which asks for one more confirmation first, the same as any other destructive action in the app. Discard throws the proposal away with no effect. A proposal nobody acts on expires automatically after 30 minutes, so a stale suggestion can't be clicked through later against data that's since moved on — clicking Apply on an expired or already-resolved proposal is rejected, not silently re-run.</p>
+
+    <div class="callout note">
+      <span class="callout-title">Re-checked at the moment you click Apply, not just when it was drafted</span>
+      <p>Applying re-validates everything that mattered when the proposal was drafted — that you still have edit access to every event involved, and (for a recurring series) that the dates still don't conflict with anything booked since. If something changed in between, Apply fails with a clear reason rather than forcing through a stale proposal.</p>
+    </div>
+
+    <!-- AUDIT TRAIL ──────────────────────────────────────────────────────── -->
+    <h2 id="ai-audit">Audit trail</h2>
+
+    <p>A change made by clicking Apply lands in <a href="#admin-db-history">Database history &amp; undo</a> exactly like any other write — attributed distinctly as an AI-assisted edit rather than a plain user edit, so it's always clear how something changed. It can be undone from there the same way any other write can.</p>
+
+    <!-- CONVERSATIONS ────────────────────────────────────────────────────── -->
+    <h2 id="ai-conversations">Multi-turn conversations</h2>
+
+    <p>Within one open conversation, the assistant remembers recent turns — a reply like "there's a conflict on that date" can be followed by "skip it and just do the other two" without repeating the original request. That memory is scoped to the open conversation only: it doesn't carry across a closed-and-reopened drawer or a switch to a different event, and — importantly — it never substitutes for a permission check. Every lookup and every proposal re-verifies what the asking admin can actually see and touch at the moment it runs, no matter what was already discussed.</p>
+
+    <!-- PERMISSIONS ──────────────────────────────────────────────────────── -->
+    <h2 id="ai-permissions">Permissions &amp; rate limits</h2>
+
+    <p>Seeing the AI Assistant at all — the topbar button, the "Ask AI" button, and the backend route itself — requires <code>use_ai_assistant</code>. Only venue admins have it today.</p>
+
+    <p>Two separate hourly limits protect the assistant's shared capacity: one for asking questions, a tighter one for clicking Apply. Hitting either surfaces a plain "Too many AI requests" / "Too many AI apply actions" message — it clears itself after the hour rolls over, and isn't a per-person quota anyone needs to track by hand.</p>
+
+  </div><!-- /book-content -->
+</div><!-- /chapter 12 -->
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- QUICK REFERENCE: ROLES & WHO DOES WHAT                                     -->

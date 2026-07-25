@@ -1,7 +1,10 @@
 # AI Assistant Drawer + Recurring-Event Horizon Cap — Implementation Plan
 
 **Added:** 2026-07-24
-**Status:** ✅ Built — Phase 0 (horizon cap), Phase 1 (read-only assistant), and Phase 2 (propose/apply write tools: `propose_booker_update`, `propose_recurring_series`) are all implemented per this doc. Phase 2 adds `src/Ai/BookerUpdate.php` (shared allowlist/match/diff/apply logic) and `Events\Series::attemptCreate()`/`previewSeries()` (extracted from `Series::create()` so the AI apply path and the human "Create recurring events" button share one validation/insert code path), plus `POST /api/ai/proposals/{id}/apply` and `DELETE /api/ai/proposals/{id}` on `src/Ai/Assistant.php`. Verified end-to-end against the live `claude` CLI: propose → apply (DB row changed, `db_history.actor = 'ai:{id}'`), propose → discard (DB untouched, replay blocked), a destructive-request refusal, and a disallowed-field request refusal — see `tests/ai_booker_update_test.php` and `tests/ai_phase2_db_test.php` for the hermetic/DB-backed coverage.
+**Updated:** 2026-07-25 — multi-turn conversation memory, in-app + ops docs, and the proposal expiry sweep (all below).
+**Status:** ✅ Built and documented — Phase 0 (horizon cap), Phase 1 (read-only assistant), and Phase 2 (propose/apply write tools: `propose_booker_update`, `propose_recurring_series`) are all implemented per this doc. Phase 2 adds `src/Ai/BookerUpdate.php` (shared allowlist/match/diff/apply logic) and `Events\Series::attemptCreate()`/`previewSeries()` (extracted from `Series::create()` so the AI apply path and the human "Create recurring events" button share one validation/insert code path), plus `POST /api/ai/proposals/{id}/apply` and `DELETE /api/ai/proposals/{id}` on `src/Ai/Assistant.php`. Verified end-to-end against the live `claude` CLI: propose → apply (DB row changed, `db_history.actor = 'ai:{id}'`), propose → discard (DB untouched, replay blocked), a destructive-request refusal, and a disallowed-field request refusal — see `tests/ai_booker_update_test.php` and `tests/ai_phase2_db_test.php` for the hermetic/DB-backed coverage.
+
+A follow-up pass (2026-07-25) added **multi-turn conversation memory** (see "Multi-turn memory" under Part B — `Assistant::loadHistory()`/`trimHistoryToBudget()`/`formatHistory()`, `tests/ai_conversation_history_test.php`), verified live with the exact previously-broken scenario: a recurring-series proposal rejected for a room conflict, followed by "skip that date and do the other two" with no dates restated. The same pass added user-facing docs (`public/assets/help.js`'s "AI Assistant" topic and `docs/ops-manual.html`'s Chapter 12) and a proposal-expiry cron sweep (`scripts/expire-ai-proposals.php` / `scripts/cron-expire-ai-proposals.sh`, `*/15 * * * *`).
 
 ---
 
@@ -165,7 +168,11 @@ Proposals expire (`expires_at`, suggest 30 minutes) — an old proposal can't be
 `src/Ai/Assistant.php` (extends `BaseEndpoint`), wired into `Kernel::resolve()` next to the `app-settings` block:
 ```php
 if ($segments[0] === 'ai') {
-    return [Ai\Assistant::class, ['action' => $segments[1] ?? null, 'id' => $this->intOrNull($segments[2] ?? null)]];
+    return [Ai\Assistant::class, [
+        'action' => $segments[1] ?? null,
+        'id'     => $this->intOrNull($segments[2] ?? null),
+        'sub'    => $segments[3] ?? null, // e.g. the 'apply' in /ai/proposals/{id}/apply
+    ]];
 }
 ```
 Routes:
@@ -174,6 +181,12 @@ Routes:
 - `DELETE /api/ai/proposals/{id}` — marks `discarded`.
 
 Every route: `requireAuth()` then `requireGlobalCapability('use_ai_assistant')` first.
+
+### Multi-turn memory
+
+`--no-session-persistence` means every `claude -p` invocation is a fresh process with no memory of a prior turn — confirmed as a real gap during Phase 2 manual testing: a recurring-series proposal rejected for a room conflict, followed by "skip that date and do the other two," had nothing to resolve "that date" against. Fixed without touching the CLI invocation's statelessness: `Assistant::ask()` now calls `loadHistory($conversationId)` **before** inserting the current turn's user message, fetching the last `MAX_HISTORY_MESSAGES` (20) user/assistant rows from `ai_messages` and trimming them to a `MAX_HISTORY_CHARS` (12000) budget via `trimHistoryToBudget()` — pure, dropping from the oldest end, always keeping at least the most recent turn. `formatHistory()` (also pure) renders them as alternating `User:`/`Assistant:` lines, spliced into the system prompt ahead of the current message by `buildSystemPrompt($eventContext, $history)`. The `-p` prompt itself stays just the new message — history lives in the system prompt, not the prompt argument — so the model answers the new turn specifically rather than re-narrating everything. Both pure helpers are unit-tested directly in `tests/ai_conversation_history_test.php` (no DB needed); `loadHistory()`'s DB read is exercised by the live end-to-end verification, not a hermetic test.
+
+Tool calls/results are still not persisted as separate `ai_messages` rows (see the migration's docblock) — the assistant's own reply text already narrates what a tool did/returned (e.g. "There's a room conflict on 2026-09-03"), which is what continuity actually needs.
 
 ### Shared apply logic (no duplicated mutation code)
 
@@ -235,22 +248,27 @@ AI_ASSISTANT_MAX_BUDGET_USD=
 
 ### Audit & rate limiting
 
-- `Database::setActor('ai:' . $userId)` before any AI-triggered write — `db_history` triggers attribute and can undo it distinctly from a human edit.
-- `log_activity()` on: proposal created (booker update / recurring series) and proposal applied — not on every read-only Q&A turn, to avoid drowning the per-event activity log in chat noise.
-- `RateLimiter::tooMany()` buckets: `ai_ask:user:{id}` (suggest 30/hour) and `ai_apply:user:{id}` (suggest 10/hour) — bounds runaway usage against the shared Claude Code subscription quota (this is OAuth/subscription-based, not metered API billing — a "noisy neighbor" problem across concurrent admins is the real cost risk here, not a dollar bill).
+- `Database::setActor('ai:' . $userId)` before any AI-triggered write — `db_history` triggers attribute and can undo it distinctly from a human edit. Confirmed live: `db_history.actor = 'ai:1'` on an applied proposal's row.
+- `log_activity()` fires at **apply** time only (inside `BookerUpdate::apply()`'s caller and `Series::attemptCreate()`), not at propose time — a proposal that's never applied doesn't need an event-activity-log entry, and the `ai_action_proposals` row itself (full `diff_json`, `created_at`, `status`) is already a complete record of what was proposed, whether or not it was ever acted on. (This is a small deviation from this doc's original wording, which suggested logging at propose time too — corrected here to match what's actually built.)
+- `RateLimiter::tooMany()` buckets: `ai_ask:user:{id}` (30/hour) and `ai_apply:user:{id}` (10/hour) — bounds runaway usage against the shared Claude Code subscription quota (this is OAuth/subscription-based, not metered API billing — a "noisy neighbor" problem across concurrent admins is the real cost risk here, not a dollar bill).
+- **Proposal expiry sweep** — `scripts/expire-ai-proposals.php` (`--dry-run` supported), wrapped by `scripts/cron-expire-ai-proposals.sh` (flock-guarded, logs to `storage/logs/expire-ai-proposals.log`), scheduled `*/15 * * * *`. Flips any `ai_action_proposals` row still `status='pending'` past its `expires_at` to `status='expired'`. Not itself a security control — `Assistant::applyProposal()` already refuses a stale proposal at apply time regardless of whether this has run — it just keeps the stored `status` an honest reflection of reality for anything nobody ever clicked Apply/Discard on, e.g. when reviewed later in Admin → Database browser. Modeled on `scripts/expire-holds.php`'s shape, without that script's enable-gate or warning-email step (flipping a genuinely-expired row's status has no user-facing side effect either way).
 
 ### Testing
 
 - `php -l` on every new/changed file.
-- New hermetic tests: `Capabilities` extraction produces identical results to the pre-refactor `BaseEndpoint` logic; `Series.php` horizon-cap boundary cases.
-- `tests/ui/NN-ai-drawer.test.mjs`: open drawer on the `UI_EVENT_ID` fixture, ask a scripted read-only question, assert a rendered answer; separately, against a throwaway `"PB UI TEST — ... (safe to delete)"` event, drive a `propose_booker_update` round trip through to a clicked Apply, assert the DB row changed, delete the throwaway event in `finally`.
-- Manual: mint a `venue_admin` token via `scripts/login-link.php`, `curl /api/ai/ask` directly to verify the MCP wiring before wiring up the UI.
+- Hermetic: `tests/capabilities_test.php` (the `Capabilities` extraction vs. pre-refactor `BaseEndpoint` logic), `tests/events_series_horizon_test.php` (horizon-cap boundary cases), `tests/ai_booker_update_test.php` (field-allowlist/diff logic), `tests/ai_conversation_history_test.php` (history trim/format logic).
+- DB-backed (opt-in, `RUN_DB_TESTS=1`): `tests/ai_phase2_db_test.php` — `BookerUpdate::matchEvents()`/`apply()` and `Series::previewSeries()`/`attemptCreate()` against real throwaway events, cleaned up in `finally`.
+- `tests/ui/105-ai-drawer.test.mjs`: Phase 1 coverage only (drawer open/close/non-blocking mechanics, a scripted read-only Q&A round trip). **Not yet extended** to click through the Phase 2 proposal diff card's Apply/Discard buttons in a real browser — that flow has only been verified via direct API calls (see below), not through the actual `ai-drawer.js` UI. Known gap, not yet closed.
+- Manual, live, against the real `claude` CLI (repeated for both Phase 2 and the multi-turn follow-up): mint a `venue_admin` token via `scripts/login-link.php`, drive `/api/ai/ask` → `/api/ai/proposals/{id}/apply` / `DELETE .../proposals/{id}` directly with `curl` against throwaway `"PB UI TEST — ..."` events, cleaned up afterward. Covered: propose→apply (DB changed, correctly attributed), propose→discard (DB untouched, replay blocked with 409), a destructive-request refusal, a disallowed-field refusal, and the multi-turn "skip that date" scenario.
 
 ### Rollout
 
-1. **Phase 0** (ship first, independent): recurring-event 90-day horizon cap.
-2. **Phase 1**: read-only assistant. `--allowedTools` contains only `get_event`/`list_events` — the write tools don't exist in the MCP server binary at all yet, so there's nothing to accidentally allow.
-3. **Phase 2**: add `propose_booker_update` / `propose_recurring_series` + Apply/Discard UI, once Phase 1 has run in production and the propose/apply pattern has been validated end-to-end on the read-only foundation.
+1. **Phase 0** (shipped): recurring-event 90-day horizon cap.
+2. **Phase 1** (shipped): read-only assistant — `get_event`/`list_events` only.
+3. **Phase 2** (shipped): `propose_booker_update` / `propose_recurring_series` + Apply/Discard UI.
+4. **Follow-up** (shipped): multi-turn conversation memory; in-app help (`public/assets/help.js`, "AI Assistant" topic) and ops manual (`docs/ops-manual.html`, Chapter 12) documentation; proposal expiry sweep.
+
+**Known gaps, not yet closed:** no headless-browser test drives the Phase 2 proposal card's Apply/Discard buttons (see "Testing" above).
 
 ---
 
