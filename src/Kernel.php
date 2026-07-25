@@ -579,12 +579,18 @@ final class Kernel
             return [AppSettings::class, []];
         }
 
-        // AI Assistant drawer — POST /api/ai/ask (Phase 1: read-only Q&A
-        // only; requireAuth()+requireGlobalCapability('use_ai_assistant')
-        // gate inside the endpoint). Phase 2's /api/ai/proposals/* routes
-        // aren't implemented yet — see docs/AI-ASSISTANT-PLAN.md.
+        // AI Assistant drawer — src/Ai/Assistant.php, gated inside the
+        // endpoint by requireAuth() + requireGlobalCapability('use_ai_assistant').
+        // See docs/AI-ASSISTANT-PLAN.md.
+        //   POST   /api/ai/ask                     — ask a question / trigger a propose_* tool
+        //   POST   /api/ai/proposals/{id}/apply     — human-clicked: apply a stored proposal
+        //   DELETE /api/ai/proposals/{id}           — human-clicked: discard a stored proposal
         if ($segments[0] === 'ai') {
-            return [Ai\Assistant::class, ['action' => $segments[1] ?? null, 'id' => $this->intOrNull($segments[2] ?? null)]];
+            return [Ai\Assistant::class, [
+                'action' => $segments[1] ?? null,
+                'id'     => $this->intOrNull($segments[2] ?? null),
+                'sub'    => $segments[3] ?? null,
+            ]];
         }
 
         // Panic Promote — /api/promote/...

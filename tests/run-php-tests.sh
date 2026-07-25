@@ -8,10 +8,14 @@
 # *.sh integration scripts that need a live server + seeded DB. The scripts
 # here need neither by default.
 #
-# Two scripts are skipped unless explicitly opted into, because they need a
-# real MySQL connection:
+# Several scripts are skipped unless explicitly opted into, because they
+# need a real MySQL connection:
 #   - rate_limiter_test.php      RateLimiter's SQL (ON DUPLICATE KEY, NOW(6))
 #                                 is MySQL-only.
+#   - ai_phase2_db_test.php      AI Assistant Phase 2 write path (BookerUpdate
+#                                 + Series::attemptCreate/previewSeries) —
+#                                 needs a real venue + venue_admin user and
+#                                 creates/cleans-up throwaway event rows.
 #   - contract_signing_test.php  A manual/exploratory script that mutates
 #                                 real rows against whatever DB is configured
 #                                 and isn't written to be safely repeatable —
@@ -27,7 +31,7 @@ set -u
 cd "$(dirname "$0")/.."
 
 TESTS_DIR="./tests"
-DB_TESTS=("rate_limiter_test.php" "process_versions_test.php" "process_runtime_test.php" "process_centerstage_handlers_test.php")
+DB_TESTS=("rate_limiter_test.php" "process_versions_test.php" "process_runtime_test.php" "process_centerstage_handlers_test.php" "ai_phase2_db_test.php")
 MANUAL_TESTS=("contract_signing_test.php")
 
 shopt -s nullglob

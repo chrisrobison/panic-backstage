@@ -7575,6 +7575,78 @@ pb-ai-drawer.ai-drawer-open {
   pb-ai-drawer { width: 100vw; }
 }
 
+/* ── AI Assistant proposal diff card (Phase 2: propose/apply) ──────────────
+   Rendered in place of a plain assistant bubble when a propose_* tool call
+   comes back on /ai/ask's response. Deliberately visually distinct (dashed
+   border, its own head row) from an ordinary reply — this represents a
+   change that has NOT happened yet, and Apply/Discard are the only way it
+   ever will. See ai-drawer.js's renderProposalCard(). */
+.ai-msg-proposal {
+  align-self: stretch;
+  max-width: 100%;
+  background: var(--panel);
+  border: 1px dashed var(--proc-ai, #0f9488);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.ai-proposal-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  color: var(--proc-ai, #0f9488);
+  margin-bottom: 8px;
+}
+.ai-proposal-list, .ai-proposal-dates { list-style: none; margin: 0; padding: 0; }
+.ai-proposal-event { margin-bottom: 8px; }
+.ai-proposal-event:last-child { margin-bottom: 0; }
+.ai-proposal-event strong { font-size: 13px; }
+.ai-diff-fields { list-style: none; margin: 4px 0 0; padding: 0 0 0 4px; font-size: 12.5px; color: var(--muted); }
+.ai-diff-field { font-weight: 600; color: var(--ink); }
+.ai-diff-before { text-decoration: line-through; opacity: .7; }
+.ai-diff-after { color: var(--proc-ai, #0f9488); font-weight: 600; }
+.ai-proposal-summary { font-size: 13px; font-weight: 600; margin: 0 0 6px; }
+.ai-proposal-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+}
+.ai-proposal-dates li {
+  background: var(--soft);
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+.ai-proposal-empty { color: var(--muted); font-size: 13px; margin: 0; }
+.ai-proposal-error { color: var(--danger, #c72525); font-size: 12.5px; margin: 8px 0 0; }
+.ai-proposal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ai-proposal-apply, .ai-proposal-discard {
+  flex: 1 1 auto;
+  border: 0;
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ai-proposal-apply { background: var(--proc-ai, #0f9488); color: #fff; }
+.ai-proposal-discard { background: var(--soft); color: var(--ink); }
+.ai-proposal-status {
+  margin-top: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.ai-proposal-status-applied { color: var(--proc-ai, #0f9488); }
+.ai-proposal-status-discarded { color: var(--muted); }
+.ai-proposal-status-applying, .ai-proposal-status-discarding { color: var(--muted); font-style: italic; }
+
 /* ═════════════════════════════════════════════════════════════════════════
    ── Booking Inbox (incoming-ui.png) ─────────────────────────────────────────
    Three-column workspace: saved-view queue (ib-list) + conversation

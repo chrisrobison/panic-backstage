@@ -5,18 +5,31 @@ namespace Panic\Ai;
 
 use Panic\BaseEndpoint;
 use Panic\Capabilities;
+use Panic\Events\Series;
 use Panic\RateLimiter;
 use Panic\Request;
 use Panic\Response;
+use function Panic\log_activity;
 
 /**
- * POST /api/ai/ask — the AI Assistant drawer's only route in Phase 1.
- * {conversation_id?, event_id?, message} -> {conversation_id, reply}
+ * The AI Assistant drawer's backend.
  *
- * Read-only: the model gets exactly two MCP tools (get_event, list_events —
- * see scripts/ai-mcp-server.php), never Claude Code's own Bash/Read/Write/
- * Edit tools, and never any MCP server but ours. There is no write/propose/
- * apply route here at all yet — that's Phase 2 (see docs/AI-ASSISTANT-PLAN.md).
+ *   POST   /api/ai/ask                   {conversation_id?, event_id?, message}
+ *                                         -> {conversation_id, reply, proposal?}
+ *   POST   /api/ai/proposals/{id}/apply  -> executes a stored, not-yet-expired
+ *                                         proposal — human-clicked only, never
+ *                                         reachable from the model itself.
+ *   DELETE /api/ai/proposals/{id}        -> discards a pending proposal.
+ *
+ * The model gets a fixed MCP tool set (see scripts/ai-mcp-server.php), never
+ * Claude Code's own Bash/Read/Write/Edit tools, and never any MCP server but
+ * ours. Read tools (get_event, list_events) return data directly. Write
+ * tools (propose_booker_update, propose_recurring_series) only ever INSERT a
+ * row into ai_action_proposals describing a computed diff — there is no
+ * apply_* tool the model can call. Applying is this class's applyProposal(),
+ * reachable only via the POST /api/ai/proposals/{id}/apply route above,
+ * which a human triggers by clicking "Apply" on the diff card in the
+ * drawer. See docs/AI-ASSISTANT-PLAN.md, "Guardrails, restated".
  *
  * Spawns `claude -p ...` per request, in a scoped temp dir cleaned up in
  * `finally`, modeled directly on Events\GenerateFlyer::runCodex() (escape
@@ -28,11 +41,18 @@ final class Assistant extends BaseEndpoint
     private const RATE_LIMIT_MAX_PER_HOUR = 30;
     private const RATE_LIMIT_WINDOW_SECONDS = 3600;
 
+    /** Bucket: ai_apply:user:{id} — a tighter cap than ai_ask since this bucket gates actual writes. */
+    private const APPLY_RATE_LIMIT_MAX_PER_HOUR = 10;
+
     /** Reject absurdly long prompts before ever spawning a subprocess. */
     private const MAX_MESSAGE_LENGTH = 4000;
 
-    /** Phase 1: read-only tools only. Phase 2 adds propose_* here once apply/UI exists. */
-    private const ALLOWED_TOOLS = ['mcp__panic__get_event', 'mcp__panic__list_events'];
+    private const ALLOWED_TOOLS = [
+        'mcp__panic__get_event',
+        'mcp__panic__list_events',
+        'mcp__panic__propose_booker_update',
+        'mcp__panic__propose_recurring_series',
+    ];
 
     public function handle(Request $request): Response
     {
@@ -44,16 +64,22 @@ final class Assistant extends BaseEndpoint
         }
 
         $action = $this->params['action'] ?? null;
-        if ($action !== 'ask') {
-            // Phase 2's /api/ai/proposals/* routes aren't implemented yet —
-            // this endpoint intentionally has exactly one route right now.
-            return $this->notFound();
+        $id     = $this->params['id'] ?? null;
+        $sub    = $this->params['sub'] ?? null;
+
+        if ($action === 'ask') {
+            return $request->method() === 'POST' ? $this->ask($request) : Response::methodNotAllowed();
         }
-        if ($request->method() !== 'POST') {
-            return Response::methodNotAllowed();
+        if ($action === 'proposals' && $id !== null) {
+            if ($sub === 'apply') {
+                return $request->method() === 'POST' ? $this->applyProposal((int) $id) : Response::methodNotAllowed();
+            }
+            if ($sub === null) {
+                return $request->method() === 'DELETE' ? $this->discardProposal((int) $id) : Response::methodNotAllowed();
+            }
         }
 
-        return $this->ask($request);
+        return $this->notFound();
     }
 
     private function ask(Request $request): Response
@@ -121,8 +147,20 @@ final class Assistant extends BaseEndpoint
             [$conversationId, $message]
         );
 
+        // Watermark: the highest ai_action_proposals.id that already existed
+        // for this conversation before we spawn `claude`. Any propose_* tool
+        // call the model makes during this turn INSERTs a new row with a
+        // higher id — comparing against this watermark afterward (rather
+        // than a timestamp, which risks clock-skew edge cases) is how we
+        // find "the proposal this turn produced, if any" without threading
+        // any extra plumbing through the MCP subprocess boundary.
+        $proposalWatermark = (int) ($this->db->one(
+            'SELECT COALESCE(MAX(id), 0) AS m FROM ai_action_proposals WHERE conversation_id = ?',
+            [$conversationId]
+        )['m'] ?? 0);
+
         try {
-            $reply = $this->runClaude($message, $userId, $role, $effectiveEventId, $eventContext);
+            $reply = $this->runClaude($message, $userId, $role, $conversationId, $effectiveEventId, $eventContext);
         } catch (\RuntimeException $e) {
             return Response::json(['error' => $e->getMessage()], 502);
         }
@@ -133,15 +171,184 @@ final class Assistant extends BaseEndpoint
         );
         $this->db->run('UPDATE ai_conversations SET updated_at = NOW() WHERE id = ?', [$conversationId]);
 
-        return $this->ok(['conversation_id' => $conversationId, 'reply' => $reply]);
+        $proposal = $this->db->one(
+            'SELECT id, tool_name, diff_json, expires_at FROM ai_action_proposals
+             WHERE conversation_id = ? AND id > ? AND status = \'pending\'
+             ORDER BY id DESC LIMIT 1',
+            [$conversationId, $proposalWatermark]
+        );
+
+        $payload = ['conversation_id' => $conversationId, 'reply' => $reply];
+        if ($proposal) {
+            $payload['proposal'] = [
+                'id'         => (int) $proposal['id'],
+                'tool_name'  => $proposal['tool_name'],
+                'diff'       => json_decode($proposal['diff_json'], true),
+                'expires_at' => $proposal['expires_at'],
+            ];
+        }
+
+        return $this->ok($payload);
     }
 
     /**
-     * Spawn `claude -p` headless, scoped to exactly the two Phase 1 MCP
-     * tools, and return its final text reply. Throws RuntimeException (with
-     * a user-safe message) on timeout or failure.
+     * POST /api/ai/proposals/{id}/apply — the ONE place in this codebase
+     * that turns an AI proposal into a real write. Only reachable via a
+     * human-clicked REST call (never a model tool); re-validates ownership,
+     * pending status, and expiry before touching anything, then re-runs the
+     * exact same validation the write would go through if a human had done
+     * it directly through the app (Series::attemptCreate() /
+     * BookerUpdate::apply()) rather than trusting the stored diff blindly —
+     * the underlying data may have changed since the proposal was computed.
      */
-    private function runClaude(string $message, int $userId, string $role, ?int $eventId, ?array $eventContext): string
+    private function applyProposal(int $proposalId): Response
+    {
+        $userId = $this->userId();
+        $role   = $this->role();
+
+        if (RateLimiter::tooMany($this->db, 'ai_apply:user:' . $userId, self::APPLY_RATE_LIMIT_MAX_PER_HOUR, self::RATE_LIMIT_WINDOW_SECONDS)) {
+            return Response::json(['error' => 'Too many AI apply actions — please wait a bit and try again.'], 429);
+        }
+
+        $loaded = $this->loadOwnedPendingProposal($proposalId, $userId);
+        if ($loaded instanceof Response) {
+            return $loaded;
+        }
+        $args = json_decode((string) $loaded['args_json'], true);
+        if (!is_array($args)) {
+            $args = [];
+        }
+
+        // Every write below runs through Database::setActor() so db_history
+        // attributes it (and can undo it) as an AI-assisted change distinct
+        // from an ordinary human edit — see docs/AI-ASSISTANT-PLAN.md,
+        // "Audit & rate limiting".
+        $this->db->setActor('ai:' . $userId);
+
+        $result = match ($loaded['tool_name']) {
+            'propose_booker_update'    => $this->applyBookerUpdate($args, $userId, $role),
+            'propose_recurring_series' => $this->applyRecurringSeries($args, $userId, $role),
+            default                    => ['ok' => false, 'status' => 500, 'error' => 'Unknown proposal type.'],
+        };
+
+        if ($result['ok']) {
+            $this->db->run(
+                "UPDATE ai_action_proposals SET status = 'applied', applied_at = NOW(), applied_by_user_id = ? WHERE id = ?",
+                [$userId, $proposalId]
+            );
+            return $this->ok($result['payload']);
+        }
+
+        $payload = ['error' => $result['error']];
+        if (isset($result['horizon_date'])) {
+            $payload['horizon_date'] = $result['horizon_date'];
+            $payload['beyond_horizon_dates'] = $result['beyond_horizon_dates'];
+        }
+        if (isset($result['conflict_dates'])) {
+            $payload['conflict_dates'] = $result['conflict_dates'];
+        }
+        return Response::json($payload, $result['status']);
+    }
+
+    /** DELETE /api/ai/proposals/{id} — human-clicked "Discard". Idempotent: only a still-pending proposal is touched. */
+    private function discardProposal(int $proposalId): Response
+    {
+        $userId = $this->userId();
+        $proposal = $this->db->one('SELECT id, user_id, status FROM ai_action_proposals WHERE id = ?', [$proposalId]);
+        if (!$proposal || (int) $proposal['user_id'] !== $userId) {
+            return $this->notFound('Proposal not found.');
+        }
+        if ($proposal['status'] === 'pending') {
+            $this->db->run("UPDATE ai_action_proposals SET status = 'discarded' WHERE id = ?", [$proposalId]);
+        }
+        return $this->ok(['ok' => true]);
+    }
+
+    /**
+     * Load a proposal by id, verifying it belongs to $userId and is still
+     * pending and unexpired. Returns the proposal row, or an error Response
+     * ready to hand straight back to the caller.
+     */
+    private function loadOwnedPendingProposal(int $proposalId, int $userId): array|Response
+    {
+        $proposal = $this->db->one('SELECT * FROM ai_action_proposals WHERE id = ?', [$proposalId]);
+        if (!$proposal || (int) $proposal['user_id'] !== $userId) {
+            return $this->notFound('Proposal not found.');
+        }
+        if ($proposal['status'] !== 'pending') {
+            return Response::json(['error' => 'This proposal is no longer pending (status: ' . $proposal['status'] . ').'], 409);
+        }
+        if (strtotime((string) $proposal['expires_at']) < time()) {
+            $this->db->run("UPDATE ai_action_proposals SET status = 'expired' WHERE id = ?", [$proposalId]);
+            return Response::json(['error' => 'This proposal has expired — ask again to get a fresh one.'], 409);
+        }
+        return $proposal;
+    }
+
+    /**
+     * @return array{ok: bool, status?: int, error?: string, payload?: array}
+     */
+    private function applyBookerUpdate(array $args, int $userId, string $role): array
+    {
+        $eventIds = is_array($args['event_ids'] ?? null) ? array_map('intval', $args['event_ids']) : [];
+        $fields   = BookerUpdate::sanitizeFields(is_array($args['fields'] ?? null) ? $args['fields'] : []);
+        if (!$eventIds || !$fields) {
+            return ['ok' => false, 'status' => 422, 'error' => 'This proposal has no valid changes to apply.'];
+        }
+
+        // Re-check edit_event access NOW, at apply time, rather than trusting
+        // the set of events matched when the proposal was first computed —
+        // access (or the events themselves) may have changed since.
+        $db = $this->db;
+        $authorizedIds = array_values(array_filter(
+            $eventIds,
+            static fn(int $eventId): bool => Capabilities::hasEvent($db, $eventId, $userId, $role, 'edit_event')
+        ));
+        if (!$authorizedIds) {
+            return ['ok' => false, 'status' => 403, 'error' => 'You no longer have edit access to any of the events in this proposal.'];
+        }
+
+        $updated = BookerUpdate::apply($this->db, $authorizedIds, $fields);
+        foreach ($authorizedIds as $eventId) {
+            log_activity($this->db, $eventId, $userId, 'booker info updated via AI assistant', ['fields' => array_keys($fields)]);
+        }
+
+        return ['ok' => true, 'payload' => ['updated_count' => $updated, 'event_ids' => $authorizedIds]];
+    }
+
+    /**
+     * @return array{ok: bool, status?: int, error?: string, payload?: array}
+     */
+    private function applyRecurringSeries(array $args, int $userId, string $role): array
+    {
+        $eventId = (int) ($args['event_id'] ?? 0);
+        $dates   = is_array($args['dates'] ?? null) ? array_values(array_filter(array_map('strval', $args['dates']))) : [];
+        $description = isset($args['description']) && is_string($args['description']) ? trim($args['description']) : null;
+        if ($eventId <= 0 || !$dates) {
+            return ['ok' => false, 'status' => 422, 'error' => 'This proposal is missing required data.'];
+        }
+
+        // Delegates to Series::attemptCreate() — the exact same validation
+        // (capability, occurrence cap, 90-day horizon, room conflicts) and
+        // insert logic the human "Create recurring events" button runs, so
+        // this can never create a series the human flow wouldn't also allow.
+        $series = new Series($this->db, $this->auth, [], $this->root);
+        $result = $series->attemptCreate(
+            $eventId, $dates, $description, null, 'after_count', null, count($dates) + 1, $userId, $role
+        );
+        if (!$result['ok']) {
+            return $result;
+        }
+
+        return ['ok' => true, 'payload' => ['series_id' => $result['series_id'], 'created_event_ids' => $result['created_event_ids']]];
+    }
+
+    /**
+     * Spawn `claude -p` headless, scoped to the current ALLOWED_TOOLS, and
+     * return its final text reply. Throws RuntimeException (with a
+     * user-safe message) on timeout or failure.
+     */
+    private function runClaude(string $message, int $userId, string $role, int $conversationId, ?int $eventId, ?array $eventContext): string
     {
         $bin            = getenv('CLAUDE_CLI_BIN') ?: '/home/cdr/.local/bin/claude';
         $model          = getenv('AI_ASSISTANT_MODEL') ?: 'sonnet';
@@ -169,9 +376,10 @@ final class Assistant extends BaseEndpoint
                         'command' => 'php',
                         'args'    => [$mcpServerScript],
                         'env'     => [
-                            'PB_ACTING_USER_ID' => (string) $userId,
-                            'PB_ACTING_ROLE'    => $role,
-                            'PB_EVENT_ID'       => $eventId !== null ? (string) $eventId : '',
+                            'PB_ACTING_USER_ID'  => (string) $userId,
+                            'PB_ACTING_ROLE'     => $role,
+                            'PB_EVENT_ID'        => $eventId !== null ? (string) $eventId : '',
+                            'PB_CONVERSATION_ID' => (string) $conversationId,
                         ],
                     ],
                 ],
@@ -253,17 +461,27 @@ final class Assistant extends BaseEndpoint
 
     private function buildSystemPrompt(?array $eventContext): string
     {
-        $prompt = 'You are the read-only AI assistant embedded in Panic Backstage, a venue booking and '
+        $prompt = 'You are the AI assistant embedded in Panic Backstage, a venue booking and '
             . 'event-management app. You help venue staff answer questions about events using the '
-            . 'get_event and list_events tools — those are your only tools, and you cannot make any '
-            . 'changes to the system: no writes, no emails, no files, no shell. If asked to change, '
-            . 'delete, cancel, or email anything, say plainly that you can currently only answer '
-            . 'questions and that changes have to be made in the app directly.'
+            . 'get_event and list_events tools, and can PROPOSE two kinds of change using '
+            . 'propose_booker_update and propose_recurring_series. Those four tools are your only '
+            . 'tools, and proposing is as far as you can ever go: calling a propose_* tool only computes '
+            . 'a diff and stores it for a human to review — it does not change anything by itself. There '
+            . 'is no way for you to actually apply a change, delete anything, cancel anything, or send '
+            . 'email — only a human clicking "Apply" in the app can do that. After a successful propose_* '
+            . 'call, tell the user their proposal is ready to review in the panel; never say the change '
+            . '"has been made" or "is done" — it has not. If asked to do something outside these four '
+            . 'tools (delete an event, change its status, send an email, run arbitrary code, etc.), say '
+            . 'plainly that you cannot do that and that it has to be done in the app directly.'
             . "\n\n"
             . 'Always call a tool to look up real data rather than guessing or inventing event details, '
             . 'dates, or contact information. If a tool call reports no access, tell the user plainly '
             . 'that they do not have access to that event rather than working around it or making '
-            . 'something up. Keep answers concise and grounded only in what the tools actually return.';
+            . 'something up. For propose_recurring_series, compute the date list yourself from what the '
+            . 'user asked for (e.g. "every Tuesday for 8 weeks") — the tool will tell you if a date is '
+            . 'invalid, beyond the 90-day booking horizon, or conflicts with an existing booking; fix and '
+            . 'retry rather than guessing around a rejection. Keep answers concise and grounded only in '
+            . 'what the tools actually return.';
 
         if ($eventContext !== null && $eventContext !== []) {
             $prompt .= "\n\nThe user currently has this event open in their workspace. Treat questions "

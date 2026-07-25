@@ -1,7 +1,7 @@
 import { api, esc, mdToHtml, PanicElement, $ } from './core.js';
 
 /**
- * <pb-ai-drawer> — the AI Assistant drawer (Phase 1: read-only Q&A).
+ * <pb-ai-drawer> — the AI Assistant drawer.
  *
  * A persistent right-side slide-over PANEL, not a modal: openModal()
  * deliberately isn't used here, and unlike the mobile nav drawer
@@ -19,6 +19,15 @@ import { api, esc, mdToHtml, PanicElement, $ } from './core.js';
  *   - an event workspace's "Ask AI" button (see event-workspace.js), which
  *     calls open({ eventId }) so "what's the status of this event" works
  *     without the user having to name it.
+ *
+ * Phase 2: when POST /ai/ask's response includes a `proposal` (the model
+ * called propose_booker_update or propose_recurring_series), it's rendered
+ * as a distinct transcript entry — a diff card with Apply/Discard buttons.
+ * Apply uses a native confirm() before POSTing to
+ * /ai/proposals/{id}/apply, matching the destructive-action confirm
+ * pattern used elsewhere in the app (e.g. event-workspace.js's payment
+ * void). The model itself never has an "apply" tool — see
+ * docs/AI-ASSISTANT-PLAN.md.
  */
 class AiDrawer extends PanicElement {
   connect() {
@@ -93,6 +102,17 @@ class AiDrawer extends PanicElement {
       textarea.style.height = `${textarea.scrollHeight}px`;
     });
 
+    // Delegated click handler for proposal-card Apply/Discard buttons —
+    // renderTranscript() rebuilds the transcript's innerHTML on every
+    // message, so per-button listeners would be lost each time; one
+    // listener on the (stable) transcript container survives that.
+    $('[data-ai-transcript]', this).addEventListener('click', (event) => {
+      const applyBtn = event.target.closest('[data-proposal-apply]');
+      const discardBtn = event.target.closest('[data-proposal-discard]');
+      if (applyBtn) this.applyProposal(Number(applyBtn.dataset.proposalApply));
+      else if (discardBtn) this.discardProposal(Number(discardBtn.dataset.proposalDiscard));
+    });
+
     this.renderTranscript();
   }
 
@@ -100,7 +120,7 @@ class AiDrawer extends PanicElement {
     const el = $('[data-ai-transcript]', this);
     if (!el) return;
     if (!this.messages.length) {
-      el.innerHTML = `<p class="ai-drawer-empty">Ask a question about ${this.eventId ? 'this event' : 'an event, or events in general'} — I can look things up, but I can't make changes yet.</p>`;
+      el.innerHTML = `<p class="ai-drawer-empty">Ask a question about ${this.eventId ? 'this event' : 'an event, or events in general'} — I can look things up, and propose changes (like updating booker info or setting up a recurring series) for you to review before anything happens.</p>`;
       return;
     }
     el.innerHTML = this.messages.map((message) => {
@@ -110,6 +130,9 @@ class AiDrawer extends PanicElement {
       if (message.role === 'error') {
         return `<div class="ai-msg ai-msg-error">${esc(message.content)}</div>`;
       }
+      if (message.role === 'proposal') {
+        return this.renderProposalCard(message);
+      }
       // Assistant replies render as the app's shared Markdown subset (safe
       // by construction — see core.js's mdToHtml); the user's own message
       // is rendered as plain escaped text.
@@ -117,6 +140,59 @@ class AiDrawer extends PanicElement {
       return `<div class="ai-msg ai-msg-${esc(message.role)}">${body}</div>`;
     }).join('');
     el.scrollTop = el.scrollHeight;
+  }
+
+  /**
+   * A proposal never applies itself — see the class docblock. `status`
+   * drives which UI shows: 'pending' (Apply/Discard buttons), 'applying'/
+   * 'discarding' (in flight, buttons hidden), or a terminal 'applied'/
+   * 'discarded' (buttons replaced with a plain status line).
+   */
+  renderProposalCard(message) {
+    const isTerminal = message.status === 'applied' || message.status === 'discarded';
+    const isBusy = message.status === 'applying' || message.status === 'discarding';
+    const body = message.toolName === 'propose_recurring_series'
+      ? this.renderSeriesDiff(message.diff)
+      : this.renderBookerDiff(message.diff);
+
+    const statusLabel = { applied: 'Applied ✓', discarded: 'Discarded', applying: 'Applying…', discarding: 'Discarding…' }[message.status] || '';
+    const actions = isTerminal || isBusy
+      ? `<div class="ai-proposal-status ai-proposal-status-${esc(message.status)}">${esc(statusLabel)}</div>`
+      : `<div class="ai-proposal-actions">
+           <button type="button" class="ai-proposal-apply" data-proposal-apply="${message.proposalId}">Apply</button>
+           <button type="button" class="ai-proposal-discard" data-proposal-discard="${message.proposalId}">Discard</button>
+         </div>`;
+    const error = message.error ? `<p class="ai-proposal-error">${esc(message.error)}</p>` : '';
+
+    return `<div class="ai-msg ai-msg-proposal">
+      <div class="ai-proposal-head"><i class="fa-solid fa-file-pen" aria-hidden="true"></i> Proposed change — nothing has happened yet</div>
+      ${body}
+      ${error}
+      ${actions}
+    </div>`;
+  }
+
+  renderBookerDiff(diff) {
+    if (!Array.isArray(diff) || !diff.length) {
+      return `<p class="ai-proposal-empty">No matching events.</p>`;
+    }
+    const rows = diff.map((row) => {
+      const fields = Object.entries(row.fields || {}).map(([key, change]) =>
+        `<li><span class="ai-diff-field">${esc(key)}</span>: <span class="ai-diff-before">${esc(change.before || '—')}</span> → <span class="ai-diff-after">${esc(change.after || '—')}</span></li>`
+      ).join('');
+      return `<li class="ai-proposal-event"><strong>${esc(row.title || `Event #${row.event_id}`)}</strong><ul class="ai-diff-fields">${fields}</ul></li>`;
+    }).join('');
+    return `<ul class="ai-proposal-list">${rows}</ul>`;
+  }
+
+  renderSeriesDiff(diff) {
+    const dates = Array.isArray(diff?.dates) ? diff.dates : [];
+    if (!dates.length) {
+      return `<p class="ai-proposal-empty">No occurrence dates.</p>`;
+    }
+    const summary = `${esc(diff.anchor_title || 'This event')} → ${dates.length} new occurrence${dates.length === 1 ? '' : 's'}`;
+    return `<p class="ai-proposal-summary">${summary}</p>
+      <ul class="ai-proposal-dates">${dates.map((date) => `<li>${esc(date)}</li>`).join('')}</ul>`;
   }
 
   async send(rawMessage) {
@@ -139,12 +215,64 @@ class AiDrawer extends PanicElement {
       if (this.eventId) body.event_id = this.eventId;
       const data = await api('/ai/ask', { method: 'POST', body: JSON.stringify(body) });
       this.conversationId = data.conversation_id;
-      this.messages = [...this.messages.filter((m) => m.role !== 'pending'), { role: 'assistant', content: data.reply }];
+      const next = [...this.messages.filter((m) => m.role !== 'pending'), { role: 'assistant', content: data.reply }];
+      if (data.proposal) {
+        next.push({
+          role: 'proposal',
+          proposalId: data.proposal.id,
+          toolName: data.proposal.tool_name,
+          diff: data.proposal.diff,
+          expiresAt: data.proposal.expires_at,
+          status: 'pending',
+        });
+      }
+      this.messages = next;
     } catch (error) {
       this.messages = [...this.messages.filter((m) => m.role !== 'pending'), { role: 'error', content: error.message || 'Something went wrong asking the AI Assistant.' }];
     } finally {
       this.sending = false;
       this.setSendingUi(false);
+      this.renderTranscript();
+    }
+  }
+
+  /** Human-clicked "Apply" on a proposal card — see the class docblock. */
+  async applyProposal(proposalId) {
+    const message = this.messages.find((m) => m.role === 'proposal' && m.proposalId === proposalId);
+    if (!message || message.status !== 'pending') return;
+    if (!confirm('Apply this change now? This will update real event data.')) return;
+
+    message.status = 'applying';
+    message.error = null;
+    this.renderTranscript();
+
+    try {
+      await api(`/ai/proposals/${proposalId}/apply`, { method: 'POST' });
+      message.status = 'applied';
+    } catch (error) {
+      message.status = 'pending';
+      message.error = error.message || 'Could not apply this proposal.';
+    } finally {
+      this.renderTranscript();
+    }
+  }
+
+  /** Human-clicked "Discard" on a proposal card. */
+  async discardProposal(proposalId) {
+    const message = this.messages.find((m) => m.role === 'proposal' && m.proposalId === proposalId);
+    if (!message || message.status !== 'pending') return;
+
+    message.status = 'discarding';
+    message.error = null;
+    this.renderTranscript();
+
+    try {
+      await api(`/ai/proposals/${proposalId}`, { method: 'DELETE' });
+      message.status = 'discarded';
+    } catch (error) {
+      message.status = 'pending';
+      message.error = error.message || 'Could not discard this proposal.';
+    } finally {
       this.renderTranscript();
     }
   }

@@ -1,7 +1,7 @@
 # AI Assistant Drawer + Recurring-Event Horizon Cap — Implementation Plan
 
 **Added:** 2026-07-24
-**Status:** 📝 Planned — Phase 0 (horizon cap) and Phase 1 (read-only assistant) to be implemented following this doc; Phase 2 (write tools) documented up front but built once Phase 1 is trusted in production.
+**Status:** ✅ Built — Phase 0 (horizon cap), Phase 1 (read-only assistant), and Phase 2 (propose/apply write tools: `propose_booker_update`, `propose_recurring_series`) are all implemented per this doc. Phase 2 adds `src/Ai/BookerUpdate.php` (shared allowlist/match/diff/apply logic) and `Events\Series::attemptCreate()`/`previewSeries()` (extracted from `Series::create()` so the AI apply path and the human "Create recurring events" button share one validation/insert code path), plus `POST /api/ai/proposals/{id}/apply` and `DELETE /api/ai/proposals/{id}` on `src/Ai/Assistant.php`. Verified end-to-end against the live `claude` CLI: propose → apply (DB row changed, `db_history.actor = 'ai:{id}'`), propose → discard (DB untouched, replay blocked), a destructive-request refusal, and a disallowed-field request refusal — see `tests/ai_booker_update_test.php` and `tests/ai_phase2_db_test.php` for the hermetic/DB-backed coverage.
 
 ---
 

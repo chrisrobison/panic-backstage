@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Panic\Events;
 
 use Panic\BaseEndpoint;
+use Panic\Capabilities;
 use Panic\Request;
 use Panic\Response;
 use function Panic\log_activity;
@@ -73,35 +74,155 @@ final class Series extends BaseEndpoint
 
     private function create(Request $request, int $eventId): Response
     {
-        if ($denied = $this->requireEventCapability($eventId, 'edit_event')) {
-            return $denied;
-        }
-        $anchor = $this->db->one('SELECT * FROM events WHERE id = ?', [$eventId]);
-        if (!$anchor) {
-            return $this->notFound('Event not found');
-        }
-        if (!empty($anchor['series_id'])) {
-            return Response::json(['error' => 'This event is already part of a series.'], 422);
-        }
-
         $body        = $request->body();
         $dates       = array_values(array_unique(array_filter(array_map('strval', (array) ($body['dates'] ?? [])))));
         $description = trim((string) ($body['description'] ?? '')) ?: null;
         $pattern     = $body['pattern'] ?? null;
         $endType     = ($body['end_type'] ?? '') === 'on_date' ? 'on_date' : 'after_count';
+        $endDate     = $endType === 'on_date' ? ($body['end_date'] ?: null) : null;
+        $occurrenceCount = $endType === 'after_count' ? (int) ($body['occurrence_count'] ?? (count($dates) + 1)) : null;
 
+        $result = $this->attemptCreate(
+            $eventId, $dates, $description, $pattern, $endType, $endDate, $occurrenceCount,
+            $this->userId(), $this->role()
+        );
+        return $this->resultToResponse($result);
+    }
+
+    /**
+     * Everything create() needs beyond parsing the HTTP request body:
+     * capability check, anchor lookup, date validation (format/self-date/
+     * MAX_OCCURRENCES/MAX_HORIZON_DAYS), room-conflict check, and the
+     * transactional insert. Takes $actingUserId/$actingRole explicitly
+     * (rather than reading $this->userId()/$this->role()) so it's callable
+     * identically from two contexts:
+     *   - create() above, an ordinary authenticated HTTP request
+     *   - Ai\Assistant::applyRecurringSeries(), the AI drawer's Apply button
+     *     — a human-clicked REST call that already re-validated the
+     *     proposal's ownership/expiry before getting here
+     * Both run through *this exact same* validation and insert code, so the
+     * AI path can never create a series the human "Create recurring events"
+     * button wouldn't also allow. Returns a plain array (not a Response) so
+     * callers that aren't building an HTTP response (the MCP propose tool's
+     * dry run, see previewSeries()) can consume the same result shape.
+     *
+     * @return array{ok: bool, status?: int, error?: string, horizon_date?: string,
+     *     beyond_horizon_dates?: list<string>, conflict_dates?: list<string>,
+     *     series_id?: int, created_event_ids?: list<int>}
+     */
+    public function attemptCreate(
+        int $eventId,
+        array $dates,
+        ?string $description,
+        mixed $pattern,
+        string $endType,
+        ?string $endDate,
+        ?int $occurrenceCount,
+        int $actingUserId,
+        string $actingRole
+    ): array {
+        $validated = $this->validateSeries($eventId, $dates, $actingUserId, $actingRole);
+        if (!$validated['ok']) {
+            return $validated;
+        }
+        $anchor = $validated['anchor'];
+        $dates  = $validated['dates'];
+
+        $pdo = $this->db->pdo();
+        $pdo->beginTransaction();
+        try {
+            $seriesId = $this->db->insert(
+                'INSERT INTO event_series (venue_id, title, pattern_json, description, end_type, end_date, occurrence_count, created_by_user_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [
+                    (int) $anchor['venue_id'],
+                    $anchor['title'],
+                    $pattern !== null ? json_encode($pattern) : null,
+                    $description,
+                    $endType,
+                    $endType === 'on_date' ? ($endDate ?: null) : null,
+                    $endType === 'after_count' ? ($occurrenceCount ?? (count($dates) + 1)) : null,
+                    $actingUserId,
+                ]
+            );
+
+            $this->db->run('UPDATE events SET series_id = ? WHERE id = ?', [$seriesId, $eventId]);
+
+            $createdIds = [];
+            foreach ($dates as $date) {
+                $createdIds[] = $this->cloneOccurrence($anchor, $date, $seriesId, $actingUserId);
+            }
+
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            @error_log('series create failed for event ' . $eventId . ': ' . $e->getMessage());
+            return ['ok' => false, 'status' => 500, 'error' => 'Could not create the series. Nothing was changed.'];
+        }
+
+        log_activity($this->db, $eventId, $actingUserId, 'recurring series created', [
+            'series_id' => $seriesId,
+            'occurrences' => count($createdIds),
+        ]);
+
+        return ['ok' => true, 'series_id' => $seriesId, 'created_event_ids' => $createdIds];
+    }
+
+    /**
+     * Read-only dry run of attemptCreate()'s validation (capability, anchor,
+     * date rules, room conflicts) with no DB writes — used by the AI
+     * Assistant's propose_recurring_series MCP tool to compute a proposal
+     * diff before any human has approved it. A proposal that passes this is
+     * guaranteed to pass attemptCreate()'s validation again at apply time
+     * (same method, same rules) — it can still be *rejected* later if the
+     * underlying data changed in between (a room got double-booked, the
+     * anchor joined another series, access was revoked), which is exactly
+     * why apply re-validates rather than trusting the stored diff blindly.
+     *
+     * @return array{ok: bool, status?: int, error?: string, horizon_date?: string,
+     *     beyond_horizon_dates?: list<string>, conflict_dates?: list<string>,
+     *     anchor?: array, dates?: list<string>}
+     */
+    public function previewSeries(int $eventId, array $dates, int $actingUserId, string $actingRole): array
+    {
+        return $this->validateSeries($eventId, $dates, $actingUserId, $actingRole);
+    }
+
+    private function validateSeries(int $eventId, array $dates, int $actingUserId, string $actingRole): array
+    {
+        // Same not-found/forbidden split as BaseEndpoint::requireEventCapability()
+        // (null access = event doesn't exist; non-null but capability-false =
+        // exists but not editable by this actor) — preserved here so this
+        // shared method behaves identically to the pre-refactor HTTP-only check.
+        $access = Capabilities::eventAccess($this->db, $eventId, $actingUserId, $actingRole);
+        if (!$access) {
+            return ['ok' => false, 'status' => 404, 'error' => 'Event not found'];
+        }
+        if (!($access['capabilities']['edit_event'] ?? false)) {
+            return ['ok' => false, 'status' => 403, 'error' => 'Forbidden'];
+        }
+
+        $anchor = $this->db->one('SELECT * FROM events WHERE id = ?', [$eventId]);
+        if (!$anchor) {
+            return ['ok' => false, 'status' => 404, 'error' => 'Event not found'];
+        }
+        if (!empty($anchor['series_id'])) {
+            return ['ok' => false, 'status' => 422, 'error' => 'This event is already part of a series.'];
+        }
+
+        $dates = array_values(array_unique(array_filter(array_map('strval', $dates))));
         if (!$dates) {
-            return Response::json(['error' => 'At least one occurrence date is required.'], 422);
+            return ['ok' => false, 'status' => 422, 'error' => 'At least one occurrence date is required.'];
         }
         if (count($dates) > self::MAX_OCCURRENCES) {
-            return Response::json(['error' => 'Too many occurrences — max ' . self::MAX_OCCURRENCES . ' per series.'], 422);
+            return ['ok' => false, 'status' => 422, 'error' => 'Too many occurrences — max ' . self::MAX_OCCURRENCES . ' per series.'];
         }
         foreach ($dates as $date) {
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-                return Response::json(['error' => "Invalid date: {$date}"], 422);
+                return ['ok' => false, 'status' => 422, 'error' => "Invalid date: {$date}"];
             }
             if ($date === $anchor['date']) {
-                return Response::json(['error' => "Occurrence dates must not include the event's own date ({$date})."], 422);
+                return ['ok' => false, 'status' => 422, 'error' => "Occurrence dates must not include the event's own date ({$date})."];
             }
         }
 
@@ -113,12 +234,13 @@ final class Series extends BaseEndpoint
         $horizonCutoff = self::horizonCutoff();
         $beyondHorizon = self::datesBeyondHorizon($dates, $horizonCutoff);
         if ($beyondHorizon) {
-            return Response::json([
+            return [
+                'ok' => false, 'status' => 422,
                 'error' => 'Too far out — occurrences must land within ' . self::MAX_HORIZON_DAYS
                     . ' days of today (by ' . $horizonCutoff . '). Beyond that: ' . implode(', ', $beyondHorizon),
                 'horizon_date' => $horizonCutoff,
                 'beyond_horizon_dates' => $beyondHorizon,
-            ], 422);
+            ];
         }
 
         // Validate every occurrence up front so we never create a partial
@@ -139,50 +261,30 @@ final class Series extends BaseEndpoint
             }
         }
         if ($conflicts) {
-            return Response::json([
+            return [
+                'ok' => false, 'status' => 409,
                 'error' => 'Room conflict on: ' . implode(', ', $conflicts) . '. Nothing was created — adjust the pattern and try again.',
                 'conflict_dates' => $conflicts,
-            ], 409);
+            ];
         }
 
-        $pdo = $this->db->pdo();
-        $pdo->beginTransaction();
-        try {
-            $seriesId = $this->db->insert(
-                'INSERT INTO event_series (venue_id, title, pattern_json, description, end_type, end_date, occurrence_count, created_by_user_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                [
-                    (int) $anchor['venue_id'],
-                    $anchor['title'],
-                    $pattern !== null ? json_encode($pattern) : null,
-                    $description,
-                    $endType,
-                    $endType === 'on_date' ? ($body['end_date'] ?: null) : null,
-                    $endType === 'after_count' ? (int) ($body['occurrence_count'] ?? (count($dates) + 1)) : null,
-                    $this->userId(),
-                ]
-            );
+        return ['ok' => true, 'anchor' => $anchor, 'dates' => $dates];
+    }
 
-            $this->db->run('UPDATE events SET series_id = ? WHERE id = ?', [$seriesId, $eventId]);
-
-            $createdIds = [];
-            foreach ($dates as $date) {
-                $createdIds[] = $this->cloneOccurrence($anchor, $date, $seriesId);
+    private function resultToResponse(array $result): Response
+    {
+        if (!$result['ok']) {
+            $payload = ['error' => $result['error']];
+            if (isset($result['horizon_date'])) {
+                $payload['horizon_date'] = $result['horizon_date'];
+                $payload['beyond_horizon_dates'] = $result['beyond_horizon_dates'];
             }
-
-            $pdo->commit();
-        } catch (\Throwable $e) {
-            $pdo->rollBack();
-            @error_log('series create failed for event ' . $eventId . ': ' . $e->getMessage());
-            return Response::json(['error' => 'Could not create the series. Nothing was changed.'], 500);
+            if (isset($result['conflict_dates'])) {
+                $payload['conflict_dates'] = $result['conflict_dates'];
+            }
+            return Response::json($payload, $result['status']);
         }
-
-        log_activity($this->db, $eventId, $this->userId(), 'recurring series created', [
-            'series_id' => $seriesId,
-            'occurrences' => count($createdIds),
-        ]);
-
-        return $this->ok(['series_id' => $seriesId, 'created_event_ids' => $createdIds]);
+        return $this->ok(['series_id' => $result['series_id'], 'created_event_ids' => $result['created_event_ids']]);
     }
 
     /**
@@ -192,7 +294,7 @@ final class Series extends BaseEndpoint
      * walkthrough, estimated guests, internal notes) start blank — mirrors
      * how Events::fromTemplate() seeds a new event, not a full row copy.
      */
-    private function cloneOccurrence(array $anchor, string $date, int $seriesId): int
+    private function cloneOccurrence(array $anchor, string $date, int $seriesId, int $actingUserId): int
     {
         $slug = $this->uniqueSlug($anchor['title'] . '-' . $date);
         $id = $this->db->insert(
@@ -217,7 +319,7 @@ final class Series extends BaseEndpoint
             ]
         );
         $this->assignEventCode($id);
-        log_activity($this->db, $id, $this->userId(), 'event created', ['title' => $anchor['title'], 'series_id' => $seriesId]);
+        log_activity($this->db, $id, $actingUserId, 'event created', ['title' => $anchor['title'], 'series_id' => $seriesId]);
         $this->pushToSheet($id);
         return $id;
     }

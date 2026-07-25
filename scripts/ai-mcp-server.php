@@ -25,9 +25,17 @@ declare(strict_types=1);
  * The tool registry is a fixed match()/switch dispatch over a hand-written
  * list, never reflection over arbitrary methods — adding a tool is always
  * a deliberate, reviewable source change, never data-driven. Phase 1 has
- * exactly two tools, both read-only: get_event, list_events. No write
- * tool, no SQL tool, no shell tool exists in this file, ever (see the
- * plan doc's "Guardrails, restated").
+ * two read-only tools: get_event, list_events. Phase 2 adds two more —
+ * propose_booker_update, propose_recurring_series — but "propose" is the
+ * operative word: both of those tools only ever INSERT a row into
+ * ai_action_proposals describing a change, computed from real (read-only)
+ * data. Neither one, nor anything else in this file, ever executes the
+ * actual UPDATE/INSERT that changes an event. That happens exactly one
+ * place in the whole codebase: Ai\Assistant::applyBookerUpdate() /
+ * applyRecurringSeries(), reachable only via POST /api/ai/proposals/{id}/apply
+ * — a plain human-clicked REST call, never a model-callable tool. No SQL
+ * tool, no shell tool, no delete/cancel-capable tool exists in this file,
+ * ever (see the plan doc's "Guardrails, restated").
  *
  * Transport: newline-delimited JSON-RPC 2.0 over stdio, per the MCP stdio
  * spec — one JSON object per line on stdin, one per line on stdout,
@@ -38,10 +46,13 @@ declare(strict_types=1);
 
 require __DIR__ . '/../src/bootstrap.php';
 
+use Panic\Ai\BookerUpdate;
 use Panic\Ai\EventContext;
+use Panic\Auth;
 use Panic\Capabilities;
 use Panic\Database;
 use Panic\Env;
+use Panic\Events\Series;
 
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
@@ -61,9 +72,20 @@ $actingRole   = (string) (getenv('PB_ACTING_ROLE') ?: '');
 // informational only — every tool below still requires an explicit
 // event_id argument and still runs the full capability check on it. Kept
 // available here for future tools that might want a default, not read yet.
-
+//
+// PB_CONVERSATION_ID identifies which ai_conversations row any proposal
+// this run creates gets attached to — required so Ai\Assistant::ask() can
+// find a freshly-created pending proposal after this process exits (see
+// "Surfacing a proposal back to the frontend" below) and so an applied/
+// discarded proposal's audit trail can be traced back to the conversation
+// that produced it.
 if ($actingUserId <= 0 || $actingRole === '') {
     fwrite(STDERR, "[ai-mcp-server] missing/invalid PB_ACTING_USER_ID or PB_ACTING_ROLE — refusing to start\n");
+    exit(1);
+}
+$conversationId = (int) (getenv('PB_CONVERSATION_ID') ?: 0);
+if ($conversationId <= 0) {
+    fwrite(STDERR, "[ai-mcp-server] missing/invalid PB_CONVERSATION_ID — refusing to start\n");
     exit(1);
 }
 
@@ -103,7 +125,7 @@ function mcp_tool_error($id, string $message): void
     ]);
 }
 
-// ── Tool registry (Phase 1: read-only) ──────────────────────────────────────
+// ── Tool registry ────────────────────────────────────────────────────────────
 
 const AI_MCP_TOOLS = [
     'get_event' => [
@@ -127,6 +149,42 @@ const AI_MCP_TOOLS = [
                 'promoter_name' => ['type' => 'string', 'description' => 'Case-insensitive substring match against the promoter name.'],
                 'limit'         => ['type' => 'integer', 'description' => 'Max rows to return. Default and hard cap: 25.'],
             ],
+        ],
+    ],
+    'propose_booker_update' => [
+        'description' => 'PROPOSE a bulk change to booker/promoter contact fields on one or more events. This does NOT change anything by itself — it computes a before/after diff and stores it for a human to review and explicitly click "Apply" on. Select events either by an explicit list of event_ids, or by a promoter_name_filter substring match (e.g. all "Zingflower" events) — capped at 25 matched events, and silently limited to events you have edit access to. Only these fields may be changed: promoter_name, promoter_email, promoter_phone, client_org, booker_name, booker_email, booker_phone — any other field is rejected. After calling this, tell the user their proposal is ready to review; do not claim the change has been made.',
+        'inputSchema' => [
+            'type'       => 'object',
+            'properties' => [
+                'event_ids'             => ['type' => 'array', 'items' => ['type' => 'integer'], 'description' => 'Explicit event ids to update. Use this OR promoter_name_filter, not both.'],
+                'promoter_name_filter'  => ['type' => 'string', 'description' => 'Case-insensitive substring match against promoter_name — selects every matching event you can edit (up to 25).'],
+                'fields' => [
+                    'type' => 'object',
+                    'description' => 'New values, keyed by field name. Allowed keys: promoter_name, promoter_email, promoter_phone, client_org, booker_name, booker_email, booker_phone.',
+                    'properties' => [
+                        'promoter_name'  => ['type' => 'string'],
+                        'promoter_email' => ['type' => 'string'],
+                        'promoter_phone' => ['type' => 'string'],
+                        'client_org'     => ['type' => 'string'],
+                        'booker_name'    => ['type' => 'string'],
+                        'booker_email'   => ['type' => 'string'],
+                        'booker_phone'   => ['type' => 'string'],
+                    ],
+                ],
+            ],
+            'required' => ['fields'],
+        ],
+    ],
+    'propose_recurring_series' => [
+        'description' => 'PROPOSE turning an existing event into the anchor of a recurring series, given an explicit list of occurrence dates you compute (e.g. "every Tuesday for the next 8 weeks"). This does NOT create anything by itself — it validates the dates (max 52 occurrences, none more than 90 days from today, no room conflicts) and stores a proposal for a human to review and explicitly click "Apply" on. If validation fails, you will get back a clear error (e.g. which dates are beyond the 90-day booking horizon, or which dates conflict with an existing booking) — adjust and try again rather than guessing around it. After a successful call, tell the user their proposal is ready to review; do not claim the series has been created.',
+        'inputSchema' => [
+            'type'       => 'object',
+            'properties' => [
+                'event_id'    => ['type' => 'integer', 'description' => 'The existing event to use as the anchor of the new series.'],
+                'dates'       => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Occurrence dates, YYYY-MM-DD, not including the anchor event\'s own date. Max 52, none beyond 90 days from today.'],
+                'description' => ['type' => 'string', 'description' => 'Optional free-text label for the series, shown alongside it later.'],
+            ],
+            'required' => ['event_id', 'dates'],
         ],
     ],
 ];
@@ -208,6 +266,127 @@ function handle_list_events($id, Database $db, int $userId, string $role, array 
     mcp_tool_result($id, ['events' => $rows, 'count' => count($rows), 'limit' => $limit]);
 }
 
+/**
+ * PROPOSE-only: computes a diff and stores it in ai_action_proposals.
+ * Never runs the UPDATE — see BookerUpdate::apply(), which only
+ * Ai\Assistant::applyBookerUpdate() calls, itself only reachable via a
+ * human-clicked POST /api/ai/proposals/{id}/apply.
+ */
+function handle_propose_booker_update($id, Database $db, int $userId, string $role, int $conversationId, array $args): void
+{
+    $fields = $args['fields'] ?? null;
+    if (!is_array($fields) || !$fields) {
+        mcp_tool_error($id, 'fields is required: an object of booker-info fields to change, e.g. {"booker_email": "new@example.com"}.');
+        return;
+    }
+    $disallowed = BookerUpdate::disallowedFields($fields);
+    if ($disallowed) {
+        mcp_tool_error($id, 'These fields are not allowed: ' . implode(', ', $disallowed)
+            . '. Allowed fields: ' . implode(', ', BookerUpdate::ALLOWED_FIELDS) . '.');
+        return;
+    }
+    $fields = BookerUpdate::sanitizeFields($fields);
+
+    $eventIds = is_array($args['event_ids'] ?? null) ? array_map('intval', $args['event_ids']) : [];
+    $promoterFilter = isset($args['promoter_name_filter']) && is_string($args['promoter_name_filter']) ? $args['promoter_name_filter'] : null;
+    if (!$eventIds && ($promoterFilter === null || trim($promoterFilter) === '')) {
+        mcp_tool_error($id, 'Provide either event_ids or promoter_name_filter to select which events to update.');
+        return;
+    }
+
+    $matched = BookerUpdate::matchEvents($db, $role, $userId, $eventIds, $promoterFilter);
+    if (!$matched) {
+        mcp_tool_error($id, 'No matching events found that you have edit access to.');
+        return;
+    }
+
+    $diff = BookerUpdate::buildDiff($matched, $fields);
+    $expiresAt = (new DateTimeImmutable('+30 minutes'))->format('Y-m-d H:i:s');
+
+    $proposalId = $db->insert(
+        'INSERT INTO ai_action_proposals (conversation_id, user_id, event_id, tool_name, args_json, diff_json, status, expires_at)
+         VALUES (?, ?, ?, \'propose_booker_update\', ?, ?, \'pending\', ?)',
+        [
+            $conversationId,
+            $userId,
+            count($matched) === 1 ? (int) $matched[0]['id'] : null,
+            json_encode(['event_ids' => array_map(static fn(array $e): int => (int) $e['id'], $matched), 'fields' => $fields]),
+            json_encode($diff),
+            $expiresAt,
+        ]
+    );
+
+    mcp_tool_result($id, [
+        'proposal_id' => $proposalId,
+        'event_count' => count($matched),
+        'fields' => array_keys($fields),
+        'diff' => $diff,
+        'note' => 'PROPOSAL ONLY — nothing has changed yet. The user must review and click Apply in the panel to make this change.',
+    ]);
+}
+
+/**
+ * PROPOSE-only: validates the series (same rules attemptCreate() will
+ * re-run at apply time — see Series::previewSeries()) and stores the
+ * result. Never creates any event — that only happens in
+ * Ai\Assistant::applyRecurringSeries(), via Series::attemptCreate(), only
+ * reachable through a human-clicked POST /api/ai/proposals/{id}/apply.
+ */
+function handle_propose_recurring_series($id, Database $db, int $userId, string $role, int $conversationId, string $root, array $args): void
+{
+    $eventId = (int) ($args['event_id'] ?? 0);
+    $dates = is_array($args['dates'] ?? null) ? array_values(array_filter(array_map('strval', $args['dates']))) : [];
+    $description = isset($args['description']) && is_string($args['description']) ? trim($args['description']) : null;
+
+    if ($eventId <= 0) {
+        mcp_tool_error($id, 'event_id is required and must be a positive integer.');
+        return;
+    }
+    if (!$dates) {
+        mcp_tool_error($id, "dates is required: a non-empty array of YYYY-MM-DD occurrence dates (not including the anchor event's own date).");
+        return;
+    }
+
+    $auth = new Auth();
+    $auth->setUser(['id' => $userId, 'name' => '', 'email' => '', 'role' => $role]);
+    $series = new Series($db, $auth, [], $root);
+    $preview = $series->previewSeries($eventId, $dates, $userId, $role);
+
+    if (!$preview['ok']) {
+        mcp_tool_error($id, (string) $preview['error']);
+        return;
+    }
+
+    $diff = [
+        'event_id' => $eventId,
+        'anchor_title' => $preview['anchor']['title'] ?? null,
+        'description' => $description,
+        'dates' => $preview['dates'],
+        'occurrence_count' => count($preview['dates']),
+    ];
+    $expiresAt = (new DateTimeImmutable('+30 minutes'))->format('Y-m-d H:i:s');
+
+    $proposalId = $db->insert(
+        'INSERT INTO ai_action_proposals (conversation_id, user_id, event_id, tool_name, args_json, diff_json, status, expires_at)
+         VALUES (?, ?, ?, \'propose_recurring_series\', ?, ?, \'pending\', ?)',
+        [
+            $conversationId,
+            $userId,
+            $eventId,
+            json_encode(['event_id' => $eventId, 'dates' => $preview['dates'], 'description' => $description]),
+            json_encode($diff),
+            $expiresAt,
+        ]
+    );
+
+    mcp_tool_result($id, [
+        'proposal_id' => $proposalId,
+        'occurrence_count' => count($preview['dates']),
+        'dates' => $preview['dates'],
+        'note' => 'PROPOSAL ONLY — nothing has been created yet. The user must review and click Apply in the panel to create these events.',
+    ]);
+}
+
 // ── Main loop ────────────────────────────────────────────────────────────────
 
 while (($line = fgets(STDIN)) !== false) {
@@ -257,9 +436,11 @@ while (($line = fgets(STDIN)) !== false) {
             }
             try {
                 match ($name) {
-                    'get_event'   => handle_get_event($id, $db, $actingUserId, $actingRole, $args),
-                    'list_events' => handle_list_events($id, $db, $actingUserId, $actingRole, $args),
-                    default       => mcp_tool_error($id, "Unknown tool: {$name}"),
+                    'get_event'                 => handle_get_event($id, $db, $actingUserId, $actingRole, $args),
+                    'list_events'               => handle_list_events($id, $db, $actingUserId, $actingRole, $args),
+                    'propose_booker_update'     => handle_propose_booker_update($id, $db, $actingUserId, $actingRole, $conversationId, $args),
+                    'propose_recurring_series'  => handle_propose_recurring_series($id, $db, $actingUserId, $actingRole, $conversationId, $root, $args),
+                    default                     => mcp_tool_error($id, "Unknown tool: {$name}"),
                 };
             } catch (\Throwable $e) {
                 fwrite(STDERR, "[ai-mcp-server] tool {$name} threw: {$e->getMessage()}\n");

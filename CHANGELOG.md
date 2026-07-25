@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `ai` — Add Phase 2 propose/apply write tools to the AI Assistant
+- **Added** `ai` — Add Phase 2 propose/apply write tools to the AI Assistant
 - **Documentation** — Document the Inbox/Routing/Reports API surface and add staff training material
 - **Added** `booking-inbox` — Finish Phase 10 Social Queue and add Phase 12 docs
 - **Changed** — Added original UI mockups for posterity
