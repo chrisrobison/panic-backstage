@@ -1320,9 +1320,6 @@ class PublicEventPage extends PanicElement {
       const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
 
       this.innerHTML = `<div class="pev">
-        <header class="pev-topbar">
-          <span class="pev-brand"><span class="pev-brand-panic">Panic</span><span class="pev-brand-chip">Backstage</span></span>
-        </header>
         <main class="pev-main">
           <section class="pev-hero">
             <div class="pev-media">

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `public-event` — Remove Panic Backstage brand bar from event.html
 - **Fixed** `ai` — Pin HOME + grant group-read so claude CLI auth works under www-data
 - **Added** `leads` — Switch AI classification/extraction from Anthropic API key to local claude CLI
 - **Documentation** `ai` — Document the AI Assistant in-app and in the ops manual; add proposal expiry sweep
