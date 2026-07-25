@@ -807,7 +807,7 @@ const HELP_CONTENT = {
       <li><strong>Monthly by weekday</strong> — the same ordinal weekday every month (e.g. "First Thursday of the month", or "Last Friday of the month").</li>
       <li><strong>Monthly by date</strong> — the same day-of-month every month (e.g. "the 15th").</li>
     </ul>
-    <p>You must also choose an end condition — <strong>after N occurrences</strong> or <strong>on a specific date</strong> — and the total is capped at 52 occurrences per series. A live preview lists the dates that will be created so you can double-check before committing.</p>
+    <p>You must also choose an end condition — <strong>after N occurrences</strong> or <strong>on a specific date</strong> — and the series is capped at 52 occurrences <em>or</em> 90 days out from today, whichever comes first (a booking-horizon limit, so a mistyped pattern like "every day" can't spin off a year of shows). A live preview lists the dates that will be created so you can double-check before committing.</p>
 
     <h3>Conflicts</h3>
     <p>Every generated date is checked against existing bookings at that venue, exactly like a normal event create. If <em>any</em> date in the pattern conflicts with an existing booking, nothing is created — you'll see an error listing which date(s) collided so you can adjust the pattern (a different day, a shorter range, or fewer occurrences) and try again.</p>

@@ -21,6 +21,11 @@
 import { esc } from './core.js';
 
 const MAX_OCCURRENCES = 52;
+// Rolling booking-horizon cap, alongside MAX_OCCURRENCES — mirrors the
+// server-side MAX_HORIZON_DAYS in src/Events/Series.php. This is UX only
+// (stops the preview from suggesting dates the server would reject); the
+// server remains the authoritative check.
+const MAX_HORIZON_DAYS = 90;
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const ORDINAL_NAMES = { 1: 'First', 2: 'Second', 3: 'Third', 4: 'Fourth', '-1': 'Last' };
 
@@ -87,6 +92,11 @@ function generateOccurrenceDates(anchorISO, pattern) {
     ? Math.min(Math.max(1, parseInt(pattern.occurrenceCount, 10) || 1), cap)
     : cap;
   const endDate = pattern.endType === 'on_date' && pattern.endDate ? parseISO(pattern.endDate) : null;
+  // Rolling horizon: today + MAX_HORIZON_DAYS, regardless of the anchor date
+  // or end condition — mirrors the server's authoritative check.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const horizonCutoff = new Date(today.getFullYear(), today.getMonth(), today.getDate() + MAX_HORIZON_DAYS);
 
   if (pattern.freq === 'weekly') {
     const interval = Math.max(1, parseInt(pattern.interval, 10) || 1);
@@ -94,6 +104,7 @@ function generateOccurrenceDates(anchorISO, pattern) {
     while (dates.length < maxCount) {
       cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + interval * 7);
       if (endDate && cursor > endDate) break;
+      if (cursor > horizonCutoff) break;
       dates.push(toISO(cursor));
     }
     return dates;
@@ -119,6 +130,7 @@ function generateOccurrenceDates(anchorISO, pattern) {
       candidate = new Date(y, m, Math.min(dayOfMonth, lastDayOfMonth));
     }
     if (endDate && candidate > endDate) break;
+    if (candidate > horizonCutoff) break;
     dates.push(toISO(candidate));
   }
   return dates;
@@ -286,7 +298,7 @@ class RecurrenceFields extends HTMLElement {
             <input type="radio" name="rf_end_type" value="on_date" ${s.endType === 'on_date' ? 'checked' : ''}>
             On date <input type="date" name="rf_end_date" min="${esc(minEndDate)}" value="${esc(s.endDate)}" ${s.endType !== 'on_date' ? 'disabled' : ''}>
           </label>
-          <p class="field-hint muted small wide">Max ${MAX_OCCURRENCES} occurrences per series. Each occurrence becomes its own independent event.</p>
+          <p class="field-hint muted small wide">Max ${MAX_OCCURRENCES} occurrences or ${MAX_HORIZON_DAYS} days out, whichever comes first. Each occurrence becomes its own independent event.</p>
           ${previewHtml}
         </div>
       ` : ''}

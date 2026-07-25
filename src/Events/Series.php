@@ -31,6 +31,15 @@ final class Series extends BaseEndpoint
      */
     private const MAX_OCCURRENCES = 52;
 
+    /**
+     * Rolling booking-horizon cap: no occurrence may land more than this many
+     * days after today (the day the series is created), regardless of the
+     * pattern or how many occurrences are requested. Applied alongside
+     * MAX_OCCURRENCES, not instead of it — whichever limit a given pattern
+     * hits first is what actually bounds it.
+     */
+    private const MAX_HORIZON_DAYS = 90;
+
     public function handle(Request $request): Response
     {
         $eventId = $this->requireEventId();
@@ -94,6 +103,22 @@ final class Series extends BaseEndpoint
             if ($date === $anchor['date']) {
                 return Response::json(['error' => "Occurrence dates must not include the event's own date ({$date})."], 422);
             }
+        }
+
+        // Rolling 90-day booking-horizon cap, alongside MAX_OCCURRENCES —
+        // whichever a given pattern hits first is what actually bounds it.
+        // Checked before the (more expensive) room-conflict pass below so a
+        // horizon violation is reported without doing conflict-check work for
+        // dates that would be rejected anyway.
+        $horizonCutoff = self::horizonCutoff();
+        $beyondHorizon = self::datesBeyondHorizon($dates, $horizonCutoff);
+        if ($beyondHorizon) {
+            return Response::json([
+                'error' => 'Too far out — occurrences must land within ' . self::MAX_HORIZON_DAYS
+                    . ' days of today (by ' . $horizonCutoff . '). Beyond that: ' . implode(', ', $beyondHorizon),
+                'horizon_date' => $horizonCutoff,
+                'beyond_horizon_dates' => $beyondHorizon,
+            ], 422);
         }
 
         // Validate every occurrence up front so we never create a partial
@@ -222,5 +247,24 @@ final class Series extends BaseEndpoint
         }
         log_activity($this->db, $eventId, $this->userId(), 'removed from recurring series', ['series_id' => $seriesId]);
         return $this->ok(['ok' => true]);
+    }
+
+    /**
+     * The last date (inclusive) an occurrence may land on: today +
+     * MAX_HORIZON_DAYS. Pure/static so it (and datesBeyondHorizon()) can be
+     * unit-tested without a Database/Auth instance — see
+     * tests/events_series_horizon_test.php.
+     */
+    public static function horizonCutoff(): string
+    {
+        return (new \DateTimeImmutable('today'))
+            ->modify('+' . self::MAX_HORIZON_DAYS . ' days')
+            ->format('Y-m-d');
+    }
+
+    /** Which of $dates (each 'YYYY-MM-DD') fall after $horizonCutoff, in input order. */
+    public static function datesBeyondHorizon(array $dates, string $horizonCutoff): array
+    {
+        return array_values(array_filter($dates, static fn(string $date): bool => $date > $horizonCutoff));
     }
 }
