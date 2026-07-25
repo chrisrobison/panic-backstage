@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Staff Training Lesson Plan — Mabuhay Backstage</title>
+<style>
+  /* ── Reset & Base — token system matches docs/ops-manual.html ─────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --brand: #e8650a;
+    --brand-dark: #b84e08;
+    --brand-pale: #fff4ed;
+    --ink: #1a1a1a;
+    --muted: #6b7280;
+    --rule: #e5e7eb;
+    --sidebar-bg: #1c1c1e;
+    --sidebar-fg: #e5e7eb;
+    --sidebar-active: #e8650a;
+    --note-bg: #eff6ff;
+    --note-border: #3b82f6;
+    --tip-bg: #f0fdf4;
+    --tip-border: #22c55e;
+    --warn-bg: #fefce8;
+    --warn-border: #eab308;
+    --danger-bg: #fef2f2;
+    --danger-border: #ef4444;
+    --code-bg: #f3f4f6;
+    --panel-bg: #1e1e24;
+    --panel-fg: #e5e7eb;
+    --radius: 8px;
+    --font-body: 'Georgia', 'Charter', serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    --sidebar-w: 260px;
+    --content-max: 820px;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--font-body);
+    color: var(--ink);
+    line-height: 1.75;
+    background: #fafafa;
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── Sidebar ──────────────────────────────────────────────────────────────── */
+  .sidebar {
+    width: var(--sidebar-w);
+    background: var(--sidebar-bg);
+    color: var(--sidebar-fg);
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    overflow-y: auto;
+    padding: 0 0 40px;
+    z-index: 100;
+    flex-shrink: 0;
+  }
+
+  .sidebar-header {
+    padding: 24px 20px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 12px;
+  }
+
+  .sidebar-logo {
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--brand);
+    margin-bottom: 4px;
+    display: block;
+  }
+
+  .sidebar-title {
+    font-family: var(--font-ui);
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.3;
+  }
+
+  .sidebar-edition {
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    font-family: var(--font-ui);
+    margin-top: 4px;
+  }
+
+  .sidebar nav { padding: 8px 0 20px; }
+
+  .nav-section {
+    padding: 18px 20px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.35);
+    font-family: var(--font-ui);
+  }
+
+  .sidebar a {
+    display: block;
+    padding: 7px 20px 7px 24px;
+    font-family: var(--font-ui);
+    font-size: 13px;
+    color: rgba(255,255,255,0.65);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+
+  .sidebar a:hover { color: #fff; background: rgba(255,255,255,0.04); }
+
+  .sidebar a.active {
+    color: var(--sidebar-active);
+    border-left-color: var(--sidebar-active);
+    background: rgba(232,101,10,0.08);
+  }
+
+  .sidebar-footer {
+    padding: 16px 20px;
+    margin-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    font-family: var(--font-ui);
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: rgba(255,255,255,0.45);
+  }
+  .sidebar-footer a { color: rgba(255,255,255,0.7); text-decoration: none; border-bottom: 1px dotted rgba(255,255,255,0.3); }
+  .sidebar-footer a:hover { color: var(--brand); border-color: var(--brand); }
+
+  /* ── Main content area ────────────────────────────────────────────────────── */
+  .content { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; }
+
+  .page-hero {
+    background: linear-gradient(135deg, var(--ink) 0%, #2d2d2d 100%);
+    color: white;
+    padding: 56px 60px 48px;
+    border-bottom: 4px solid var(--brand);
+  }
+
+  .page-hero .eyebrow {
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--brand);
+    margin-bottom: 12px;
+    display: block;
+  }
+
+  .page-hero h1 { font-size: 2.4rem; font-weight: 700; line-height: 1.15; margin-bottom: 16px; letter-spacing: -0.02em; }
+
+  .page-hero .lead { font-size: 1.08rem; color: rgba(255,255,255,0.72); max-width: 640px; line-height: 1.65; }
+
+  .hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 22px;
+  }
+  .hero-meta span {
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #fff;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.16);
+    padding: 5px 12px;
+    border-radius: 999px;
+  }
+  .hero-meta span strong { color: var(--brand); font-weight: 700; margin-right: 5px; }
+
+  .book-content { max-width: var(--content-max); margin: 0 auto; padding: 48px 60px 100px; }
+
+  /* ── Typography ───────────────────────────────────────────────────────────── */
+  h2 {
+    font-size: 1.65rem; font-weight: 700; margin: 52px 0 6px; padding-top: 20px;
+    letter-spacing: -0.015em; line-height: 1.2; color: var(--ink); scroll-margin-top: 20px;
+  }
+  h2::before { content: ''; display: block; height: 3px; width: 40px; background: var(--brand); margin-bottom: 16px; border-radius: 2px; }
+
+  .module-meta {
+    font-family: var(--font-ui);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 18px;
+  }
+
+  h3 { font-size: 1.15rem; font-weight: 700; margin: 30px 0 10px; color: var(--ink); font-family: var(--font-ui); scroll-margin-top: 20px; }
+
+  h4 { font-size: 0.95rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 24px 0 8px; font-family: var(--font-ui); }
+
+  p { margin-bottom: 1.2em; }
+  strong { font-weight: 700; }
+  a { color: var(--brand-dark); }
+  em { font-style: italic; }
+
+  code {
+    font-family: var(--font-mono); font-size: 0.85em; background: var(--code-bg);
+    padding: 2px 6px; border-radius: 4px; color: #b84e08;
+  }
+
+  ul, ol { padding-left: 1.5em; margin-bottom: 1.2em; }
+  li { margin-bottom: 0.4em; }
+
+  hr { border: none; border-top: 1px solid var(--rule); margin: 48px 0; }
+
+  /* ── Callout boxes ────────────────────────────────────────────────────────── */
+  .callout {
+    border-left: 4px solid; border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 16px 20px; margin: 20px 0 24px; font-family: var(--font-ui); font-size: 0.92rem; line-height: 1.65;
+  }
+  .callout-title { font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 6px; }
+  .callout p { margin-bottom: 0.6em; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout ul, .callout ol { margin-bottom: 0; }
+  .callout code { background: rgba(0,0,0,0.06); }
+  .callout.note   { background: var(--note-bg); border-color: var(--note-border); }
+  .callout.tip    { background: var(--tip-bg);  border-color: var(--tip-border); }
+  .callout.warn   { background: var(--warn-bg); border-color: var(--warn-border); }
+  .callout.note   .callout-title { color: var(--note-border); }
+  .callout.tip    .callout-title { color: #16a34a; }
+  .callout.warn   .callout-title { color: #a16207; }
+
+  /* ── Checklist ────────────────────────────────────────────────────────────── */
+  .checklist {
+    background: #fff; border: 1px solid var(--rule); border-radius: var(--radius);
+    padding: 20px 24px; margin: 24px 0; font-family: var(--font-ui); font-size: 0.9rem;
+  }
+  .checklist-title {
+    font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+  }
+  .checklist-title::before { content: '☑'; font-size: 1rem; color: var(--brand); }
+  .checklist ul { list-style: none; padding: 0; margin: 0; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--rule); line-height: 1.5; }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li::before { content: '☐'; color: var(--brand); font-size: 1.05rem; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── Tables ───────────────────────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; margin: 20px 0 28px; font-family: var(--font-ui); font-size: 0.88rem; line-height: 1.5; }
+  th { background: var(--ink); color: #fff; text-align: left; padding: 10px 14px; font-weight: 600; font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  tr:hover td { background: #f9fafb; }
+  td code, th code { white-space: nowrap; }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .content { margin-left: 0; }
+    .page-hero, .book-content { padding-left: 24px; padding-right: 24px; }
+  }
+</style>
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-logo">Mabuhay Backstage</span>
+      <div class="sidebar-title">Staff Training Lesson Plan</div>
+      <div class="sidebar-edition">New staff · all roles</div>
+    </div>
+    <nav>
+      <a href="#pre-training">Pre-Training Checklist</a>
+      <div class="nav-section">Modules</div>
+      <a href="#module-1">1. Orientation</a>
+      <a href="#module-2">2. The Event Lifecycle</a>
+      <a href="#module-3">3. The Booking Inbox</a>
+      <a href="#module-4">4. Night-Of Workflows</a>
+      <a href="#module-5">5. Roles &amp; Permissions</a>
+      <a href="#module-6">6. Post-Event &amp; Settlement</a>
+      <a href="#module-7">7. Q&amp;A + Resources</a>
+      <div class="nav-section">Wrap-Up</div>
+      <a href="#quick-reference">Quick-Reference Card</a>
+      <a href="#delivery-tips">Tips for Delivery</a>
+    </nav>
+    <div class="sidebar-footer">
+      Rendered from <a href="training.md">training.md</a><br>
+      Booking Inbox: <a href="booking-inbox.md">booking-inbox.md</a><br>
+      Full manual: <a href="ops-manual.html">ops-manual.html</a>
+    </div>
+  </aside>
+
+  <div class="content">
+    <header class="page-hero">
+      <span class="eyebrow">Onboarding &middot; Session Plan</span>
+      <h1>Staff Training Lesson Plan</h1>
+      <p class="lead">Session: Introduction &amp; Core Workflow — a live, hands-on walkthrough for anyone new to Mabuhay Backstage, from front-of-house door staff to bookers working the inquiry pipeline.</p>
+      <div class="hero-meta">
+        <span><strong>Duration</strong>~3–3.5 hours</span>
+        <span><strong>Audience</strong>New staff, all roles</span>
+        <span><strong>Format</strong>Live demo, not slides</span>
+      </div>
+    </header>
+
+    <main class="book-content">
+      <h2 id="pre-training">Pre-Training Checklist</h2>
+      <p class="module-meta">For you — before everyone arrives</p>
+      <div class="checklist">
+        <div class="checklist-title">Before Everyone Arrives</div>
+        <ul>
+          <li><span>Each trainee has a login link / magic-link email sent to them</span></li>
+          <li><span>At least one test event pre-created in the system (a "Training Night" hold)</span></li>
+          <li><span>At least one test inquiry sitting in the <strong>Booking Inbox</strong> unassigned queue (send a test email to <code>bookings@themab.org</code>, or add one manually) for the claim/reply demo in Module 3</span></li>
+          <li><span>TV/projector showing the live app at the dashboard</span></li>
+          <li><span>Ops manual URL written on whiteboard: <code>docs/ops-manual.html</code></span></li>
+        </ul>
+      </div>
+
+      <hr>
+
+      <h2 id="module-1">Module 1 — Orientation</h2>
+      <p class="module-meta">20 min</p>
+      <div class="callout tip">
+        <span class="callout-title">Goal</span>
+        <p>Everyone knows what the system is and why it exists.</p>
+      </div>
+
+      <h3>Topics</h3>
+      <ul>
+        <li>What is Mabuhay Backstage? ("One place where every show lives, from first inquiry to final settlement")</li>
+        <li>How to log in — magic link email flow, no passwords to remember</li>
+        <li>Tour of the interface: sidebar, dashboard, calendar view</li>
+        <li>The <strong>Getting Started checklist</strong> on the dashboard — what each item means and who's responsible for completing it (venue admin only, but good for everyone to know)</li>
+      </ul>
+
+      <h3>Talking Points</h3>
+      <ul>
+        <li>"Everything that used to live in spreadsheets, texts, and sticky notes lives here"</li>
+        <li>"Your role determines what you can see and do — we'll cover that shortly"</li>
+      </ul>
+
+      <div class="callout note">
+        <span class="callout-title">Hands-On</span>
+        <p>Everyone logs in. Confirm the dashboard loads. Point out the checklist items.</p>
+      </div>
+
+      <hr>
+
+      <h2 id="module-2">Module 2 — The Event Lifecycle</h2>
+      <p class="module-meta">45 min</p>
+      <div class="callout tip">
+        <span class="callout-title">Goal</span>
+        <p>Staff understands how a show moves from idea to close.</p>
+      </div>
+
+      <h3>The Status Pipeline</h3>
+      <p>Walk through each stage on a whiteboard or in the app:</p>
+      <table>
+        <tr><th>Stage</th><th>What it means</th></tr>
+        <tr><td><strong>Hold</strong></td><td>Date is being considered; not confirmed</td></tr>
+        <tr><td><strong>Intake Complete</strong></td><td>Details filled in, contract not yet signed</td></tr>
+        <tr><td><strong>Booked</strong></td><td>Contract signed, show is confirmed</td></tr>
+        <tr><td><strong>Settled</strong></td><td>Post-show accounting is done</td></tr>
+      </table>
+
+      <h3>Topics</h3>
+      <ul>
+        <li>Creating a new event (walk through the form fields together)</li>
+        <li>Filling in: artist, date/time, event type, capacity, ticket price</li>
+        <li>Attaching a <strong>contract template</strong> and sending for e-signature</li>
+        <li>What the artist sees when they get the signing link</li>
+        <li>Watching the audit log update as they sign</li>
+      </ul>
+
+      <div class="callout note">
+        <span class="callout-title">Hands-On</span>
+        <p>Create a new "Training Night" event as a group. Walk it from Hold &rarr; Intake Complete. Assign it a contract template. Don't send (or send to a test address).</p>
+      </div>
+
+      <hr>
+
+      <h2 id="module-3">Module 3 — The Booking Inbox: Claiming &amp; Working Inquiries</h2>
+      <p class="module-meta">30 min</p>
+      <div class="callout tip">
+        <span class="callout-title">Goal</span>
+        <p>Everyone knows how an inbound inquiry gets safely picked up, worked, and handed off — without two people replying to the same person, or an inquiry quietly disappearing into someone's personal inbox.</p>
+      </div>
+
+      <h3>The Core Idea</h3>
+      <ul>
+        <li>"Every inquiry belongs to the venue, not to whoever happened to see it first."</li>
+        <li>All booking inquiries — email to <code>bookings@themab.org</code>, the website form, phone, manual entry — land in one shared <strong>Booking Inbox</strong>, not a personal mailbox. Nobody can hide, permanently delete, or privately redirect one.</li>
+        <li><strong>Leads</strong> (the pipeline you may already know) and <strong>Inbox</strong> are two views of the same inquiry: Leads is where you evaluate the deal; Inbox is where you actually work it day to day — read messages, claim it, reply, hand it off.</li>
+      </ul>
+
+      <h3>Assigned vs. Claimed vs. Owned — three different things</h3>
+      <table>
+        <tr><th>Term</th><th>What it means</th></tr>
+        <tr><td><strong>Assigned</strong></td><td>The system (or a manager) has pointed the inquiry at you. You haven't started yet.</td></tr>
+        <tr><td><strong>Claimed</strong></td><td>You've clicked <strong>Claim</strong> — you're actively working it right now. Only one person can hold an active claim.</td></tr>
+        <tr><td><strong>Owned</strong></td><td>Set automatically once you send the first real reply (or a manager assigns it long-term). Survives future claim changes.</td></tr>
+      </table>
+
+      <h3>Topics</h3>
+      <ul>
+        <li>The left-nav <strong>Inbox</strong> views: <strong>My Inquiries</strong>, <strong>Unassigned</strong>, <strong>All Inquiries</strong>, <strong>Follow Up</strong>, <strong>Archived</strong> — and the badge counts next to each.</li>
+        <li>Opening an inquiry: the AI <strong>classification</strong> panel (event type, genre, attendance, budget, a confidence score) and the <strong>routing explanation</strong> ("Routed to Kathy because... 94% confidence") — this is a suggestion trail, not something that changed anything on its own; a human always claims and decides.</li>
+        <li>Clicking <strong>Claim</strong> — and the countdown that appears ("Claim expires in 37 minutes"). If nobody claims an assigned inquiry in time, or a claimed one goes unanswered too long, it automatically returns to the queue so it can't quietly die in someone's queue.</li>
+        <li>Replying through the Conversation tab — every outbound message goes out looking like it's from the venue (<code>bookings@themab.org</code>), never your personal account, and is logged for everyone to see.</li>
+        <li><strong>Duplicate-reply protection:</strong> if you have the reply box open and a message arrives that changes the conversation, sending is blocked until you review it — and if a teammate is drafting a reply right now, you'll see "<strong>Kathy is currently drafting a reply</strong>" so you don't step on each other.</li>
+        <li><strong>Internal notes</strong> vs. replies — notes are for staff only and never go to the customer.</li>
+        <li>The green <strong>Onboard Lead</strong> button: turns a promising inquiry into a real event opportunity. It checks for duplicate/conflicting bookings first, lets you fix any AI-extracted details, and creates the event at <strong>Proposed</strong> status — onboarding is a handoff, not a "booked" confirmation.</li>
+        <li>What gets logged: literally everything (claims, replies, status changes, reassignments) — visible on the inquiry's <strong>History</strong> tab.</li>
+      </ul>
+
+      <h3>Who can do what (quick version — full detail in Module 5)</h3>
+      <ul>
+        <li><strong>Trusted staff</strong> (bookers/managers) can see and claim across the whole pipeline.</li>
+        <li>A <strong>restricted external booker</strong> — e.g. an outside promoter helping triage — only sees full detail on inquiries assigned or shared with them, can't see the raw mailbox, can't export contact lists, and can't decline/archive a high-value inquiry without a manager's approval.</li>
+      </ul>
+
+      <div class="callout note">
+        <span class="callout-title">Hands-On</span>
+        <p>As a group, open the <strong>Unassigned</strong> queue and find the test inquiry. Have one trainee claim it and point out the countdown. Send a reply from the Conversation tab (to a test address) and show how it's logged. Open the <strong>Onboard Lead</strong> dialog together and walk through the review screen — don't actually submit it unless you want a throwaway test event.</p>
+      </div>
+
+      <hr>
+
+      <h2 id="module-4">Module 4 — Night-Of Workflows</h2>
+      <p class="module-meta">30 min</p>
+      <div class="callout tip">
+        <span class="callout-title">Goal</span>
+        <p>Door and floor staff know exactly what to do on show night.</p>
+      </div>
+
+      <h3>Topics</h3>
+      <ul>
+        <li>Opening the <strong>Run Sheet</strong> — what's in it (schedule, staff, notes)</li>
+        <li>The <strong>Guest List</strong> — how to look up a name, check in manually</li>
+        <li>The <strong>QR ticket scanner</strong> (<code>/scanner.html</code>) — scan tickets from any phone browser, no app install needed
+          <ul>
+            <li>Open the scanner URL on your phone right now</li>
+            <li>How a valid vs. invalid scan looks/sounds</li>
+          </ul>
+        </li>
+        <li>During the show: logging notes, updating headcount</li>
+      </ul>
+
+      <div class="callout note">
+        <span class="callout-title">Hands-On</span>
+        <p>Pull up <code>scanner.html</code> on everyone's phones. Scan a test ticket QR code. Show what a success and a failure look like.</p>
+      </div>
+
+      <hr>
+
+      <h2 id="module-5">Module 5 — Roles &amp; Permissions</h2>
+      <p class="module-meta">15 min</p>
+      <div class="callout tip">
+        <span class="callout-title">Goal</span>
+        <p>Everyone knows what their account can and can't do — and who to ask when they hit a wall.</p>
+      </div>
+
+      <h3>Role Summary</h3>
+      <table>
+        <tr><th>Role</th><th>Can do</th></tr>
+        <tr><td><strong>Venue Admin</strong></td><td>Everything — settings, users, templates, settlement, routing rules</td></tr>
+        <tr><td><strong>Booker</strong> (Trusted booker)</td><td>Create/edit events, manage contracts, claim/reassign/onboard any Booking Inbox inquiry</td></tr>
+        <tr><td><strong>Manager</strong></td><td>Edit events, run sheets, day-of ops, approve high-value declines</td></tr>
+        <tr><td><strong>Door Person</strong></td><td>Guest list + scanner only</td></tr>
+        <tr><td><strong>Restricted External Booker</strong> <em>(e.g. an outside promoter)</em></td><td>Claim and work only inquiries assigned/shared with them; can't see the raw mailbox, export contact lists, change routing rules, or decline a high-value inquiry without manager approval</td></tr>
+      </table>
+
+      <h3>Topics</h3>
+      <ul>
+        <li>Where to find your own role (profile/account settings)</li>
+        <li>How to invite a new staff member (admin only — show where)</li>
+        <li>Why the Restricted External Booker role exists: it lets an outside promoter help triage and respond to inquiries in their own genre/lane without ever touching the venue's actual email account or seeing the full customer list</li>
+        <li>What to do if you can't access something you think you should</li>
+      </ul>
+
+      <hr>
+
+      <h2 id="module-6">Module 6 — Post-Event &amp; Settlement</h2>
+      <p class="module-meta">20 min</p>
+      <div class="callout tip">
+        <span class="callout-title">Goal</span>
+        <p>Managers/admins know how to close out a show properly.</p>
+      </div>
+
+      <h3>Topics</h3>
+      <ul>
+        <li>After the show: <strong>auto-archive</strong> timing — the system sets Settled automatically after a window, or you can do it manually</li>
+        <li>Filing <strong>settlement</strong> — what data to enter (attendance, bar, ticket revenue)</li>
+        <li>Marking the event <strong>Settled</strong></li>
+        <li>The <strong>Activity Log</strong> — your audit trail for anything that happened on an event</li>
+      </ul>
+
+      <div class="callout note">
+        <span class="callout-title">Hands-On</span>
+        <p>Walk through the settlement fields on the Training Night event. Don't save — just show where everything goes.</p>
+      </div>
+
+      <hr>
+
+      <h2 id="module-7">Module 7 — Q&amp;A + Reference Resources</h2>
+      <p class="module-meta">20 min</p>
+
+      <h3>Where to Get Help</h3>
+      <ul>
+        <li><strong>Ops Manual</strong> — <code>[your-domain]/docs/ops-manual.html</code> — full reference, bookmark it</li>
+        <li><strong>Booking Inbox reference</strong> — <code>[your-domain]/docs/training.html</code> (this document) and <a href="booking-inbox.md">docs/booking-inbox.md</a> for the deeper architecture/API notes</li>
+        <li><strong>The activity log</strong> on any event, or the <strong>History</strong> tab on any inquiry — shows who did what and when</li>
+        <li><strong>Admin contact:</strong> [your name / email]</li>
+      </ul>
+
+      <h3>What We're NOT Covering Today</h3>
+      <p>Let trainees know these exist for later:</p>
+      <ul>
+        <li><strong>Social Queue</strong> — the multi-channel social-post approval/publishing workflow that follows an onboarded inquiry (lives inside Panic Promote — Chapter 4 in ops manual)</li>
+        <li><strong>Routing rules administration</strong> — how a venue admin edits/publishes the rules that auto-route inquiries (covered in the admin-only follow-up session)</li>
+        <li><strong>In-house ticketing</strong> setup and payment processing (Chapter 5)</li>
+        <li><strong>Event templates</strong> for repeating shows</li>
+        <li><strong>Google Sheet sync</strong> for reporting</li>
+      </ul>
+
+      <hr>
+
+      <h2 id="quick-reference">Quick-Reference Card</h2>
+      <p class="module-meta">Hand out or share</p>
+      <table>
+        <tr><th>Task</th><th>Where</th></tr>
+        <tr><td>Log in</td><td>Magic link to your email</td></tr>
+        <tr><td>View all shows</td><td>Dashboard &rarr; event list or calendar</td></tr>
+        <tr><td>Create a show</td><td>Dashboard &rarr; <strong>+ New Event</strong></td></tr>
+        <tr><td>Work an inquiry</td><td><strong>Inbox</strong> &rarr; My Inquiries / Unassigned &rarr; open it</td></tr>
+        <tr><td>Claim an inquiry</td><td>Open the inquiry &rarr; <strong>Claim</strong> button</td></tr>
+        <tr><td>Reply to an inquiry</td><td>Inquiry &rarr; Conversation tab &rarr; Reply</td></tr>
+        <tr><td>Turn an inquiry into an event</td><td>Inquiry &rarr; bottom action bar &rarr; <strong>Onboard Lead</strong></td></tr>
+        <tr><td>Send a contract</td><td>Event &rarr; Contracts tab &rarr; Send for signature</td></tr>
+        <tr><td>Night-of scanner</td><td>Go to <code>[url]/scanner.html</code> on any phone</td></tr>
+        <tr><td>Guest list</td><td>Event &rarr; Door tab</td></tr>
+        <tr><td>Settle a show</td><td>Event &rarr; Settlement tab</td></tr>
+        <tr><td>Add staff</td><td>Admin &rarr; Users &rarr; Invite</td></tr>
+        <tr><td>Full manual</td><td><code>[url]/docs/ops-manual.html</code></td></tr>
+        <tr><td>Booking Inbox reference</td><td><code>[url]/docs/training.html</code> &middot; <code>docs/booking-inbox.md</code></td></tr>
+      </table>
+
+      <hr>
+
+      <h2 id="delivery-tips">Tips for Delivery</h2>
+      <ol>
+        <li><strong>Do it live, not slides.</strong> People learn the app by watching someone use it, then doing it themselves.</li>
+        <li><strong>One test event, many hands.</strong> Have each person create one action (add a task, check in a guest) so they get muscle memory.</li>
+        <li><strong>End with the scanner demo</strong> — it's the most immediately tactile part and ends the session on a high note.</li>
+        <li><strong>Roles first, details second</strong> — if someone knows what their job is, they'll naturally focus on the relevant modules.</li>
+      </ol>
+    </main>
+  </div>
+
+<script>
+// Highlight active nav link on scroll (same pattern as docs/ops-manual.html)
+const links = document.querySelectorAll('.sidebar a[href^="#"]');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.id;
+      links.forEach(l => l.classList.remove('active'));
+      const active = document.querySelector(`.sidebar a[href="#${id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px', threshold: 0 });
+
+document.querySelectorAll('main [id]').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>

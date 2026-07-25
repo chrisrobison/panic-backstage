@@ -113,6 +113,23 @@ tags:
     description: >-
       The lead pipeline — inquiries prior to becoming a booked event, including the deal evaluator
       and lead-to-event conversion.
+  - name: Booking Inbox
+    description: >-
+      The shared, auditable claim/assign/own workspace built on top of the Leads pipeline
+      (`src/LeadsInbox.php`, `src/Inbox.php`) — conversation, drafts, viewer/drafting presence,
+      attachments, AI classification (read + human-correction), the audit trail, Onboard Lead, and
+      the cross-lead queue/counts/polling-changes feed. See `docs/booking-inbox.md` for the full
+      architecture. Every route requires the `view_booking_inbox` global capability at minimum;
+      individual actions layer on `manage_booking_inbox` (unrestricted) or `manage_assigned_leads`
+      (Restricted external booker, scoped to rows they're assigned/claimed/owner/watcher of via
+      `BaseEndpoint::leadScopeSql()`).
+  - name: Routing Rules
+    description: >-
+      Deterministic, versioned, immutable-once-published rules that route a newly classified
+      inquiry to a person or queue (`src/RoutingRules.php`). Mirrors the `process_versions`
+      draft/publish pattern. Reading the rule list only requires `view_booking_inbox`; creating,
+      editing, or publishing a version requires `manage_lead_routing` (Venue administrator only —
+      neither the Trusted booker nor the Restricted external booker role has it).
   - name: CRM Profiles
     description: Longer-lived CRM profiles for bands/promoters/vendors, independent of any one event.
   - name: Contacts
@@ -167,6 +184,12 @@ tags:
       destinations, analytics, credentials).
   - name: Dashboard
     description: The landing-page summary/KPI view.
+  - name: Reports
+    description: >-
+      Venue-wide reporting (`src/Reports.php`, `view_reports` global capability). Only the Booking
+      Inbox report is documented here so far — the P&L overview and settlement reports predate this
+      pass and remain an open documentation gap (same `/api/reports/*` family, same capability
+      gate).
   - name: Wizard Defaults
     description: Admin-configurable defaults for the event-creation wizard.
   - name: Staff Roster
@@ -4671,6 +4694,875 @@ components:
         event_url:
           type: string
           description: A client-side hash route, e.g. "#events/123" — not a full URL.
+    LeadInboxStatus:
+      type: string
+      description: >-
+        The full Booking Inbox status machine (`src/Leads/StatusMachine.php::STATUSES`) — a strict
+        superset of `LeadStatus`. `leads.status` is shared by both the original Leads pipeline and
+        the Inbox; only `StatusMachine::transition()` may change it. `onboarded`, `converted`,
+        `booked`, `lost`, `declined`, `spam`, `duplicate`, `archived`, and `canceled` are terminal
+        (leaving one requires `override_lead_claims`); `declined`, `lost`, `spam`, `duplicate`,
+        `archived`, and `canceled` additionally require a non-empty `reason`.
+      enum:
+        - new
+        - triage
+        - evaluating
+        - needs_review
+        - approved
+        - declined
+        - converted
+        - canceled
+        - classified
+        - assigned
+        - claimed
+        - acknowledged
+        - qualifying
+        - awaiting_customer
+        - availability_sent
+        - tour_scheduled
+        - proposal_sent
+        - negotiating
+        - on_hold
+        - onboarded
+        - contract_sent
+        - deposit_pending
+        - booked
+        - lost
+        - spam
+        - duplicate
+        - archived
+    LeadInbox:
+      type: object
+      description: >-
+        A `leads` row as returned by the Booking Inbox surface — the same table `Lead` describes,
+        widened with the claim/assign/own columns and SLA timestamps added by migration
+        `071_add_booking_inbox_core.sql`. `GET /leads/{leadId}` (the original Leads pipeline) does
+        not return these fields; they're only populated/returned via `/inbox/*` and `/leads/{id}/*`
+        Booking Inbox routes.
+      properties:
+        id:
+          type: integer
+        inquiry_number:
+          type: string
+          description: 'Stable human-friendly id, e.g. "INQ-000123". Backfilled for pre-existing rows.'
+        inquiry_score:
+          type: integer
+          nullable: true
+          description: Simple, explainable 0-100 score set by the classifier.
+        status:
+          $ref: '#/components/schemas/LeadInboxStatus'
+        source:
+          $ref: '#/components/schemas/LeadSource'
+        contact_name:
+          type: string
+          nullable: true
+        contact_email:
+          type: string
+          nullable: true
+        contact_org:
+          type: string
+          nullable: true
+        contact_phone:
+          type: string
+          nullable: true
+        event_name:
+          type: string
+          nullable: true
+        event_type:
+          type: string
+          nullable: true
+        event_category:
+          type: string
+          nullable: true
+        music_genre:
+          type: string
+          nullable: true
+        age_restriction:
+          type: string
+          nullable: true
+        desired_date:
+          type: string
+          format: date
+          nullable: true
+        projected_attendance:
+          type: integer
+          nullable: true
+        budget:
+          type: number
+          format: float
+          nullable: true
+        assigned_to_user_id:
+          type: integer
+          nullable: true
+        assigned_to_name:
+          type: string
+          nullable: true
+          description: Joined; only present on list/detail responses, not writes.
+        assigned_at:
+          type: string
+          format: date-time
+          nullable: true
+        claimed_by_user_id:
+          type: integer
+          nullable: true
+        claimed_by_name:
+          type: string
+          nullable: true
+        claimed_at:
+          type: string
+          format: date-time
+          nullable: true
+        claim_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Business-hours-aware (src/Leads/BusinessHours.php). Past this, the SLA sweep releases the claim.
+        owner_user_id:
+          type: integer
+          nullable: true
+        owner_name:
+          type: string
+          nullable: true
+        owned_since:
+          type: string
+          format: date-time
+          nullable: true
+        sla_claim_due_at:
+          type: string
+          format: date-time
+          nullable: true
+        sla_response_due_at:
+          type: string
+          format: date-time
+          nullable: true
+        first_response_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    LeadInboxChangeEntry:
+      type: object
+      description: The slim per-lead row returned by the `/inbox/changes` polling feed (not the full LeadInbox shape).
+      properties:
+        id:
+          type: integer
+        inquiry_number:
+          type: string
+        status:
+          $ref: '#/components/schemas/LeadInboxStatus'
+        assigned_to_user_id:
+          type: integer
+          nullable: true
+        claimed_by_user_id:
+          type: integer
+          nullable: true
+        owner_user_id:
+          type: integer
+          nullable: true
+        claim_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        sla_claim_due_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+    LeadInboxMessageChangeEntry:
+      type: object
+      description: A newly-created/updated message included in the `/inbox/changes` feed.
+      properties:
+        id:
+          type: integer
+        lead_id:
+          type: integer
+        direction:
+          type: string
+          enum: [inbound, outbound, internal_note, system]
+        created_at:
+          type: string
+          format: date-time
+    LeadInboxCounts:
+      type: object
+      properties:
+        mine:
+          type: integer
+          description: Assigned/claimed/owned by the caller, excluding terminal statuses.
+        unassigned:
+          type: integer
+        all:
+          type: integer
+          description: All open (non-terminal) inquiries in the caller's scope.
+        follow_up:
+          type: integer
+          description: status = awaiting_customer.
+        archived:
+          type: integer
+    LeadClaimResult:
+      type: object
+      properties:
+        claimed:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+    LeadAssignRequest:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          nullable: true
+          description: Null clears the assignment, returning the inquiry to the unassigned queue.
+        reason:
+          type: string
+          default: Manually assigned
+    LeadReassignRequest:
+      type: object
+      required:
+        - user_id
+        - reason
+      properties:
+        user_id:
+          type: integer
+        reason:
+          type: string
+          description: >-
+            Required (422 if blank). Also clears the current claim (lead_claims row marked
+            'released', reason 'Reassigned').
+    LeadStatusTransitionRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          $ref: '#/components/schemas/LeadInboxStatus'
+        reason:
+          type: string
+          nullable: true
+          description: Required (422) when the target status is in StatusMachine::REASON_REQUIRED.
+        related_message_id:
+          type: integer
+          nullable: true
+    LeadStatusTransitionResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        status:
+          type: string
+          nullable: true
+        unchanged:
+          type: boolean
+          description: True when the requested status equals the current one (no-op, still 200).
+        pendingApproval:
+          type: boolean
+          description: >-
+            Present (with HTTP 202) instead of applying the transition when a restricted user
+            without decline_high_value_leads targets a high-value lead — a lead_approval_requests
+            row is created for a manager instead.
+        approvalRequestId:
+          type: integer
+    LeadMessageDirection:
+      type: string
+      enum: [inbound, outbound, internal_note, system]
+    LeadMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        lead_id:
+          type: integer
+        direction:
+          $ref: '#/components/schemas/LeadMessageDirection'
+        channel:
+          type: string
+          enum: [email, sms, social_dm, phone, manual, system]
+        status:
+          type: string
+          enum: [draft, queued, sent, failed, received]
+        from_name:
+          type: string
+          nullable: true
+        from_email:
+          type: string
+          nullable: true
+        to_recipients:
+          type: string
+          nullable: true
+        subject:
+          type: string
+          nullable: true
+        body_text:
+          type: string
+          nullable: true
+        body_html:
+          type: string
+          nullable: true
+        checksum:
+          type: string
+          nullable: true
+          description: sha256 of the normalized body, used for duplicate detection.
+        sent_by_user_id:
+          type: integer
+          nullable: true
+        sent_by_name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    LeadMessageCreateRequest:
+      type: object
+      properties:
+        direction:
+          type: string
+          enum: [outbound, internal_note]
+          default: internal_note
+          description: Only these two are writable here; inbound/system rows are created by ingestion only.
+        based_on_message_id:
+          type: integer
+          nullable: true
+          description: >-
+            Optimistic-concurrency token for outbound sends: the id of the latest message the
+            composer had loaded. If a newer message has since arrived, the send is rejected 409
+            instead of silently landing on a stale thread.
+        subject:
+          type: string
+          nullable: true
+        body_text:
+          type: string
+          nullable: true
+          description: Required unless body_html is set.
+        body_html:
+          type: string
+          nullable: true
+      description: >-
+        An outbound send also: mails the contact from bookings@themab.org, sets
+        first_response_at if unset, counts as a claim-preserving action, and establishes
+        owner_user_id on the lead's first meaningful reply if nobody owns it yet.
+    LeadDraft:
+      type: object
+      properties:
+        id:
+          type: integer
+        lead_id:
+          type: integer
+        user_id:
+          type: integer
+        kind:
+          type: string
+          enum: [reply, reply_all, note]
+        subject:
+          type: string
+          nullable: true
+        body_html:
+          type: string
+          nullable: true
+        body_text:
+          type: string
+          nullable: true
+        based_on_message_id:
+          type: integer
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+    LeadDraftSaveRequest:
+      type: object
+      description: >-
+        Upserted on (lead_id, user_id) — one in-progress draft per user per lead. Deliberately NOT
+        a claim-preserving action.
+      properties:
+        kind:
+          type: string
+          enum: [reply, reply_all, note]
+          default: reply
+        subject:
+          type: string
+          nullable: true
+        body_html:
+          type: string
+          nullable: true
+        body_text:
+          type: string
+          nullable: true
+        based_on_message_id:
+          type: integer
+          nullable: true
+    LeadPresenceEntry:
+      type: object
+      description: Another viewer's heartbeat on this lead (rows older than ~20s are treated as stale by the reader).
+      properties:
+        user_id:
+          type: integer
+        name:
+          type: string
+        state:
+          type: string
+          enum: [viewing, drafting]
+        updated_at:
+          type: string
+          format: date-time
+    LeadPresenceHeartbeatRequest:
+      type: object
+      properties:
+        state:
+          type: string
+          enum: [viewing, drafting]
+          default: viewing
+    LeadAttachment:
+      type: object
+      properties:
+        id:
+          type: integer
+        lead_id:
+          type: integer
+        message_id:
+          type: integer
+          nullable: true
+        filename:
+          type: string
+        mime_type:
+          type: string
+          nullable: true
+        size_bytes:
+          type: integer
+          nullable: true
+        storage_path:
+          type: string
+        uploaded_by_user_id:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    LeadClassificationRecord:
+      type: object
+      description: One classification run (lead_classifications). `is_current = 1` marks the row RoutingEngine/StatusMachine actually read.
+      properties:
+        id:
+          type: integer
+        lead_id:
+          type: integer
+        message_id:
+          type: integer
+          nullable: true
+          description: The inbound message that triggered this run, if any.
+        source:
+          type: string
+          enum: [ai, human_correction]
+        model:
+          type: string
+          nullable: true
+        prompt_version:
+          type: string
+          nullable: true
+        extracted_json:
+          type: string
+          nullable: true
+          description: >-
+            Raw JSON-encoded object, not decoded server-side. ~24 fields: event type, music genre,
+            event category, public/private, proposed date, alternate dates, start/end time,
+            attendance, budget, ticket price, ticketed vs. hosted, age restriction, alcohol/food/
+            production/stage/sound/lighting requirements, organization, contact name/role, event
+            history, urgency, likely booking value, and recommended action.
+        field_confidence_json:
+          type: string
+          nullable: true
+          description: Raw JSON-encoded per-field confidence (0-100), same key set as extracted_json.
+        overall_confidence:
+          type: number
+          format: float
+          nullable: true
+        spam_probability:
+          type: number
+          format: float
+          nullable: true
+        recommended_action:
+          type: string
+          nullable: true
+        missing_fields_json:
+          type: string
+          nullable: true
+          description: Raw JSON-encoded array of field names the classifier could not extract.
+        is_current:
+          type: boolean
+        corrected_by_user_id:
+          type: integer
+          nullable: true
+        processing_ms:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    LeadClassificationCorrectionRequest:
+      type: object
+      description: >-
+        Free-form field:value pairs (any subset of the extracted fields) inserted as a NEW
+        lead_classifications row with source=human_correction — the AI's original record is never
+        overwritten. `id` in the body, if present, is ignored.
+      additionalProperties: true
+    LeadAuditEntry:
+      type: object
+      description: One append-only lead_audit_log row. No endpoint allows editing or deleting these.
+      properties:
+        id:
+          type: integer
+        lead_id:
+          type: integer
+          nullable: true
+        user_id:
+          type: integer
+          nullable: true
+          description: Null when the actor was automation (e.g. the SLA sweep), not a human.
+        user_name:
+          type: string
+          nullable: true
+        action:
+          type: string
+          description: >-
+            e.g. viewed, claimed, released, manually_assigned, reassigned, response_sent,
+            internal_note_added, draft_saved, attachment_uploaded, attachments_viewed, onboarded,
+            routing_rule_created, routing_rule_published.
+        details_json:
+          type: string
+          nullable: true
+          description: Raw JSON-encoded action-specific metadata, not decoded server-side.
+        ip_address:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    LeadOnboardPreview:
+      type: object
+      description: >-
+        Side-effect-free preview returned by GET .../onboard, rendered by the Onboard Lead review
+        dialog before the user commits.
+      properties:
+        duplicates:
+          type: array
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+                enum: [inquiry, event]
+              id:
+                type: integer
+              label:
+                type: string
+        availability:
+          type: object
+          properties:
+            available:
+              type: boolean
+            conflict_event_id:
+              type: integer
+              nullable: true
+        templates:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+    LeadOnboardRequest:
+      type: object
+      properties:
+        venue_id:
+          type: integer
+          description: Defaults to the venue's own single venue row.
+        date:
+          type: string
+          format: date
+          description: Defaults to the lead's desired_date, or 30 days from today.
+        title:
+          type: string
+          description: Defaults to the lead's event_name.
+        event_type:
+          type: string
+          description: Defaults to the lead's event_type; coerced to special_event if not a recognized LeadEventType value.
+        task_template_id:
+          type: integer
+          nullable: true
+          description: When set, applies that event_templates checklist to the new event (Events\Staffing-style task-template application).
+    LeadOnboardResult:
+      type: object
+      properties:
+        event_id:
+          type: integer
+        event_url:
+          type: string
+          description: A client-side hash route, e.g. "#event-123".
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Informational only — duplicate/conflict warnings never block onboarding (a human already reviewed the preview).
+        tasks_created:
+          type: integer
+    RoutingRuleConditions:
+      type: object
+      description: >-
+        Recursive condition object evaluated by RoutingEngine::route() against lead + classification
+        fields (category, genre, attendance, budget, space, age_restriction, date, source, promoter,
+        prior_customer, confidence_threshold, staff specialty/workload/availability), matched by
+        case-insensitive substring containment rather than exact equality.
+      additionalProperties: true
+    RoutingRuleAction:
+      type: object
+      description: 'One of: assign_to_user_id, assign_to_role, or fallback_unassigned.'
+      additionalProperties: true
+    RoutingRule:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        priority:
+          type: integer
+          description: Lower runs first; the first published version whose conditions match wins.
+        current_published_version_id:
+          type: integer
+          nullable: true
+        conditions_json:
+          type: string
+          nullable: true
+          description: Joined from the current published version, if any (raw JSON, not decoded).
+        action_json:
+          type: string
+          nullable: true
+        published_version_number:
+          type: integer
+          nullable: true
+        created_by_id:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RoutingRuleVersion:
+      type: object
+      properties:
+        id:
+          type: integer
+        routing_rule_id:
+          type: integer
+        version_number:
+          type: integer
+        status:
+          type: string
+          enum: [draft, published, archived]
+        conditions_json:
+          type: string
+        action_json:
+          type: string
+        note:
+          type: string
+          nullable: true
+        created_by_id:
+          type: integer
+          nullable: true
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        published_by_id:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    RoutingRuleCreateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+          default: true
+        priority:
+          type: integer
+          default: 100
+    RoutingRuleUpdateRequest:
+      type: object
+      description: Partial update; only name, description, priority, is_active are settable. Omitted fields are left unchanged.
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        priority:
+          type: integer
+        is_active:
+          type: boolean
+    RoutingRuleVersionCreateRequest:
+      type: object
+      required:
+        - conditions
+        - action
+      properties:
+        conditions:
+          $ref: '#/components/schemas/RoutingRuleConditions'
+        action:
+          $ref: '#/components/schemas/RoutingRuleAction'
+        note:
+          type: string
+          nullable: true
+      description: Always created as a new draft version (version_number auto-incremented); publish separately.
+    BookingInboxReport:
+      type: object
+      description: >-
+        Every figure is derived live from leads/lead_status_history/lead_claims/lead_assignments/
+        lead_classifications/lead_audit_log — no separate rollup table.
+      properties:
+        range:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+        totals:
+          type: object
+          properties:
+            new_inquiries:
+              type: integer
+            onboarded:
+              type: integer
+            lost:
+              type: integer
+            spam:
+              type: integer
+            unanswered:
+              type: integer
+            expired_claims:
+              type: integer
+            tours_scheduled:
+              type: integer
+            proposals_sent:
+              type: integer
+            avg_claim_minutes:
+              type: number
+              format: float
+            avg_response_minutes:
+              type: number
+              format: float
+            conversion_rate_pct:
+              type: number
+              format: float
+            booked_budget_total:
+              type: number
+              format: float
+        by_source:
+          type: array
+          items:
+            type: object
+            properties:
+              source:
+                type: string
+              n:
+                type: integer
+        by_category:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              n:
+                type: integer
+        decline_reasons:
+          type: array
+          items:
+            type: object
+            properties:
+              reason:
+                type: string
+              n:
+                type: integer
+        activity_by_booker:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+              assigned_count:
+                type: integer
+              owned_count:
+                type: integer
+              onboarded_count:
+                type: integer
+        routing_rule_performance:
+          type: array
+          items:
+            type: object
+            properties:
+              rule_name:
+                type: string
+              assignments:
+                type: integer
+              onboarded:
+                type: integer
+        classifier:
+          type: object
+          properties:
+            classified_count:
+              type: integer
+            human_corrections:
+              type: integer
+            accuracy_pct:
+              type: number
+              format: float
+              nullable: true
+              description: 'null when classified_count is 0; otherwise (1 - human_corrections/classified_count) * 100.'
+        manual_routing_corrections:
+          type: integer
+        anomalies:
+          type: array
+          description: >-
+            Informational-only observations (never accusations) from Leads\AnomalyScanner — empty
+            array unless the caller is a venue admin, since these name individual bookers.
+          items:
+            type: object
+            properties:
+              severity:
+                type: string
+                enum: [info, warning]
+              message:
+                type: string
     CrmProfileType:
       type: string
       enum:
@@ -7587,13 +8479,42 @@ components:
           type: string
           nullable: true
         status:
+          $ref: '#/components/schemas/PromotePostStatus'
+        approval_tier:
           type: string
-          enum:
-            - draft
-            - approved
-            - scheduled
-            - sent
-            - archived
+          enum: [routine, manager]
+          default: routine
+          description: >-
+            Manager-tier posts (paid ads, policy statements, cancellations, controversial
+            announcements — per the Social Queue spec) additionally require the manage_campaigns
+            capability to approve, as a stand-in for a dedicated "manager approval" gate.
+        content_hash:
+          type: string
+          nullable: true
+          description: sha256 of title+master_text+target_url+asset_id, recomputed on every save.
+        approved_content_hash:
+          type: string
+          nullable: true
+          description: >-
+            content_hash at the moment of approval. If a later save changes content_hash away from
+            this value while the post is in an approval-locked status
+            (approved/scheduled/awaiting_manual_publish), Posts::update() automatically drops it
+            back to changes_requested — approval only ever covers the revision it was granted on.
+        approved_by_user_id:
+          type: integer
+          nullable: true
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+        public_post_url:
+          type: string
+          nullable: true
+          description: Filled in by mark-published — auto for API-integrated destinations, manually pasted for manual-publish platforms.
+        related_task_id:
+          type: integer
+          nullable: true
+          description: The Tasks-app task created when this post enters awaiting_manual_publish (see POST .../mark-published); closed automatically on publish.
         scheduled_at:
           type: string
           format: date-time
@@ -7620,6 +8541,25 @@ components:
           description: >-
             Always present; empty array immediately after creation until variants/generate is
             called.
+    PromotePostStatus:
+      type: string
+      description: >-
+        The full Social Queue workflow (migration 082_add_social_queue.sql widened this from the
+        original draft/approved/scheduled/sent/archived set). approved/scheduled/
+        awaiting_manual_publish are "approval-locked" — a content-changing edit automatically drops
+        the post back to changes_requested (see approved_content_hash on PromotePost).
+      enum:
+        - draft
+        - needs_assets
+        - ready_for_review
+        - changes_requested
+        - approved
+        - scheduled
+        - awaiting_manual_publish
+        - sent
+        - published
+        - verified
+        - archived
     PromotePostCreateRequest:
       type: object
       required:
@@ -7628,14 +8568,7 @@ components:
         title:
           type: string
         status:
-          type: string
-          enum:
-            - draft
-            - approved
-            - scheduled
-            - sent
-            - archived
-          default: draft
+          $ref: '#/components/schemas/PromotePostStatus'
         asset_id:
           type: integer
           nullable: true
@@ -7659,13 +8592,14 @@ components:
             Empty string is ignored (existing title is kept) — there is no way to clear this field
             via the API.
         status:
-          type: string
-          enum:
-            - draft
-            - approved
-            - scheduled
-            - sent
-            - archived
+          $ref: '#/components/schemas/PromotePostStatus'
+          description: >-
+            Omitting this field entirely is treated the same as resubmitting the post's current
+            status (the real post-editor form always resends the dropdown's current value) — if the
+            edit changed the content and the pre-edit status was approval-locked, the post reverts
+            to changes_requested regardless. Requesting a genuinely different status is respected
+            as-is; use POST .../approve to approve the current revision instead of setting
+            status=approved directly.
         asset_id:
           type: integer
           nullable: true
@@ -7680,6 +8614,21 @@ components:
           format: date-time
           nullable: true
           description: Send "" or null to clear.
+    PromotePostApproveResult:
+      type: object
+      properties:
+        post:
+          $ref: '#/components/schemas/PromotePost'
+    PromotePostMarkPublishedRequest:
+      type: object
+      properties:
+        public_post_url:
+          type: string
+          description: Falls back to the post's existing public_post_url if omitted.
+        verified:
+          type: boolean
+          default: false
+          description: 'False (default): status -> published. True: status -> verified (staff have confirmed the post is actually live).'
     PromotePostVariant:
       type: object
       description: One of the 15 channel-specific variants of a post (unique on post_id+channel).
@@ -7718,7 +8667,11 @@ components:
             - draft
             - ready
             - needs_review
+            - changes_requested
             - approved
+          description: >-
+            A variant can independently move to changes_requested after post-level review starts
+            (migration 082_add_social_queue.sql), symmetric with the post-level workflow.
         warnings_json:
           type: string
           nullable: true
@@ -9422,6 +10375,19 @@ components:
       required: true
       schema:
         type: integer
+    RoutingRuleIdPath:
+      name: ruleId
+      in: path
+      required: true
+      schema:
+        type: integer
+    RoutingRuleVersionNumberPath:
+      name: versionNumber
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: routing_rule_versions.version_number (not its row id).
     CrmProfileIdPath:
       name: profileId
       in: path
@@ -15784,6 +16750,1296 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /leads/{leadId}/claim:
+    post:
+      operationId: leadsInbox_claim
+      summary: Claim an inquiry
+      description: >-
+        Requires `view_booking_inbox` + `claim_leads`. Only one active claim per lead
+        (src/Leads/ClaimService.php) — claiming an already-actively-claimed lead is rejected with
+        who holds it and when it expires, rather than silently taking over. A restricted booker
+        (lacking `manage_booking_inbox`) may only claim inquiries that are currently unassigned or
+        already assigned to them.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      responses:
+        '200':
+          description: Claimed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadClaimResult'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing view_booking_inbox/claim_leads, no access to this row, or assigned to someone else.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Already actively claimed by someone else.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /leads/{leadId}/release-claim:
+    post:
+      operationId: leadsInbox_releaseClaim
+      summary: Release the active claim on an inquiry
+      description: >-
+        Requires `view_booking_inbox`. Callable by the current claimant, or by anyone with
+        `override_lead_claims` (manager override) on someone else's claim. `reason` defaults to a
+        generic "Released by claimant/manager override" note if omitted.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Released.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  released:
+                    type: boolean
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the claimant and lacks override_lead_claims, or no access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /leads/{leadId}/assign:
+    post:
+      operationId: leadsInbox_assign
+      summary: Manually (re)assign an inquiry
+      description: >-
+        Requires `view_booking_inbox` + `manage_booking_inbox`. Writes a new lead_assignments
+        history row and updates leads.assigned_to_user_id/assigned_at. Unlike reassign, no reason
+        is required and this does not touch an existing claim.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadAssignRequest'
+      responses:
+        '200':
+          description: Assigned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assigned_to_user_id:
+                    type: integer
+                    nullable: true
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing manage_booking_inbox, or no access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /leads/{leadId}/reassign:
+    post:
+      operationId: leadsInbox_reassign
+      summary: Reassign an inquiry to a different user
+      description: >-
+        Requires `view_booking_inbox` + `manage_booking_inbox`. A Trusted booker may reassign an
+        inquiry currently assigned/owned by them; reassigning anyone else's inquiry additionally
+        requires `override_lead_claims`. A Restricted external booker cannot reassign at all.
+        `reason` is required (422 if blank). Clears the current claim (marks the active lead_claims
+        row 'released').
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadReassignRequest'
+      responses:
+        '200':
+          description: Reassigned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assigned_to_user_id:
+                    type: integer
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: >-
+            Missing manage_booking_inbox, the lead isn't currently the caller's and they lack
+            override_lead_claims, or no access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing reason or user_id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /leads/{leadId}/status:
+    post:
+      operationId: leadsInbox_status
+      summary: Transition an inquiry's status
+      description: >-
+        Requires `view_booking_inbox` + (`manage_booking_inbox`, or `manage_assigned_leads` scoped
+        to this row). The single authoritative transition table (src/Leads/StatusMachine.php) —
+        rejects unknown targets, blocks leaving a terminal status without override_lead_claims,
+        requires a reason for declined/lost/spam/duplicate/archived/canceled, and — for a caller
+        without decline_high_value_leads targeting a high-value lead — creates a
+        lead_approval_requests row for a manager instead of applying the transition (202,
+        pendingApproval=true).
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadStatusTransitionRequest'
+      responses:
+        '200':
+          description: Transition applied (or a no-op if the target equals the current status).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadStatusTransitionResult'
+        '202':
+          description: Blocked pending manager approval (high-value gate) — see pendingApproval/approvalRequestId.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadStatusTransitionResult'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No manage access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Unknown target status, terminal status without override, or missing required reason.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /leads/{leadId}/messages:
+    get:
+      operationId: leadsInbox_listMessages
+      summary: List an inquiry's conversation feed
+      description: >-
+        Requires `view_booking_inbox` + row access. Returns every lead_messages row (inbound,
+        outbound, internal_note, system) in chronological order. Logs a `viewed` audit entry as a
+        side effect.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      responses:
+        '200':
+          description: The conversation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeadMessage'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: leadsInbox_createMessage
+      summary: Send a reply, or add an internal note
+      description: >-
+        Requires `view_booking_inbox` + manage access to this row. See LeadMessageCreateRequest for
+        the duplicate-send/stale-thread guard. Clears the caller's saved draft on success.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadMessageCreateRequest'
+      responses:
+        '200':
+          description: Message created (and, for outbound, sent).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    $ref: '#/components/schemas/LeadMessage'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No manage access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Stale thread — a newer message has arrived since based_on_message_id. See latest_message_id in the error body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid direction, or an empty message body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /leads/{leadId}/drafts:
+    get:
+      operationId: leadsInbox_getDraft
+      summary: Fetch the caller's in-progress draft on this inquiry
+      description: Requires `view_booking_inbox` + manage access to this row. `draft` is null when the caller has none saved.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      responses:
+        '200':
+          description: The caller's draft, if any.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  draft:
+                    $ref: '#/components/schemas/LeadDraft'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No manage access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: leadsInbox_saveDraft
+      summary: Save (upsert) the caller's in-progress draft
+      description: Requires `view_booking_inbox` + manage access to this row. One draft per (lead, caller); autosave-friendly.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadDraftSaveRequest'
+      responses:
+        '200':
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  saved:
+                    type: boolean
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No manage access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /leads/{leadId}/presence:
+    get:
+      operationId: leadsInbox_getPresence
+      summary: List other viewers currently on this inquiry
+      description: >-
+        Requires `view_booking_inbox` + row access. Returns other users' heartbeats from the last
+        20 seconds (excludes the caller's own).
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      responses:
+        '200':
+          description: Current viewers/drafters.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  presence:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeadPresenceEntry'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: leadsInbox_heartbeatPresence
+      summary: Send a viewing/drafting presence heartbeat
+      description: >-
+        Requires `view_booking_inbox` + row access. Call every ~10s while an inquiry is open so
+        "Kathy is currently drafting a reply" banners stay live for everyone else.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadPresenceHeartbeatRequest'
+      responses:
+        '200':
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /leads/{leadId}/attachments:
+    get:
+      operationId: leadsInbox_listAttachments
+      summary: List an inquiry's attachments
+      description: Requires `view_booking_inbox` + row access. Logs an `attachments_viewed` audit entry.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      responses:
+        '200':
+          description: Attachments, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attachments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeadAttachment'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: leadsInbox_uploadAttachment
+      summary: Upload an attachment to an inquiry
+      description: >-
+        Requires `view_booking_inbox` + manage access to this row. Multipart upload; the file field
+        must be named `file`. Stored under a per-tenant or per-install uploads path keyed by lead id.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No manage access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: No file uploaded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Could not store the upload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /leads/{leadId}/classification:
+    get:
+      operationId: leadsInbox_getClassification
+      summary: Fetch the current AI classification for an inquiry
+      description: Requires `view_booking_inbox` + row access. Returns the row with is_current=1, or null if none has run yet.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      responses:
+        '200':
+          description: The current classification.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  classification:
+                    $ref: '#/components/schemas/LeadClassificationRecord'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: leadsInbox_correctClassification
+      summary: Record a human correction to the AI classification
+      description: >-
+        Requires `view_booking_inbox` + manage access to this row. Inserts a NEW
+        lead_classifications row (source=human_correction) — the AI's original record is never
+        overwritten or deleted.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadClassificationCorrectionRequest'
+      responses:
+        '200':
+          description: Correction recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No manage access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /leads/{leadId}/onboard:
+    get:
+      operationId: leadsInbox_onboardPreview
+      summary: Preview the Onboard Lead review dialog (no side effects)
+      description: >-
+        Requires `view_booking_inbox` + manage access to this row. Runs duplicate detection and a
+        same-date availability check without creating anything, so the review dialog can show
+        warnings before the user commits.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Defaults to the lead's desired_date, or 30 days from today.
+      responses:
+        '200':
+          description: Preview.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadOnboardPreview'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No manage access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: leadsInbox_onboard
+      summary: Onboard an inquiry into a real event
+      description: >-
+        Requires `view_booking_inbox` + manage access to this row. Creates an `events` row (status
+        `proposed` — onboarding is a handoff, not a close), optionally applies an event_templates
+        checklist, sets the lead's status to `onboarded`, and writes the full audit trail. Shares
+        `Onboarding::createEventFromLead()` with the original Leads pipeline's `convert()` action.
+        Rejects re-onboarding an already-onboarded/converted/terminal lead. Duplicate/availability
+        warnings never block the onboard — a human already reviewed them via the GET preview.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadOnboardRequest'
+      responses:
+        '200':
+          description: Onboarded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadOnboardResult'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: No manage access to this row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Already onboarded/converted, or in a terminal status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /leads/{leadId}/audit:
+    get:
+      operationId: leadsInbox_audit
+      summary: Fetch an inquiry's full audit trail
+      description: >-
+        Requires the `view_lead_audit` global capability (narrower than view_booking_inbox alone —
+        not granted to the Restricted external booker role). Append-only lead_audit_log rows,
+        newest first.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      responses:
+        '200':
+          description: The audit trail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audit:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeadAuditEntry'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing view_lead_audit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /inbox/list:
+    get:
+      operationId: inbox_list
+      summary: The inquiry queue (saved views)
+      description: >-
+        Requires `view_booking_inbox`. `view` selects one of the spec's saved views (mine,
+        unassigned, all, follow_up, archived, awaiting_first_response, claims_expiring,
+        follow_up_overdue, high_value, recently_onboarded, declined) — the first five map 1:1 to
+        left-nav routes; the rest are surfaced as an in-page dropdown. Results are always scoped by
+        `BaseEndpoint::leadScopeSql()` for a Restricted external booker. Capped at 200 rows.
+      tags:
+        - Booking Inbox
+      parameters:
+        - name: view
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - mine
+              - unassigned
+              - all
+              - follow_up
+              - archived
+              - awaiting_first_response
+              - claims_expiring
+              - follow_up_overdue
+              - high_value
+              - recently_onboarded
+              - declined
+            default: all
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Free-text match against contact name/org/email, event name, and inquiry number.
+      responses:
+        '200':
+          description: The queue.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  leads:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeadInbox'
+                  view:
+                    type: string
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing view_booking_inbox.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /inbox/changes:
+    get:
+      operationId: inbox_changes
+      summary: Realtime-by-polling changes feed
+      description: >-
+        Requires `view_booking_inbox`. No SSE/WebSocket infrastructure exists in this app — the
+        Inbox UI polls this every few seconds while open and republishes results onto the
+        client-side pub/sub bus. Pass the previous response's server_time as the next call's
+        `since` to avoid gaps/dupes.
+      tags:
+        - Booking Inbox
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 'Y-m-d H:i:s (UTC) or a Unix epoch integer. Defaults to 1970-01-01 (i.e. everything).'
+      responses:
+        '200':
+          description: What changed since `since`, scoped to the caller.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  leads:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeadInboxChangeEntry'
+                  messages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeadInboxMessageChangeEntry'
+                  server_time:
+                    type: string
+                    format: date-time
+                    description: Pass this as the next poll's `since`.
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing view_booking_inbox.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /inbox/counts:
+    get:
+      operationId: inbox_counts
+      summary: Left-nav badge counts
+      description: Requires `view_booking_inbox`. Scoped the same way as /inbox/list.
+      tags:
+        - Booking Inbox
+      responses:
+        '200':
+          description: Counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  counts:
+                    $ref: '#/components/schemas/LeadInboxCounts'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing view_booking_inbox.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /routing-rules:
+    get:
+      operationId: routingRules_list
+      summary: List routing rules
+      description: >-
+        Requires `view_booking_inbox` (manage_lead_routing is not required just to read — anyone
+        who can see the Inbox can see what rules exist, to understand a routing explanation).
+        Each rule includes its currently published version's conditions/action, if any.
+      tags:
+        - Routing Rules
+      responses:
+        '200':
+          description: Rules, ordered by priority then id.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rules:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RoutingRule'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing view_booking_inbox.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: routingRules_create
+      summary: Create a routing rule
+      description: Requires `manage_lead_routing` (Venue administrator only). Starts with no published version — create and publish a version separately.
+      tags:
+        - Routing Rules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoutingRuleCreateRequest'
+      responses:
+        '200':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing manage_lead_routing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /routing-rules/{ruleId}:
+    get:
+      operationId: routingRules_show
+      summary: Fetch one routing rule with its full version history
+      description: Requires `view_booking_inbox`.
+      tags:
+        - Routing Rules
+      parameters:
+        - $ref: '#/components/parameters/RoutingRuleIdPath'
+      responses:
+        '200':
+          description: Rule + versions (newest first).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rule:
+                    $ref: '#/components/schemas/RoutingRule'
+                  versions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RoutingRuleVersion'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing view_booking_inbox.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Routing rule not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: routingRules_update
+      summary: Update a routing rule's header fields
+      description: >-
+        Requires `manage_lead_routing`. Only name, description, priority, is_active are settable
+        here — conditions/action live on a version (POST .../versions).
+      tags:
+        - Routing Rules
+      parameters:
+        - $ref: '#/components/parameters/RoutingRuleIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoutingRuleUpdateRequest'
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing manage_lead_routing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Routing rule not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /routing-rules/{ruleId}/versions:
+    post:
+      operationId: routingRules_createVersion
+      summary: Draft a new version of a routing rule
+      description: >-
+        Requires `manage_lead_routing`. Mirrors process_versions: always creates a new draft
+        (version_number auto-incremented), never mutates a published version. Publish it separately
+        via POST .../versions/{versionNumber}/publish.
+      tags:
+        - Routing Rules
+      parameters:
+        - $ref: '#/components/parameters/RoutingRuleIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoutingRuleVersionCreateRequest'
+      responses:
+        '200':
+          description: Draft created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  version_number:
+                    type: integer
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing manage_lead_routing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Routing rule not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: conditions or action missing/invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /routing-rules/{ruleId}/versions/{versionNumber}/publish:
+    post:
+      operationId: routingRules_publishVersion
+      summary: Publish a draft routing-rule version
+      description: >-
+        Requires `manage_lead_routing`. Freezes the version (immutable once published — same
+        contract as process_versions) and points routing_rules.current_published_version_id at it,
+        so RoutingEngine::route() starts using it on the next classification. Already-published
+        versions return 409.
+      tags:
+        - Routing Rules
+      parameters:
+        - $ref: '#/components/parameters/RoutingRuleIdPath'
+        - $ref: '#/components/parameters/RoutingRuleVersionNumberPath'
+      responses:
+        '200':
+          description: Published.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  published:
+                    type: boolean
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing manage_lead_routing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Routing rule version not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: This version is already published.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /reports/booking-inbox:
+    get:
+      operationId: reports_bookingInbox
+      summary: Booking Inbox venue-wide report
+      description: >-
+        Requires the `view_reports` global capability. Every figure is derived live from
+        leads/lead_status_history/lead_claims/lead_assignments/lead_classifications/lead_audit_log —
+        no separate rollup table. The `anomalies` array is only populated for venue admins (see
+        Leads\AnomalyScanner — informational observations, never accusations, since they name
+        individual bookers).
+      tags:
+        - Reports
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Defaults to 3 months before today.
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Defaults to today.
+      responses:
+        '200':
+          description: The report.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  report:
+                    $ref: '#/components/schemas/BookingInboxReport'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing view_reports.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /crm-profiles:
     get:
       operationId: crm_profiles_list
@@ -21043,6 +23299,92 @@ paths:
       responses:
         '204':
           description: Post deleted.
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller lacks the edit_event capability for this event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Event or post not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /promote/events/{eventId}/posts/{postId}/approve:
+    post:
+      operationId: promotePosts_approve
+      summary: Approve a post's current revision
+      description: >-
+        Requires the `edit_event` event capability. Approves the CURRENT content_hash specifically
+        — not a generic "set status=approved" — by recording it as approved_content_hash. A post
+        with approval_tier=manager additionally requires the manage_campaigns global capability.
+        Any later content-changing edit automatically invalidates this approval (see
+        PromotePostUpdateRequest).
+      tags:
+        - Promote
+      parameters:
+        - $ref: '#/components/parameters/PromoteEventId'
+        - $ref: '#/components/parameters/PromotePostId'
+      responses:
+        '200':
+          description: Approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromotePostApproveResult'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Caller lacks edit_event for this event, or the post requires manager approval and the caller lacks manage_campaigns.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Event or post not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /promote/events/{eventId}/posts/{postId}/mark-published:
+    post:
+      operationId: promotePosts_markPublished
+      summary: Record a post as published (manual platforms) or verified
+      description: >-
+        Requires the `edit_event` event capability. Records the public URL for a post published on
+        a manual (no-API) platform, or confirms an API-published one, and moves status to
+        `published` (or `verified` when `verified` is truthy — staff have actually confirmed the
+        post is live). If the post has a related_task_id (the manual-publish Tasks-app task created
+        on entering awaiting_manual_publish), that task is marked done.
+      tags:
+        - Promote
+      parameters:
+        - $ref: '#/components/parameters/PromoteEventId'
+        - $ref: '#/components/parameters/PromotePostId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromotePostMarkPublishedRequest'
+      responses:
+        '200':
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromotePostApproveResult'
         '401':
           description: Authentication required.
           content:
