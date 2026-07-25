@@ -181,20 +181,59 @@ final class Mailer
      *                                        Downloadable file attachments (e.g. a PDF).
      *                                        Each: filename, optional mime (defaults to
      *                                        application/octet-stream), and raw bytes.
+     * @param string|null $messageId  Bare Message-ID (no angle brackets) to use instead
+     *                                of generating a random one — pass
+     *                                Mailer::generateMessageId() computed ahead of time
+     *                                when the caller needs to persist the same id (e.g.
+     *                                lead_messages.external_message_id) that ends up on
+     *                                the wire, so a customer's reply can be matched back
+     *                                to this exact message later (see Panic\Leads\ThreadMatcher).
+     * @param string|null $inReplyTo  Bare Message-ID (no angle brackets) this send is a
+     *                                reply to — emitted as the In-Reply-To header so the
+     *                                recipient's mail client (and their eventual reply's
+     *                                own In-Reply-To/References) threads correctly.
+     * @param list<string> $references Bare Message-IDs (no angle brackets), oldest first,
+     *                                for the References header — the full prior chain of
+     *                                this conversation.
      * @return int|null The new outbox row id, or null when no DB was injected
      *                   or the outbox insert failed.
      */
-    public function send(string $to, string $subject, string $textBody, ?string $htmlBody = null, ?string $template = null, array $inline = [], array $attachments = []): ?int
-    {
+    public function send(
+        string $to,
+        string $subject,
+        string $textBody,
+        ?string $htmlBody = null,
+        ?string $template = null,
+        array $inline = [],
+        array $attachments = [],
+        ?string $messageId = null,
+        ?string $inReplyTo = null,
+        array $references = [],
+    ): ?int {
         // Strip header injection attempts from anything that ends up in headers.
         $to      = $this->sanitizeHeaderValue($to);
         $subject = $this->sanitizeHeaderValue($subject);
 
-        $message = $this->buildMessage($to, $subject, $textBody, $htmlBody, $inline, $attachments);
+        $message = $this->buildMessage($to, $subject, $textBody, $htmlBody, $inline, $attachments, $messageId, $inReplyTo, $references);
 
         $this->writeToFile($to, $message);
         $this->pipeToSendmail($to, $message);
         return $this->logToOutbox($to, $subject, $textBody, $htmlBody, $template, $inline);
+    }
+
+    /**
+     * Generate a Message-ID for a send that hasn't happened yet — bare (no
+     * angle brackets), matching the convention lead_intake_emails.message_id
+     * and lead_messages.external_message_id already store inbound
+     * Message-IDs in (see LeadEmailParser::parse()). Callers that need to
+     * record the id before/alongside calling send() (LeadsInbox.php,
+     * Leads\Acknowledgment) generate it here first, then pass it back into
+     * send() via $messageId so the id on the wire matches the one persisted.
+     */
+    public static function generateMessageId(string $fromAddress): string
+    {
+        $domain = substr(strrchr($fromAddress, '@') ?: '@localhost', 1);
+        return sprintf('%s.%s@%s', date('YmdHis'), bin2hex(random_bytes(8)), $domain ?: 'localhost');
     }
 
     // ─── Message builder ───────────────────────────────────────────────────────
@@ -222,6 +261,9 @@ final class Mailer
      * @param array<string,string> $inline  Content-ID (bare) => raw PNG bytes.
      * @param list<array{filename:string,mime?:string,bytes:string}> $attachments
      *        File attachments wrapped in an outer multipart/mixed envelope.
+     * @param string|null $messageId  Bare Message-ID to use verbatim (see send()'s docblock).
+     * @param string|null $inReplyTo  Bare Message-ID this send replies to.
+     * @param list<string> $references Bare Message-IDs, oldest first.
      */
     private function buildMessage(
         string  $to,
@@ -230,21 +272,38 @@ final class Mailer
         ?string $htmlBody,
         array   $inline = [],
         array   $attachments = [],
+        ?string $messageId = null,
+        ?string $inReplyTo = null,
+        array   $references = [],
     ): string {
         $domain = substr(strrchr($this->fromAddress, '@') ?: '@localhost', 1);
-        $msgId  = sprintf('<%s.%s@%s>', date('YmdHis'), bin2hex(random_bytes(8)), $domain);
+        $msgId  = $messageId ?? sprintf('%s.%s@%s', date('YmdHis'), bin2hex(random_bytes(8)), $domain);
 
         $baseHeaders = [
             "From: {$this->fromName} <{$this->fromAddress}>",
             "To: {$to}",
             "Reply-To: {$this->fromName} <{$this->fromAddress}>",
             "Subject: {$subject}",
-            "Message-ID: {$msgId}",
+            "Message-ID: <{$msgId}>",
             'Date: ' . date('r'),
             'MIME-Version: 1.0',
             'Auto-Submitted: auto-generated',
             'X-Mailer: Backstage',
         ];
+
+        // Threading headers — lets the recipient's mail client group this
+        // with the rest of the conversation, and (more importantly for us)
+        // means their next reply's own In-Reply-To/References will carry
+        // one of these ids back, which is exactly what ThreadMatcher looks
+        // for to fold that reply into the same lead instead of the ingest
+        // script spawning a duplicate.
+        if ($inReplyTo !== null && trim($inReplyTo) !== '') {
+            $baseHeaders[] = "In-Reply-To: <{$inReplyTo}>";
+        }
+        $refs = array_values(array_filter(array_map('trim', $references), static fn(string $r): bool => $r !== ''));
+        if ($refs !== []) {
+            $baseHeaders[] = 'References: ' . implode(' ', array_map(static fn(string $r): string => "<{$r}>", $refs));
+        }
 
         // Build the message *content* (MIME part headers + body). When file
         // attachments are present the content becomes the first part of an outer

@@ -22,7 +22,13 @@ use function Panic\log_lead_activity;
  */
 final class Acknowledgment
 {
-    /** Sentinel used as lead_messages.external_message_id so send-once can be checked cheaply. */
+    /**
+     * Marker stored in lead_messages.raw_headers_json so the send-once check
+     * below can find this row cheaply. external_message_id used to double as
+     * this sentinel, but now holds the auto-ack's real Message-ID instead
+     * (see Mailer::generateMessageId()) so a customer replying to the
+     * acknowledgment threads back to this lead via Panic\Leads\ThreadMatcher.
+     */
     private const MARKER = 'auto-ack';
 
     private const SKIP_SOURCES = ['internal', 'manual'];
@@ -49,7 +55,9 @@ final class Acknowledgment
         }
 
         $already = $db->one(
-            "SELECT id FROM lead_messages WHERE lead_id = ? AND external_message_id = ? LIMIT 1",
+            "SELECT id FROM lead_messages
+             WHERE lead_id = ? AND JSON_UNQUOTE(JSON_EXTRACT(raw_headers_json, '$.kind')) = ?
+             LIMIT 1",
             [$leadId, self::MARKER]
         );
         if ($already !== null) {
@@ -70,18 +78,44 @@ final class Acknowledgment
             $body = "Hi {$name},\n\n{$body}";
         }
 
+        // Threaded against whatever inbound message(s) triggered this lead so
+        // far (normally just the one that created it) — see the class
+        // docblock and Panic\Leads\ThreadMatcher.
+        $priorMessageIds = array_column(
+            $db->all(
+                "SELECT external_message_id FROM lead_messages
+                 WHERE lead_id = ? AND external_message_id IS NOT NULL
+                 ORDER BY id ASC",
+                [$leadId]
+            ),
+            'external_message_id'
+        );
+        $externalMessageId = Mailer::generateMessageId('bookings@themab.org');
+
         $mailer = new Mailer($this->root, $db, 'bookings@themab.org', 'Mabuhay Gardens Booking Team');
-        $mailer->send($email, $subject, $body);
+        $mailer->send(
+            $email,
+            $subject,
+            $body,
+            null,
+            null,
+            [],
+            [],
+            $externalMessageId,
+            $priorMessageIds !== [] ? end($priorMessageIds) : null,
+            $priorMessageIds
+        );
 
         $db->insert(
             'INSERT INTO lead_messages
              (lead_id, direction, channel, status, from_name, from_email, to_recipients, subject,
-              body_text, external_message_id, is_read)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
+              body_text, external_message_id, in_reply_to, raw_headers_json, is_read)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
             [
                 $leadId, 'outbound', 'email', 'sent',
                 'Mabuhay Gardens Booking Team', 'bookings@themab.org', $email, $subject,
-                $body, self::MARKER,
+                $body, $externalMessageId, $priorMessageIds !== [] ? end($priorMessageIds) : null,
+                json_encode(['kind' => self::MARKER]),
             ]
         );
 

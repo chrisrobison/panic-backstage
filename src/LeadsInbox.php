@@ -297,21 +297,52 @@ final class LeadsInbox extends BaseEndpoint
         $fromName = $direction === 'outbound' ? 'Mabuhay Gardens Booking Team' : $this->auth->user()['name'] ?? 'Staff';
         $fromEmail = $direction === 'outbound' ? 'bookings@themab.org' : null;
 
+        // A real Message-ID, generated before the row is written so the id
+        // persisted here matches the one that goes out on the wire — that's
+        // what lets a customer's reply be matched back to this exact message
+        // (see Panic\Leads\ThreadMatcher). Threaded against the rest of this
+        // lead's conversation via In-Reply-To/References so both the
+        // customer's mail client and our own matching see one thread.
+        $externalMessageId = $direction === 'outbound' ? Mailer::generateMessageId($fromEmail) : null;
+        $priorMessageIds = $direction === 'outbound'
+            ? array_column(
+                $this->db->all(
+                    "SELECT external_message_id FROM lead_messages
+                     WHERE lead_id = ? AND external_message_id IS NOT NULL
+                     ORDER BY id ASC",
+                    [$lead['id']]
+                ),
+                'external_message_id'
+            )
+            : [];
+
         $id = $this->db->insert(
-            'INSERT INTO lead_messages (lead_id, direction, channel, status, from_name, from_email, to_recipients, subject, body_text, body_html, sent_by_user_id, checksum)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+            'INSERT INTO lead_messages (lead_id, direction, channel, status, from_name, from_email, to_recipients, subject, body_text, body_html, sent_by_user_id, checksum, external_message_id, in_reply_to)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             [
                 $lead['id'], $direction, $direction === 'outbound' ? 'email' : 'manual', $status,
                 $fromName, $fromEmail, $direction === 'outbound' ? $lead['contact_email'] : null,
                 $subject ?: null, $bodyText ?: null, $bodyHtml ?: null, $this->userId(),
                 hash('sha256', $bodyText . $bodyHtml),
+                $externalMessageId, $priorMessageIds !== [] ? end($priorMessageIds) : null,
             ]
         );
 
         if ($direction === 'outbound') {
             $mailer = new Mailer($this->root, $this->db, 'bookings@themab.org', 'Mabuhay Gardens Booking Team');
             if (trim((string) $lead['contact_email']) !== '') {
-                $mailer->send((string) $lead['contact_email'], $subject ?: 'Re: your inquiry', $bodyText, $bodyHtml ?: null);
+                $mailer->send(
+                    (string) $lead['contact_email'],
+                    $subject ?: 'Re: your inquiry',
+                    $bodyText,
+                    $bodyHtml ?: null,
+                    null,
+                    [],
+                    [],
+                    $externalMessageId,
+                    $priorMessageIds !== [] ? end($priorMessageIds) : null,
+                    $priorMessageIds
+                );
             }
             $this->db->run('UPDATE leads SET first_response_at = COALESCE(first_response_at, NOW()) WHERE id = ?', [$lead['id']]);
             (new ClaimService())->recordPreservingAction($this->db, $lead, (int) $this->userId(), 'sent_response');

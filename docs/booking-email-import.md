@@ -27,6 +27,36 @@ The `unseen` keyword means the message is **also delivered to the inbox as
 normal** — the importer only gets a copy. The filter never calls `finish`, so
 the rest of the mailbox's rules still run.
 
+## Threading (replies fold into the original conversation)
+
+A reply to a booking inquiry doesn't create a second lead. Before creating a
+new `leads` row, `src/Leads/ThreadMatcher.php` checks whether the inbound
+email is obviously a continuation of one we already have:
+
+1. **Threading headers** — the email's `In-Reply-To`/`References` ids are
+   checked against `lead_messages.external_message_id`, which every message
+   on a lead carries: its own `Message-ID` for inbound mail, and (since this
+   feature landed) a real generated `Message-ID` for every outbound send too
+   — staff replies (`LeadsInbox.php`) and the auto-acknowledgment
+   (`Leads/Acknowledgment.php`). A hit is exact.
+2. **Subject + sender fallback** — for webmail clients that drop
+   `References` on forward: if the subject, normalized (`Re:`/`Fwd:`/`Fw:`/
+   `Aw:` prefixes stripped — `LeadEmailParser::normalizeSubject()`), matches
+   a prior message from the same `contact_email` within the last 180 days,
+   it's treated as the same thread.
+
+A match attaches a new `lead_intake_emails` row and `lead_messages` row to
+the **existing** lead (plus an audit `lead_notes` entry) instead of running
+the full new-lead pipeline — classification, routing, and the
+auto-acknowledgment only ever run once, when the lead is first created, so a
+reply never re-triggers them or re-sends the acknowledgment. Staff see the
+new message on the lead's Conversation tab via the existing Inbox polling
+(`Inbox::changes()`) — no separate notification needed.
+
+No match (a first inquiry, or a reply to a pre-threading message with no
+recoverable subject/sender match) falls through to lead creation exactly as
+before.
+
 ## Parsing strategy (hybrid)
 
 | Email shape | How it's parsed |
@@ -111,5 +141,11 @@ php scripts/ingest-booking-email.php < message.eml
 ## Tests
 
 `php tests/booking_email_parser_test.php` — exercises MIME decoding, Jotform
-label parsing, and heuristic extraction against fixtures in
-`tests/fixtures/booking-emails/` (no API key or DB required).
+label parsing, heuristic extraction, and threading-header/subject
+normalization against fixtures in `tests/fixtures/booking-emails/` (no API key
+or DB required).
+
+`RUN_DB_TESTS=1 php tests/leads_thread_matcher_test.php` — exercises
+`ThreadMatcher`'s header and subject+sender matching against real
+`leads`/`lead_messages` rows (throwaway, cleaned up after). Needs a real DB,
+so it's opt-in — see `tests/run-php-tests.sh`.

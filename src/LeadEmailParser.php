@@ -92,6 +92,21 @@ final class LeadEmailParser
         $messageId = trim($headers['message-id'] ?? '', " \t<>");
         $receivedAt = $this->parseDate($headers['date'] ?? '');
 
+        // Threading headers — used by Panic\Leads\ThreadMatcher (invoked from
+        // scripts/ingest-booking-email.php) to fold an obvious reply into its
+        // existing lead's conversation instead of spawning a new lead for
+        // every back-and-forth. In-Reply-To is normally a single id;
+        // References accumulates the whole prior chain. Either can carry a
+        // Message-ID this system minted itself (Mailer::generateMessageId(),
+        // stored on lead_messages.external_message_id) or one from a prior
+        // inbound email (lead_intake_emails.message_id) — either is a valid
+        // thread match.
+        $inReplyToIds = $this->extractMessageIds($headers['in-reply-to'] ?? '');
+        $referenceIds = array_values(array_unique(array_merge(
+            $inReplyToIds,
+            $this->extractMessageIds($headers['references'] ?? '')
+        )));
+
         // Deterministic Jotform label parse.
         $labels   = $this->extractLabels($bodyText);
         $jotform  = $labels !== [];
@@ -183,8 +198,53 @@ final class LeadEmailParser
                 // derived rather than re-deriving it from the raw MIME again.
                 'body_text'     => $bodyText,
                 'body_html'     => $msg['html'] !== '' ? $msg['html'] : null,
+                // Threading (see comment above where these are extracted).
+                'in_reply_to'   => $inReplyToIds[0] ?? null,
+                'reference_ids' => $referenceIds,
             ],
         ];
+    }
+
+    // ── Threading helpers ──────────────────────────────────────────────────
+
+    /**
+     * Pull Message-IDs out of an In-Reply-To/References header value.
+     * Normally angle-bracketed and (for References) whitespace-separated;
+     * a handful of broken senders omit the brackets, so that's the fallback.
+     *
+     * @return list<string> ids without angle brackets, in header order.
+     */
+    private function extractMessageIds(string $header): array
+    {
+        $header = trim($header);
+        if ($header === '') {
+            return [];
+        }
+        if (preg_match_all('/<([^<>\s]+)>/', $header, $m)) {
+            return array_values(array_unique($m[1]));
+        }
+        return array_values(array_unique(array_filter(preg_split('/\s+/', $header) ?: [])));
+    }
+
+    /**
+     * Normalize a subject line for thread matching: strip repeated reply/
+     * forward prefixes (Re:, Fwd:, Fw:, Aw:, Antw:, Sv: — English plus a
+     * few common localizations, optionally suffixed "[2]") and case-fold.
+     * Shared with Panic\Leads\ThreadMatcher's subject+sender fallback so
+     * both sides of the comparison are normalized identically.
+     */
+    public static function normalizeSubject(?string $subject): string
+    {
+        $s = trim((string) $subject);
+        if ($s === '') {
+            return '';
+        }
+        do {
+            $prev = $s;
+            $s = trim((string) preg_replace('/^\s*(re|fwd?|aw|antw|sv)\s*(\[\d+\])?\s*:\s*/i', '', $s));
+        } while ($s !== $prev);
+        $s = (string) preg_replace('/\s+/', ' ', $s);
+        return mb_strtolower($s);
     }
 
     // ── MIME parsing ──────────────────────────────────────────────────────────
