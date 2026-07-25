@@ -2339,7 +2339,12 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
     overflow: hidden;
   }
   .sidebar { grid-row: 1 / 3; overflow-y: auto; }
-  .workspace { overflow-y: auto; min-height: 0; }
+  /* overflow-anchor: none — the calendar's continuous-scroll grid manually
+     compensates scrollTop when it prepends/prunes a month above the
+     viewport (see event-views.js _adjustScroll); native scroll anchoring
+     would otherwise apply its own correction on top of that, compounding
+     into a much larger jump than intended. */
+  .workspace { overflow-y: auto; min-height: 0; overflow-anchor: none; }
   .app-footer { display: none; }
 
   .nav-toggle {

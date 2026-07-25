@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `calendar` — Stop first scroll from jumping the grid view forward a month
 - **Fixed** `public-event` — Remove Panic Backstage brand bar from event.html
 - **Fixed** `ai` — Pin HOME + grant group-read so claude CLI auth works under www-data
 - **Added** `leads` — Switch AI classification/extraction from Anthropic API key to local claude CLI
