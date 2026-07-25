@@ -127,13 +127,22 @@ class InboxWorkspace extends PanicElement {
       this.loadHistory(lead.id);
       return;
     }
-    if (this.activeTab === 'details' || this.activeTab === 'event-info') {
+    if (this.activeTab === 'details') {
       wrap.innerHTML = `<div class="padded grid-form">
         ${row('Contact', lead.contact_name)}${row('Email', lead.contact_email)}${row('Phone', lead.contact_phone)}
-        ${row('Organization', lead.contact_org)}${row('Event Type', lead.event_type)}${row('Category', lead.event_category)}
-        ${row('Genre', lead.music_genre)}${row('Desired Date', lead.desired_date)}${row('Alt Date', lead.desired_date_alt)}
+        ${row('Organization', lead.contact_org)}${row('Source', lead.source)}
+        ${row('Point person', lead.point_person_name)}${row('Risk level', lead.risk_level)}
+      </div>`;
+      return;
+    }
+    if (this.activeTab === 'event-info') {
+      wrap.innerHTML = `<div class="padded grid-form">
+        ${row('Event Name', lead.event_name)}${row('Event Type', lead.event_type)}${row('Category', lead.event_category)}
+        ${row('Genre', lead.music_genre)}${row('Band(s)', lead.band_name)}${row('Rooms Requested', lead.rooms_requested)}
+        ${row('Desired Date', lead.desired_date)}${row('Alt Date', lead.desired_date_alt)}
         ${row('Attendance', lead.projected_attendance)}${row('Budget', lead.budget)}${row('Age restriction', lead.age_restriction)}
-        ${row('Alcohol plan', lead.alcohol_plan)}${row('Notes', lead.notes)}
+        ${row('Private event', lead.is_private ? 'Yes' : 'No')}${row('Alcohol plan', lead.alcohol_plan)}
+        ${row('Notes', lead.notes)}
       </div>`;
       return;
     }

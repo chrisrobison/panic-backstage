@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `booking-inbox` — Fix unscrollable list/conversation panes and dead Event Info tab
 - **Added** `leads` — Thread reply emails into the original inquiry's conversation
 - **Fixed** `calendar` — Stop first scroll from jumping the grid view forward a month
 - **Fixed** `public-event` — Remove Panic Backstage brand bar from event.html
