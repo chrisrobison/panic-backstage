@@ -53,10 +53,14 @@ Fields populated where present: `contact_name`, `contact_email`, `contact_org`,
    php scripts/migrate.php          # single-tenant
    ```
 
-2. **Configure the Anthropic key** (optional but recommended for freeform mail) —
-   set `ANTHROPIC_API_KEY` (or `ANTHROPIC_API_KEY_FILE`) in `.env`. Without it,
-   structured emails still import perfectly and freeform emails import via
-   heuristics. See `.env.example` → *Booking-email importer*.
+2. **Confirm the local `claude` CLI is usable** (optional but recommended for
+   freeform mail) — `CLAUDE_CLI_BIN` in `.env` (default
+   `/home/cdr/.local/bin/claude`), authenticated via its own OAuth/
+   subscription login, no billed API key needed. This script must run as the
+   same OS user that ran `claude login` (true by default: Exim invokes it as
+   the mailbox owner via `~/.forward`). Without a working CLI, structured
+   emails still import perfectly and freeform emails import via heuristics.
+   See `.env.example` → *Booking-email importer*.
 
 3. **Add the Exim filter rule.** Because the mailbox already uses an Exim user
    filter (`~/.forward` beginning with `# Exim filter`), add this rule near the

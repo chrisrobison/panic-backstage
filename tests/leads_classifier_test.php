@@ -3,9 +3,12 @@
  * Tests for src/Leads/Classifier.php — the Booking Inbox's AI classification
  * scoring/gating logic (database/migrations/074_add_booking_inbox_classification.sql).
  *
- * Hermetic: no network call (no API key configured => isEnabled() is false
- * and classify() short-circuits before touching the DB), and score() is a
- * pure function over already-extracted data.
+ * Hermetic: the constructor's $enabled param is forced explicitly (rather
+ * than left null to auto-detect via ClaudeCli::isAvailable(), which would
+ * make these tests depend on whether a real `claude` binary happens to be
+ * installed on the box running them), so classify() short-circuits before
+ * ever spawning a subprocess or touching the DB. score() is a pure function
+ * over already-extracted data.
  *
  * Run with: php tests/leads_classifier_test.php
  */
@@ -31,23 +34,23 @@ function ok(bool $cond, string $label): void {
 
 echo "\n=== Booking Inbox classifier tests ===\n\n";
 
-// ── isEnabled() / classify() short-circuit without an API key ───────────────
+// ── isEnabled() / classify() short-circuit when disabled ────────────────────
 
-$noKey = new Classifier(null);
-ok($noKey->isEnabled() === false, "No API key configured => isEnabled() is false");
+$disabled = new Classifier(false);
+ok($disabled->isEnabled() === false, "enabled=false => isEnabled() is false");
 
-$result = $noKey->classify(new Database(), 999999, 'Some inquiry text');
-ok($result === null, "classify() returns null (never touches the DB) with no API key");
+$result = $disabled->classify(new Database(), 999999, 'Some inquiry text');
+ok($result === null, "classify() returns null (never touches the DB) when disabled");
 
-$withKey = new Classifier('sk-ant-fake-for-testing');
-ok($withKey->isEnabled() === true, "A configured API key => isEnabled() is true");
+$enabled = new Classifier(true);
+ok($enabled->isEnabled() === true, "enabled=true => isEnabled() is true");
 
-$emptyBody = $withKey->classify(new Database(), 999999, '   ');
+$emptyBody = $enabled->classify(new Database(), 999999, '   ');
 ok($emptyBody === null, "classify() returns null for blank body text without calling the model");
 
 // ── score(): explainable 0-100 heuristic ─────────────────────────────────────
 
-$c = new Classifier(null);
+$c = new Classifier(false);
 
 ok($c->score([], null, 0.9) === 0, "High spam probability (>=0.7) forces score to 0");
 ok($c->score([], null, 0.69) > 0, "Just-under-threshold spam probability does not zero the score");

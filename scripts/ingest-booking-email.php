@@ -26,10 +26,21 @@ declare(strict_types=1);
  * where possible, recorded in lead_intake_emails with status='error'.
  *
  * Env:
- *   ANTHROPIC_API_KEY        — enables LLM extraction of freeform emails.
- *   ANTHROPIC_API_KEY_FILE   — path to a file containing the key (env-style or raw).
- *   LEAD_PARSER_MODEL        — Anthropic model id (default claude-opus-4-8).
- *   BOOKING_INTAKE_LOG       — log file (default storage/logs/booking-intake.log).
+ *   CLAUDE_CLI_BIN            — path to the `claude` binary (default
+ *                               /home/cdr/.local/bin/claude). LLM extraction
+ *                               of freeform emails runs through this CLI's
+ *                               own logged-in OAuth/subscription session
+ *                               (Panic\Ai\ClaudeCli) — no billed API key
+ *                               involved. This script must run as the same
+ *                               OS user that ran `claude login` (normally
+ *                               true here: Exim invokes it as the mailbox
+ *                               owner via ~/.forward) or the CLI will be
+ *                               found but fail to authenticate, and
+ *                               extraction silently falls back to the
+ *                               regex heuristics below.
+ *   LEAD_PARSER_MODEL         — model alias/name passed to `claude --model`
+ *                               (default opus).
+ *   BOOKING_INTAKE_LOG        — log file (default storage/logs/booking-intake.log).
  */
 
 $root = dirname(__DIR__);
@@ -66,11 +77,10 @@ if (trim($raw) === '') {
     exit(0);
 }
 
-$apiKey = resolve_api_key();
-$model  = getenv('LEAD_PARSER_MODEL') ?: 'claude-opus-4-8';
+$model = getenv('LEAD_PARSER_MODEL') ?: 'opus';
 
 try {
-    $parser = new LeadEmailParser($apiKey, $model);
+    $parser = new LeadEmailParser(null, $model);
     $result = $parser->parse($raw);
     $lead   = $result['lead'];
     $meta   = $result['meta'];
@@ -193,7 +203,7 @@ try {
     // never cause this mail-pipe script to look like an ingestion failure
     // (the lead is already safely committed either way).
     try {
-        $classifier = new Classifier($apiKey, $model);
+        $classifier = new Classifier(null, $model);
         if ($classifier->isEnabled()) {
             $classifier->classify($db, $leadId, (string) ($meta['body_text'] ?? ''), $meta['subject'] ?? null, $messageRowId);
         }
@@ -238,29 +248,6 @@ try {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-
-function resolve_api_key(): ?string
-{
-    $key = getenv('ANTHROPIC_API_KEY');
-    if ($key) {
-        return $key;
-    }
-    $path = getenv('ANTHROPIC_API_KEY_FILE');
-    if ($path && is_readable($path)) {
-        $contents = trim((string) file_get_contents($path));
-        // Accept either a bare key or an env-style "ANTHROPIC_API_KEY=sk-...".
-        foreach (preg_split('/\R/', $contents) as $line) {
-            $line = trim($line);
-            if (stripos($line, 'ANTHROPIC_API_KEY=') === 0) {
-                return trim(substr($line, strlen('ANTHROPIC_API_KEY=')), " \"'");
-            }
-        }
-        if (str_starts_with($contents, 'sk-')) {
-            return $contents;
-        }
-    }
-    return null;
-}
 
 /** Record an intake row with status='error' so a failed message is never silently lost. */
 function record_error_only(string $root, string $raw, string $error, array $meta = []): void

@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use Panic\Ai\ClaudeCli;
+
 /**
  * Parses an inbound booking-request email (raw RFC 5322) into a normalized
  * lead field set.
@@ -18,8 +20,9 @@ namespace Panic;
  *      These are parsed deterministically (free, exact).
  *
  *   2. Freeform prose — a human writing a paragraph. These are extracted with
- *      Claude (Anthropic Messages API, structured output) when an API key is
- *      configured, falling back to regex heuristics otherwise.
+ *      Claude — via the local `claude` CLI's own OAuth/subscription session
+ *      (Panic\Ai\ClaudeCli), not a billed API key — when that CLI is
+ *      available, falling back to regex heuristics otherwise.
  *
  * The two strategies are combined: deterministic label values win where present,
  * and the LLM (or heuristics) fills the gaps and enriches freeform sections.
@@ -52,15 +55,21 @@ final class LeadEmailParser
         'phone'          => 'phone',
     ];
 
-    private ?string $apiKey;
+    private bool $enabled;
     private string $model;
     private string $today;
 
-    public function __construct(?string $apiKey = null, string $model = 'claude-opus-4-8', ?string $today = null)
+    /**
+     * @param bool|null $enabled Null (the default) auto-detects via
+     *   ClaudeCli::isAvailable() — pass an explicit true/false to override
+     *   that (tests do this to stay hermetic regardless of whether a real
+     *   `claude` binary happens to be present on the box running them).
+     */
+    public function __construct(?bool $enabled = null, string $model = 'opus', ?string $today = null)
     {
-        $this->apiKey = ($apiKey !== null && $apiKey !== '') ? $apiKey : null;
-        $this->model  = $model;
-        $this->today  = $today ?: date('Y-m-d');
+        $this->enabled = $enabled ?? ClaudeCli::isAvailable();
+        $this->model   = $model;
+        $this->today   = $today ?: date('Y-m-d');
     }
 
     // ── Public entry point ──────────────────────────────────────────────────
@@ -460,54 +469,43 @@ final class LeadEmailParser
 
     // ── LLM enrichment (Anthropic Messages API, raw HTTP) ─────────────────────
 
-    /** @return array<string,mixed>|null null when no API key or the call failed. */
+    /** @return array<string,mixed>|null null when the CLI is unavailable or the call failed. */
     private function enrich(string $body, string $subject, ?string $name, ?string $email): ?array
     {
-        if ($this->apiKey === null || trim($body) === '') {
+        if (!$this->enabled || trim($body) === '') {
             return null;
         }
 
-        $schema = [
-            'type' => 'object',
-            'additionalProperties' => false,
-            'properties' => [
-                'contact_name'         => ['type' => ['string', 'null']],
-                'contact_org'          => ['type' => ['string', 'null']],
-                'contact_phone'        => ['type' => ['string', 'null']],
-                'event_name'           => ['type' => ['string', 'null']],
-                // No enum here: the validator rejects enum+nullable type. The
-                // system prompt lists the allowed values and normalizeEventType()
-                // maps whatever comes back onto the Leads UI set.
-                'event_type'           => ['type' => ['string', 'null']],
-                'band_name'            => ['type' => ['string', 'null']],
-                'desired_date'         => ['type' => ['string', 'null']],
-                'desired_date_alt'     => ['type' => ['string', 'null']],
-                'projected_attendance' => ['type' => ['integer', 'null']],
-                'is_private'           => ['type' => ['boolean', 'null']],
-                'alcohol_plan'         => ['type' => ['string', 'null']],
-                'summary'              => ['type' => ['string', 'null']],
-            ],
-            'required' => [
-                'contact_name', 'contact_org', 'contact_phone', 'event_name', 'event_type',
-                'band_name', 'desired_date', 'desired_date_alt', 'projected_attendance',
-                'is_private', 'alcohol_plan', 'summary',
-            ],
-        ];
-
+        // No JSON-Schema enforcement here — the CLI has no equivalent of
+        // the Messages API's `output_config.format.json_schema` (see
+        // Ai\ClaudeCli's "No API-key path" docblock note), so the shape is
+        // spelled out in plain instructions and ClaudeCli::promptJson()
+        // parses the reply leniently. "null" (spelled out below) still
+        // means what it always meant — array_filter() below strips both
+        // that and any empty string so deterministic label values aren't
+        // overridden by an absent LLM field either way.
         $system = "You extract structured booking-inquiry data from emails sent to a "
             . "music & events venue (The Mab / FAME) at bookings@themab.org. Today's date is "
-            . "{$this->today}. Return only the requested fields, using null when a field is "
-            . "not stated. Rules:\n"
-            . "- desired_date / desired_date_alt: a concrete calendar date as YYYY-MM-DD. If only "
-            . "a month, range, or season is given, leave the date null (the prose is kept in notes).\n"
-            . "- event_type must be one of: concert, private_event, festival, comedy_show, other.\n"
-            . "- band_name: the performing artist(s)/band(s), comma-separated if multiple.\n"
-            . "- projected_attendance: an integer headcount only.\n"
-            . "- is_private: true only for closed/non-public events (corporate, wedding, private "
-            . "party, hackathon, buyout); false for public shows.\n"
-            . "- alcohol_plan: any stated alcohol arrangement (e.g. 'dry event, no alcohol', "
-            . "'cash bar'), else null.\n"
-            . "- summary: one sentence (<160 chars) describing the request.";
+            . "{$this->today}.\n\n"
+            . "Respond with ONLY a single JSON object — no prose, no markdown code fences, no "
+            . "explanation before or after it. It must have exactly these keys, using JSON null "
+            . "when a field is not stated:\n"
+            . "- contact_name (string or null)\n"
+            . "- contact_org (string or null)\n"
+            . "- contact_phone (string or null)\n"
+            . "- event_name (string or null)\n"
+            . "- event_type (string or null) — one of: concert, private_event, festival, comedy_show, other\n"
+            . "- band_name (string or null) — performing artist(s)/band(s), comma-separated if multiple\n"
+            . "- desired_date (string or null) — YYYY-MM-DD, only if a concrete date is given\n"
+            . "- desired_date_alt (string or null) — same format\n"
+            . "- projected_attendance (integer or null) — headcount only\n"
+            . "- is_private (boolean or null) — true only for closed/non-public events (corporate, "
+            . "wedding, private party, hackathon, buyout); false for public shows\n"
+            . "- alcohol_plan (string or null) — any stated alcohol arrangement (e.g. 'dry event, "
+            . "no alcohol', 'cash bar')\n"
+            . "- summary (string or null) — one sentence (<160 chars) describing the request\n\n"
+            . "If only a month, range, or season is given for a date, leave it null (the prose is "
+            . "kept in notes elsewhere) rather than guessing a day.";
 
         $hint = '';
         if ($name)  { $hint .= "Sender name (from headers): {$name}\n"; }
@@ -516,65 +514,13 @@ final class LeadEmailParser
             . ($hint !== '' ? $hint . "\n" : '')
             . "Email body:\n\"\"\"\n" . $body . "\n\"\"\"";
 
-        $payload = [
-            'model'      => $this->model,
-            'max_tokens' => 1024,
-            'system'     => $system,
-            'output_config' => [
-                'effort' => 'low',
-                'format' => ['type' => 'json_schema', 'schema' => $schema],
-            ],
-            'messages' => [['role' => 'user', 'content' => $user]],
-        ];
-
-        $json = $this->callAnthropic($payload);
+        $json = ClaudeCli::promptJson($system, $user, $this->model);
         if ($json === null) {
             return null;
         }
 
-        // Strip empty strings so they don't override deterministic values.
+        // Strip empty strings/null so they don't override deterministic values.
         return array_filter($json, static fn($v) => $v !== '' && $v !== null);
-    }
-
-    /** @param array<string,mixed> $payload @return array<string,mixed>|null */
-    private function callAnthropic(array $payload): ?array
-    {
-        $ch = curl_init('https://api.anthropic.com/v1/messages');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_TIMEOUT        => 60,
-            CURLOPT_HTTPHEADER     => [
-                'content-type: application/json',
-                'x-api-key: ' . $this->apiKey,
-                'anthropic-version: 2023-06-01',
-            ],
-            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-        ]);
-        $resp = curl_exec($ch);
-        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $err  = curl_error($ch);
-        curl_close($ch);
-
-        if ($resp === false || $code < 200 || $code >= 300) {
-            error_log("LeadEmailParser: Anthropic call failed (HTTP {$code}) {$err} " . substr((string) $resp, 0, 500));
-            return null;
-        }
-
-        $body = json_decode((string) $resp, true);
-        if (!is_array($body)) {
-            return null;
-        }
-        // Structured-output responses return the JSON as the first text block.
-        $text = '';
-        foreach ($body['content'] ?? [] as $block) {
-            if (($block['type'] ?? '') === 'text') {
-                $text = (string) ($block['text'] ?? '');
-                break;
-            }
-        }
-        $parsed = json_decode($text, true);
-        return is_array($parsed) ? $parsed : null;
     }
 
     // ── Heuristic fallback (no LLM) ───────────────────────────────────────────

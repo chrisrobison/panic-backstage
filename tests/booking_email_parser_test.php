@@ -1,9 +1,12 @@
 <?php
 /**
  * Tests for LeadEmailParser — the deterministic (no-LLM) paths of the booking
- * email importer. The LLM enrichment step is disabled here (null API key) so
- * these tests are hermetic; they exercise MIME decoding, Jotform label parsing,
- * and the heuristic fallback against the bundled .eml fixtures.
+ * email importer. The LLM enrichment step is force-disabled here (enabled:
+ * false, rather than left null to auto-detect via ClaudeCli::isAvailable())
+ * so these tests are hermetic regardless of whether a real `claude` binary
+ * happens to be installed on the box running them; they exercise MIME
+ * decoding, Jotform label parsing, and the heuristic fallback against the
+ * bundled .eml fixtures.
  *
  * Run with: php tests/booking_email_parser_test.php
  */
@@ -24,7 +27,7 @@ function ok(bool $cond, string $label): void {
 }
 
 $fixtures = __DIR__ . '/fixtures/booking-emails';
-$parser   = new LeadEmailParser(null, 'claude-opus-4-8', '2026-06-01'); // null key → no LLM
+$parser   = new LeadEmailParser(false, 'opus', '2026-06-01'); // enabled:false → no LLM
 
 // ── Structured Jotform notification ─────────────────────────────────────────
 echo "\n=== Jotform structured email ===\n\n";

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `leads` — Switch AI classification/extraction from Anthropic API key to local claude CLI
 - **Documentation** `ai` — Document the AI Assistant in-app and in the ops manual; add proposal expiry sweep
 - **Added** `ai` — Give the AI Assistant drawer multi-turn conversation memory
 - **Added** `ai` — Give the AI Assistant drawer multi-turn conversation memory

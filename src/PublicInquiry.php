@@ -168,8 +168,7 @@ final class PublicInquiry extends BaseEndpoint
     private function classifyAndAcknowledge(int $leadId, string $message, int $messageRowId): void
     {
         try {
-            $apiKey = getenv('ANTHROPIC_API_KEY') ?: null;
-            $classifier = new Classifier($apiKey);
+            $classifier = new Classifier();
             if ($classifier->isEnabled()) {
                 $classifier->classify($this->db, $leadId, $message, 'Website booking inquiry', $messageRowId);
             }

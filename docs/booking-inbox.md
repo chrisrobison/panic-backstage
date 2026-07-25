@@ -266,11 +266,17 @@ list/workspace/detail components each react to just their slice — the same
 
 1. **Migrations** (`071`–`082`) are additive/idempotent — `php
    scripts/migrate.php` applies them in order. Already applied on this box.
-2. **Anthropic key** (`ANTHROPIC_API_KEY` / `ANTHROPIC_API_KEY_FILE` in
-   `.env`) enables AI classification; without it, `Classifier::classify()`
-   still runs but every result is generic/low-confidence and routes to
-   unassigned triage (the deterministic parts of the pipeline — dedup,
-   acknowledgment, claim, status machine, onboarding — are unaffected).
+2. **The local `claude` CLI** (`CLAUDE_CLI_BIN` in `.env`, see
+   `src/Ai/ClaudeCli.php`) enables AI classification, riding that CLI's own
+   logged-in OAuth/subscription session rather than a billed API key — the
+   same mechanism the AI Assistant drawer uses. It must run as the same OS
+   user that ran `claude login` (the mail-pipe script and any CLI testing
+   run as `cdr`; a web-server-pool-user process such as PHP-FPM's `www-data`
+   will find the binary but fail to authenticate). Without a working CLI,
+   `Classifier::isEnabled()` is false and `classify()` short-circuits to
+   `null` — the lead is left unclassified and routes to unassigned triage
+   (the deterministic parts of the pipeline — dedup, acknowledgment, claim,
+   status machine, onboarding — are unaffected).
 3. **SLA cron** — not enabled; see the crontab line above when you're ready.
 4. **Ingestion** — reuses the existing `bookings@themab.org` Exim pipe (see
    `docs/booking-email-import.md`); no additional mail setup needed.
