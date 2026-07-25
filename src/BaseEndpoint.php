@@ -5,102 +5,12 @@ namespace Panic;
 
 abstract class BaseEndpoint implements Endpoint
 {
-    private const EVENT_CAPABILITIES = [
-        'venue_admin' => [
-            'read_event', 'edit_event', 'publish_event', 'delete_event',
-            'manage_lineup', 'manage_tasks', 'manage_schedule', 'manage_open_items',
-            'upload_assets', 'manage_assets', 'manage_invites',
-            'manage_guest_list', 'manage_staffing',
-            'view_settlement', 'edit_settlement',
-            'view_contracts', 'manage_contracts', 'approve_contracts',
-            'manage_ticketing',
-            // New capabilities
-            'manage_payments', 'waive_deposit',
-            'manage_vendors',
-            'manage_ledger', 'finalize_closeout',
-            'view_execution', 'manage_execution',
-            'view_incidents', 'manage_incidents',
-        ],
-        'event_owner' => [
-            'read_event', 'edit_event', 'publish_event', 'delete_event',
-            'manage_lineup', 'manage_tasks', 'manage_schedule', 'manage_open_items',
-            'upload_assets', 'manage_assets', 'manage_invites',
-            'manage_guest_list', 'manage_staffing',
-            'view_settlement', 'edit_settlement',
-            'view_contracts', 'manage_contracts', 'approve_contracts',
-            'manage_ticketing',
-            // New capabilities
-            'manage_payments',
-            'manage_vendors',
-            'manage_ledger',
-            'view_execution', 'manage_execution',
-        ],
-        'promoter' => [
-            'read_event', 'edit_event', 'manage_lineup', 'manage_tasks', 'manage_schedule',
-            'manage_open_items', 'manage_guest_list', 'manage_staffing', 'view_public_page',
-            'view_contracts',
-            'view_execution',
-        ],
-        'band' => ['read_event', 'upload_assets', 'view_assigned_tasks'],
-        'artist' => ['read_event', 'upload_assets', 'view_assigned_tasks'],
-        'designer' => ['read_event', 'upload_assets', 'manage_assets'],
-        'staff' => [
-            'read_event', 'manage_tasks', 'manage_schedule', 'manage_open_items',
-            'manage_guest_list', 'manage_staffing',
-            'view_execution', 'manage_execution',
-        ],
-        'viewer' => ['read_event'],
-        // global_viewer: read-only access to every event — no edits, no publishing, no admin actions.
-        'global_viewer' => ['read_event', 'view_settlement', 'view_contracts', 'view_public_page', 'view_execution'],
-    ];
-
-    private const EVENT_CAPABILITY_KEYS = [
-        'read_event', 'edit_event', 'publish_event', 'delete_event',
-        'manage_lineup', 'manage_tasks', 'manage_schedule', 'manage_open_items',
-        'upload_assets', 'manage_assets', 'manage_invites',
-        'manage_guest_list', 'manage_staffing',
-        'view_settlement', 'edit_settlement', 'view_public_page', 'view_assigned_tasks',
-        'view_contracts', 'manage_contracts', 'approve_contracts',
-        'manage_ticketing',
-        // New capabilities
-        'manage_payments', 'waive_deposit',
-        'manage_vendors',
-        'manage_ledger', 'finalize_closeout',
-        'view_execution', 'manage_execution',
-        'view_incidents', 'manage_incidents',
-    ];
-
-    private const GLOBAL_CAPABILITIES = [
-        'venue_admin' => [
-            'view_all_events', 'create_events', 'manage_templates', 'manage_users',
-            'manage_staff_roster', 'manage_contract_library', 'view_all_contracts',
-            'manage_contacts', 'manage_campaigns',
-            // New global capabilities
-            'manage_leads', 'view_leads',
-            'manage_crm_profiles',
-            'manage_venue_policy',
-            'manage_systems_inventory',
-            'admin_credential_encryption',
-            'reopen_settlement',
-            'manage_db_history',
-            'view_reports',
-            'manage_navigation',
-            'manage_settings',
-            'manage_processes',
-            'view_processes',
-            'manage_tasks_app',
-            'view_tasks_app',
-        ],
-        'event_owner' => ['view_leads', 'manage_tasks_app', 'view_tasks_app'],
-        'promoter' => [],
-        'band' => [],
-        'artist' => [],
-        'designer' => [],
-        'staff' => ['view_leads', 'view_processes', 'manage_tasks_app', 'view_tasks_app'],
-        'viewer' => [],
-        'global_viewer' => ['view_all_events', 'view_leads', 'view_reports', 'view_processes', 'view_tasks_app'],
-    ];
-
+    // Capability tables + the pure role/access logic that used to live here
+    // now live in Panic\Capabilities, so a standalone process with no
+    // Request/Endpoint/Auth (scripts/ai-mcp-server.php) can enforce the
+    // exact same rules from a plain (user id, role) pair. Everything below
+    // is a thin instance-context wrapper around those static methods —
+    // pure refactor, no behavior change. See Capabilities.php's docblock.
     private array $eventAccessCache = [];
 
     public function __construct(
@@ -156,17 +66,12 @@ abstract class BaseEndpoint implements Endpoint
 
     protected function hasGlobalCapability(string $capability): bool
     {
-        return in_array($capability, self::GLOBAL_CAPABILITIES[$this->role()] ?? [], true);
+        return Capabilities::hasGlobal($this->role(), $capability);
     }
 
     protected function globalCapabilities(): array
     {
-        $roleCapabilities = self::GLOBAL_CAPABILITIES[$this->role()] ?? [];
-        $capabilities = [];
-        foreach (array_unique(array_merge(...array_values(self::GLOBAL_CAPABILITIES))) as $capability) {
-            $capabilities[$capability] = in_array($capability, $roleCapabilities, true);
-        }
-        return $capabilities;
+        return Capabilities::globalCapabilities($this->role());
     }
 
     protected function requireAuth(string $message = 'Authentication required'): ?Response
@@ -187,36 +92,13 @@ abstract class BaseEndpoint implements Endpoint
             return $this->eventAccessCache[$eventId];
         }
 
-        $event = $this->db->one('SELECT id, owner_user_id FROM events WHERE id = ?', [$eventId]);
-        if (!$event || !$this->userId()) {
-            return $this->eventAccessCache[$eventId] = null;
-        }
-
-        $role = null;
-        if ($this->isVenueAdmin()) {
-            $role = 'venue_admin';
-        } elseif ($this->isGlobalViewer()) {
-            $role = 'global_viewer';
-        } elseif ((int) ($event['owner_user_id'] ?? 0) === $this->userId()) {
-            $role = 'event_owner';
-        } else {
-            $collaborator = $this->db->one('SELECT role FROM event_collaborators WHERE event_id = ? AND user_id = ? LIMIT 1', [$eventId, $this->userId()]);
-            $role = $collaborator['role'] ?? null;
-        }
-
-        if (!$role) {
-            return $this->eventAccessCache[$eventId] = null;
-        }
-
-        return $this->eventAccessCache[$eventId] = [
-            'role' => $role,
-            'capabilities' => $this->capabilitiesForEventRole($role),
-        ];
+        return $this->eventAccessCache[$eventId] =
+            Capabilities::eventAccess($this->db, $eventId, $this->userId(), $this->role());
     }
 
     protected function eventCapabilities(int $eventId): array
     {
-        return $this->eventAccess($eventId)['capabilities'] ?? $this->emptyEventCapabilities();
+        return $this->eventAccess($eventId)['capabilities'] ?? Capabilities::emptyEventCapabilities();
     }
 
     protected function hasEventCapability(int $eventId, string $capability): bool
@@ -282,23 +164,5 @@ abstract class BaseEndpoint implements Endpoint
              ORDER BY name',
             [$this->userId(), $this->userId(), $this->userId(), $this->userId()]
         );
-    }
-
-    private function capabilitiesForEventRole(string $role): array
-    {
-        $allowed = self::EVENT_CAPABILITIES[$role] ?? [];
-        $capabilities = $this->emptyEventCapabilities();
-        foreach ($allowed as $capability) {
-            $capabilities[$capability] = true;
-        }
-        if (!($capabilities['view_public_page'] ?? false) && ($capabilities['publish_event'] ?? false)) {
-            $capabilities['view_public_page'] = true;
-        }
-        return $capabilities;
-    }
-
-    private function emptyEventCapabilities(): array
-    {
-        return array_fill_keys(self::EVENT_CAPABILITY_KEYS, false);
     }
 }

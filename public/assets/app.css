@@ -7412,3 +7412,163 @@ pb-process-step-form { display: block; }
   .proc-history-grid { grid-template-columns: 1fr; }
   .proc-instance-detail-grid { grid-template-columns: 1fr; }
 }
+
+/* ── AI Assistant drawer (public/assets/ai-drawer.js) ──────────────────────
+   A persistent slide-over PANEL, not a modal: the rest of the app stays
+   fully visible and interactive while this is open. Deliberately has no
+   backdrop/scrim element at all (unlike .drawer-backdrop above, which the
+   mobile nav drawer uses) — per the product requirement, it must not block
+   or darken the app underneath. Closed via the header's close button or
+   Escape only; there is no click-outside-to-dismiss since there's no
+   backdrop to click. <pb-ai-drawer> itself is the sliding element (borrows
+   the translateX + transition *mechanics* of the mobile nav drawer above,
+   not its backdrop), positioned off-screen by default and toggled via a
+   plain `.ai-drawer-open` class the component manages on itself. */
+.topbar-ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--proc-ai, #0f9488);
+  color: #fff;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.topbar-ai:hover { opacity: .9; }
+.topbar-ai i { font-size: 13px; }
+@media (max-width: 860px) {
+  .topbar-ai span { display: none; }
+  .topbar-ai { padding: 8px 10px; }
+}
+
+pb-ai-drawer {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(420px, 100vw);
+  z-index: 90;              /* above the mobile nav drawer (60); below .modal-backdrop (200) so a modal opened from inside a chat reply still wins */
+  transform: translateX(100%);
+  transition: transform .25s ease;
+  pointer-events: none;      /* off-screen when closed — nothing to intercept clicks on */
+}
+pb-ai-drawer.ai-drawer-open {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+.ai-drawer-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  box-shadow: -12px 0 32px rgba(20, 25, 32, .14);
+}
+.ai-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.ai-drawer-head strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+}
+.ai-drawer-head strong i { color: var(--proc-ai, #0f9488); }
+.ai-drawer-head-sub { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+.ai-drawer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 16px;
+  cursor: pointer;
+}
+.ai-drawer-close:hover { background: var(--line); }
+.ai-drawer-transcript {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-drawer-empty { color: var(--muted); font-size: 13px; margin: 0; }
+.ai-msg {
+  max-width: 92%;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+}
+.ai-msg :is(p, ul, ol) { margin: 0 0 6px; }
+.ai-msg :is(p, ul, ol):last-child { margin-bottom: 0; }
+.ai-msg-user {
+  align-self: flex-end;
+  background: var(--proc-ai, #0f9488);
+  color: #fff;
+}
+.ai-msg-assistant {
+  align-self: flex-start;
+  background: var(--soft);
+  color: var(--ink);
+}
+.ai-msg-error {
+  align-self: flex-start;
+  background: #fdecec;
+  color: var(--danger, #c72525);
+  border: 1px solid rgba(199, 37, 37, .25);
+}
+.ai-msg-pending {
+  align-self: flex-start;
+  color: var(--muted);
+  font-size: 13px;
+  font-style: italic;
+}
+.ai-drawer-form {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+}
+.ai-drawer-input {
+  flex: 1 1 auto;
+  resize: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font: inherit;
+  font-size: 13.5px;
+  max-height: 120px;
+}
+.ai-drawer-input:focus { outline: 2px solid var(--proc-ai, #0f9488); outline-offset: 1px; }
+.ai-drawer-send {
+  flex: 0 0 auto;
+  background: var(--proc-ai, #0f9488);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 14px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ai-drawer-send:disabled { opacity: .55; cursor: default; }
+@media (max-width: 520px) {
+  pb-ai-drawer { width: 100vw; }
+}

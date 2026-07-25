@@ -58,6 +58,20 @@ function getAppUser() { return _appUser; }
 
 function setAppUser(user) { _appUser = user || null; }
 
+// Module-level cache of the signed-in user's GLOBAL capability map (from
+// /me's `capabilities`), separate from getAppUser() because most call sites
+// only need one or the other. Global, not event-scoped — for per-event
+// capabilities (edit_event, manage_lineup, etc.) use can(data, capability)
+// against a specific /events/{id} response instead. Set by AppShell once
+// /me resolves; read by anything outside the shell that needs to gate on a
+// global capability without its own /me round-trip (e.g. the AI Assistant
+// drawer's event-workspace entry point).
+let _appCapabilities = {};
+
+function getAppCapabilities() { return _appCapabilities; }
+
+function setAppCapabilities(capabilities) { _appCapabilities = capabilities || {}; }
+
 
 // ── Real LARC/PAN bus adapter ────────────────────────────────────────────────
 // pan.mjs (loaded in index.html) is a component autoloader; on init it mounts a
@@ -714,4 +728,4 @@ function mdToHtml(text) {
   }).join('\n');
 }
 
-export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox, openAssetFileViewer, openModal, timesOverlap, roomConflictIds, roomConflictDates };
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, getAppCapabilities, setAppCapabilities, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox, openAssetFileViewer, openModal, timesOverlap, roomConflictIds, roomConflictDates };

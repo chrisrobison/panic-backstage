@@ -547,6 +547,14 @@ final class Kernel
             return [AppSettings::class, []];
         }
 
+        // AI Assistant drawer — POST /api/ai/ask (Phase 1: read-only Q&A
+        // only; requireAuth()+requireGlobalCapability('use_ai_assistant')
+        // gate inside the endpoint). Phase 2's /api/ai/proposals/* routes
+        // aren't implemented yet — see docs/AI-ASSISTANT-PLAN.md.
+        if ($segments[0] === 'ai') {
+            return [Ai\Assistant::class, ['action' => $segments[1] ?? null, 'id' => $this->intOrNull($segments[2] ?? null)]];
+        }
+
         // Panic Promote — /api/promote/...
         if ($segments[0] === 'promote') {
             // GET|PATCH /api/promote/auto-publish — global auto-publish settings

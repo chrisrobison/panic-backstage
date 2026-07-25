@@ -1,4 +1,5 @@
-import { getRefreshToken, clearTokens, appUrl, setAppUser, esc, publish, subscribe, api, broadcastEventData, refreshSection, table, PanicElement, $, $$ } from './core.js';
+import { getRefreshToken, clearTokens, appUrl, setAppUser, setAppCapabilities, esc, publish, subscribe, api, broadcastEventData, refreshSection, table, PanicElement, $, $$ } from './core.js';
+import './ai-drawer.js';
 import { openCredentialSetupModal } from './auth.js';
 import './core.js';
 import './print.js';
@@ -50,6 +51,7 @@ class AppShell extends PanicElement {
       this.capabilities = me.capabilities || {};
       this.navItems = navData.items || [];
       setAppUser(me.user);
+      setAppCapabilities(this.capabilities);
       publish('auth.changed', me);
       if (!this.user) {
         location.href = appUrl('login.html');
@@ -141,6 +143,7 @@ class AppShell extends PanicElement {
       <pb-page-header></pb-page-header>
       <label class="search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input data-search placeholder="Search events, IDs, notes…" aria-label="Search events"></label>
       <button class="topbar-create" data-action="new-event" type="button" title="Create event" aria-label="Create event"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>New event</span></button>
+      <button class="topbar-ai" data-action="ai-drawer-toggle" type="button" title="AI Assistant" aria-label="Open AI Assistant" hidden><i class="fa-solid fa-sparkles" aria-hidden="true"></i><span>AI Assistant</span></button>
       <span class="session-pill" data-user-pill>…</span>
       <a href="#account" class="logout" style="text-decoration:none">Account</a>
       <button id="logout" class="logout">Logout</button>
@@ -155,7 +158,8 @@ class AppShell extends PanicElement {
       <a data-nav="help" href="#help"><i class="fa-solid fa-circle-question" aria-hidden="true"></i>Help</a>
     </nav>
     <div class="drawer-backdrop" data-drawer-close aria-hidden="true"></div>
-    <pb-toast-stack></pb-toast-stack>`;
+    <pb-toast-stack></pb-toast-stack>
+    <pb-ai-drawer></pb-ai-drawer>`;
     $('#logout', this).addEventListener('click', async () => {
       const refreshToken = getRefreshToken();
       if (refreshToken) {
@@ -186,6 +190,12 @@ class AppShell extends PanicElement {
       searchDebounce = setTimeout(() => publish('events.search', { query: value }), 250);
     });
     $('[data-action="new-event"]', this).addEventListener('click', () => { location.hash = 'new-event'; });
+    $('[data-action="ai-drawer-toggle"]', this)?.addEventListener('click', () => {
+      // Explicit eventId:null — a topbar-opened conversation is always
+      // general/cross-event, even if the drawer was last scoped to a
+      // specific event from an event workspace tab.
+      $('pb-ai-drawer', this)?.open({ eventId: null });
+    });
     this.setupNavCollapse();
     this.setupMobileDrawer();
   }
@@ -292,6 +302,11 @@ class AppShell extends PanicElement {
   applyCapabilities() {
     if (!this.capabilities?.create_events) {
       $$('[data-action="new-event"]', this).forEach((btn) => btn.remove());
+    }
+    if (this.capabilities?.use_ai_assistant) {
+      $$('[data-action="ai-drawer-toggle"]', this).forEach((btn) => btn.hidden = false);
+    } else {
+      $$('[data-action="ai-drawer-toggle"]', this).forEach((btn) => btn.remove());
     }
     const pill = $('[data-user-pill]', this);
     if (pill && this.user) pill.textContent = this.user.name || this.user.email || 'Account';

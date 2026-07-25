@@ -1,7 +1,7 @@
 // ── Event workspace shell ────────────────────────────────────────────────────
 // The event workspace (tabs, print menu, publish toggle) plus the read-only
 // summary/readiness/next-action bus cards and the autosaving details form.
-import { setTokens, esc, titleCase, statuses, appUrl, apiUrl, assetUrl, getAppUser, getToken, publish, subscribe, api, formData, broadcastEventData, refreshSection, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, openModal, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, apiUrl, assetUrl, getAppUser, getAppCapabilities, getToken, publish, subscribe, api, formData, broadcastEventData, refreshSection, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, openModal, $, $$ } from './core.js';
 import { openPrintWindow } from './print.js';
 import './paint-splat.js';
 import './event-vendors.js';
@@ -605,6 +605,14 @@ class EventWorkspace extends PanicElement {
       event.preventDefault();
       this.setActiveTab(trigger.dataset.gotoTab);
     }, { signal: this.abort.signal });
+    // "Ask AI" opens the single app-shell-level <pb-ai-drawer> (a sibling of
+    // this component, not a descendant — see app.js's renderShell()) scoped
+    // to the event currently open in this workspace, so "what's the status
+    // of this event" works without the user having to name it.
+    this.addEventListener('click', (event) => {
+      if (!event.target.closest('[data-ask-ai]')) return;
+      document.querySelector('pb-ai-drawer')?.open({ eventId: this.data?.event?.id });
+    }, { signal: this.abort.signal });
   }
 
   /** Re-publish the topbar page context and patch the publish button after an in-place event update. */
@@ -671,6 +679,7 @@ class EventWorkspace extends PanicElement {
         <a class="back-link" href="#events">&lt;- Back to Events</a>
       </div>
       <div class="event-actions">
+        ${getAppCapabilities()?.use_ai_assistant ? `<button type="button" class="secondary" data-ask-ai title="Ask the AI Assistant about this event"><i class="fa-solid fa-sparkles" aria-hidden="true"></i> Ask AI</button>` : ''}
         ${isPrivate ? '' : `<a class="button promote-accent" href="#promote-event-${esc(String(event.id))}"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Promote</a>`}
         ${isPrivate ? '' : `<a class="button secondary" href="${esc(appUrl(data.links.public_page))}" target="_blank" rel="noreferrer">Public Page</a>`}
         ${isPrivate ? '' : `<button class="secondary" data-qr-toggle title="Show a QR code linking to this event's public page"><i class="fa-solid fa-qrcode" aria-hidden="true"></i> QR Code</button>`}

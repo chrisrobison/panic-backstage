@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `ai
+Phase 1` — Add read-only AI Assistant drawer (Phase 1)
 - **Added** `events` — Cap recurring-series occurrences to a 90-day booking horizon
 - **Documentation** — Plan AI assistant drawer + recurring-event 90-day horizon cap
 - **Added** `search` — Rebuild the topbar search into a live, full-text results page
