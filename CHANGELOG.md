@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `ai` — Give the AI Assistant drawer multi-turn conversation memory
+- **Added** `ai` — Give the AI Assistant drawer multi-turn conversation memory
 - **Added** `ai` — Add Phase 2 propose/apply write tools to the AI Assistant
 - **Added** `ai` — Add Phase 2 propose/apply write tools to the AI Assistant
 - **Documentation** — Document the Inbox/Routing/Reports API surface and add staff training material

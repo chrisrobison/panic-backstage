@@ -47,6 +47,22 @@ final class Assistant extends BaseEndpoint
     /** Reject absurdly long prompts before ever spawning a subprocess. */
     private const MAX_MESSAGE_LENGTH = 4000;
 
+    /**
+     * Multi-turn memory: a fresh `claude -p` process (--no-session-persistence)
+     * has no memory of its own between requests, so prior turns are replayed
+     * into the system prompt (see buildSystemPrompt()) from ai_messages —
+     * this is what lets a follow-up like "skip that conflicting date" refer
+     * to what the assistant said last turn. Bounded both by message count and
+     * total characters so a long-running conversation can't blow up prompt
+     * size/latency/cost indefinitely; trimmed from the oldest end, keeping
+     * the most recent (most relevant) turns. Tool calls/results aren't
+     * persisted as separate rows (see ai_messages' docblock in the
+     * migration) — the assistant's own reply text already narrates what a
+     * tool did/returned, which is what matters for continuity here.
+     */
+    private const MAX_HISTORY_MESSAGES = 20;
+    private const MAX_HISTORY_CHARS = 12000;
+
     private const ALLOWED_TOOLS = [
         'mcp__panic__get_event',
         'mcp__panic__list_events',
@@ -142,6 +158,11 @@ final class Assistant extends BaseEndpoint
             );
         }
 
+        // Prior turns, fetched BEFORE this turn's user message is inserted
+        // below (otherwise it'd show up twice — once in history, once as
+        // the live -p prompt).
+        $history = $this->loadHistory($conversationId);
+
         $this->db->run(
             "INSERT INTO ai_messages (conversation_id, role, content) VALUES (?, 'user', ?)",
             [$conversationId, $message]
@@ -160,7 +181,7 @@ final class Assistant extends BaseEndpoint
         )['m'] ?? 0);
 
         try {
-            $reply = $this->runClaude($message, $userId, $role, $conversationId, $effectiveEventId, $eventContext);
+            $reply = $this->runClaude($message, $userId, $role, $conversationId, $effectiveEventId, $eventContext, $history);
         } catch (\RuntimeException $e) {
             return Response::json(['error' => $e->getMessage()], 502);
         }
@@ -189,6 +210,66 @@ final class Assistant extends BaseEndpoint
         }
 
         return $this->ok($payload);
+    }
+
+    /**
+     * The last MAX_HISTORY_MESSAGES user/assistant turns for $conversationId,
+     * in chronological order, trimmed to MAX_HISTORY_CHARS total content —
+     * see the constants' docblock above.
+     *
+     * @return list<array{role: string, content: string}>
+     */
+    private function loadHistory(int $conversationId): array
+    {
+        $rows = $this->db->all(
+            "SELECT role, content FROM ai_messages
+             WHERE conversation_id = ? AND role IN ('user', 'assistant')
+             ORDER BY id DESC LIMIT " . self::MAX_HISTORY_MESSAGES, // int constant, never interpolated from input
+            [$conversationId]
+        );
+        return self::trimHistoryToBudget(array_reverse($rows), self::MAX_HISTORY_CHARS);
+    }
+
+    /**
+     * Pure — trims $rows (chronological order, ['role'=>..., 'content'=>...])
+     * from the oldest end until the total content length is <= $maxChars.
+     * Public + static so it's unit-testable without a DB — see
+     * tests/ai_conversation_history_test.php.
+     *
+     * @param list<array{role: string, content: string}> $rows
+     * @return list<array{role: string, content: string}>
+     */
+    public static function trimHistoryToBudget(array $rows, int $maxChars): array
+    {
+        $total = 0;
+        foreach ($rows as $row) {
+            $total += mb_strlen((string) ($row['content'] ?? ''));
+        }
+        // count() > 1, not just $rows: even a single turn over budget alone
+        // is kept rather than emptied out entirely — some (long) context
+        // beats none.
+        while (count($rows) > 1 && $total > $maxChars) {
+            $removed = array_shift($rows);
+            $total -= mb_strlen((string) ($removed['content'] ?? ''));
+        }
+        return array_values($rows);
+    }
+
+    /**
+     * Pure — format history turns as alternating "User:"/"Assistant:" lines,
+     * oldest first, for splicing into the system prompt. Public + static for
+     * the same testability reason as trimHistoryToBudget() above.
+     *
+     * @param list<array{role: string, content: string}> $history
+     */
+    public static function formatHistory(array $history): string
+    {
+        $lines = [];
+        foreach ($history as $turn) {
+            $speaker = ($turn['role'] ?? '') === 'user' ? 'User' : 'Assistant';
+            $lines[] = $speaker . ': ' . trim((string) ($turn['content'] ?? ''));
+        }
+        return implode("\n", $lines);
     }
 
     /**
@@ -348,7 +429,7 @@ final class Assistant extends BaseEndpoint
      * return its final text reply. Throws RuntimeException (with a
      * user-safe message) on timeout or failure.
      */
-    private function runClaude(string $message, int $userId, string $role, int $conversationId, ?int $eventId, ?array $eventContext): string
+    private function runClaude(string $message, int $userId, string $role, int $conversationId, ?int $eventId, ?array $eventContext, array $history = []): string
     {
         $bin            = getenv('CLAUDE_CLI_BIN') ?: '/home/cdr/.local/bin/claude';
         $model          = getenv('AI_ASSISTANT_MODEL') ?: 'sonnet';
@@ -385,7 +466,7 @@ final class Assistant extends BaseEndpoint
                 ],
             ], JSON_PRETTY_PRINT));
 
-            file_put_contents($systemPromptPath, $this->buildSystemPrompt($eventContext));
+            file_put_contents($systemPromptPath, $this->buildSystemPrompt($eventContext, $history));
 
             // Literal flags are static, safe strings (never interpolated
             // from request input) and left unescaped; every value that
@@ -459,7 +540,7 @@ final class Assistant extends BaseEndpoint
         }
     }
 
-    private function buildSystemPrompt(?array $eventContext): string
+    private function buildSystemPrompt(?array $eventContext, array $history = []): string
     {
         $prompt = 'You are the AI assistant embedded in Panic Backstage, a venue booking and '
             . 'event-management app. You help venue staff answer questions about events using the '
@@ -481,12 +562,23 @@ final class Assistant extends BaseEndpoint
             . 'user asked for (e.g. "every Tuesday for 8 weeks") — the tool will tell you if a date is '
             . 'invalid, beyond the 90-day booking horizon, or conflicts with an existing booking; fix and '
             . 'retry rather than guessing around a rejection. Keep answers concise and grounded only in '
-            . 'what the tools actually return.';
+            . 'what the tools actually return.'
+            . "\n\n"
+            . 'This can be a multi-turn conversation — a "Conversation so far" transcript may follow '
+            . 'below. If it does, treat the new message at the very end as a follow-up to it: resolve '
+            . 'references like "that date", "skip it", "try again", or "yes, do that" against what was '
+            . 'actually said, and reuse decisions (rejected dates, matched events, a promoter filter) '
+            . 'already established there instead of asking the user to repeat themselves. Respond only '
+            . 'to the new message, not the whole history.';
 
         if ($eventContext !== null && $eventContext !== []) {
             $prompt .= "\n\nThe user currently has this event open in their workspace. Treat questions "
                 . "like \"this event\" or \"it\" as referring to this event unless they clearly ask about "
                 . "something else:\n" . json_encode($eventContext, JSON_PRETTY_PRINT);
+        }
+
+        if ($history) {
+            $prompt .= "\n\nConversation so far in this session (oldest first):\n" . self::formatHistory($history);
         }
 
         return $prompt;
