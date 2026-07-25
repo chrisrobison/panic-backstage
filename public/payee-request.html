@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Submit W-9 &amp; Mailing Address</title>
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --font-sans:   -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --font-serif:  Georgia, 'Times New Roman', serif;
+      --color-ink:   #111;
+      --color-mid:   #555;
+      --color-muted: #888;
+      --color-bg:    #f8f7f4;
+      --color-card:  #fff;
+      --color-border:#d0cfc8;
+      --color-accent:#1a56c4;
+      --color-danger:#b91c1c;
+      --color-ok:    #15803d;
+      --radius:      6px;
+      --shadow:      0 1px 4px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-bg);
+      color: var(--color-ink);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 48px;
+    }
+
+    header { width: 100%; max-width: 620px; margin-bottom: 28px; text-align: center; }
+    header h1 { font-family: var(--font-serif); font-size: 1.4rem; }
+    header p  { font-size: .875rem; color: var(--color-mid); margin-top: 4px; }
+
+    .card {
+      background: var(--color-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 28px 32px;
+      width: 100%;
+      max-width: 620px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-family: var(--font-serif);
+      font-size: 1.1rem;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .field { margin-bottom: 16px; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .row3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 14px; }
+    @media (max-width: 520px) { .row2, .row3 { grid-template-columns: 1fr; } }
+
+    label { display: block; font-size: .875rem; font-weight: 600; margin-bottom: 5px; color: var(--color-ink); }
+    .hint { font-size: .78rem; color: var(--color-mid); margin-top: 4px; }
+
+    input[type="text"], input[type="email"], input[type="tel"], select {
+      width: 100%;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: 9px 12px;
+      font-size: 1rem;
+      font-family: var(--font-sans);
+      outline: none;
+      transition: border-color .15s;
+      background: #fff;
+    }
+    input:focus, select:focus { border-color: var(--color-accent); }
+
+    .file-drop {
+      border: 2px dashed var(--color-border);
+      border-radius: var(--radius);
+      padding: 20px 16px;
+      text-align: center;
+      background: #fdfcfa;
+    }
+    .file-drop.has-file { border-style: solid; border-color: var(--color-ok); background: #f0fdf4; }
+    .file-drop input[type="file"] { margin: 0 auto; }
+    .file-status { font-size: .85rem; color: var(--color-mid); margin-top: 8px; }
+
+    .on-file-note {
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: .82rem;
+      color: #075985;
+      margin-bottom: 16px;
+    }
+
+    .btn-submit {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      background: var(--color-accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 1.05rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background .15s, opacity .15s;
+    }
+    .btn-submit:hover { background: #1546a0; }
+    .btn-submit:disabled { opacity: .5; cursor: not-allowed; }
+
+    .error-banner {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      font-size: .9rem;
+      color: var(--color-danger);
+      margin-bottom: 18px;
+      display: none;
+    }
+
+    .status-screen { text-align: center; padding: 40px 24px; }
+    .status-icon { font-size: 3rem; margin-bottom: 16px; }
+    .status-screen h2 { font-family: var(--font-serif); font-size: 1.4rem; margin-bottom: 10px; }
+    .status-screen p  { color: var(--color-mid); font-size: .95rem; line-height: 1.6; }
+
+    .loading { text-align: center; padding: 60px 24px; color: var(--color-mid); }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--color-border);
+      border-top-color: var(--color-accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .recipient-info { font-size: .875rem; color: var(--color-mid); margin-bottom: 20px; }
+    .recipient-info strong { color: var(--color-ink); }
+
+    @media (max-width: 480px) { .card { padding: 20px 16px; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Payee Info &amp; W-9</h1>
+  <p id="eventTitle"></p>
+</header>
+
+<div id="loadingScreen" class="card">
+  <div class="loading"><div class="spinner"></div>Loading…</div>
+</div>
+
+<div id="errorScreen" class="card" style="display:none">
+  <div class="status-screen">
+    <div class="status-icon">⚠️</div>
+    <h2>Link Unavailable</h2>
+    <p id="errorMsg">This link is invalid or has expired. Please contact the venue to request a new one.</p>
+  </div>
+</div>
+
+<div id="formScreen" style="display:none">
+  <div class="card">
+    <div class="card-title">Mailing Address &amp; W-9</div>
+    <div id="recipientInfo" class="recipient-info"></div>
+
+    <div id="errorBanner" class="error-banner"></div>
+
+    <form id="payeeForm">
+      <div class="field">
+        <label for="fName">Full name / business name</label>
+        <input type="text" id="fName" name="name" autocomplete="name">
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="fPhone">Phone <span class="hint" style="display:inline">(optional)</span></label>
+          <input type="tel" id="fPhone" name="phone" autocomplete="tel">
+        </div>
+        <div class="field">
+          <label for="fCompany">Company <span class="hint" style="display:inline">(optional)</span></label>
+          <input type="text" id="fCompany" name="company" autocomplete="organization">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="fLine1">Mailing address</label>
+        <input type="text" id="fLine1" name="mailing_address_line1" required autocomplete="address-line1" placeholder="Street address">
+      </div>
+      <div class="field">
+        <input type="text" id="fLine2" name="mailing_address_line2" autocomplete="address-line2" placeholder="Apt / suite / unit (optional)">
+      </div>
+
+      <div class="row3">
+        <div class="field">
+          <label for="fCity">City</label>
+          <input type="text" id="fCity" name="mailing_city" required autocomplete="address-level2">
+        </div>
+        <div class="field">
+          <label for="fState">State</label>
+          <input type="text" id="fState" name="mailing_state" required autocomplete="address-level1">
+        </div>
+        <div class="field">
+          <label for="fZip">ZIP</label>
+          <input type="text" id="fZip" name="mailing_zip" required autocomplete="postal-code">
+        </div>
+      </div>
+      <div class="field">
+        <label for="fCountry">Country</label>
+        <input type="text" id="fCountry" name="mailing_country" value="US" autocomplete="country">
+      </div>
+
+      <div id="w9OnFileNote" class="on-file-note" style="display:none"></div>
+
+      <div class="field">
+        <label for="fW9">Completed W-9 <span id="w9Required" class="hint" style="display:inline">(PDF, JPG, or PNG)</span></label>
+        <div class="file-drop" id="fileDrop">
+          <input type="file" id="fW9" name="w9" accept="application/pdf,image/jpeg,image/png">
+          <p class="file-status" id="fileStatus">No file chosen</p>
+        </div>
+        <p class="hint">Don't have a blank W-9 handy? <a href="https://www.irs.gov/pub/irs-pdf/fw9.pdf" target="_blank" rel="noopener">Download one from the IRS</a>, fill it out, and upload it here.</p>
+      </div>
+
+      <button type="submit" class="btn-submit" id="submitBtn">Submit</button>
+    </form>
+  </div>
+</div>
+
+<div id="successScreen" class="card" style="display:none">
+  <div class="status-screen">
+    <div class="status-icon">✅</div>
+    <h2>Thank You</h2>
+    <p>Your mailing address and W-9 have been received. The venue will follow up if anything else is needed.</p>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  let token = '';
+  let w9OnFile = false;
+
+  const apiBase = window.location.pathname.replace(/\/[^/]*$/, '') + '/api';
+
+  window.addEventListener('DOMContentLoaded', function () {
+    const params = new URLSearchParams(window.location.search);
+    token = params.get('token') || '';
+    if (!token) {
+      showError('No link token found in the URL. Please use the link from your email.');
+      return;
+    }
+    load();
+    document.getElementById('fW9').addEventListener('change', onFileChange);
+    document.getElementById('payeeForm').addEventListener('submit', onSubmit);
+  });
+
+  async function load() {
+    try {
+      const res  = await fetch(apiBase + '/payee-request/' + encodeURIComponent(token));
+      const data = await res.json();
+      if (!res.ok) {
+        showError(data.error || 'Failed to load this link.');
+        return;
+      }
+
+      document.getElementById('eventTitle').textContent = data.event?.venue_name
+        ? data.event.title + ' — ' + data.event.venue_name
+        : (data.event?.title || '');
+      document.title = 'Submit W-9: ' + (data.event?.title || '');
+
+      document.getElementById('recipientInfo').innerHTML =
+        'Submitting for <strong>' + esc(data.request.recipient_name || data.request.recipient_email) + '</strong>.';
+
+      const payee = data.payee;
+      if (payee) {
+        setVal('fName', payee.name);
+        setVal('fPhone', payee.phone);
+        setVal('fCompany', payee.company);
+        setVal('fLine1', payee.mailing_address_line1);
+        setVal('fLine2', payee.mailing_address_line2);
+        setVal('fCity', payee.mailing_city);
+        setVal('fState', payee.mailing_state);
+        setVal('fZip', payee.mailing_zip);
+        setVal('fCountry', payee.mailing_country || 'US');
+
+        w9OnFile = !!payee.w9_on_file;
+        if (w9OnFile) {
+          const note = document.getElementById('w9OnFileNote');
+          note.style.display = '';
+          note.textContent = 'We already have a W-9 on file' + (payee.w9_original_filename ? ' (' + payee.w9_original_filename + ')' : '') + '. Only upload a new one below if it needs to be replaced.';
+          document.getElementById('w9Required').textContent = '(optional — you already have one on file)';
+        }
+      }
+
+      show('formScreen');
+      hide('loadingScreen');
+    } catch (err) {
+      showError('Network error loading this link. Please refresh and try again.');
+    }
+  }
+
+  function onFileChange() {
+    const file = document.getElementById('fW9').files[0];
+    const drop = document.getElementById('fileDrop');
+    const status = document.getElementById('fileStatus');
+    if (file) {
+      drop.classList.add('has-file');
+      status.textContent = file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
+    } else {
+      drop.classList.remove('has-file');
+      status.textContent = 'No file chosen';
+    }
+  }
+
+  async function onSubmit(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
+    clearError();
+
+    const file = document.getElementById('fW9').files[0];
+    if (!file && !w9OnFile) {
+      showFormError('Please attach your completed W-9.');
+      btn.disabled = false;
+      btn.textContent = 'Submit';
+      return;
+    }
+
+    const fd = new FormData();
+    Object.keys(FIELD_IDS).forEach(function (key) {
+      fd.append(key, document.getElementById(FIELD_IDS[key]).value.trim());
+    });
+    if (file) fd.append('w9', file);
+
+    try {
+      const res  = await fetch(apiBase + '/payee-request/' + encodeURIComponent(token) + '/submit', {
+        method: 'POST',
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showFormError(data.error || 'Submission failed. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Submit';
+        return;
+      }
+      hide('formScreen');
+      show('successScreen');
+    } catch (err) {
+      showFormError('Network error. Please check your connection and try again.');
+      btn.disabled = false;
+      btn.textContent = 'Submit';
+    }
+  }
+
+  // Map each submitted field name to the (hand-picked, non-uniform) input id
+  // used above — e.g. mailing_address_line1 -> fLine1, not fMailing_address_line1.
+  const FIELD_IDS = {
+    name: 'fName', phone: 'fPhone', company: 'fCompany',
+    mailing_address_line1: 'fLine1', mailing_address_line2: 'fLine2',
+    mailing_city: 'fCity', mailing_state: 'fState', mailing_zip: 'fZip', mailing_country: 'fCountry',
+  };
+
+  function setVal(id, value) { const el = document.getElementById(id); if (el && value) el.value = value; }
+  function show(id) { document.getElementById(id).style.display = ''; }
+  function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+  function showError(msg) {
+    document.getElementById('errorMsg').textContent = msg;
+    hide('loadingScreen');
+    show('errorScreen');
+  }
+  function showFormError(msg) {
+    const el = document.getElementById('errorBanner');
+    el.textContent = msg;
+    el.style.display = '';
+  }
+  function clearError() { document.getElementById('errorBanner').style.display = 'none'; }
+
+  function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+}());
+</script>
+</body>
+</html>

@@ -186,9 +186,9 @@ final class Leads extends BaseEndpoint
         $id = $this->db->insert(
             'INSERT INTO leads (status, source, contact_name, contact_email, contact_org, contact_phone,
              event_name, event_type, band_name, desired_date, desired_date_alt, rooms_requested,
-             projected_attendance, is_private, alcohol_plan, notes, point_person_id,
+             projected_attendance, budget, is_private, alcohol_plan, notes, point_person_id,
              risk_level, created_by_id)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             [
                 $status,
                 $source,
@@ -203,6 +203,7 @@ final class Leads extends BaseEndpoint
                 date_or_null($b['desired_date_alt'] ?? null),
                 $b['rooms_requested'] ?? null,
                 isset($b['projected_attendance']) ? (int) $b['projected_attendance'] : null,
+                isset($b['budget']) && $b['budget'] !== '' ? (float) $b['budget'] : null,
                 boolish($b['is_private'] ?? false),
                 $b['alcohol_plan']    ?? null,
                 $b['notes']           ?? null,
@@ -251,7 +252,7 @@ final class Leads extends BaseEndpoint
         $fields = [
             'status', 'source', 'contact_name', 'contact_email', 'contact_org', 'contact_phone',
             'event_name', 'event_type', 'band_name', 'desired_date', 'desired_date_alt', 'rooms_requested',
-            'projected_attendance', 'is_private', 'alcohol_plan', 'notes',
+            'projected_attendance', 'budget', 'is_private', 'alcohol_plan', 'notes',
             'point_person_id', 'risk_level', 'decline_reason', 'decision_notes',
         ];
 
@@ -264,8 +265,10 @@ final class Leads extends BaseEndpoint
                 $val = date_or_null($val);
             } elseif ($field === 'is_private') {
                 $val = boolish($val);
-            } elseif (in_array($field, ['projected_attendance', 'point_person_id'], true)) {
+            } elseif ($field === 'projected_attendance' || $field === 'point_person_id') {
                 $val = $val !== null && $val !== '' ? (int) $val : null;
+            } elseif ($field === 'budget') {
+                $val = $val !== null && $val !== '' ? (float) $val : null;
             }
             $sets[]   = "$field = ?";
             $params[] = $val;

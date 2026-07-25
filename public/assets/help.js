@@ -34,10 +34,11 @@ export const HELP_SECTIONS = [
     icon: 'fa-solid fa-compass',
     items: [
       { slug: 'navigation',   title: 'Main navigation' },
+      { slug: 'search',       title: 'Search' },
       { slug: 'dashboard',    title: 'Dashboard' },
       { slug: 'calendar',     title: 'Calendar' },
       { slug: 'pipeline',     title: 'Pipeline board' },
-      { slug: 'events-list',  title: 'Events list &amp; search' },
+      { slug: 'events-list',  title: 'Events list' },
       { slug: 'events-upcoming', title: 'Upcoming events (card view)' },
       { slug: 'asset-library', title: 'Asset library' },
       { slug: 'templates',    title: 'Templates' },
@@ -283,10 +284,31 @@ const HELP_CONTENT = {
     </ul>
     <p>The topbar holds:</p>
     <ul>
-      <li><strong>Search</strong> — type to filter the Events list by title.</li>
+      <li><strong>Search</strong> — opens a dedicated results page and updates live as you type. See <a href="#help-search">Search</a>.</li>
       <li><strong>Account</strong> — passkey and password management.</li>
       <li><strong>Logout</strong> — clears tokens and returns to the login page.</li>
     </ul>
+  `,
+
+  search: `
+    <h2>Search</h2>
+    <p>The box at the top of every screen searches across your events — not just the page you're currently on. Start typing and it takes you straight to a dedicated <strong>Search Results</strong> page in the main pane; keep typing and the results update live, with no need to press Enter.</p>
+
+    <h3>What it searches</h3>
+    <p>A search matches against, for every event you have access to:</p>
+    <ul>
+      <li><strong>Event ID</strong> — the internal numeric ID (exact match) and the human-readable code shown on the event, e.g. <code>EVT-214</code> (partial match).</li>
+      <li><strong>Title</strong></li>
+      <li><strong>Public description</strong> and <strong>Internal notes</strong></li>
+      <li><strong>Producer/Artist</strong> and <strong>Booker</strong> — both name and email</li>
+      <li><strong>Organization</strong> (private-event client/company name)</li>
+    </ul>
+    <p>Type at least 2 characters — anything shorter would match nearly every event and isn't a useful result yet. Results are capped at 50 and sorted by date (most recent first), same as the plain Events list.</p>
+
+    <h3>Reading the results</h3>
+    <p>Each row is one event: ID, date, title, status, main issue, and owner — the same columns as the <a href="#help-events-list">Events list</a>. When the match is somewhere other than the title (say, a word buried in Internal Notes), a small line under the title shows exactly where it was found and a short excerpt around it, so a hit is never a mystery. Click any row to open that event's workspace.</p>
+
+    <div class="tip"><strong>Only sees what you can see:</strong> search respects the same event-access rules as everywhere else in the app — a search never surfaces an event you couldn't otherwise open. Venue admins and global viewers search every event; other roles only search events they own or collaborate on.</div>
   `,
 
   dashboard: `
@@ -350,8 +372,9 @@ const HELP_CONTENT = {
   `,
 
   'events-list': `
-    <h2>Events list &amp; search</h2>
-    <p>The Events page shows every event you have access to. Use the topbar search to filter by title. Click any row to open the workspace. Admins see a <em>Create Event</em> button that links to <a href="#help-templates">Templates</a>.</p>
+    <h2>Events list</h2>
+    <p>The Events page shows every event you have access to as a sortable table — click a column header to sort by it. Click any row to open the workspace. Admins see a <em>Create Event</em> button that links to <a href="#help-templates">Templates</a>. Past events are hidden by default; check <strong>Show past events</strong> to bring them back.</p>
+    <p>To find one specific event rather than browse the whole list, use the <a href="#help-search">topbar search</a> instead — it searches title, description, internal notes, and contacts, not just what's visible in this table.</p>
   `,
 
   'events-upcoming': `
@@ -691,6 +714,14 @@ const HELP_CONTENT = {
       <li><strong>Age restriction</strong> — shown on the public page and in the run sheet (e.g. 21+, All Ages).</li>
       <li><strong>Paid deposit</strong> — the deposit amount confirmed received. Required to advance past Intake Complete.</li>
     </ul>
+
+    <h3>Workshop / Comedy / Non-Music events</h3>
+    <p>Check <strong>Workshop / Comedy / Non-Music event</strong> for a show where "Doors" and "Load-In / Tech" don't really apply — a workshop, class, comedy night, or similar. Checking it:</p>
+    <ul>
+      <li>Hides the <strong>Load-In / Tech</strong> and <strong>Doors</strong> fields from this form (and from the workspace summary's fact row) — their existing values, if any, are left alone in the database, just no longer shown or editable.</li>
+      <li>Relabels <strong>Show</strong> to <strong>Start</strong> everywhere it appears for this event, including the public page (which shows a single "Start 7:30 PM" instead of "Doors 6:30 PM · Show 7:30 PM").</li>
+    </ul>
+    <p>Because Doors is hidden, the Hold-status requirement and the Run Sheet readiness check both switch to requiring <strong>Start</strong> (Show) instead for a non-music event — you're never blocked waiting on a field the form no longer shows you. Room-conflict detection also falls back to Start when Doors is empty, so scheduling checks stay accurate.</p>
 
     <h3>Public show fields</h3>
     <ul>
@@ -1572,6 +1603,8 @@ const HELP_CONTENT = {
 
     <h3>Notes</h3>
     <p>Status transitions are validated by the server — some forward moves require certain fields to be filled (e.g. you cannot advance to Booked without a contract). The pipeline and calendar display the current status for every event.</p>
+
+    <div class="tip"><strong>Checking a whole book of shows at once:</strong> the per-event workspace only shows you one event's gaps at a time. For a single view across every upcoming event — who's missing a booker/producer contact, a deposit, show times, an age restriction, and more — see the Intake Readiness Report at <code>docs/event-intake-status.html</code>. It reads live from the same API this app uses (you need to already be logged in to Backstage) and every field shown is directly editable in place.</div>
   `,
 
   workflow: `
@@ -1665,6 +1698,7 @@ const HELP_CONTENT = {
       <li><strong>Email</strong> — direct email inquiry.</li>
       <li><strong>Manual entry</strong> — created by staff directly in Backstage.</li>
     </ul>
+    <p>"Website form" leads can arrive two ways: someone filling out a form on the venue's own site, or the drop-in <code>&lt;panic-booking-inquiry&gt;</code> widget — a self-contained, no-login web component (<code>public/assets/panic-booking-inquiry.js</code>) that can be embedded on any page on any domain and files straight into this same Leads inbox as a <em>Website</em>-sourced lead. See <code>public/booking-inquiry-demo.html</code> for the embed snippet, styling hooks, and a live example — that page doubles as the setup instructions for whoever manages the marketing site.</p>
 
     <h3>Creating a lead</h3>
     <ol>
@@ -1672,6 +1706,7 @@ const HELP_CONTENT = {
       <li>Fill in the title, event type, venue, contact info, source, and requested date.</li>
       <li>Save. The lead is created with status <em>New</em>.</li>
     </ol>
+    <p>Once it's created, open the lead and fill in the rest from its <strong>Details</strong> tab: <strong>Band(s)</strong>, <strong>Projected Attendance</strong>, and <strong>Budget</strong> (the prospect's stated budget, if they gave one). None of these are required to create the lead, but they give the Deal Evaluator more to work with.</p>
 
     <h3>Moving a lead through statuses</h3>
     <p>Open a lead to see its detail panel. The status buttons along the top of the detail panel advance or revert the lead's status. Click the appropriate button to move it forward — for example from <em>Triage</em> to <em>Evaluating</em> once you've begun the deal evaluation.</p>
@@ -1887,6 +1922,17 @@ const HELP_CONTENT = {
 
     <h3>Send Invoice Link</h3>
     <p>For any <em>pending</em> or <em>invoiced</em> payment, click <strong>Send Invoice Link</strong> to generate a one-time Stripe Payment Link for that exact amount. Backstage creates the link, copies it to your clipboard, and marks the record <em>invoiced</em> — from there you paste it into an email, text, or however you reach the payer. This requires <code>STRIPE_SECRET_KEY</code> to be configured for the venue (see <a href="#help-admin-payments">Payment providers</a>); if it isn't, the button will show an error explaining Stripe isn't set up.</p>
+
+    <h3>Payee Info (W-9 &amp; mailing address)</h3>
+    <p>Below the payment table, the <strong>Payee Info</strong> card is where you collect what you need to actually pay out and 1099 a promoter or band: their current mailing address and a completed W-9. Click <strong>Request W-9 &amp; Address</strong> to open a small form pre-filled with the event's producer/artist contact — edit the name/email if you want it to go somewhere else — and send it.</p>
+    <ul>
+      <li>The recipient gets an emailed link to a page with no login required. They fill in their mailing address and upload their completed W-9 (PDF, JPG, or PNG).</li>
+      <li>The card shows the current status: <strong>Sent</strong>, <strong>Viewed</strong> (they opened the link), or <strong>Submitted</strong>, plus whatever's already on file (address, and whether a W-9 has been uploaded).</li>
+      <li><strong>Resend</strong> mints a fresh link and voids the old one — use it if the first email bounced or the link expired (links are valid 14 days by default).</li>
+      <li><strong>Void</strong> kills an outstanding request without sending a new one.</li>
+      <li><strong>Download</strong> next to the W-9 row fetches the file — this only works for staff with <code>manage_payments</code>; the file is never reachable by a plain URL.</li>
+    </ul>
+    <p>Payee profiles are reusable — they're keyed by email, not by event. If the same promoter or band plays again, a new request pre-fills whatever they already gave you last time, so most repeat performers just have to confirm it's still correct rather than start over. The W-9 itself is stored as the uploaded file only; Backstage never reads or stores the SSN/EIN as data — it's exactly the same file the payee gave you, retrievable only through this card.</p>
   `,
 
   // ── Closeout &amp; Billing ───────────────────────────────────────────────────

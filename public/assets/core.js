@@ -78,7 +78,21 @@ document.addEventListener('pan:sys.ready', () => {
 // silent no-ops instead of an unbounded pending-call queue.
 setTimeout(() => { if (!_panReady) { _panReady = true; _panPending.splice(0).forEach((fn) => fn()); } }, 3000);
 
-function _whenPanReady(fn) { _panReady ? fn() : _panPending.push(fn); }
+// `pan:sys.ready` only reaches us if this module's addEventListener above
+// happens to register before pan.mjs's async init (mount <pan-bus>, dynamically
+// import pan-bus-lite.mjs) fires it — both are independently-scheduled module
+// scripts, so that ordering is a genuine race, not something script-tag order
+// guarantees. Losing it isn't rare in practice: it stranded every subscribe()/
+// publish() call in _panPending for the full 3s fallback until this same-tick
+// existence check landed. window.pan.bus only ever appears once pan-bus-lite.mjs
+// has actually loaded (see comment above), so checking for it directly is a
+// strictly more reliable readiness signal than "did we happen to see the event"
+// — keep the event listener and the 3s fallback as a backstop for the case
+// subscribe()/publish() runs before window.pan.bus exists at all.
+function _whenPanReady(fn) {
+  if (_panReady || window.pan?.bus) { _panReady = true; fn(); return; }
+  _panPending.push(fn);
+}
 
 function publish(topic, payload = {}) {
   _whenPanReady(() => {

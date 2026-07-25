@@ -562,6 +562,9 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
 .data-table tr.clickable-row:hover { background: var(--bg-alt, #f7f8fa); }
 .data-table tr.clickable-row:hover td { color: var(--ink); }
 .row-action-cell { text-align: right; white-space: nowrap; padding-right: 12px; }
+/* Search results: the "matched in ..." excerpt line under a non-title hit
+   (see search-results.js) — separated a touch from the title link above it. */
+.search-match { margin-top: 3px; }
 .contracts-table .row-action-cell .button { opacity: 0; transition: opacity 120ms; }
 .contracts-table tr.clickable-row:hover .row-action-cell .button { opacity: 1; }
 .status-dot {

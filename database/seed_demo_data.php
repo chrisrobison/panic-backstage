@@ -17,6 +17,14 @@ declare(strict_types=1);
  * Truncation (if you need to reset existing demo data first) is the caller's
  * responsibility — this function only inserts, so it's safe to call once
  * against a freshly-created, empty database.
+ *
+ * Independent backstop (see the 2026-07-23 incident note in database/seed.php):
+ * this function refuses to run at all if `users` already has rows, regardless
+ * of what the caller believes about the state of the target database. Both
+ * known callers (database/seed.php and TenantProvisioner::provision()) already
+ * guard against this themselves — this is a second, cheap check at the lowest
+ * common point so a mistake in either caller can't silently double-seed or
+ * insert demo rows alongside real data.
  */
 
 namespace Panic;
@@ -35,6 +43,16 @@ namespace Panic;
  */
 function seed_demo_data(\PDO $pdo, string $root, array $opts = []): array
 {
+    $existingUsers = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
+    if ($existingUsers > 0) {
+        throw new \RuntimeException(
+            "seed_demo_data() refuses to run: `users` already has {$existingUsers} row(s). "
+            . 'This function only INSERTs and is only safe against a freshly-created, empty '
+            . 'database — emptying an existing database first is the caller\'s explicit '
+            . 'responsibility, never this function\'s.'
+        );
+    }
+
     $venueName     = $opts['venue_name']     ?? 'Demo Venue';
     $venueSlug     = $opts['venue_slug']     ?? 'demo-venue';
     $timezone      = $opts['timezone']       ?? 'America/Los_Angeles';

@@ -10,6 +10,14 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `search` — Rebuild the topbar search into a live, full-text results page
+- **Documentation** — Fill remaining gaps from the last 2 days of feature work
+- **Documentation** — Cover the non-music event flag and payee W-9/address request
+- **Added** `payments` — Request promoter/band mailing address + W-9 via email
+- **Added** `events` — Add non-music flag to hide Doors/Load-in and relabel Show as Start
+- **Fixed** `seed` — Guard database/seed.php against ever truncating production again
+- **Fixed** `auth` — Abort conditional passkey request before explicit passkey login
+- **Added** `leads` — Add budget field to booking inquiries
 - **Fixed** `ticketing` — Store sales_start/sales_end as true UTC instants
 - **Added** `public` — Add embeddable <panic-booking-inquiry> booking form widget
 - **Fixed** `docs` — Stop showing two headings per ops-manual chapter

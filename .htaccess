@@ -28,6 +28,17 @@ RewriteEngine On
 # legitimate access always goes through the /files/ gateway below.
 RewriteRule ^clients/ - [F,L]
 
+# ── Security: block direct web access to single-tenant private storage ───────
+# storage/ (contract signature images, contract PDFs, payee W-9 uploads —
+# which can contain a SSN/EIN, mail logs, etc.) sits outside public/ but is
+# still under the document root, exactly like clients/ above, and needs the
+# same block: nothing here is ever meant to be fetched by a raw URL — every
+# legitimate reader (ContractSigningEndpoint::downloadFinal(),
+# Events\Payee::downloadW9(), etc.) opens the file server-side with
+# file_get_contents() and streams it back through an authenticated/
+# token-checked endpoint instead.
+RewriteRule ^storage/ - [F,L]
+
 # ── Per-tenant file gateway ───────────────────────────────────────────────────
 # /files/{path} is resolved by files.php which looks up the tenant slug from
 # the current hostname, validates the path, and streams the file.
@@ -42,7 +53,7 @@ RewriteRule ^api(?:/(.*))?$ public/api/index.php [L,QSA]
 # the SPA catch-all below. Mirror the rule in public/.htaccess here so the
 # root-level rewrite engine sees it before falling through to index.html.
 RewriteRule ^t(?:/(.*))?$ public/api/index.php [L,QSA]
-RewriteRule ^(login|event|upcoming|invite|scanner|sign)\.html$ public/$1.html [L]
+RewriteRule ^(login|event|upcoming|invite|scanner|sign|payee-request)\.html$ public/$1.html [L]
 
 # Friendly public calendar-feed alias — see the matching rule in
 # public/.htaccess and the routing comment in src/Kernel.php.

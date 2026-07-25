@@ -316,6 +316,10 @@
                 <label for="pbi-attendance">Estimated guests <span class="opt">(optional)</span></label>
                 <input id="pbi-attendance" name="projected_attendance" type="number" min="0" max="100000" inputmode="numeric" placeholder="150">
               </div>
+              <div class="field">
+                <label for="pbi-budget">Budget <span class="opt">(optional)</span></label>
+                <input id="pbi-budget" name="budget" type="number" min="0" max="99999999" step="1" inputmode="numeric" placeholder="5000">
+              </div>
             </div>
             <div class="field full">
               <label for="pbi-message">Tell us about your event<span class="req" aria-hidden="true">*</span></label>

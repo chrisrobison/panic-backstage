@@ -1,0 +1,17 @@
+Hi {{recipient_name}},
+
+To process your payment for {{event_title}}, we need your current mailing
+address and a completed W-9 form on file.
+
+Please use the link below to submit both — it only takes a minute:
+
+  {{submission_url}}
+
+This link is valid until {{expires_date}}.
+
+If you did not expect this email or have questions, please contact us directly.
+
+——
+{{venue_name}}
+
+IMPORTANT: Do not forward this email. The link is unique to you.

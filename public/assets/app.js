@@ -25,6 +25,7 @@ import './leads.js';
 import './asset-library.js';
 import './reports.js';
 import './event-report.js';
+import './search-results.js';
 import './nav-manager.js';
 import { buildNavTree, filterNavTree, renderNavHtml } from './nav-shared.js';
 import './processes/process-list.js';
@@ -138,7 +139,7 @@ class AppShell extends PanicElement {
       <button class="nav-toggle" data-nav-toggle type="button" aria-label="Toggle navigation" aria-expanded="true" title="Toggle navigation"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
       <a class="mobile-brand" href="#dashboard"><span class="brand-mark"></span><span>Panic Backstage</span></a>
       <pb-page-header></pb-page-header>
-      <label class="search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input data-search placeholder="Search events..." aria-label="Search events"></label>
+      <label class="search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input data-search placeholder="Search events, IDs, notes…" aria-label="Search events"></label>
       <button class="topbar-create" data-action="new-event" type="button" title="Create event" aria-label="Create event"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>New event</span></button>
       <span class="session-pill" data-user-pill>…</span>
       <a href="#account" class="logout" style="text-decoration:none">Account</a>
@@ -163,7 +164,27 @@ class AppShell extends PanicElement {
       clearTokens();
       location.href = appUrl('login.html');
     });
-    $('[data-search]', this).addEventListener('input', (event) => publish('events.search', { query: event.target.value }));
+    // Topbar search: opens the dedicated search-results page (see
+    // search-results.js) on the very first keystroke — a real navigation, so
+    // it lands in browser history and back/forward work normally — then, for
+    // every keystroke after that while already on that page, just syncs the
+    // URL in place (history.replaceState — no history spam per character) and
+    // pushes a debounced `events.search` bus event for the already-mounted
+    // page to pick up, instead of a full remount per character.
+    let searchDebounce;
+    $('[data-search]', this).addEventListener('input', (event) => {
+      const value = event.target.value;
+      const hashRoute = value ? `search-${encodeURIComponent(value)}` : 'search';
+      const currentRoute = location.hash.replace(/^#/, '');
+      const onSearchPage = currentRoute === 'search' || currentRoute.startsWith('search-');
+      if (!onSearchPage) {
+        location.hash = hashRoute;
+        return;
+      }
+      history.replaceState(null, '', '#' + hashRoute);
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => publish('events.search', { query: value }), 250);
+    });
     $('[data-action="new-event"]', this).addEventListener('click', () => { location.hash = 'new-event'; });
     this.setupNavCollapse();
     this.setupMobileDrawer();
@@ -357,6 +378,12 @@ class AppShell extends PanicElement {
     if (route === 'promote-settings') return this.mount(outlet, 'pb-promote-settings');
     if (promoteRoute) {
       return this.mount(outlet, 'pb-promote-campaign-overview', promoteRoute);
+    }
+    if (route === 'search' || route.startsWith('search-')) {
+      const query = route === 'search' ? '' : decodeURIComponent(route.slice(7));
+      const searchInput = $('[data-search]', this);
+      if (searchInput && searchInput.value !== query) searchInput.value = query;
+      return this.mount(outlet, 'pb-search-results', { query });
     }
     if (route.startsWith('event-')) return this.mount(outlet, 'pb-event-workspace', { eventId: Number(route.slice(6)) });
     if (route.startsWith('contract-')) return this.mount(outlet, 'pb-contract-editor', { contractId: Number(route.slice(9)) });

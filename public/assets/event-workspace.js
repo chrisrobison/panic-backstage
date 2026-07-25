@@ -1,7 +1,7 @@
 // ── Event workspace shell ────────────────────────────────────────────────────
 // The event workspace (tabs, print menu, publish toggle) plus the read-only
 // summary/readiness/next-action bus cards and the autosaving details form.
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, formData, broadcastEventData, refreshSection, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, openModal, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, apiUrl, assetUrl, getAppUser, getToken, publish, subscribe, api, formData, broadcastEventData, refreshSection, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, openModal, $, $$ } from './core.js';
 import { openPrintWindow } from './print.js';
 import './paint-splat.js';
 import './event-vendors.js';
@@ -97,8 +97,8 @@ class EventSummary extends EventBusCard {
       </div>
       <div class="facts-grid">
         ${factCell('Date', eventDateRangeLabel(event))}
-        ${factCell('Doors', timeLabel(event.doors_time))}
-        ${factCell('Show', timeLabel(event.show_time))}
+        ${Number(event.is_non_music) ? '' : factCell('Doors', timeLabel(event.doors_time))}
+        ${factCell(Number(event.is_non_music) ? 'Start' : 'Show', timeLabel(event.show_time))}
         ${factCell('Status', badge(event.status))}
         ${factCell('Owner', esc(event.owner_name || 'Unassigned'))}
         ${factCell('Public Page', Number(event.public_visibility) ? 'Live' : 'Hidden')}
@@ -922,6 +922,9 @@ class EventDetailsForm extends HTMLElement {
     const editable = can(data, 'edit_event') && !isArchivedLocked;
     const disabled = editable ? '' : ' disabled';
     const isPrivate = event.event_type === 'private_event';
+    // Workshops/comedy/etc. — hides Doors & Load-In and renames Show to Start,
+    // both here and on the public event page (see PublicEventPage).
+    const isNonMusic = Number(event.is_non_music) === 1;
 
     // Status dropdown is filtered for private events to prevent invalid transitions.
     const availableStatuses = isPrivate ? PRIVATE_EVENT_STATUSES : statuses;
@@ -944,9 +947,10 @@ class EventDetailsForm extends HTMLElement {
           <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
           <label>Status ${statusSelect}</label>
           <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
-          <label>Load-In / Tech <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>
-          <label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>
-          <label>Show <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
+          <label class="check-label wide"><input type="checkbox" name="is_non_music" value="1" ${Number(event.is_non_music) ? 'checked' : ''}${disabled}> Workshop / Comedy / Non-Music event <span class="form-section-note">Hides Doors &amp; Load-In and renames Show to Start</span></label>
+          ${isNonMusic ? '' : `<label>Load-In / Tech <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>`}
+          ${isNonMusic ? '' : `<label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>`}
+          <label>${isNonMusic ? 'Start' : 'Show'} <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
           <label>End <input type="time" name="end_time" value="${esc(event.end_time || '')}"${disabled}></label>
           <label>Age restriction <input name="age_restriction" value="${esc(event.age_restriction || '')}"${disabled}></label>
           <label>Estimated guests <input type="number" name="estimated_guests" value="${esc(event.estimated_guests || '')}" placeholder="Expected headcount"${disabled}></label>
@@ -978,9 +982,10 @@ class EventDetailsForm extends HTMLElement {
         <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
         <label>Status ${statusSelect}</label>
         <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
-        <label>Load-In / Tech <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>
-        <label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>
-        <label>Show <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
+        <label class="check-label wide"><input type="checkbox" name="is_non_music" value="1" ${Number(event.is_non_music) ? 'checked' : ''}${disabled}> Workshop / Comedy / Non-Music event <span class="form-section-note">Hides Doors &amp; Load-In and renames Show to Start</span></label>
+        ${isNonMusic ? '' : `<label>Load-In / Tech <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>`}
+        ${isNonMusic ? '' : `<label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>`}
+        <label>${isNonMusic ? 'Start' : 'Show'} <input type="time" name="show_time" value="${esc(event.show_time || '')}"${disabled}></label>
         <label>End <input type="time" name="end_time" value="${esc(event.end_time || '')}"${disabled}></label>
         <label>Age <input name="age_restriction" value="${esc(event.age_restriction || '')}"${disabled}></label>
         <label>Ticket price <input type="number" step="0.01" name="ticket_price" value="${esc(event.ticket_price || 0)}"${disabled}></label>
@@ -1016,13 +1021,18 @@ class EventDetailsForm extends HTMLElement {
     // Fields mirrored in the workspace summary (pb-event-summary). When one of
     // these changes we re-broadcast fresh event data on the bus so the summary
     // facts update live; other fields skip the extra round-trip.
-    const summaryFields = new Set(['title', 'date', 'doors_time', 'show_time', 'status', 'owner_user_id', 'public_visibility']);
+    const summaryFields = new Set(['title', 'date', 'doors_time', 'show_time', 'status', 'owner_user_id', 'public_visibility', 'is_non_music']);
     const save = async (changedName) => {
       const body = formData(form);
       // Private events are never publicly visible — the hidden input sends 0,
       // but we double-enforce here in case of DOM manipulation.
       body.public_visibility = isPrivate ? 0 : (form.public_visibility?.checked ? 1 : 0);
       body.walkthrough_done  = form.walkthrough_done?.checked ? 1 : 0;
+      // Checkbox is only rendered when unchecked/checked in the DOM (not removed
+      // like Doors/Load-In), so it's always present — but be explicit the same
+      // way the other checkboxes are, since unchecked boxes are omitted from
+      // native FormData.
+      body.is_non_music      = form.is_non_music?.checked ? 1 : 0;
       setStatus('saving', 'Saving…');
       try {
         await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
@@ -1559,9 +1569,14 @@ class EventPayments extends PanicElement {
     const id = this._eventId;
     if (!id) return;
     try {
-      const res = await api(`/events/${id}/payments`);
+      const [res, payeeRes] = await Promise.all([
+        api(`/events/${id}/payments`),
+        api(`/events/${id}/payee`).catch(() => ({ payee: null, request: null })),
+      ]);
       this._paymentTypes = res.payment_types || PAYMENT_TYPES_FALLBACK;
       this._methods      = res.methods       || PAYMENT_METHODS_FALLBACK;
+      this._payee        = payeeRes.payee   || null;
+      this._payeeRequest = payeeRes.request || null;
       this._render(res);
     } catch (err) {
       this.innerHTML = `<section class="panel" id="payments"><div class="section-head padded"><h2>Payments</h2></div><p class="muted padded">Could not load payments.</p></section>`;
@@ -1642,7 +1657,8 @@ class EventPayments extends PanicElement {
             <tbody>${rows}</tbody>
           </table>
         </div>
-      </section>`;
+      </section>
+      ${this._payeeCardHtml(canManage)}`;
 
     $$('[data-send-link]', this).forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -1675,6 +1691,130 @@ class EventPayments extends PanicElement {
       btn.addEventListener('click', () => this._voidPayment(parseInt(btn.dataset.voidPayment, 10)));
     });
     $('[data-waive-deposit]', this)?.addEventListener('click', () => this._waiveDeposit());
+
+    $('[data-payee-request]', this)?.addEventListener('click', () => this._openPayeeRequestModal());
+    $('[data-payee-void]', this)?.addEventListener('click', () => this._voidPayeeRequest());
+    $('[data-payee-download]', this)?.addEventListener('click', () => this._downloadPayeeW9());
+  }
+
+  // ── Payee info (mailing address + W-9) ───────────────────────────────────
+  _payeeCardHtml(canManage) {
+    const payee   = this._payee;
+    const req     = this._payeeRequest;
+    const fmt     = (v) => v ? shortDate(new Date(String(v).replace(' ', 'T'))) : '';
+    const active  = req && ['pending', 'sent', 'viewed'].includes(req.status);
+
+    const addressLines = payee && (payee.mailing_address_line1 || payee.mailing_city)
+      ? [
+          payee.mailing_address_line1,
+          payee.mailing_address_line2,
+          [payee.mailing_city, payee.mailing_state, payee.mailing_zip].filter(Boolean).join(', '),
+          payee.mailing_country && payee.mailing_country !== 'US' ? payee.mailing_country : null,
+        ].filter(Boolean).map(esc).join('<br>')
+      : null;
+
+    const w9Row = payee?.has_w9
+      ? `<div class="summary-row"><span class="label">W-9</span><span class="value">On file${payee.w9_uploaded_at ? ` &middot; uploaded ${esc(fmt(payee.w9_uploaded_at))}` : ''} ${canManage ? '<button type="button" class="small secondary" data-payee-download>Download</button>' : ''}</span></div>`
+      : `<div class="summary-row"><span class="label">W-9</span><span class="value muted">Not on file yet</span></div>`;
+
+    const addressRow = addressLines
+      ? `<div class="summary-row"><span class="label">Mailing Address</span><span class="value">${addressLines}</span></div>`
+      : `<div class="summary-row"><span class="label">Mailing Address</span><span class="value muted">Not on file yet</span></div>`;
+
+    const REQUEST_STATUS_LABEL = { pending: 'Pending', sent: 'Sent', viewed: 'Viewed', submitted: 'Submitted', expired: 'Expired', voided: 'Voided' };
+    const requestRow = req
+      ? `<div class="summary-row"><span class="label">Last Request</span><span class="value">${esc(REQUEST_STATUS_LABEL[req.status] || titleCase(req.status))} to ${esc(req.recipient_name || req.recipient_email)}${req.sent_at ? ` &middot; ${esc(fmt(req.sent_at))}` : ''}</span></div>`
+      : '';
+
+    const actions = canManage ? `
+      <button type="button" class="small" data-payee-request>${active ? 'Resend Request' : 'Request W-9 &amp; Address'}</button>
+      ${active ? '<button type="button" class="small secondary" data-payee-void>Void</button>' : ''}
+    ` : '';
+
+    return `<section class="panel">
+      <div class="section-head padded">
+        <h2>Payee Info (W-9 &amp; Mailing Address)</h2>
+        <div class="section-head-actions">${actions}</div>
+      </div>
+      <div class="summary-block">
+        ${addressRow}
+        ${w9Row}
+        ${requestRow}
+      </div>
+    </section>`;
+  }
+
+  _openPayeeRequestModal() {
+    const event = this._data?.event || {};
+    const defaultName  = event.promoter_name  || event.booker_name  || '';
+    const defaultEmail = event.promoter_email || event.booker_email || '';
+    const { dialog, close } = openModal({
+      title: 'Request W-9 & Mailing Address',
+      bodyHtml: `<form class="grid-form padded" data-payee-request-form>
+        <label class="wide">Recipient name <input name="recipient_name" required value="${esc(defaultName)}"></label>
+        <label class="wide">Recipient email <input type="email" name="recipient_email" required value="${esc(defaultEmail)}"></label>
+        <p class="muted wide" style="margin:0">They'll get an emailed link to submit their mailing address and upload a completed W-9. If we already have anything on file for that email, it'll be pre-filled for them to confirm or update.</p>
+        <div class="wide form-actions">
+          <button type="submit" class="primary">Send Request</button>
+          <button type="button" class="secondary" data-close>Cancel</button>
+        </div>
+        <p class="error-text wide" data-error></p>
+      </form>`,
+    });
+    $('[data-payee-request-form]', dialog).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form  = e.target;
+      const errEl = $('[data-error]', form);
+      errEl.textContent = '';
+      const fd = formData(form);
+      const btn = $('button[type="submit"]', form);
+      btn.disabled = true;
+      try {
+        await api(`/events/${this._eventId}/payee`, {
+          method: 'POST',
+          body: JSON.stringify({ recipient_name: fd.recipient_name, recipient_email: fd.recipient_email }),
+        });
+        publish('toast.show', { message: 'Request sent.' });
+        close();
+        this._load();
+      } catch (err) {
+        errEl.textContent = err.message || 'Something went wrong.';
+        btn.disabled = false;
+      }
+    });
+  }
+
+  async _voidPayeeRequest() {
+    if (!confirm('Void the outstanding W-9/address request? The link in that email will stop working.')) return;
+    try {
+      await api(`/events/${this._eventId}/payee/void`, { method: 'POST' });
+      publish('toast.show', { message: 'Request voided.' });
+      this._load();
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Failed to void request.', tone: 'error' });
+    }
+  }
+
+  async _downloadPayeeW9() {
+    try {
+      const resp = await fetch(apiUrl(`events/${this._eventId}/payee/w9`), { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Server error ${resp.status}`);
+      }
+      const disposition = resp.headers.get('Content-Disposition') || '';
+      const match = /filename="([^"]+)"/.exec(disposition);
+      const filename = match ? match[1] : 'w9';
+      const blob = await resp.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Failed to download W-9.', tone: 'error' });
+    }
   }
 
   // ── Add / Edit payment modal ─────────────────────────────────────────────

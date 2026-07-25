@@ -174,6 +174,18 @@ final class Kernel
             ]];
         }
 
+        // Public payee (mailing address + W-9) submission (unauthenticated;
+        // token-protected) — see Events\Payee::sendRequest() for how the
+        // token is minted, and public/payee-request.html for the form:
+        //   GET  /api/payee-request/{token}          load form (marks viewed)
+        //   POST /api/payee-request/{token}/submit   submit address + W-9
+        if ($segments[0] === 'payee-request') {
+            return [PayeeSubmissionEndpoint::class, [
+                'token'  => $segments[1] ?? null,
+                'action' => $segments[2] ?? null,
+            ]];
+        }
+
         // Staff roster (admin)
         if ($segments[0] === 'staff-members') {
             return [StaffMembers::class, ['staffId' => $this->intOrNull($segments[1] ?? null)]];
@@ -703,6 +715,7 @@ final class Kernel
                 'guest-list' => [Events\GuestList::class, ['eventId' => $eventId, 'guestId'   => $childId]],
                 'staffing'   => [Events\Staffing::class,  ['eventId' => $eventId, 'staffingId' => $childId]],
                 'contracts'  => [Events\Contracts::class, ['eventId' => $eventId, 'contractId' => $childId]],
+                'payee'      => [Events\Payee::class,     ['eventId' => $eventId, 'action' => $segments[3] ?? null]],
                 'stream'     => [Events\Stream::class,   ['eventId' => $eventId]],
                 'ticketing'  => [Events\Ticketing::class, [
                     'eventId' => $eventId,
@@ -737,6 +750,7 @@ final class Kernel
             Portal::class,              // Client portal — public view gated by signed token (no JWT)
             ContractWebhooks::class,    // contract provider webhooks, authenticated by signature
             ContractSigningEndpoint::class, // public signing flow, authenticated by token hash
+            PayeeSubmissionEndpoint::class, // public W-9/address submission, authenticated by token hash
             TicketView::class,          // public ticket page, looked up by token hash
             Scanner::class,             // /api/scan/redeem (scanner-token); JWT mgmt paths
                                         // still gated via requireEventCapability (null user => denied)

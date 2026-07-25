@@ -93,7 +93,7 @@ trait EventRowHelpers
         $excl    = $excludeId ? ' AND id != ?' : '';
         if ($excludeId) $args[] = $excludeId;
         $rows = $this->db->all(
-            "SELECT id, title, date, end_date, doors_time, end_time FROM events WHERE $col IN ($ph) AND date <= ? AND COALESCE(end_date, date) >= ? AND status NOT IN ('canceled','empty')$excl",
+            "SELECT id, title, date, end_date, doors_time, show_time, end_time FROM events WHERE $col IN ($ph) AND date <= ? AND COALESCE(end_date, date) >= ? AND status NOT IN ('canceled','empty')$excl",
             $args
         );
         $isMultiDayNew = $endDate && $endDate !== $date;
@@ -110,7 +110,11 @@ trait EventRowHelpers
                 ], 409);
             }
             // Both events are single-day: check the 30-minute time buffer.
-            if ($this->timesOverlap($doorsTime, $endTime, $row['doors_time'], $row['end_time'])) {
+            // A non-music event leaves doors_time null (Doors is hidden from
+            // its form) — fall back to show_time/Start so its window isn't
+            // mistaken for starting at midnight (see timesOverlap() below).
+            $rowStart = $row['doors_time'] ?: $row['show_time'];
+            if ($this->timesOverlap($doorsTime, $endTime, $rowStart, $row['end_time'])) {
                 return \Panic\Response::json([
                     'error' => "Room conflict: \"{$row['title']}\" is already booked at this venue on {$date}. Events must be at least 30 minutes apart.",
                     'conflict_event_id' => (int) $row['id'],

@@ -106,11 +106,16 @@ final class PublicInquiry extends BaseEndpoint
             $attendance = max(0, min(100000, (int) $b['projected_attendance']));
         }
 
+        $budget = null;
+        if (isset($b['budget']) && $b['budget'] !== '') {
+            $budget = max(0, min(99999999.99, (float) $b['budget']));
+        }
+
         $id = $this->db->insert(
             'INSERT INTO leads (status, source, contact_name, contact_email, contact_org, contact_phone,
-             event_name, event_type, desired_date, desired_date_alt, projected_attendance, notes,
+             event_name, event_type, desired_date, desired_date_alt, projected_attendance, budget, notes,
              risk_level)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             [
                 'new',
                 'website',
@@ -123,6 +128,7 @@ final class PublicInquiry extends BaseEndpoint
                 $desiredDate,
                 $desiredDateAlt,
                 $attendance,
+                $budget,
                 $this->clip($message, self::MAX_MESSAGE_LEN),
                 'unknown',
             ]
