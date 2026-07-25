@@ -86,7 +86,20 @@ final class ClaudeCli
             // (nothing here should ever act, only answer); `< /dev/null`
             // avoids the ~3s stdin-wait stall the CLI otherwise does when
             // spawned from a PHP process that leaves stdin open.
+            //
+            // HOME=self::homeDir() is pinned explicitly rather than left to
+            // the child's inherited environment: when PHP is invoked by
+            // PHP-FPM (pool user e.g. www-data), the worker's HOME is
+            // unset/wrong for finding the OAuth session at
+            // ~/.claude/.credentials.json — the CLI falls back to
+            // os.homedir(), which resolves off the *process's own UID*
+            // (www-data -> /var/www, not /home/cdr where `claude login` was
+            // actually run). Confirmed by hand: with HOME unset, this
+            // silently "succeeds" at the process level but authenticates as
+            // nobody, returning `is_error: true` with zero token usage
+            // rather than a loud failure.
             $cmd = 'env -u ANTHROPIC_API_KEY -u ANTHROPIC_API_KEY_FILE'
+                 . ' HOME=' . escapeshellarg(self::homeDir())
                  . ' timeout --signal=KILL ' . escapeshellarg($timeoutSeconds . 's')
                  . ' ' . escapeshellarg($bin)
                  . ' -p ' . escapeshellarg($user)
@@ -142,6 +155,12 @@ final class ClaudeCli
     {
         $bin = trim((string) (getenv('CLAUDE_CLI_BIN') ?: '/home/cdr/.local/bin/claude'));
         return ($bin !== '' && is_executable($bin)) ? $bin : null;
+    }
+
+    /** Home directory of the OS user that ran `claude login` — see the HOME= note above. */
+    private static function homeDir(): string
+    {
+        return trim((string) (getenv('CLAUDE_CLI_HOME') ?: '/home/cdr'));
     }
 
     /** Recursively delete a directory and all its contents. Mirrors Ai\Assistant::rrmdir(). */

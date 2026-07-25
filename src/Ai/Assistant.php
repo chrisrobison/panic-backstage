@@ -489,7 +489,19 @@ final class Assistant extends BaseEndpoint
             // both possible forms of that key from the child's environment
             // — confirmed necessary and sufficient by hand while building
             // this endpoint.
+            //
+            // HOME is pinned explicitly for the same reason it's now shared
+            // with Ai\ClaudeCli (see that class's runClaude-mirroring
+            // docblock note): this endpoint is reached through PHP-FPM
+            // (pool user www-data), whose own HOME doesn't point at
+            // /home/cdr where `claude login` actually ran. Without this,
+            // the CLI falls back to os.homedir() off www-data's own UID
+            // (-> /var/www), silently authenticating as nobody — confirmed
+            // live: the endpoint returned `is_error: true` with zero token
+            // usage rather than a loud failure until this was added.
+            $home = getenv('CLAUDE_CLI_HOME') ?: '/home/cdr';
             $cmd = 'env -u ANTHROPIC_API_KEY -u ANTHROPIC_API_KEY_FILE'
+                 . ' HOME=' . escapeshellarg($home)
                  . ' timeout --signal=KILL ' . escapeshellarg($timeoutSeconds . 's')
                  . ' ' . escapeshellarg($bin)
                  . ' -p ' . escapeshellarg($message)
