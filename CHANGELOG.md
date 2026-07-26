@@ -10,6 +10,11 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `leads` — Backfill thread grouping for already-imported booking emails
+- **Fixed** `leads` — Don't auto-acknowledge freeform emails or anything that looks like a reply
+- **Fixed** `booking-inbox` — Fix unscrollable list/conversation panes and dead Event Info tab
+- **Added** `leads` — Thread reply emails into the original inquiry's conversation
+- **Fixed** `calendar` — Stop first scroll from jumping the grid view forward a month
 - **Fixed** `public-event` — Remove Panic Backstage brand bar from event.html
 - **Fixed** `ai` — Pin HOME + grant group-read so claude CLI auth works under www-data
 - **Added** `leads` — Switch AI classification/extraction from Anthropic API key to local claude CLI

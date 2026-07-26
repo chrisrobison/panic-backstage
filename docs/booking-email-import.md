@@ -27,6 +27,81 @@ The `unseen` keyword means the message is **also delivered to the inbox as
 normal** — the importer only gets a copy. The filter never calls `finish`, so
 the rest of the mailbox's rules still run.
 
+## Threading (replies fold into the original conversation)
+
+A reply to a booking inquiry doesn't create a second lead. Before creating a
+new `leads` row, `src/Leads/ThreadMatcher.php` checks whether the inbound
+email is obviously a continuation of one we already have:
+
+1. **Threading headers** — the email's `In-Reply-To`/`References` ids are
+   checked against `lead_messages.external_message_id`, which every message
+   on a lead carries: its own `Message-ID` for inbound mail, and (since this
+   feature landed) a real generated `Message-ID` for every outbound send too
+   — staff replies (`LeadsInbox.php`) and the auto-acknowledgment
+   (`Leads/Acknowledgment.php`). A hit is exact.
+2. **Subject + sender fallback** — for webmail clients that drop
+   `References` on forward: if the subject, normalized (`Re:`/`Fwd:`/`Fw:`/
+   `Aw:` prefixes stripped — `LeadEmailParser::normalizeSubject()`), matches
+   a prior message from the same `contact_email` within the last 180 days,
+   it's treated as the same thread.
+
+A match attaches a new `lead_intake_emails` row and `lead_messages` row to
+the **existing** lead (plus an audit `lead_notes` entry) instead of running
+the full new-lead pipeline — classification, routing, and the
+auto-acknowledgment only ever run once, when the lead is first created, so a
+reply never re-triggers them or re-sends the acknowledgment. Staff see the
+new message on the lead's Conversation tab via the existing Inbox polling
+(`Inbox::changes()`) — no separate notification needed.
+
+No match (a first inquiry, or a reply to a pre-threading message with no
+recoverable subject/sender match) falls through to lead creation exactly as
+before.
+
+## Backfilling threads for already-imported email
+
+`scripts/backfill-lead-threads.php` retroactively applies the same
+header-based thread match to `leads`/`lead_intake_emails` rows that were
+already imported before ThreadMatcher existed. Deliberately header-only (no
+subject+sender fallback) — see the script's own docblock for why running
+that heuristic across *all* history is riskier than scoping it to a 180-day
+window against one sender the way ThreadMatcher does for new mail.
+
+```
+php scripts/backfill-lead-threads.php            # dry run (default) — reports, writes nothing
+php scripts/backfill-lead-threads.php --apply     # writes the safe merges
+```
+
+A merge only ever runs automatically when the duplicate lead shows no sign of
+having been worked (still an automatic-pipeline status, unclaimed, no owner,
+no real reply sent, no human note/attachment/linked task, not converted).
+Anything else is printed under "needs manual review" and left completely
+untouched. Applied merges move the conversation (messages/notes/attachments)
+onto the earlier lead and mark the duplicate `status = 'duplicate'` — nothing
+is deleted, and it's idempotent (safe to re-run; already-merged leads won't
+match again).
+
+## Auto-acknowledgment gating
+
+`Leads/Acknowledgment.php` sends a neutral "we got your inquiry" receipt at
+most once per lead, but only when it's actually a first contact through one
+of our own intake channels:
+
+- **Never for a freeform email.** A person emailing bookings@ directly in
+  their own words (parse_method `llm`/`heuristic`/`none`) doesn't get a
+  form-receipt-sounding auto-reply — only a Jotform submission forwarded as
+  email (parse_method `jotform`/`jotform+llm`) or the website's own inquiry
+  form (`source = website`, no email parsing involved) counts as "one of our
+  forms."
+- **Never for anything that looks like a reply**, even when it landed here as
+  a "new" lead because ThreadMatcher couldn't resolve it to a specific prior
+  lead — an `In-Reply-To` header, or a `Re:`/`Fwd:`/`Fw:`/`Aw:` subject
+  prefix, is enough to skip it. Sending a first-contact receipt to something
+  that says right in its own headers/subject that it's a continuation of a
+  conversation reads as ignoring what the person just wrote.
+
+Both checks are independent of the threading match above and run every time,
+so a genuinely new Jotform lead still gets acknowledged normally.
+
 ## Parsing strategy (hybrid)
 
 | Email shape | How it's parsed |
@@ -111,5 +186,11 @@ php scripts/ingest-booking-email.php < message.eml
 ## Tests
 
 `php tests/booking_email_parser_test.php` — exercises MIME decoding, Jotform
-label parsing, and heuristic extraction against fixtures in
-`tests/fixtures/booking-emails/` (no API key or DB required).
+label parsing, heuristic extraction, and threading-header/subject
+normalization against fixtures in `tests/fixtures/booking-emails/` (no API key
+or DB required).
+
+`RUN_DB_TESTS=1 php tests/leads_thread_matcher_test.php` — exercises
+`ThreadMatcher`'s header and subject+sender matching against real
+`leads`/`lead_messages` rows (throwaway, cleaned up after). Needs a real DB,
+so it's opt-in — see `tests/run-php-tests.sh`.

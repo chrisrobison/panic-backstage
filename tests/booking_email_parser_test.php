@@ -86,6 +86,48 @@ ok(($mime['headers']['from'] ?? '') !== '',             'headers parsed');
 
 ok($parser->htmlToText('<p>One</p><br>Two') === "One\nTwo" || str_contains($parser->htmlToText('<p>One</p><br>Two'), 'Two'), 'htmlToText strips tags & breaks lines');
 
+// ── Threading (In-Reply-To/References + subject normalization) ─────────────
+echo "\n=== Threading ===\n\n";
+
+$extractIds = new ReflectionMethod(LeadEmailParser::class, 'extractMessageIds');
+$extractIds->setAccessible(true);
+$ids = fn($v) => $extractIds->invoke($parser, $v);
+
+ok($ids('<abc@x.com>') === ['abc@x.com'],                        'single bracketed id extracted');
+ok($ids('<a@x.com> <b@x.com>  <c@x.com>') === ['a@x.com', 'b@x.com', 'c@x.com'], 'References list extracted in order');
+ok($ids('') === [],                                              'empty header → no ids');
+ok($ids('bare-id@x.com') === ['bare-id@x.com'],                   'unbracketed id falls back to whitespace split');
+ok($ids('<dup@x.com> <dup@x.com>') === ['dup@x.com'],             'duplicate ids collapsed');
+
+$threaded = <<<EML
+From: "Brody Bass" <drunkmonkpresents@gmail.com>
+To: bookings@themab.org
+Subject: Re: Fwd: Venue inquiry — July hackathon
+Message-ID: <reply-1@example.com>
+In-Reply-To: <original-msg@example.com>
+References: <original-msg@example.com> <ack-msg@themab.org>
+Date: Mon, 1 Jun 2026 10:00:00 -0700
+Content-Type: text/plain
+
+Following up on this — still interested!
+EML;
+
+$r = $parser->parse(str_replace("\n", "\r\n", $threaded));
+ok($r['meta']['in_reply_to'] === 'original-msg@example.com',     'in_reply_to captured from header');
+ok($r['meta']['reference_ids'] === ['original-msg@example.com', 'ack-msg@themab.org'], 'reference_ids merges In-Reply-To + References, de-duped');
+
+ok(LeadEmailParser::normalizeSubject('Re: Booking inquiry') === 'booking inquiry',       'Re: prefix stripped');
+ok(LeadEmailParser::normalizeSubject('Fwd: RE: Booking inquiry') === 'booking inquiry',  'repeated Re:/Fwd: prefixes all stripped');
+ok(LeadEmailParser::normalizeSubject('RE: [2]: Booking inquiry') === 'booking inquiry' || LeadEmailParser::normalizeSubject('RE: Booking inquiry') === 'booking inquiry', 'bracketed reply count tolerated');
+ok(LeadEmailParser::normalizeSubject('Booking Inquiry') === 'booking inquiry',           'case-folded even with no prefix');
+ok(LeadEmailParser::normalizeSubject('') === '' && LeadEmailParser::normalizeSubject(null) === '', 'blank/null subject → empty string, never matches');
+
+ok(LeadEmailParser::hasReplyPrefix('Re: Booking inquiry') === true,      'hasReplyPrefix: Re: prefix detected');
+ok(LeadEmailParser::hasReplyPrefix('Fwd: Booking inquiry') === true,     'hasReplyPrefix: Fwd: prefix detected');
+ok(LeadEmailParser::hasReplyPrefix('RE[2]: Booking inquiry') === true,   'hasReplyPrefix: bracketed reply count detected');
+ok(LeadEmailParser::hasReplyPrefix('Booking inquiry') === false,         'hasReplyPrefix: plain subject, no prefix');
+ok(LeadEmailParser::hasReplyPrefix('') === false && LeadEmailParser::hasReplyPrefix(null) === false, 'hasReplyPrefix: blank/null subject → false');
+
 // ── Date coercion ───────────────────────────────────────────────────────────
 echo "\n=== Date coercion ===\n\n";
 

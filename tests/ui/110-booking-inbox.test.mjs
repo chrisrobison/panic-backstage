@@ -42,6 +42,72 @@ test('Switching the saved-view dropdown reloads the queue', async (page) => {
   );
 });
 
+test('The inquiry list pane is actually scrollable (not clipped to its content height)', async (page) => {
+  await page.goto('#inbox-all');
+  await page.until(`document.querySelectorAll('.ib-list-item').length > 0`);
+  const info = await page.eval(`(() => {
+    const el = document.querySelector('.ib-list-scroll');
+    if (!el) return null;
+    return { scrollHeight: el.scrollHeight, clientHeight: el.clientHeight, overflowY: getComputedStyle(el).overflowY };
+  })()`);
+  assert.ok(info, '.ib-list-scroll is present');
+  assert.equal(info.overflowY, 'auto', '.ib-list-scroll has overflow-y: auto');
+  // A flexbox regression (missing min-height:0 anywhere in the .ib-body →
+  // .ib-list → pb-inbox-list → .ib-list-scroll chain) makes this element grow
+  // to fit every row instead of being clipped to .ib-list's bounded height —
+  // scrollHeight then always equals clientHeight and nothing is scrollable.
+  assert.ok(info.clientHeight > 0, '.ib-list-scroll has a real (non-zero) rendered height');
+  if (info.scrollHeight > info.clientHeight) {
+    const moved = await page.eval(`(() => {
+      const el = document.querySelector('.ib-list-scroll');
+      el.scrollTop = 0;
+      el.scrollTop = el.scrollHeight;
+      return el.scrollTop > 0;
+    })()`);
+    assert.ok(moved, 'setting .ib-list-scroll.scrollTop actually scrolls it');
+  }
+});
+
+test('The conversation pane is actually scrollable (not clipped to its content height)', async (page) => {
+  await page.goto('#inbox-all');
+  await page.until(`document.querySelectorAll('.ib-list-item').length > 0`);
+  await page.click('.ib-list-item');
+  await page.until(`document.querySelector('.ib-thread')`);
+  const info = await page.eval(`(() => {
+    const el = document.querySelector('.ib-thread');
+    if (!el) return null;
+    return { scrollHeight: el.scrollHeight, clientHeight: el.clientHeight, overflowY: getComputedStyle(el).overflowY };
+  })()`);
+  assert.ok(info, '.ib-thread is present');
+  assert.equal(info.overflowY, 'auto', '.ib-thread has overflow-y: auto');
+  assert.ok(info.clientHeight > 0, '.ib-thread has a real (non-zero) rendered height');
+  // .ib-thread sits behind two unstyled custom-element hops
+  // (pb-inbox-workspace, pb-inbox-conversation) that must each pass the
+  // bounded height through (flex + min-height:0) — if either one silently
+  // reverts to sizing itself by content, .ib-thread stops being clipped and
+  // this ratio assertion is what would catch it.
+  assert.ok(info.clientHeight < 700, '.ib-thread is bounded to its pane, not stretched to the full conversation height');
+});
+
+test('The Event Info tab shows event-specific fields distinct from the Details tab', async (page) => {
+  await page.goto('#inbox-all');
+  await page.until(`document.querySelectorAll('.ib-list-item').length > 0`);
+  await page.click('.ib-list-item');
+  await page.until(`document.querySelector('.ib-tabs a.active')`);
+
+  await page.click('[data-tab="details"]');
+  const detailsHtml = await page.eval(`document.querySelector('[data-tab-body]')?.innerHTML || ''`);
+
+  await page.click('[data-tab="event-info"]');
+  assert.ok(
+    await page.until(`document.querySelector('.ib-tabs a.active')?.dataset.tab === 'event-info'`),
+    'Event Info tab becomes the active tab',
+  );
+  const eventInfoHtml = await page.eval(`document.querySelector('[data-tab-body]')?.innerHTML || ''`);
+  assert.ok(eventInfoHtml.length > 0, 'Event Info tab renders content');
+  assert.ok(eventInfoHtml !== detailsHtml, 'Event Info tab shows different content than the Details tab');
+});
+
 test('Booking Inbox collapses to a single-pane, list-first layout on a narrow viewport', async (page) => {
   await page.setViewport(420, 900, true);
   try {

@@ -2,7 +2,10 @@
 declare(strict_types=1);
 
 /**
- * Booking-email importer — turns an inbound email into a `leads` row.
+ * Booking-email importer — turns an inbound email into a `leads` row, unless
+ * it's an obvious reply to one we already have (see src/Leads/ThreadMatcher.php),
+ * in which case it's added as another message on that lead's conversation
+ * instead of creating a second lead for the same inquiry.
  *
  * Designed to be invoked from an Exim user filter on the mailbox that receives
  * bookings@themab.org, e.g. in ~/.forward:
@@ -52,6 +55,7 @@ use Panic\LeadEmailParser;
 use Panic\Leads\Acknowledgment;
 use Panic\Leads\Classifier;
 use Panic\Leads\RoutingEngine;
+use Panic\Leads\ThreadMatcher;
 
 Env::load($root . '/.env');
 
@@ -114,33 +118,47 @@ try {
         }
     }
 
+    // Threading: is this obviously a reply/continuation of an inquiry we
+    // already have a lead for? If so, fold it into that lead's conversation
+    // instead of spawning a duplicate lead for the same back-and-forth. See
+    // src/Leads/ThreadMatcher.php for the two signals it tries (In-Reply-To/
+    // References headers, then a subject+sender fallback).
+    $referenceIds = $meta['reference_ids'] ?? [];
+    $existingLeadId = (new ThreadMatcher())->findLeadId($db, $referenceIds, $lead['contact_email'], $meta['subject'] ?? null);
+
     $db->pdo()->beginTransaction();
 
-    $leadId = $db->insert(
-        'INSERT INTO leads (status, source, contact_name, contact_email, contact_org, contact_phone,
-         event_name, event_type, band_name, desired_date, desired_date_alt, rooms_requested,
-         projected_attendance, is_private, alcohol_plan, notes, risk_level)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [
-            $lead['status'],
-            $lead['source'],
-            $lead['contact_name'],
-            $lead['contact_email'],
-            $lead['contact_org'],
-            $lead['contact_phone'],
-            $lead['event_name'],
-            $lead['event_type'],
-            $lead['band_name'],
-            $lead['desired_date'],
-            $lead['desired_date_alt'],
-            null, // rooms_requested
-            $lead['projected_attendance'],
-            $lead['is_private'],
-            $lead['alcohol_plan'],
-            $lead['notes'],
-            $lead['risk_level'],
-        ]
-    );
+    $contact = $lead['contact_name'] ?: ($lead['contact_email'] ?: 'unknown sender');
+
+    if ($existingLeadId !== null) {
+        $leadId = $existingLeadId;
+    } else {
+        $leadId = $db->insert(
+            'INSERT INTO leads (status, source, contact_name, contact_email, contact_org, contact_phone,
+             event_name, event_type, band_name, desired_date, desired_date_alt, rooms_requested,
+             projected_attendance, is_private, alcohol_plan, notes, risk_level)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            [
+                $lead['status'],
+                $lead['source'],
+                $lead['contact_name'],
+                $lead['contact_email'],
+                $lead['contact_org'],
+                $lead['contact_phone'],
+                $lead['event_name'],
+                $lead['event_type'],
+                $lead['band_name'],
+                $lead['desired_date'],
+                $lead['desired_date_alt'],
+                null, // rooms_requested
+                $lead['projected_attendance'],
+                $lead['is_private'],
+                $lead['alcohol_plan'],
+                $lead['notes'],
+                $lead['risk_level'],
+            ]
+        );
+    }
 
     $intakeEmailId = $db->insert(
         'INSERT INTO lead_intake_emails
@@ -164,15 +182,17 @@ try {
         ]
     );
 
-    $contact = $lead['contact_name'] ?: ($lead['contact_email'] ?: 'unknown sender');
     $db->insert(
         'INSERT INTO lead_notes (lead_id, user_id, type, body) VALUES (?,?,?,?)',
         [
             $leadId,
             null,
             'audit',
-            "Imported from booking email (via {$meta['parse_method']}) — from {$contact}"
-                . ($meta['subject'] ? ", subject: \"{$meta['subject']}\"" : ''),
+            $existingLeadId !== null
+                ? "Reply received via booking email (via {$meta['parse_method']}) — added to this inquiry's conversation; from {$contact}"
+                    . ($meta['subject'] ? ", subject: \"{$meta['subject']}\"" : '')
+                : "Imported from booking email (via {$meta['parse_method']}) — from {$contact}"
+                    . ($meta['subject'] ? ", subject: \"{$meta['subject']}\"" : ''),
         ]
     );
 
@@ -185,17 +205,28 @@ try {
     $messageRowId = $db->insert(
         'INSERT INTO lead_messages
          (lead_id, direction, channel, status, from_name, from_email, to_recipients, subject,
-          body_text, body_html, external_message_id, checksum, intake_email_id)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+          body_text, body_html, external_message_id, in_reply_to, checksum, intake_email_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
         [
             $leadId, 'inbound', 'email', 'received',
             $meta['from_name'], $meta['from_email'], $meta['to_recipients'], $meta['subject'],
             $meta['body_text'] ?? null, $meta['body_html'] ?? null,
-            $messageId, $checksum, $intakeEmailId,
+            $messageId, $meta['in_reply_to'] ?? null, $checksum, $intakeEmailId,
         ]
     );
 
     $db->pdo()->commit();
+
+    // A merged reply doesn't get its own classification/routing/
+    // acknowledgment pass — the lead was already classified and routed when
+    // it was first created, and re-sending the auto-acknowledgment on every
+    // reply would spam the customer. Staff see the new message immediately
+    // via the existing Conversation-tab polling (Inbox::changes()).
+    if ($existingLeadId !== null) {
+        $log("Merged reply into existing lead #{$leadId} from {$contact} (method={$meta['parse_method']}, msgid=" . ($messageId ?? '-') . ').');
+        exit(0);
+    }
+
     $log("Imported lead #{$leadId} from {$contact} (method={$meta['parse_method']}, msgid=" . ($messageId ?? '-') . ').');
 
     // Classification and acknowledgment run *after* commit, each in its own

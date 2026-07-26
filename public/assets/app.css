@@ -2339,7 +2339,12 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
     overflow: hidden;
   }
   .sidebar { grid-row: 1 / 3; overflow-y: auto; }
-  .workspace { overflow-y: auto; min-height: 0; }
+  /* overflow-anchor: none — the calendar's continuous-scroll grid manually
+     compensates scrollTop when it prepends/prunes a month above the
+     viewport (see event-views.js _adjustScroll); native scroll anchoring
+     would otherwise apply its own correction on top of that, compounding
+     into a much larger jump than intended. */
+  .workspace { overflow-y: auto; min-height: 0; overflow-anchor: none; }
   .app-footer { display: none; }
 
   .nav-toggle {
@@ -7674,6 +7679,13 @@ pb-inbox-app {
   border-right: 1px solid var(--line);
   background: var(--panel);
 }
+/* <pb-inbox-list> is .ib-list's only child (see inbox-shell.js's
+   renderList()) and, like <pb-inbox-workspace> above, is an unstyled custom
+   element — it needs to be a flex container in its own right (not just
+   auto-blockified) so its own children (.ib-list-head, fixed-size, and
+   .ib-list-scroll, flex:1 1 auto below) size against .ib-list's bounded
+   height instead of .ib-list-scroll growing to fit every row. */
+pb-inbox-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .ib-list-head { flex-shrink: 0; padding: 16px 16px 10px; border-bottom: 1px solid var(--line); }
 .ib-list-head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ib-list-head-row h2 { margin: 0; font-size: 18px; }
@@ -7688,7 +7700,14 @@ pb-inbox-app {
 }
 .ib-list-search i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 12px; }
 .ib-list-view-select { margin-top: 8px; width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; font-size: 12px; font-weight: 700; background: var(--bg); }
-.ib-list-scroll { flex: 1 1 auto; overflow-y: auto; }
+/* min-height: 0 is load-bearing here: without it a flex item's default
+   min-height is auto (sized to its content), so this pane grows to fit
+   every row instead of shrinking to the space .ib-list hands it — the
+   overflow then gets clipped by an ancestor's overflow:hidden instead of
+   being reachable by scrolling this element. Same fix as .ib-thread below
+   and every other scrollable flex pane in this file (.dbx-rows-scroll,
+   .proc-designer-history, etc.). */
+.ib-list-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .ib-list-item {
   display: flex;
   gap: 10px;
@@ -7737,6 +7756,22 @@ pb-inbox-app {
 
 /* ── Main column: workspace ──────────────────────────────────────────────── */
 .ib-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+/* [data-workspace-mount] and <pb-inbox-workspace> sit between .ib-main and
+   .ib-workspace (see inbox-shell.js's renderShell()/renderWorkspace()).
+   Neither is a direct flex child of .ib-main's own flex column at the point
+   that matters (the mount div is, but an unstyled custom element defaults to
+   display:inline and only gets auto-blockified when it's itself a direct
+   flex child) — so without this, .ib-workspace's `flex:1 1 auto; min-height:
+   0` below has no flex container to size against and the whole workspace
+   grows to its content height instead of .ib-main's bounded height, the same
+   bug the .ib-list-scroll/.ib-thread comments describe. */
+.ib-main [data-workspace-mount],
+pb-inbox-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .ib-empty-main { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); gap: 8px; }
 .ib-empty-main i { font-size: 40px; opacity: .4; }
 
@@ -7776,8 +7811,15 @@ pb-inbox-app {
 .ib-tab-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 
 /* ── Conversation ─────────────────────────────────────────────────────────── */
+/* <pb-inbox-conversation> (mounted directly into .ib-tab-body, see
+   inbox-workspace.js's mountTab()) is a direct flex child so it gets
+   auto-blockified, but that alone doesn't make it grow to fill .ib-tab-body
+   or become a flex container for its own .ib-conversation child — same fix
+   as <pb-inbox-list>/<pb-inbox-workspace> above. */
+pb-inbox-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .ib-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.ib-thread { flex: 1 1 auto; overflow-y: auto; padding: 18px 24px; display: flex; flex-direction: column; gap: 16px; }
+/* min-height: 0 — see the comment on .ib-list-scroll above; same bug, same fix. */
+.ib-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px 24px; display: flex; flex-direction: column; gap: 16px; }
 .ib-msg { max-width: 640px; }
 .ib-msg.outbound { align-self: flex-end; }
 .ib-msg-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin-bottom: 4px; }

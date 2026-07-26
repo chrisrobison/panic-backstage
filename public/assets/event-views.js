@@ -773,9 +773,16 @@ class EventCalendar extends PanicElement {
     if (!this._scrollWired) {
       this._scrollWired = true;
       this._hasScrolled = false;
+      this._suppressScroll = false;
       this._scrollHostEl = this._findScrollHost();
       let ticking = false;
       const onScroll = () => {
+        // Ignore scroll events we caused ourselves (see _adjustScroll) —
+        // otherwise the compensation applied after a prepend/prune re-enters
+        // this handler, which can misread its own correction as "the user
+        // scrolled near the top/bottom" and kick off another month load from
+        // a single real scroll tick.
+        if (this._suppressScroll) return;
         this._hasScrolled = true;
         if (ticking) return;
         ticking = true;
@@ -788,6 +795,24 @@ class EventCalendar extends PanicElement {
       this._scrollHostEl.addEventListener('scroll', onScroll, { passive: true, signal: this.abort.signal });
     }
     this._handleScroll(); // always re-check after a grid render — content/viewport may not fill the screen yet
+  }
+
+  // Adjusts the scroll host's position programmatically (to keep content
+  // visually stable across a prepend/prune) while suppressing the resulting
+  // 'scroll' event from being treated as user input. Held across two rAFs
+  // since the browser's own scroll-anchoring can re-adjust scrollTop again
+  // on the frame after ours, on top of this correction.
+  _adjustScroll(host, delta) {
+    this._suppressScroll = true;
+    // Explicit 'instant' behavior matters here: <html> sets `scroll-behavior:
+    // smooth` globally, which window.scrollBy(x, y) would otherwise inherit,
+    // animating this correction across many frames — well past the window
+    // below where we stop suppressing, and re-exposing the same reentrancy
+    // this method exists to prevent.
+    if (host === window) window.scrollBy({ top: delta, behavior: 'instant' }); else host.scrollTop += delta;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { this._suppressScroll = false; });
+    });
   }
 
   _handleScroll() {
@@ -811,14 +836,25 @@ class EventCalendar extends PanicElement {
     // against each other. Prefer whichever edge is actually closer; the
     // other gets its turn on the next tick regardless, since a successful
     // load re-triggers this check itself.
-    if (nearBottom && nearTop) {
-      const distTop = scrollTop;
-      const distBottom = scrollHeight - scrollTop - clientHeight;
-      this._loadAdjacentMonth(distTop <= distBottom ? 'prev' : 'next');
-    } else if (nearBottom) {
-      this._loadAdjacentMonth('next');
-    } else if (nearTop) {
-      this._loadAdjacentMonth('prev');
+    //
+    // Also never start a load for one edge while another is still in
+    // flight, even across separate calls to this method (e.g. the trailing
+    // "keep filling" call at the end of _loadAdjacentMonth racing a fresh
+    // scroll event for the opposite edge) — two concurrent fetches for
+    // different months resolve in whatever order the network gives them,
+    // which can land content on the wrong edge relative to what a caller
+    // was waiting for. Once the in-flight one settles it re-triggers this
+    // check itself, so the other edge still gets its turn right after.
+    if (this._loadingMonths.size === 0) {
+      if (nearBottom && nearTop) {
+        const distTop = scrollTop;
+        const distBottom = scrollHeight - scrollTop - clientHeight;
+        this._loadAdjacentMonth(distTop <= distBottom ? 'prev' : 'next');
+      } else if (nearBottom) {
+        this._loadAdjacentMonth('next');
+      } else if (nearTop) {
+        this._loadAdjacentMonth('prev');
+      }
     }
     this._updateVisibleMonthLabel();
   }
@@ -877,7 +913,7 @@ class EventCalendar extends PanicElement {
     this._wireGrid(node);
     const after = host === window ? document.documentElement.scrollHeight : host.scrollHeight;
     const delta = after - before;
-    if (host === window) window.scrollBy(0, delta); else host.scrollTop += delta;
+    this._adjustScroll(host, delta);
   }
 
   // Bounds how many months stay mounted at once during a very long scroll
@@ -902,7 +938,7 @@ class EventCalendar extends PanicElement {
     const host = this._scrollHostEl;
     const h = node.offsetHeight;
     node.remove();
-    if (host === window) window.scrollBy(0, -h); else host.scrollTop -= h;
+    this._adjustScroll(host, -h);
   }
 
   _setEdgeLoading(direction, isLoading) {

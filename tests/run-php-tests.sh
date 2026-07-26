@@ -16,6 +16,10 @@
 #                                 + Series::attemptCreate/previewSeries) —
 #                                 needs a real venue + venue_admin user and
 #                                 creates/cleans-up throwaway event rows.
+#   - leads_thread_matcher_test.php  Booking-email reply threading
+#                                 (src/Leads/ThreadMatcher.php) — needs a real
+#                                 leads/lead_messages schema; creates/cleans-up
+#                                 throwaway lead rows.
 #   - contract_signing_test.php  A manual/exploratory script that mutates
 #                                 real rows against whatever DB is configured
 #                                 and isn't written to be safely repeatable —
@@ -31,7 +35,7 @@ set -u
 cd "$(dirname "$0")/.."
 
 TESTS_DIR="./tests"
-DB_TESTS=("rate_limiter_test.php" "process_versions_test.php" "process_runtime_test.php" "process_centerstage_handlers_test.php" "ai_phase2_db_test.php")
+DB_TESTS=("rate_limiter_test.php" "process_versions_test.php" "process_runtime_test.php" "process_centerstage_handlers_test.php" "ai_phase2_db_test.php" "leads_thread_matcher_test.php")
 MANUAL_TESTS=("contract_signing_test.php")
 
 shopt -s nullglob
