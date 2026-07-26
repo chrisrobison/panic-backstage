@@ -57,6 +57,28 @@ No match (a first inquiry, or a reply to a pre-threading message with no
 recoverable subject/sender match) falls through to lead creation exactly as
 before.
 
+## Auto-acknowledgment gating
+
+`Leads/Acknowledgment.php` sends a neutral "we got your inquiry" receipt at
+most once per lead, but only when it's actually a first contact through one
+of our own intake channels:
+
+- **Never for a freeform email.** A person emailing bookings@ directly in
+  their own words (parse_method `llm`/`heuristic`/`none`) doesn't get a
+  form-receipt-sounding auto-reply — only a Jotform submission forwarded as
+  email (parse_method `jotform`/`jotform+llm`) or the website's own inquiry
+  form (`source = website`, no email parsing involved) counts as "one of our
+  forms."
+- **Never for anything that looks like a reply**, even when it landed here as
+  a "new" lead because ThreadMatcher couldn't resolve it to a specific prior
+  lead — an `In-Reply-To` header, or a `Re:`/`Fwd:`/`Fw:`/`Aw:` subject
+  prefix, is enough to skip it. Sending a first-contact receipt to something
+  that says right in its own headers/subject that it's a continuation of a
+  conversation reads as ignoring what the person just wrote.
+
+Both checks are independent of the threading match above and run every time,
+so a genuinely new Jotform lead still gets acknowledged normally.
+
 ## Parsing strategy (hybrid)
 
 | Email shape | How it's parsed |

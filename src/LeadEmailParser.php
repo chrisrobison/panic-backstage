@@ -226,12 +226,14 @@ final class LeadEmailParser
         return array_values(array_unique(array_filter(preg_split('/\s+/', $header) ?: [])));
     }
 
+    /** Leading reply/forward prefix — Re:, Fwd:, Fw:, Aw:, Antw:, Sv: (English plus a few common localizations), optionally suffixed "[2]". */
+    private const REPLY_PREFIX = '/^\s*(re|fwd?|aw|antw|sv)\s*(\[\d+\])?\s*:\s*/i';
+
     /**
      * Normalize a subject line for thread matching: strip repeated reply/
-     * forward prefixes (Re:, Fwd:, Fw:, Aw:, Antw:, Sv: — English plus a
-     * few common localizations, optionally suffixed "[2]") and case-fold.
-     * Shared with Panic\Leads\ThreadMatcher's subject+sender fallback so
-     * both sides of the comparison are normalized identically.
+     * forward prefixes (see REPLY_PREFIX) and case-fold. Shared with
+     * Panic\Leads\ThreadMatcher's subject+sender fallback so both sides of
+     * the comparison are normalized identically.
      */
     public static function normalizeSubject(?string $subject): string
     {
@@ -241,10 +243,24 @@ final class LeadEmailParser
         }
         do {
             $prev = $s;
-            $s = trim((string) preg_replace('/^\s*(re|fwd?|aw|antw|sv)\s*(\[\d+\])?\s*:\s*/i', '', $s));
+            $s = trim((string) preg_replace(self::REPLY_PREFIX, '', $s));
         } while ($s !== $prev);
         $s = (string) preg_replace('/\s+/', ' ', $s);
         return mb_strtolower($s);
+    }
+
+    /**
+     * True when the subject itself carries a reply/forward prefix (Re:,
+     * Fwd:, etc.) — used by Leads\Acknowledgment to recognize "this is
+     * plainly a continuation of some conversation" even when
+     * Panic\Leads\ThreadMatcher couldn't resolve it to a specific existing
+     * lead (a reply to a pre-threading-era message, a different channel, or
+     * a dropped References chain), so the neutral first-contact
+     * acknowledgment isn't sent for it.
+     */
+    public static function hasReplyPrefix(?string $subject): bool
+    {
+        return (bool) preg_match(self::REPLY_PREFIX, trim((string) $subject));
     }
 
     // ── MIME parsing ──────────────────────────────────────────────────────────

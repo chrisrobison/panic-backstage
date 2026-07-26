@@ -122,6 +122,12 @@ ok(LeadEmailParser::normalizeSubject('RE: [2]: Booking inquiry') === 'booking in
 ok(LeadEmailParser::normalizeSubject('Booking Inquiry') === 'booking inquiry',           'case-folded even with no prefix');
 ok(LeadEmailParser::normalizeSubject('') === '' && LeadEmailParser::normalizeSubject(null) === '', 'blank/null subject → empty string, never matches');
 
+ok(LeadEmailParser::hasReplyPrefix('Re: Booking inquiry') === true,      'hasReplyPrefix: Re: prefix detected');
+ok(LeadEmailParser::hasReplyPrefix('Fwd: Booking inquiry') === true,     'hasReplyPrefix: Fwd: prefix detected');
+ok(LeadEmailParser::hasReplyPrefix('RE[2]: Booking inquiry') === true,   'hasReplyPrefix: bracketed reply count detected');
+ok(LeadEmailParser::hasReplyPrefix('Booking inquiry') === false,         'hasReplyPrefix: plain subject, no prefix');
+ok(LeadEmailParser::hasReplyPrefix('') === false && LeadEmailParser::hasReplyPrefix(null) === false, 'hasReplyPrefix: blank/null subject → false');
+
 // ── Date coercion ───────────────────────────────────────────────────────────
 echo "\n=== Date coercion ===\n\n";
 

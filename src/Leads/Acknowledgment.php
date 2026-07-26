@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Panic\Leads;
 
 use Panic\Database;
+use Panic\LeadEmailParser;
 use Panic\Mailer;
 use function Panic\log_lead_activity;
 
@@ -15,6 +16,24 @@ use function Panic\log_lead_activity;
  * come from bookings@themab.org via Mailer's from-address override so a
  * customer reply lands back in the same mailbox the ingestion pipe reads
  * (docs/booking-email-import.md).
+ *
+ * Only sent for inquiries that actually came in through one of our own
+ * intake forms — the website's own inquiry form (source=website), or a
+ * Jotform submission forwarded as email (lead_intake_emails.parse_method
+ * starting with "jotform") — never for a freeform email a person wrote
+ * directly to bookings@ (parse_method llm/heuristic/none). An automatic
+ * form-receipt-sounding reply to someone's personally-written email reads as
+ * a canned brush-off; a human triaging/replying is the real acknowledgment
+ * there. See isFromOneOfOurForms().
+ *
+ * Also never sent for anything that is plainly a reply to some existing
+ * conversation (In-Reply-To set, or a Re:/Fwd:/Fw:/Aw: subject prefix) —
+ * even when it landed here as a "new" lead because Panic\Leads\ThreadMatcher
+ * couldn't resolve it to a specific prior lead (a reply to a pre-threading-
+ * era message, a different channel, or a dropped References chain). A
+ * "thanks for reaching out" first-contact receipt is plainly wrong for
+ * something that says right in its headers/subject that it's a continuation
+ * of a conversation. See looksLikeAReply().
  *
  * Every send (or skip, with why) is recorded: a `lead_messages` row so the
  * Conversation tab shows it like any other outbound message, and a
@@ -51,6 +70,12 @@ final class Acknowledgment
             return false;
         }
         if (in_array((string) $lead['status'], ['spam', 'duplicate'], true)) {
+            return false;
+        }
+        if ($this->looksLikeAReply($db, $lead)) {
+            return false;
+        }
+        if (!$this->isFromOneOfOurForms($db, $lead)) {
             return false;
         }
 
@@ -122,5 +147,54 @@ final class Acknowledgment
         log_lead_activity($db, $leadId, null, 'auto_acknowledged', ['to' => $email]);
 
         return true;
+    }
+
+    /**
+     * True when the inbound message that created this lead carries its own
+     * evidence of being a reply/forward. Checked against the lead's earliest
+     * inbound lead_messages row rather than the leads row itself, since
+     * that's where in_reply_to/subject were captured verbatim at ingestion
+     * (scripts/ingest-booking-email.php); a lead with no such row (e.g. a
+     * website-form submission, which was never an email at all) can't be a
+     * reply.
+     */
+    private function looksLikeAReply(Database $db, array $lead): bool
+    {
+        $msg = $db->one(
+            "SELECT subject, in_reply_to FROM lead_messages
+             WHERE lead_id = ? AND direction = 'inbound'
+             ORDER BY id ASC LIMIT 1",
+            [(int) $lead['id']]
+        );
+        if ($msg === null) {
+            return false;
+        }
+        if (!empty($msg['in_reply_to'])) {
+            return true;
+        }
+        return LeadEmailParser::hasReplyPrefix($msg['subject'] ?? null);
+    }
+
+    /**
+     * True for a lead that came in through one of our own intake forms —
+     * non-email sources (the website's own inquiry form is source=website)
+     * are always one of "our forms" by definition, since there's no
+     * freeform-prose email to have written instead. For an email-sourced
+     * lead, only a Jotform submission forwarded as email counts: its
+     * originating lead_intake_emails row was parsed deterministically from
+     * labelled Jotform fields (parse_method 'jotform' or 'jotform+llm' — see
+     * LeadEmailParser), as opposed to a person's own freeform email
+     * (parse_method 'llm'/'heuristic'/'none').
+     */
+    private function isFromOneOfOurForms(Database $db, array $lead): bool
+    {
+        if ((string) ($lead['source'] ?? '') !== 'email') {
+            return true;
+        }
+        $intake = $db->one(
+            'SELECT parse_method FROM lead_intake_emails WHERE lead_id = ? ORDER BY id ASC LIMIT 1',
+            [(int) $lead['id']]
+        );
+        return str_starts_with((string) ($intake['parse_method'] ?? ''), 'jotform');
     }
 }

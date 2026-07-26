@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `leads` — Don't auto-acknowledge freeform emails or anything that looks like a reply
 - **Fixed** `booking-inbox` — Fix unscrollable list/conversation panes and dead Event Info tab
 - **Added** `leads` — Thread reply emails into the original inquiry's conversation
 - **Fixed** `calendar` — Stop first scroll from jumping the grid view forward a month

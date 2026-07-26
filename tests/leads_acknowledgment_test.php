@@ -48,5 +48,11 @@ foreach (['spam', 'duplicate'] as $skipStatus) {
     ok($r === false, "Status '$skipStatus' is never auto-acknowledged");
 }
 
+// A freeform email (no matching lead_intake_emails row at all, for this
+// nonexistent id — same as a real "llm"/"heuristic"/"none" parse_method,
+// which also isn't "jotform") never gets the form-receipt-style auto-ack.
+$freeformEmail = $ack->maybeSend($db, ['id' => 999999, 'source' => 'email', 'status' => 'new', 'contact_email' => 'a@example.com', 'contact_name' => 'Test']);
+ok($freeformEmail === false, "Email source with no Jotform-parsed intake row (freeform email) is never auto-acknowledged");
+
 echo "\nBooking Inbox auto-acknowledgment: $passed passed, $failed failed.\n";
 exit($failed > 0 ? 1 : 0);
