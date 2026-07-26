@@ -57,6 +57,29 @@ No match (a first inquiry, or a reply to a pre-threading message with no
 recoverable subject/sender match) falls through to lead creation exactly as
 before.
 
+## Backfilling threads for already-imported email
+
+`scripts/backfill-lead-threads.php` retroactively applies the same
+header-based thread match to `leads`/`lead_intake_emails` rows that were
+already imported before ThreadMatcher existed. Deliberately header-only (no
+subject+sender fallback) — see the script's own docblock for why running
+that heuristic across *all* history is riskier than scoping it to a 180-day
+window against one sender the way ThreadMatcher does for new mail.
+
+```
+php scripts/backfill-lead-threads.php            # dry run (default) — reports, writes nothing
+php scripts/backfill-lead-threads.php --apply     # writes the safe merges
+```
+
+A merge only ever runs automatically when the duplicate lead shows no sign of
+having been worked (still an automatic-pipeline status, unclaimed, no owner,
+no real reply sent, no human note/attachment/linked task, not converted).
+Anything else is printed under "needs manual review" and left completely
+untouched. Applied merges move the conversation (messages/notes/attachments)
+onto the earlier lead and mark the duplicate `status = 'duplicate'` — nothing
+is deleted, and it's idempotent (safe to re-run; already-merged leads won't
+match again).
+
 ## Auto-acknowledgment gating
 
 `Leads/Acknowledgment.php` sends a neutral "we got your inquiry" receipt at
