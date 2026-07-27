@@ -8,7 +8,7 @@ namespace Panic;
  *
  * Responsibilities:
  *   - Parse + validate a Bearer token from an incoming request
- *   - Issue short-lived signed access tokens (15 minutes by default)
+ *   - Issue short-lived signed access tokens (1 hour by default)
  *   - Generate and hash opaque tokens (magic links, refresh tokens)
  *
  * Refresh-token DB operations live in AuthEndpoint to keep this class
@@ -18,7 +18,7 @@ final class Auth
 {
     public const ACCESS_COOKIE = 'backstage_access';
     public const REFRESH_COOKIE = 'backstage_refresh';
-    private const DEFAULT_ACCESS_TTL_SECONDS = 900;
+    private const DEFAULT_ACCESS_TTL_SECONDS = 3600;
 
     private ?array $currentUser = null;
     private ?string $currentAccessToken = null;
@@ -139,7 +139,7 @@ final class Auth
     public static function accessTtlSeconds(): int
     {
         $configured = (int) (getenv('ACCESS_TOKEN_TTL_SECONDS') ?: self::DEFAULT_ACCESS_TTL_SECONDS);
-        return max(300, min(3600, $configured));
+        return max(300, min(86400, $configured));
     }
 
     /** Generate a cryptographically random opaque token (hex string). */

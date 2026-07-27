@@ -77,11 +77,11 @@ ok($cookieAuth->authenticationSource() === 'cookie', 'authentication source reco
 
 // ── 6. Access TTL is short and configuration is bounded ────────────────────
 putenv('ACCESS_TOKEN_TTL_SECONDS');
-ok(Auth::accessTtlSeconds() === 900, 'access-token TTL defaults to 15 minutes');
+ok(Auth::accessTtlSeconds() === 3600, 'access-token TTL defaults to one hour');
 putenv('ACCESS_TOKEN_TTL_SECONDS=10');
 ok(Auth::accessTtlSeconds() === 300, 'access-token TTL has a five-minute lower bound');
 putenv('ACCESS_TOKEN_TTL_SECONDS=999999');
-ok(Auth::accessTtlSeconds() === 3600, 'access-token TTL has a one-hour upper bound');
+ok(Auth::accessTtlSeconds() === 86400, 'access-token TTL has a twenty-four-hour upper bound');
 putenv('ACCESS_TOKEN_TTL_SECONDS');
 
 echo "\nAuth token_version: $passed passed, $failed failed.\n";

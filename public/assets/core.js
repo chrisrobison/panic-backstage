@@ -172,24 +172,42 @@ async function api(path, options = {}) {
 }
 
 
+// Refresh tokens are single-use on the server (each /auth/refresh call
+// revokes the presented token and issues a new one). Several api() calls
+// can race to a 401 at the same moment (e.g. multiple dashboard widgets
+// fetching in parallel right as the access token expires); without this
+// dedup, every one of them would call /auth/refresh concurrently and all
+// but the first would be rejected as "already rotated," forcing a logout
+// even though a fresh, valid session had just been issued. Sharing a single
+// in-flight promise means concurrent 401s all await the same refresh call.
+let _refreshPromise = null;
+
 async function tryRefresh() {
-  const refreshToken = getRefreshToken();
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = (async () => {
+    const refreshToken = getRefreshToken();
+    try {
+      const response = await fetch(apiUrl('/auth/refresh'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (data.access_token) {
+        setTokens(data.access_token, data.refresh_token);
+        _legacyRefreshToken = null;
+        sessionStorage.removeItem(REFRESH_KEY);
+        return data.access_token;
+      }
+    } catch { /* network error */ }
+    return null;
+  })();
   try {
-    const response = await fetch(apiUrl('/auth/refresh'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
-    });
-    if (!response.ok) return null;
-    const data = await response.json();
-    if (data.access_token) {
-      setTokens(data.access_token, data.refresh_token);
-      _legacyRefreshToken = null;
-      sessionStorage.removeItem(REFRESH_KEY);
-      return data.access_token;
-    }
-  } catch { /* network error */ }
-  return null;
+    return await _refreshPromise;
+  } finally {
+    _refreshPromise = null;
+  }
 }
 
 
