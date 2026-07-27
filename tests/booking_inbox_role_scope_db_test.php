@@ -36,25 +36,27 @@ function payload(Response $response): array
 echo "\n=== Booking Inbox role scope (DB-backed) ===\n\n";
 
 $db = new Database();
-$promoter = $db->one("SELECT * FROM users WHERE role = 'promoter' AND is_hidden = 0 ORDER BY id LIMIT 1");
-if ($promoter === null) {
-    fwrite(STDERR, "A visible promoter is required for this test.\n");
-    exit(1);
-}
-
 $marker = bin2hex(random_bytes(4));
-$scopedId = $db->insert(
-    "INSERT INTO leads (status,source,contact_email,event_name,assigned_to_user_id)
-     VALUES ('new','other',?,?,?)",
-    ["scoped-{$marker}@example.invalid", "PB Scoped {$marker}", $promoter['id']]
+$promoterId = $db->insert(
+    "INSERT INTO users (name,email,role,is_hidden) VALUES (?,?,'promoter',0)",
+    ["PB Test Promoter {$marker}", "promoter-{$marker}@example.invalid"]
 );
-$otherId = $db->insert(
-    "INSERT INTO leads (status,source,contact_email,event_name)
-     VALUES ('new','other',?,?)",
-    ["other-{$marker}@example.invalid", "PB Other {$marker}"]
-);
+$promoter = $db->one('SELECT * FROM users WHERE id = ?', [$promoterId]);
+$scopedId = 0;
+$otherId = 0;
 
 try {
+    $scopedId = $db->insert(
+        "INSERT INTO leads (status,source,contact_email,event_name,assigned_to_user_id)
+         VALUES ('new','other',?,?,?)",
+        ["scoped-{$marker}@example.invalid", "PB Scoped {$marker}", $promoterId]
+    );
+    $otherId = $db->insert(
+        "INSERT INTO leads (status,source,contact_email,event_name)
+         VALUES ('new','other',?,?)",
+        ["other-{$marker}@example.invalid", "PB Other {$marker}"]
+    );
+
     $auth = new Auth();
     $auth->setUser($promoter);
     $get = new Request('GET', '/', [], [], [], []);
@@ -72,7 +74,10 @@ try {
     ok(in_array($scopedId, $ids, true), 'scoped list includes the assigned inquiry');
     ok(!in_array($otherId, $ids, true), 'scoped list excludes the unrelated inquiry');
 } finally {
-    $db->run('DELETE FROM leads WHERE id IN (?, ?)', [$scopedId, $otherId]);
+    if ($scopedId > 0 || $otherId > 0) {
+        $db->run('DELETE FROM leads WHERE id IN (?, ?)', [$scopedId, $otherId]);
+    }
+    $db->run('DELETE FROM users WHERE id = ?', [$promoterId]);
 }
 
 echo "\nBooking Inbox role scope: {$passed} passed, {$failed} failed.\n";

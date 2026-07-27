@@ -25,39 +25,47 @@ function ok(bool $condition, string $label): void
 echo "\n=== ClaimService (DB-backed) ===\n\n";
 
 $db = new Database();
-$users = $db->all('SELECT id FROM users WHERE is_hidden = 0 ORDER BY id LIMIT 2');
-if (count($users) < 2) {
-    fwrite(STDERR, "Two visible users are required for this test.\n");
-    exit(1);
-}
-
-$leadId = $db->insert(
-    "INSERT INTO leads (status, source, contact_email, notes) VALUES ('new','other',?,?)",
-    ['claim-test-' . bin2hex(random_bytes(4)) . '@example.invalid', 'PB TEST ClaimService']
+$marker = bin2hex(random_bytes(4));
+$firstUserId = $db->insert(
+    "INSERT INTO users (name,email,role,is_hidden) VALUES (?,?,'venue_admin',0)",
+    ["PB Claim User A {$marker}", "claim-a-{$marker}@example.invalid"]
 );
+$secondUserId = $db->insert(
+    "INSERT INTO users (name,email,role,is_hidden) VALUES (?,?,'venue_admin',0)",
+    ["PB Claim User B {$marker}", "claim-b-{$marker}@example.invalid"]
+);
+$leadId = 0;
 
 try {
+    $leadId = $db->insert(
+        "INSERT INTO leads (status, source, contact_email, notes) VALUES ('new','other',?,?)",
+        ["claim-test-{$marker}@example.invalid", 'PB TEST ClaimService']
+    );
+
     $service = new ClaimService();
     $lead = $db->one('SELECT * FROM leads WHERE id = ?', [$leadId]);
-    $first = $service->claim($db, $lead, (int) $users[0]['id']);
+    $first = $service->claim($db, $lead, $firstUserId);
     ok($first['ok'] === true, 'first user claims the inquiry');
 
-    $second = $service->claim($db, $lead, (int) $users[1]['id']);
+    $second = $service->claim($db, $lead, $secondUserId);
     ok($second['ok'] === false && ($second['code'] ?? null) === 409, 'second user cannot claim the same inquiry');
 
     $active = $db->one("SELECT COUNT(*) n FROM lead_claims WHERE lead_id = ? AND status = 'active'", [$leadId]);
     ok((int) $active['n'] === 1, 'database contains exactly one active claim');
 
     $fresh = $db->one('SELECT * FROM leads WHERE id = ?', [$leadId]);
-    $service->release($db, $fresh, (int) $users[0]['id'], 'DB regression test');
+    $service->release($db, $fresh, $firstUserId, 'DB regression test');
     $afterRelease = $db->one("SELECT COUNT(*) n FROM lead_claims WHERE lead_id = ? AND status = 'active'", [$leadId]);
     ok((int) $afterRelease['n'] === 0, 'release clears the active claim slot');
 
     $fresh = $db->one('SELECT * FROM leads WHERE id = ?', [$leadId]);
-    $after = $service->claim($db, $fresh, (int) $users[1]['id']);
+    $after = $service->claim($db, $fresh, $secondUserId);
     ok($after['ok'] === true, 'another user can claim after release');
 } finally {
-    $db->run('DELETE FROM leads WHERE id = ?', [$leadId]);
+    if ($leadId > 0) {
+        $db->run('DELETE FROM leads WHERE id = ?', [$leadId]);
+    }
+    $db->run('DELETE FROM users WHERE id IN (?, ?)', [$firstUserId, $secondUserId]);
 }
 
 echo "\nClaimService DB: {$passed} passed, {$failed} failed.\n";

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** — Make database tests self-contained
 - **Changed** — Make static analysis portable in CI
 - **Changed** — Harden booking inbox and CI workflows
 - **Added** `leads` — Backfill thread grouping for already-imported booking emails
