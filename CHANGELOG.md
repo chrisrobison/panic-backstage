@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** — Align inquiry integration test with accepted response
 - **Changed** — Make database tests self-contained
 - **Changed** — Make static analysis portable in CI
 - **Changed** — Harden booking inbox and CI workflows

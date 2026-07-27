@@ -32,11 +32,11 @@ assert_status 422 "$status"
 
 marker="ci-test-$$-$(date +%s)"
 
-# Honeypot filled -> looks like success (200) but must NOT create a lead —
+# Honeypot filled -> looks like accepted (202) but must NOT create a lead —
 # tipping off a bot that it was caught only teaches it to try harder.
 hp_email="${marker}-hp@example.com"
 status="$(http_post /public/inquiries "$(printf '{"contact_name":"CI Bot","contact_email":"%s","message":"buy stuff now","company":"not blank"}' "$hp_email")")"
-assert_status 200 "$status"
+assert_status 202 "$status"
 
 status="$(http_get "/api/leads?source=website")"
 assert_status 200 "$status"
@@ -44,11 +44,11 @@ if grep -q "$hp_email" "$RESP_BODY"; then
     fail "honeypot-filled submission created a lead anyway"
 fi
 
-# Real submission -> 200, and it shows up in the pipeline as source=website.
+# Real submission -> 202, and it shows up in the pipeline as source=website.
 real_email="${marker}@example.com"
 body="$(printf '{"contact_name":"CI TEST Public Inquiry (safe to delete)","contact_email":"%s","message":"Automated test submission - safe to delete.","event_type":"corporate"}' "$real_email")"
 status="$(http_post /public/inquiries "$body")"
-assert_status 200 "$status"
+assert_status 202 "$status"
 
 status="$(http_get "/api/leads?source=website")"
 assert_status 200 "$status"
