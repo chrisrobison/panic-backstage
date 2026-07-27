@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** — Store access token in localStorage, not sessionStorage
 - **Changed** — Extend default access-token lifetime to 1 week
 - **Changed** — Fix session timeout: raise access-token TTL and dedupe refresh calls
 - **Changed** — Stabilize UI integration fixtures

@@ -3,15 +3,21 @@ const TOKEN_KEY   = 'backstage_access_token';
 
 const REFRESH_KEY = 'backstage_refresh_token';
 
-// One-release migration from the old persistent localStorage session. Access
-// tokens live only for this tab; new refresh tokens are HttpOnly cookies and
-// are never written by JavaScript.
-let _accessToken = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
-let _legacyRefreshToken = sessionStorage.getItem(REFRESH_KEY) || localStorage.getItem(REFRESH_KEY);
-if (_accessToken) sessionStorage.setItem(TOKEN_KEY, _accessToken);
-if (_legacyRefreshToken) sessionStorage.setItem(REFRESH_KEY, _legacyRefreshToken);
-localStorage.removeItem(TOKEN_KEY);
-localStorage.removeItem(REFRESH_KEY);
+// Access tokens persist in localStorage (shared across tabs, survives
+// browser restarts) rather than tab-scoped sessionStorage — this app favors
+// low login friction, and several standalone pages outside the SPA shell
+// (e.g. docs/event-intake-status.html) read backstage_access_token straight
+// out of localStorage with no refresh-cookie fallback of their own, so the
+// SPA needs to actually keep it there for them to keep working. New refresh
+// tokens are HttpOnly cookies and are never written by JavaScript; the
+// _legacyRefreshToken plumbing below only exists to migrate pre-cookie
+// sessions once.
+let _accessToken = localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+let _legacyRefreshToken = localStorage.getItem(REFRESH_KEY) || sessionStorage.getItem(REFRESH_KEY);
+if (_accessToken) localStorage.setItem(TOKEN_KEY, _accessToken);
+if (_legacyRefreshToken) localStorage.setItem(REFRESH_KEY, _legacyRefreshToken);
+sessionStorage.removeItem(TOKEN_KEY);
+sessionStorage.removeItem(REFRESH_KEY);
 
 const getToken = () => _accessToken;
 
@@ -19,8 +25,8 @@ const getRefreshToken = () => _legacyRefreshToken;
 
 const setTokens = (access, refresh) => {
   _accessToken = access || null;
-  if (_accessToken) sessionStorage.setItem(TOKEN_KEY, _accessToken);
-  else sessionStorage.removeItem(TOKEN_KEY);
+  if (_accessToken) localStorage.setItem(TOKEN_KEY, _accessToken);
+  else localStorage.removeItem(TOKEN_KEY);
   // Deliberately ignore newly-issued refresh tokens. The server placed the
   // authoritative copy in an HttpOnly cookie.
 };
@@ -28,10 +34,10 @@ const setTokens = (access, refresh) => {
 const clearTokens = () => {
   _accessToken = null;
   _legacyRefreshToken = null;
-  sessionStorage.removeItem(TOKEN_KEY);
-  sessionStorage.removeItem(REFRESH_KEY);
-  localStorage.removeItem(TOKEN_KEY); // clean up pre-cookie releases
+  localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
+  sessionStorage.removeItem(TOKEN_KEY); // clean up any leftover tab-scoped copy
+  sessionStorage.removeItem(REFRESH_KEY);
 };
 
 
@@ -197,7 +203,7 @@ async function tryRefresh() {
       if (data.access_token) {
         setTokens(data.access_token, data.refresh_token);
         _legacyRefreshToken = null;
-        sessionStorage.removeItem(REFRESH_KEY);
+        localStorage.removeItem(REFRESH_KEY);
         return data.access_token;
       }
     } catch { /* network error */ }
