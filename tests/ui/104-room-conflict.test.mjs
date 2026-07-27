@@ -16,7 +16,7 @@
 import { test, assert } from './harness.mjs';
 
 async function apiFetch(page, path, opts = {}) {
-  const token = await page.eval("localStorage.getItem('backstage_access_token')");
+  const token = page.accessToken;
   const res = await fetch(page.base + '/api' + path, {
     ...opts,
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token, ...(opts.headers || {}) },
@@ -37,9 +37,13 @@ test('room double-booking is flagged red on the calendar, agenda, and dashboard'
   target.setDate(target.getDate() + 10); // within the dashboard's default 30-day window
   const targetIso = isoDate(target);
 
+  const venueData = await apiFetch(page, '/venues');
+  const room = (venueData.resources || [])[0];
+  assert.ok(room, 'at least one active room is available for conflict testing');
+
   const base = {
-    venue_id: 1,
-    resource_id: 2, // "Downstairs (21+)" — see database/schema.sql `resources`
+    venue_id: Number(room.venue_id),
+    resource_id: Number(room.id),
     event_type: 'special_event',
     date: targetIso,
   };

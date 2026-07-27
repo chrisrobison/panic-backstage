@@ -172,6 +172,7 @@ export function makePage(cdp, base) {
   const page = {
     base,
     cdp,
+    accessToken: null,
     eventId: null,
     hasEvent: false,
     eval: (expr) => cdp.eval(expr),

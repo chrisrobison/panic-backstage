@@ -6,7 +6,7 @@
 import { test, assert } from './harness.mjs';
 
 async function apiFetch(page, path, opts = {}) {
-  const token = await page.eval("localStorage.getItem('backstage_access_token')");
+  const token = page.accessToken;
   const res = await fetch(page.base + '/api' + path, {
     ...opts,
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token, ...(opts.headers || {}) },

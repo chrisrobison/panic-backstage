@@ -27,7 +27,7 @@ const TITLE = 'PB UI TEST uploaded contract (safe to delete)';
 const MODAL = '.modal-backdrop:has([data-form="new"])';
 
 async function apiFetch(page, apiPath, opts = {}) {
-  const token = await page.eval("localStorage.getItem('backstage_access_token')");
+  const token = page.accessToken;
   const res = await fetch(page.base + '/api' + apiPath, {
     ...opts,
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token, ...(opts.headers || {}) },
@@ -78,7 +78,7 @@ test('Create Contract modal clearly separates Generate vs. Upload', async (page)
 // (cleaning it up immediately) to know up front whether this host can write
 // there at all, and skip with a clear reason if not.
 async function canUploadOnThisHost(page) {
-  const token = await page.eval("localStorage.getItem('backstage_access_token')");
+  const token = page.accessToken;
   const body = new FormData();
   body.set('asset', new Blob([Buffer.from(PNG_BASE64, 'base64')], { type: 'image/png' }), 'preflight.png');
   body.set('asset_type', 'other');
