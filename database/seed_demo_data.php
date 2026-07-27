@@ -64,9 +64,43 @@ function seed_demo_data(\PDO $pdo, string $root, array $opts = []): array
     $stmt->execute([$adminName, $adminEmail, password_hash($adminPassword, PASSWORD_DEFAULT), 'venue_admin']);
     $adminId = (int) $pdo->lastInsertId();
 
+    // A fresh schema contains the configurable navigation table but no rows.
+    // Seed the core application routes before later migrations append feature
+    // entries such as Booking Inbox and Social Queue; otherwise those
+    // migrations leave a new install with only their own links.
+    $navStmt = $pdo->prepare(
+        'INSERT INTO nav_items
+         (parent_id, label, icon, link, capability, visible, is_home, sort_order)
+         VALUES (?, ?, ?, ?, ?, 1, ?, ?)'
+    );
+    $navStmt->execute([null, 'Dashboard', 'fa-solid fa-gauge-high', 'dashboard', null, 1, 10]);
+    $navStmt->execute([null, 'Events', 'fa-solid fa-calendar-days', null, null, 0, 20]);
+    $eventsNavId = (int) $pdo->lastInsertId();
+    $navStmt->execute([$eventsNavId, 'Events List', 'fa-solid fa-list', 'events', 'view_all_events', 0, 10]);
+    $navStmt->execute([$eventsNavId, 'Calendar', 'fa-solid fa-calendar-days', 'calendar', 'view_all_events', 0, 20]);
+    $navStmt->execute([$eventsNavId, 'Pipeline', 'fa-solid fa-filter', 'pipeline', 'view_leads', 0, 30]);
+    $navStmt->execute([null, 'Reports', 'fa-solid fa-chart-line', 'reports', 'view_reports', 0, 30]);
+    $navStmt->execute([null, 'Tasks', 'fa-solid fa-list-check', 'tasks', 'view_tasks_app', 0, 40]);
+    $navStmt->execute([null, 'Contacts', 'fa-solid fa-address-book', 'contacts', 'manage_contacts', 0, 50]);
+    $navStmt->execute([null, 'Asset Library', 'fa-solid fa-photo-film', 'asset-library', 'view_all_events', 0, 60]);
+    $navStmt->execute([null, 'Admin', 'fa-solid fa-gear', null, null, 0, 70]);
+    $adminNavId = (int) $pdo->lastInsertId();
+    $navStmt->execute([$adminNavId, 'Users', 'fa-solid fa-users', 'admin-users', 'manage_users', 0, 10]);
+    $navStmt->execute([$adminNavId, 'App Settings', 'fa-solid fa-sliders', 'admin-settings', 'manage_settings', 0, 20]);
+    $navStmt->execute([$adminNavId, 'Navigation', 'fa-solid fa-bars', 'admin-navigation', 'manage_navigation', 0, 30]);
+
     $stmt = $pdo->prepare('INSERT INTO venues (name, slug, timezone) VALUES (?, ?, ?)');
     $stmt->execute([$venueName, $venueSlug, $timezone]);
     $venueId = (int) $pdo->lastInsertId();
+
+    $resourceStmt = $pdo->prepare(
+        'INSERT INTO resources (venue_id, name, slug, description, capacity, zone, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+    $resourceStmt->execute([$venueId, 'On Broadway', 'on-broadway', 'Upstairs room', 180, 'up', 10]);
+    $upstairsResourceId = (int) $pdo->lastInsertId();
+    $resourceStmt->execute([$venueId, 'The Mab', 'the-mab', 'Downstairs room', 300, 'down', 20]);
+    $downstairsResourceId = (int) $pdo->lastInsertId();
 
     $templates = [
         ['Karaoke + Open Mic', 'karaoke', 'Karaoke + Open Mic', 'Two-part night: open mic for songs, poems, and experiments, then karaoke takes over. Bring originals or sing along — all experience levels welcome.', 0, '21+', ['Confirm KJ/host','Confirm sound + microphones','Confirm projection/display setup','Confirm signup process (open mic + karaoke)','Create/update recurring flyer','Publish event page','Post social reminder','Confirm door/staff coverage'], [['Staff call','staff_call','18:30'],['Open mic signups open','other','19:00'],['Doors','doors','19:30'],['Open mic','set','20:00'],['Karaoke begins','set','21:30'],['Last call for singers','other','23:30'],['Event end','curfew','00:00']]],
@@ -108,6 +142,10 @@ function seed_demo_data(\PDO $pdo, string $root, array $opts = []): array
     foreach ($events as $event) {
         $eventStmt->execute([$venueId, $event[0], $event[1], $event[2], $event[3], "{$event[0]} at {$venueName}.", $event[9], $event[4], $event[5], $event[6], $event[7], $event[8], $adminId]);
         $eventIds[] = (int) $pdo->lastInsertId();
+    }
+    foreach ($eventIds as $index => $eventId) {
+        $pdo->prepare('UPDATE events SET resource_id = ? WHERE id = ?')
+            ->execute([$index % 2 === 0 ? $upstairsResourceId : $downstairsResourceId, $eventId]);
     }
 
     // Insert bands one at a time and capture the real auto-increment IDs —
@@ -197,6 +235,19 @@ function seed_demo_data(\PDO $pdo, string $root, array $opts = []): array
             $c[4] > 0 ? $addDays(-7) : null,
         ]);
     }
+
+    // Give the Booking Inbox a safe unassigned row on fresh/demo installs.
+    // Later inbox migrations add their workflow columns with nullable/default
+    // values, so this base lead remains a valid fixture after migration.
+    $pdo->prepare(
+        "INSERT INTO leads (status, source, contact_name, contact_email, event_name, event_type, notes)
+         VALUES ('new', 'website', ?, ?, ?, 'other', ?)"
+    )->execute([
+        'Demo Booker',
+        'booking-inquiry@demo.local',
+        'Demo Booking Inquiry',
+        'Fresh-install fixture for the Booking Inbox.',
+    ]);
 
     // Contract clause library + starter templates (idempotent, venue-agnostic).
     require_once $root . '/database/seed_contracts.php';

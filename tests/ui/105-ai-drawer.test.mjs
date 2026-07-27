@@ -60,6 +60,9 @@ test('opening from an event workspace scopes the drawer to that event', async (p
 
 test('a real question gets a grounded answer through the full claude CLI round trip', async (page) => {
   if (!page.hasEvent) page.skip('UI_EVENT_ID fixture event not found');
+  if (process.env.CI && !process.env.CLAUDE_CLI_BIN) {
+    page.skip('GitHub Actions has no authenticated Claude CLI runtime');
+  }
   await page.openEvent();
   if (!(await page.exists('[data-ask-ai]'))) page.skip('use_ai_assistant capability not granted to this test user');
   await page.click('[data-ask-ai]');

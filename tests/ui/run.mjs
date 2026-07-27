@@ -60,6 +60,12 @@ async function main() {
     const booted = await browser.cdp.until(`document.querySelector('pb-events-upcoming') && document.querySelector('pb-events-upcoming').children.length>0 && document.querySelector('.side-nav')`);
     if (!booted) throw new Error('app did not boot (pb-events-upcoming / .side-nav never appeared)');
 
+    // The production SPA intentionally removes legacy localStorage tokens once
+    // its HttpOnly cookie session is established. Several test helpers make
+    // direct Node-side API calls and read this test token from localStorage, so
+    // restore it after boot without changing the application's cookie behavior.
+    await browser.cdp.eval(`localStorage.setItem('backstage_access_token', ${JSON.stringify(auth.access_token)})`);
+
     const page = makePage(browser.cdp, BASE);
     page.eventId = EVENT_ID;
     page.hasEvent = await eventExists(auth.access_token, EVENT_ID);
