@@ -75,13 +75,13 @@ $cookieAuth->authenticate($cookieRequest);
 ok($cookieAuth->user() !== null, 'valid HttpOnly access-cookie value authenticates');
 ok($cookieAuth->authenticationSource() === 'cookie', 'authentication source records cookie use');
 
-// ── 6. Access TTL is short and configuration is bounded ────────────────────
+// ── 6. Access TTL defaults long (low-friction login) but stays bounded ─────
 putenv('ACCESS_TOKEN_TTL_SECONDS');
-ok(Auth::accessTtlSeconds() === 3600, 'access-token TTL defaults to one hour');
+ok(Auth::accessTtlSeconds() === 604800, 'access-token TTL defaults to one week');
 putenv('ACCESS_TOKEN_TTL_SECONDS=10');
 ok(Auth::accessTtlSeconds() === 300, 'access-token TTL has a five-minute lower bound');
-putenv('ACCESS_TOKEN_TTL_SECONDS=999999');
-ok(Auth::accessTtlSeconds() === 86400, 'access-token TTL has a twenty-four-hour upper bound');
+putenv('ACCESS_TOKEN_TTL_SECONDS=999999999');
+ok(Auth::accessTtlSeconds() === 2592000, 'access-token TTL has a thirty-day upper bound');
 putenv('ACCESS_TOKEN_TTL_SECONDS');
 
 echo "\nAuth token_version: $passed passed, $failed failed.\n";
