@@ -31,11 +31,14 @@ final class Mailer
     private string $templateDir;
     private string $fromAddress;
     private string $fromName;
+    private string $sendmailPath;
     /** @var string[] Extra envelope-only recipients (blind copies). */
     private array $bcc;
     private ?Database $db;
     /** When true, a sent message is never mirrored into the in-app inbox. */
     private bool $skipInboxCopy = false;
+    private bool $deliveryAccepted = false;
+    private ?string $deliveryError = null;
 
     /**
      * @param Database|null $db            When provided, each sent message is
@@ -64,6 +67,7 @@ final class Mailer
         $this->templateDir = $root . '/storage/email-templates';
         $this->fromAddress = $fromAddress ?: (getenv('MAIL_FROM_ADDRESS') ?: ('noreply@' . (getenv('APP_HOST') ?: 'localhost')));
         $this->fromName    = $fromName ?: (getenv('MAIL_FROM_NAME') ?: 'Backstage');
+        $this->sendmailPath = getenv('SENDMAIL_PATH') ?: self::SENDMAIL;
         $this->bcc         = $this->parseBcc(getenv('MAIL_BCC') ?: '');
         $this->db          = $db;
 
@@ -100,6 +104,18 @@ final class Mailer
     {
         $this->skipInboxCopy = true;
         return $this;
+    }
+
+    /** True when the local sendmail process accepted the most recent message. */
+    public function deliveryAccepted(): bool
+    {
+        return $this->deliveryAccepted;
+    }
+
+    /** Diagnostic for the most recent failed local-delivery attempt. */
+    public function deliveryError(): ?string
+    {
+        return $this->deliveryError;
     }
 
     // ─── Public API ────────────────────────────────────────────────────────────
@@ -216,8 +232,10 @@ final class Mailer
 
         $message = $this->buildMessage($to, $subject, $textBody, $htmlBody, $inline, $attachments, $messageId, $inReplyTo, $references);
 
+        $this->deliveryAccepted = false;
+        $this->deliveryError = null;
         $this->writeToFile($to, $message);
-        $this->pipeToSendmail($to, $message);
+        $this->deliveryAccepted = $this->pipeToSendmail($to, $message);
         return $this->logToOutbox($to, $subject, $textBody, $htmlBody, $template, $inline);
     }
 
@@ -467,11 +485,12 @@ final class Mailer
 
     // ─── Delivery ──────────────────────────────────────────────────────────────
 
-    private function pipeToSendmail(string $to, string $message): void
+    private function pipeToSendmail(string $to, string $message): bool
     {
-        if (!is_executable(self::SENDMAIL)) {
-            $this->logError($to, -1, 'sendmail binary not executable: ' . self::SENDMAIL);
-            return;
+        if (!is_executable($this->sendmailPath)) {
+            $this->deliveryError = 'sendmail binary not executable: ' . $this->sendmailPath;
+            $this->logError($to, -1, $this->deliveryError);
+            return false;
         }
 
         // -i  : do not treat a line containing only "." as end of input
@@ -484,7 +503,7 @@ final class Mailer
         // to the primary recipient. As envelope args they receive a blind copy.
         $cmd = array_merge(
             [
-                self::SENDMAIL,
+                $this->sendmailPath,
                 '-i',
                 '-f', $this->fromAddress,
                 '--',
@@ -501,8 +520,9 @@ final class Mailer
 
         $proc = @proc_open($cmd, $descriptors, $pipes);
         if (!is_resource($proc)) {
-            $this->logError($to, -1, 'proc_open failed');
-            return;
+            $this->deliveryError = 'proc_open failed';
+            $this->logError($to, -1, $this->deliveryError);
+            return false;
         }
 
         fwrite($pipes[0], $message);
@@ -514,8 +534,11 @@ final class Mailer
 
         $exit = proc_close($proc);
         if ($exit !== 0) {
-            $this->logError($to, $exit, trim($stderr));
+            $this->deliveryError = trim($stderr) ?: "sendmail exited with status {$exit}";
+            $this->logError($to, $exit, $this->deliveryError);
+            return false;
         }
+        return true;
     }
 
     private function writeToFile(string $to, string $message): void

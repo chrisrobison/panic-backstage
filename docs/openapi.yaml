@@ -18,7 +18,7 @@ info:
       the HTTP status code to signal the category (401 not authenticated, 403
       forbidden/capability gate failed, 404 not found, 409 conflict, 422
       validation error, 500 server error).
-    - Most routes require a Bearer JWT (see **Authentication** below) *and* a
+    - Most routes require the secure staff session (see **Authentication** below) *and* a
       role/capability check performed inside the endpoint — operations note
       the specific capability required where one applies. Capabilities come
       in two flavors: **global** (`venue_admin`-style, venue-wide) and
@@ -31,16 +31,18 @@ info:
       receivers, and the client portal all use their own token- or
       signature-based verification instead of the staff JWT — each such
       operation says so explicitly.
-    - This spec is maintained by hand alongside `src/Kernel.php` (the actual
-      router) — if you add or change a route, please update the matching
-      section here in the same change.
+    - This spec is checked against `src/Kernel.php` in CI by
+      `scripts/check-openapi-routes.php`. Route and documentation changes
+      must land together.
 
     ## Authentication
 
-    Staff-facing routes use a stateless HS256 JWT passed as
-    `Authorization: Bearer <token>`, issued by `POST /api/auth/login` (or the
-    magic-link / passkey flows under `/api/auth/*`) and good for 60 minutes;
-    pair it with the refresh-token flow to stay signed in longer. A token is
+    Staff-facing routes use a short-lived HS256 JWT issued by
+    `POST /api/auth/login` (or the magic-link / passkey flows under
+    `/api/auth/*`). Browsers receive it in a Secure, HttpOnly, SameSite=Lax
+    cookie; API clients may instead pass `Authorization: Bearer <token>`.
+    The default lifetime is 15 minutes and is capped at 60 minutes; pair it
+    with the rotating refresh-token flow to stay signed in longer. A token is
     immediately invalidated venue-wide if the user's `token_version` is
     bumped (e.g. on password change), even before it expires.
 
@@ -51,6 +53,14 @@ info:
   contact:
     name: Panic Backstage
 tags:
+  - name: Admin
+    description: Tenant application configuration available to venue administrators.
+  - name: AI Assistant
+    description: Human-reviewed assistant questions and proposed actions.
+  - name: Automation
+    description: Process definitions, runtime instances, waits, and cross-process tasks.
+  - name: Tasks
+    description: Standalone task documents and their task items.
   - name: Auth
     description: Login, magic-link, passkey/WebAuthn, refresh, logout, and password/email verification flows.
   - name: Account
@@ -214,7 +224,7 @@ tags:
       configured). Session-cookie authenticated, entirely separate from the staff Bearer JWT used
       everywhere else.
 servers:
-  - url: https://{host}/api
+  - url: https://{host}
     description: >-
       A single-tenant install's own domain, or one SaaS tenant's own domain in multi-tenant mode. If
       the app is mounted under a sub-path (`APP_BASE_PATH`), include it in `host`'s path portion.
@@ -223,6 +233,7 @@ servers:
         default: your-venue.example.com
 security:
   - bearerAuth: []
+  - accessCookie: []
 components:
   securitySchemes:
     bearerAuth:
@@ -230,10 +241,19 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: >-
-        HS256 JWT, 60-minute lifetime, issued by `POST /api/auth/login` (and the magic-link/passkey
-        equivalents). Send as `Authorization: Bearer <token>`. Immediately invalid venue-wide if the
-        user's `token_version` has been bumped since issuance (e.g. a password change), even if the
-        token hasn't expired yet.
+        Short-lived HS256 JWT, issued by `POST /api/auth/login` (and the magic-link/passkey
+        equivalents). Browsers use the Secure HttpOnly cookie; API clients may send
+        `Authorization: Bearer <token>`. The default lifetime is 15 minutes and the configurable
+        maximum is 60 minutes. Immediately invalid venue-wide if the user's `token_version` has
+        been bumped since issuance (e.g. a password change), even if the token hasn't expired yet.
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: backstage_access
+      description: >-
+        Browser staff session. Contains the same short-lived HS256 access token as bearerAuth and
+        is issued with Secure, HttpOnly, SameSite=Lax attributes. Unsafe cookie-authenticated
+        requests are also subject to same-origin validation.
     superAdminSession:
       type: apiKey
       in: cookie
@@ -311,13 +331,13 @@ components:
       properties:
         access_token:
           type: string
-          description: HS256 JWT, 90-day expiry
+          description: Short-lived HS256 JWT (15-minute default, configurable up to 60 minutes)
         refresh_token:
           type: string
           description: Opaque hex token, 180-day expiry, single use (revoked on next refresh/logout)
         expires_in:
           type: integer
-          description: Access token lifetime in seconds (7776000 = 90 days)
+          description: Access token lifetime in seconds (900 by default)
         user:
           $ref: '#/components/schemas/AuthUserSummary'
         capabilities:
@@ -10781,7 +10801,7 @@ paths:
         absent). If the account already has a password, `current_password` must match it. Bumps
         `token_version`, which invalidates every access token issued before this point (see Kernel's
         revocation check) — a stolen bearer token stops working immediately rather than surviving
-        the rest of its 90-day life.
+        even the remainder of its short expiry window.
       tags:
         - Auth
       security: []
@@ -14006,7 +14026,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/payments:
+  /api/events/{eventId}/payments:
     parameters:
       - name: eventId
         in: path
@@ -14115,7 +14135,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/payments/{paymentId}:
+  /api/events/{eventId}/payments/{paymentId}:
     parameters:
       - name: eventId
         in: path
@@ -14202,7 +14222,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/payments/{paymentId}/waive-deposit:
+  /api/events/{eventId}/payments/{paymentId}/waive-deposit:
     parameters:
       - name: eventId
         in: path
@@ -14277,7 +14297,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/payments/{paymentId}/send-link:
+  /api/events/{eventId}/payments/{paymentId}/send-link:
     parameters:
       - name: eventId
         in: path
@@ -14360,7 +14380,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/payee:
+  /api/events/{eventId}/payee:
     parameters:
       - name: eventId
         in: path
@@ -14471,7 +14491,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/payee/void:
+  /api/events/{eventId}/payee/void:
     parameters:
       - name: eventId
         in: path
@@ -14499,7 +14519,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/payee/w9:
+  /api/events/{eventId}/payee/w9:
     parameters:
       - name: eventId
         in: path
@@ -14527,7 +14547,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /payee-request/{token}:
+  /api/payee-request/{token}:
     parameters:
       - name: token
         in: path
@@ -14556,7 +14576,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /payee-request/{token}/submit:
+  /api/payee-request/{token}/submit:
     parameters:
       - name: token
         in: path
@@ -14613,7 +14633,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/ledger:
+  /api/events/{eventId}/ledger:
     parameters:
       - name: eventId
         in: path
@@ -14734,7 +14754,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/ledger/{entryId}:
+  /api/events/{eventId}/ledger/{entryId}:
     parameters:
       - name: eventId
         in: path
@@ -14794,7 +14814,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/ledger/summary:
+  /api/events/{eventId}/ledger/summary:
     parameters:
       - name: eventId
         in: path
@@ -14839,7 +14859,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/ledger/finalize:
+  /api/events/{eventId}/ledger/finalize:
     parameters:
       - name: eventId
         in: path
@@ -14936,7 +14956,7 @@ paths:
                         type: array
                         items:
                           type: string
-  /events/{eventId}/ledger/reopen:
+  /api/events/{eventId}/ledger/reopen:
     parameters:
       - name: eventId
         in: path
@@ -15006,7 +15026,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/settlement:
+  /api/events/{eventId}/settlement:
     parameters:
       - name: eventId
         in: path
@@ -15140,7 +15160,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/vendors:
+  /api/events/{eventId}/vendors:
     parameters:
       - name: eventId
         in: path
@@ -15236,7 +15256,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/vendors/{vendorId}:
+  /api/events/{eventId}/vendors/{vendorId}:
     parameters:
       - name: eventId
         in: path
@@ -15352,7 +15372,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/execution:
+  /api/events/{eventId}/execution:
     parameters:
       - name: eventId
         in: path
@@ -15475,7 +15495,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/execution/{recordId}:
+  /api/events/{eventId}/execution/{recordId}:
     parameters:
       - name: eventId
         in: path
@@ -15612,7 +15632,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/history:
+  /api/events/{eventId}/history:
     parameters:
       - name: eventId
         in: path
@@ -15666,7 +15686,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/history/{historyId}/undo:
+  /api/events/{eventId}/history/{historyId}/undo:
     parameters:
       - name: eventId
         in: path
@@ -15722,7 +15742,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/contracts:
+  /api/events/{eventId}/contracts:
     parameters:
       - name: eventId
         in: path
@@ -15835,7 +15855,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /templates:
+  /api/templates:
     get:
       operationId: eventTemplates_list
       summary: List event templates
@@ -15923,7 +15943,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /templates/{templateId}:
+  /api/templates/{templateId}:
     parameters:
       - name: templateId
         in: path
@@ -16029,7 +16049,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /venue-policy:
+  /api/venue-policy:
     get:
       operationId: venuePolicy_getActive
       summary: Get the active venue policy
@@ -16105,7 +16125,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /venue-policy/{policyId}:
+  /api/venue-policy/{policyId}:
     parameters:
       - name: policyId
         in: path
@@ -16184,7 +16204,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /venue-policy/history:
+  /api/venue-policy/history:
     get:
       operationId: venuePolicy_history
       summary: List all venue policy versions
@@ -16217,7 +16237,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /venues:
+  /api/venues:
     get:
       operationId: venues_list
       summary: List all venues with their active resources
@@ -16256,7 +16276,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /venues/{venueId}:
+  /api/venues/{venueId}:
     parameters:
       - name: venueId
         in: path
@@ -16318,7 +16338,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /venues/{venueId}/resources:
+  /api/venues/{venueId}/resources:
     parameters:
       - name: venueId
         in: path
@@ -16418,7 +16438,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /venues/{venueId}/resources/{resourceId}:
+  /api/venues/{venueId}/resources/{resourceId}:
     parameters:
       - name: venueId
         in: path
@@ -16521,7 +16541,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads:
+  /api/leads:
     get:
       operationId: leads_list
       summary: List leads
@@ -16636,7 +16656,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}:
+  /api/leads/{leadId}:
     get:
       operationId: leads_get
       summary: Get lead detail
@@ -16759,7 +16779,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/notes:
+  /api/leads/{leadId}/notes:
     post:
       operationId: leads_notes_create
       summary: Add a note or task to a lead
@@ -16804,7 +16824,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/notes/{noteId}:
+  /api/leads/{leadId}/notes/{noteId}:
     patch:
       operationId: leads_notes_update
       summary: Update a lead note
@@ -16881,7 +16901,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/evaluation:
+  /api/leads/{leadId}/evaluation:
     get:
       operationId: leads_evaluation_get
       summary: Get the latest deal evaluation for a lead
@@ -16967,7 +16987,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/convert:
+  /api/leads/{leadId}/convert:
     post:
       operationId: leads_convert
       summary: Convert a lead into a booked event
@@ -17032,7 +17052,83 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/claim:
+  /api/leads/{leadId}/detail:
+    get:
+      operationId: leadsInbox_detail
+      summary: Get the Booking Inbox detail payload
+      description: >-
+        Returns the scoped inquiry record plus its classification, assignment, claim, routing
+        explanation, and capability flags used by the Booking Inbox workspace.
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      responses:
+        '200':
+          description: Booking Inbox detail payload.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Inquiry is outside the current user's scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/leads/{leadId}/tasks:
+    get:
+      operationId: leadsInbox_tasks
+      summary: List tasks associated with an inquiry
+      tags:
+        - Booking Inbox
+      parameters:
+        - $ref: '#/components/parameters/LeadIdPath'
+      responses:
+        '200':
+          description: Inquiry tasks.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Inquiry is outside the current user's scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/leads/{leadId}/claim:
     post:
       operationId: leadsInbox_claim
       summary: Claim an inquiry
@@ -17077,7 +17173,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/release-claim:
+  /api/leads/{leadId}/release-claim:
     post:
       operationId: leadsInbox_releaseClaim
       summary: Release the active claim on an inquiry
@@ -17126,7 +17222,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/assign:
+  /api/leads/{leadId}/assign:
     post:
       operationId: leadsInbox_assign
       summary: Manually (re)assign an inquiry
@@ -17173,7 +17269,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/reassign:
+  /api/leads/{leadId}/reassign:
     post:
       operationId: leadsInbox_reassign
       summary: Reassign an inquiry to a different user
@@ -17229,7 +17325,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/status:
+  /api/leads/{leadId}/status:
     post:
       operationId: leadsInbox_status
       summary: Transition an inquiry's status
@@ -17288,7 +17384,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/messages:
+  /api/leads/{leadId}/messages:
     get:
       operationId: leadsInbox_listMessages
       summary: List an inquiry's conversation feed
@@ -17386,7 +17482,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/drafts:
+  /api/leads/{leadId}/drafts:
     get:
       operationId: leadsInbox_getDraft
       summary: Fetch the caller's in-progress draft on this inquiry
@@ -17465,7 +17561,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/presence:
+  /api/leads/{leadId}/presence:
     get:
       operationId: leadsInbox_getPresence
       summary: List other viewers currently on this inquiry
@@ -17550,7 +17646,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/attachments:
+  /api/leads/{leadId}/attachments:
     get:
       operationId: leadsInbox_listAttachments
       summary: List an inquiry's attachments
@@ -17651,7 +17747,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/classification:
+  /api/leads/{leadId}/classification:
     get:
       operationId: leadsInbox_getClassification
       summary: Fetch the current AI classification for an inquiry
@@ -17733,7 +17829,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/onboard:
+  /api/leads/{leadId}/onboard:
     get:
       operationId: leadsInbox_onboardPreview
       summary: Preview the Onboard Lead review dialog (no side effects)
@@ -17828,7 +17924,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /leads/{leadId}/audit:
+  /api/leads/{leadId}/audit:
     get:
       operationId: leadsInbox_audit
       summary: Fetch an inquiry's full audit trail
@@ -17870,7 +17966,177 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /inbox/list:
+  /api/inbox/approvals:
+    get:
+      operationId: inbox_listApprovals
+      summary: List pending high-value status approvals
+      description: Requires `override_lead_claims`.
+      tags:
+        - Booking Inbox
+      responses:
+        '200':
+          description: Pending approval requests.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  approvals:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing approval capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/inbox/approvals/{approvalId}:
+    post:
+      operationId: inbox_decideApproval
+      summary: Approve or deny a high-value status request
+      description: Requires `override_lead_claims`; the decision and resulting transition are atomic.
+      tags:
+        - Booking Inbox
+      parameters:
+        - name: approvalId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - decision
+              properties:
+                decision:
+                  type: string
+                  enum: [approve, deny]
+                note:
+                  type: string
+      responses:
+        '200':
+          description: Decision recorded.
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing approval capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Approval request or lead not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Approval request was already decided.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/inbox/quarantine:
+    get:
+      operationId: inbox_listQuarantine
+      summary: List skipped booking-email intake items
+      description: Requires `manage_booking_inbox`.
+      tags:
+        - Booking Inbox
+      responses:
+        '200':
+          description: Quarantined intake items awaiting review.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing inbox-management capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/inbox/quarantine/{itemId}:
+    post:
+      operationId: inbox_promoteQuarantineItem
+      summary: Promote a quarantined email into an inquiry
+      description: Requires `manage_booking_inbox`; accepts `{"action":"promote"}`.
+      tags:
+        - Booking Inbox
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum: [promote]
+      responses:
+        '200':
+          description: Intake item promoted into an inquiry.
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing inbox-management capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Quarantined item not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Intake item was already reviewed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/inbox/list:
     get:
       operationId: inbox_list
       summary: The inquiry queue (saved views)
@@ -17933,7 +18199,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /inbox/changes:
+  /api/inbox/changes:
     get:
       operationId: inbox_changes
       summary: Realtime-by-polling changes feed
@@ -17983,7 +18249,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /inbox/counts:
+  /api/inbox/counts:
     get:
       operationId: inbox_counts
       summary: Left-nav badge counts
@@ -18012,7 +18278,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /routing-rules:
+  /api/routing-rules:
     get:
       operationId: routingRules_list
       summary: List routing rules
@@ -18086,7 +18352,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /routing-rules/{ruleId}:
+  /api/routing-rules/{ruleId}:
     get:
       operationId: routingRules_show
       summary: Fetch one routing rule with its full version history
@@ -18171,7 +18437,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /routing-rules/{ruleId}/versions:
+  /api/routing-rules/{ruleId}/versions:
     post:
       operationId: routingRules_createVersion
       summary: Draft a new version of a routing rule
@@ -18225,7 +18491,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /routing-rules/{ruleId}/versions/{versionNumber}/publish:
+  /api/routing-rules/{ruleId}/versions/{versionNumber}/publish:
     post:
       operationId: routingRules_publishVersion
       summary: Publish a draft routing-rule version
@@ -18273,7 +18539,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /reports/booking-inbox:
+  /api/reports/booking-inbox:
     get:
       operationId: reports_bookingInbox
       summary: Booking Inbox venue-wide report
@@ -18322,7 +18588,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /crm-profiles:
+  /api/crm-profiles:
     get:
       operationId: crm_profiles_list
       summary: List CRM (client/promoter) profiles
@@ -18415,7 +18681,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /crm-profiles/{profileId}:
+  /api/crm-profiles/{profileId}:
     get:
       operationId: crm_profiles_get
       summary: Get CRM profile detail
@@ -18532,7 +18798,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /crm-profiles/{profileId}/notes:
+  /api/crm-profiles/{profileId}/notes:
     post:
       operationId: crm_profiles_notes_create
       summary: Add a note or task to a CRM profile
@@ -18575,7 +18841,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /crm-profiles/{profileId}/notes/{noteId}:
+  /api/crm-profiles/{profileId}/notes/{noteId}:
     patch:
       operationId: crm_profiles_notes_update
       summary: Update a CRM profile note
@@ -18651,7 +18917,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /crm-profiles/{profileId}/link-event:
+  /api/crm-profiles/{profileId}/link-event:
     post:
       operationId: crm_profiles_link_event
       summary: Link a CRM profile to an event
@@ -18698,7 +18964,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /crm-followups:
+  /api/crm-followups:
     post:
       operationId: crm_followups_run
       summary: Send reminder emails for due/overdue CRM follow-up tasks
@@ -18743,7 +19009,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /contacts:
+  /api/contacts:
     get:
       operationId: contacts_list
       summary: List / search marketing contacts
@@ -18911,7 +19177,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /contacts/{contactId}:
+  /api/contacts/{contactId}:
     get:
       operationId: contacts_get
       summary: Get a contact
@@ -19025,7 +19291,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /contacts/{contactId}/lists:
+  /api/contacts/{contactId}/lists:
     get:
       operationId: contacts_get_lists
       summary: List which mailing lists a contact belongs to
@@ -19071,7 +19337,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /campaigns:
+  /api/campaigns:
     get:
       operationId: campaigns_list
       summary: List email campaigns
@@ -19178,7 +19444,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /campaigns/eligible-events:
+  /api/campaigns/eligible-events:
     get:
       operationId: campaigns_eligible_events
       summary: List events eligible for the "generate from events" picker
@@ -19217,7 +19483,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /campaigns/generate-from-events:
+  /api/campaigns/generate-from-events:
     post:
       operationId: campaigns_generate_from_events
       summary: Create a draft campaign generated from picked events
@@ -19266,7 +19532,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /campaigns/{campaignId}:
+  /api/campaigns/{campaignId}:
     get:
       operationId: campaigns_get
       summary: Get campaign detail
@@ -19392,7 +19658,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /campaigns/{campaignId}/recipients/preview:
+  /api/campaigns/{campaignId}/recipients/preview:
     get:
       operationId: campaigns_recipients_preview
       summary: Preview recipient resolution for a campaign
@@ -19439,7 +19705,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /campaigns/{campaignId}/send:
+  /api/campaigns/{campaignId}/send:
     post:
       operationId: campaigns_send
       summary: Send a campaign to resolved recipients
@@ -19498,7 +19764,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /campaigns/{campaignId}/send-test:
+  /api/campaigns/{campaignId}/send-test:
     post:
       operationId: campaigns_send_test
       summary: Send a one-off test copy of a campaign
@@ -19552,7 +19818,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /mailing-lists:
+  /api/mailing-lists:
     get:
       operationId: mailing_lists_list
       summary: List mailing lists
@@ -19639,7 +19905,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /mailing-lists/{listId}:
+  /api/mailing-lists/{listId}:
     get:
       operationId: mailing_lists_get
       summary: Get mailing list detail
@@ -19761,7 +20027,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /mailing-lists/{listId}/members:
+  /api/mailing-lists/{listId}/members:
     get:
       operationId: mailing_lists_members_list
       summary: List members of a mailing list
@@ -19886,7 +20152,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /mailing-lists/{listId}/members/{contactId}:
+  /api/mailing-lists/{listId}/members/{contactId}:
     patch:
       operationId: mailing_lists_member_update
       summary: Change a member's subscription status
@@ -19970,7 +20236,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /mailing-lists/{listId}/add-by-filter:
+  /api/mailing-lists/{listId}/add-by-filter:
     post:
       operationId: mailing_lists_add_by_filter
       summary: Add every contact matching a filter to a mailing list
@@ -20026,7 +20292,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /mailing-lists/{listId}/import:
+  /api/mailing-lists/{listId}/import:
     post:
       operationId: mailing_lists_import
       summary: Import contacts from a CSV file and add them to a mailing list
@@ -20096,7 +20362,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /mailing-lists/{listId}/refresh:
+  /api/mailing-lists/{listId}/refresh:
     post:
       operationId: mailing_lists_refresh
       summary: Re-run a smart (segment) list's saved rules and sync membership
@@ -21867,7 +22133,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /public/events/{idOrSlug}:
+  /api/public/events/{idOrSlug}:
     get:
       operationId: publicEvents_getEvent
       summary: Get a public event page
@@ -21903,7 +22169,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /public/tickets/{eventId}:
+  /api/public/tickets/{eventId}:
     get:
       operationId: publicTickets_listTypes
       summary: List buyable ticket tiers for a public event
@@ -22005,7 +22271,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /public/inquiries:
+  /api/public/inquiries:
     post:
       operationId: publicInquiry_create
       summary: Submit a booking inquiry (embeddable widget intake)
@@ -22018,7 +22284,9 @@ paths:
         inbox. Answers its own CORS preflight (OPTIONS) since there is no global CORS layer.
         Applies a honeypot check (a `company` field a human never sees; tripping it silently
         returns the same success response as a real submission) plus a per-IP and per-email rate
-        limit before validating required fields. Best-effort emails venue admins on success.
+        limit before validating required fields. The lead, initial message, and durable follow-up
+        jobs commit atomically; a worker performs classification, routing, acknowledgment, and
+        venue-admin notification with bounded retries.
       tags:
         - Public Booking Inquiry
       security: []
@@ -22073,12 +22341,12 @@ paths:
                   description: >-
                     Honeypot — must be left blank. The widget renders this field visually hidden
                     and outside the tab order; a non-empty value is treated as a bot and silently
-                    dropped (still responds 200).
+                    dropped (still responds 202).
       responses:
-        '200':
+        '202':
           description: >-
-            Lead created (or silently dropped as spam via the honeypot — both cases respond
-            identically).
+            Lead and follow-up jobs accepted (or silently dropped via the honeypot — both cases
+            respond identically).
           content:
             application/json:
               schema:
@@ -22114,7 +22382,7 @@ paths:
       responses:
         '204':
           description: Preflight OK.
-  /events/{eventId}/ticketing:
+  /api/events/{eventId}/ticketing:
     get:
       operationId: ticketing_getDashboard
       summary: Get the event's ticketing dashboard
@@ -22234,7 +22502,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/ticketing/types/{typeId}:
+  /api/events/{eventId}/ticketing/types/{typeId}:
     patch:
       operationId: ticketing_updateTier
       summary: Update a ticket tier
@@ -22324,7 +22592,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/ticketing/tickets:
+  /api/events/{eventId}/ticketing/tickets:
     get:
       operationId: ticketing_listTickets
       summary: List every issued ticket for an event
@@ -22354,7 +22622,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/ticketing/tickets/{ticketId}:
+  /api/events/{eventId}/ticketing/tickets/{ticketId}:
     post:
       operationId: ticketing_resendTicket
       summary: Resend a ticket's QR link to the holder's email
@@ -22438,7 +22706,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/ticketing/comp:
+  /api/events/{eventId}/ticketing/comp:
     post:
       operationId: ticketing_issueComp
       summary: Issue (or resend) complimentary tickets
@@ -22495,7 +22763,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/ticketing/refund:
+  /api/events/{eventId}/ticketing/refund:
     post:
       operationId: ticketing_refundCancelEvent
       summary: Refund and void all paid ticket orders for a canceled event
@@ -22537,7 +22805,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/scanner-links:
+  /api/events/{eventId}/scanner-links:
     get:
       operationId: scanner_listLinks
       summary: List an event's door-scanner links
@@ -22614,7 +22882,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /events/{eventId}/scanner-links/{linkId}:
+  /api/events/{eventId}/scanner-links/{linkId}:
     post:
       operationId: scanner_regenerateLink
       summary: Rotate a scanner link's secret token
@@ -22692,7 +22960,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /scan/redeem:
+  /api/scan/redeem:
     post:
       operationId: scanner_redeemTicket
       summary: Redeem a scanned ticket at the door
@@ -22735,7 +23003,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /t/{token}:
+  /api/t/{token}:
     get:
       operationId: ticketView_getPage
       summary: View a ticket's public HTML page (scannable QR)
@@ -22770,7 +23038,7 @@ paths:
             text/html:
               schema:
                 type: string
-  /assets/qr.svg:
+  /api/assets/qr.svg:
     get:
       operationId: qrCode_getSvg
       summary: Render an SVG QR code for arbitrary text
@@ -22806,7 +23074,7 @@ paths:
             image/svg+xml:
               schema:
                 type: string
-  /assets/qr.png:
+  /api/assets/qr.png:
     get:
       operationId: qrCode_getPng
       summary: Render a PNG QR code for arbitrary text
@@ -22842,7 +23110,7 @@ paths:
               schema:
                 type: string
                 format: binary
-  /webhooks/{provider}:
+  /api/webhooks/{provider}:
     post:
       operationId: paymentWebhook_receive
       summary: Receive a ticket-checkout payment provider webhook
@@ -22899,7 +23167,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /webhooks/square-pos:
+  /api/webhooks/square-pos:
     post:
       operationId: posWebhook_receive
       summary: Receive a Square POS (bar/merch) payment webhook
@@ -22942,7 +23210,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /pos-location-map:
+  /api/pos-location-map:
     get:
       operationId: posLocationMap_list
       summary: List Square POS location -> venue mappings
@@ -23012,7 +23280,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /pos-location-map/{id}:
+  /api/pos-location-map/{id}:
     patch:
       operationId: posLocationMap_update
       summary: Update a POS location mapping
@@ -23102,7 +23370,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /pos-location-map/{id}/set-active:
+  /api/pos-location-map/{id}/set-active:
     post:
       operationId: posLocationMap_setActive
       summary: Set the active event override for a POS location
@@ -23163,7 +23431,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /pos-location-map/{id}/clear-active:
+  /api/pos-location-map/{id}/clear-active:
     post:
       operationId: posLocationMap_clearActive
       summary: Clear the active event override for a POS location
@@ -23197,7 +23465,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /payment-settings:
+  /api/payment-settings:
     get:
       operationId: paymentSettings_get
       summary: Get global payment provider settings
@@ -23262,7 +23530,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events:
+  /api/promote/events:
     get:
       operationId: promoteCampaign_list
       summary: List events with Panic Promote activity
@@ -23294,7 +23562,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}:
+  /api/promote/events/{eventId}:
     get:
       operationId: promoteCampaign_show
       summary: Fetch the Promote campaign overview for an event
@@ -23387,7 +23655,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}/posts:
+  /api/promote/events/{eventId}/posts:
     get:
       operationId: promotePosts_list
       summary: List marketing posts for a campaign
@@ -23482,7 +23750,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}/posts/{postId}:
+  /api/promote/events/{eventId}/posts/{postId}:
     get:
       operationId: promotePosts_show
       summary: Fetch one marketing post with its variants
@@ -23599,7 +23867,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}/posts/{postId}/approve:
+  /api/promote/events/{eventId}/posts/{postId}/approve:
     post:
       operationId: promotePosts_approve
       summary: Approve a post's current revision
@@ -23639,7 +23907,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}/posts/{postId}/mark-published:
+  /api/promote/events/{eventId}/posts/{postId}/mark-published:
     post:
       operationId: promotePosts_markPublished
       summary: Record a post as published (manual platforms) or verified
@@ -23685,7 +23953,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}/posts/{postId}/variants/generate:
+  /api/promote/events/{eventId}/posts/{postId}/variants/generate:
     post:
       operationId: promotePosts_generateVariants
       summary: Generate all 15 channel variants for a post
@@ -23733,7 +24001,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}/posts/{postId}/variants/{variantId}:
+  /api/promote/events/{eventId}/posts/{postId}/variants/{variantId}:
     patch:
       operationId: promotePosts_updateVariant
       summary: Update a single channel variant
@@ -23786,7 +24054,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}/posts/{postId}/action/{destKey}:
+  /api/promote/events/{eventId}/posts/{postId}/action/{destKey}:
     get:
       operationId: promoteAction_getInfo
       summary: Get action-modal info for a manual-submission destination
@@ -23831,7 +24099,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}/posts/{postId}/action/{destKey}/send:
+  /api/promote/events/{eventId}/posts/{postId}/action/{destKey}/send:
     post:
       operationId: promoteAction_send
       summary: Send the destination's variant copy by server email
@@ -23894,7 +24162,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}/broadcasts:
+  /api/promote/events/{eventId}/broadcasts:
     get:
       operationId: promoteBroadcasts_list
       summary: List broadcasts for a campaign
@@ -24006,7 +24274,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}/broadcasts/{broadcastId}:
+  /api/promote/events/{eventId}/broadcasts/{broadcastId}:
     get:
       operationId: promoteBroadcasts_show
       summary: Fetch one broadcast with its per-destination results
@@ -24049,7 +24317,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}/destinations:
+  /api/promote/events/{eventId}/destinations:
     get:
       operationId: promoteDestinations_list
       summary: List broadcast destinations with current status
@@ -24092,7 +24360,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}/health:
+  /api/promote/events/{eventId}/health:
     get:
       operationId: promoteHealth_get
       summary: Get the 20-item promotion-health checklist and score
@@ -24133,7 +24401,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/events/{eventId}/analytics:
+  /api/promote/events/{eventId}/analytics:
     get:
       operationId: promoteAnalytics_get
       summary: Get real broadcast analytics for a campaign
@@ -24176,7 +24444,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/credentials:
+  /api/promote/credentials:
     get:
       operationId: promoteCredential_list
       summary: List per-venue platform credentials
@@ -24232,7 +24500,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/credentials/{destKey}:
+  /api/promote/credentials/{destKey}:
     put:
       operationId: promoteCredential_upsert
       summary: Save or update a platform credential
@@ -24330,7 +24598,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/auto-publish:
+  /api/promote/auto-publish:
     get:
       operationId: promoteAutoPublish_get
       summary: Get global auto-publish settings
@@ -24418,7 +24686,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/eventbrite/org:
+  /api/promote/eventbrite/org:
     get:
       operationId: promoteEventbrite_getOrg
       summary: One-time Eventbrite organizer lookup helper
@@ -24461,7 +24729,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/oauth/twitter/start:
+  /api/promote/oauth/twitter/start:
     post:
       operationId: promoteTwitterOAuth_start
       summary: Start the "Connect X account" OAuth 2.0 PKCE flow
@@ -24510,7 +24778,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /promote/oauth/twitter/callback:
+  /api/promote/oauth/twitter/callback:
     get:
       operationId: promoteTwitterOAuth_callback
       summary: X (Twitter) OAuth redirect target — completes the connect flow
@@ -26287,6 +26555,290 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/contact-tags:
+    get:
+      operationId: contactTags_list
+      summary: List contact tag definitions
+      tags: [Contacts]
+      responses:
+        '200':
+          description: Tag definitions and usage counts.
+    post:
+      operationId: contactTags_create
+      summary: Create a contact tag definition
+      tags: [Contacts]
+      responses:
+        '201':
+          description: Tag created.
+  /api/contact-tags/{tagId}:
+    get:
+      operationId: contactTags_get
+      summary: Get a contact tag definition
+      tags: [Contacts]
+      parameters:
+        - name: tagId
+          in: path
+          required: true
+          schema: {type: integer}
+      responses:
+        '200':
+          description: Tag definition.
+    patch:
+      operationId: contactTags_update
+      summary: Update a contact tag definition
+      tags: [Contacts]
+      parameters:
+        - name: tagId
+          in: path
+          required: true
+          schema: {type: integer}
+      responses:
+        '200':
+          description: Tag updated.
+    delete:
+      operationId: contactTags_delete
+      summary: Delete a contact tag definition
+      tags: [Contacts]
+      parameters:
+        - name: tagId
+          in: path
+          required: true
+          schema: {type: integer}
+      responses:
+        '200':
+          description: Tag deleted.
+  /api/contact-storage:
+    get:
+      operationId: contactStorage_get
+      summary: Get contact storage usage and limit
+      tags: [Contacts]
+      responses:
+        '200':
+          description: Storage meter.
+    patch:
+      operationId: contactStorage_update
+      summary: Update the contact storage limit
+      tags: [Contacts]
+      responses:
+        '200':
+          description: Updated storage meter.
+  /api/asset-library:
+    get:
+      operationId: assetLibrary_list
+      summary: Browse assets across accessible events
+      tags: [Event Assets]
+      responses:
+        '200':
+          description: Paginated asset gallery.
+  /api/processes:
+    get:
+      operationId: processes_list
+      summary: List automation processes
+      tags: [Automation]
+      responses:
+        '200':
+          description: Process definitions.
+    post:
+      operationId: processes_create
+      summary: Create an automation process
+      tags: [Automation]
+      responses:
+        '201':
+          description: Process created.
+  /api/processes/{processId}:
+    get:
+      operationId: processes_get
+      summary: Get an automation process
+      tags: [Automation]
+      parameters:
+        - name: processId
+          in: path
+          required: true
+          schema: {type: integer}
+      responses:
+        '200':
+          description: Process definition.
+    patch:
+      operationId: processes_update
+      summary: Update an automation process
+      tags: [Automation]
+      parameters:
+        - name: processId
+          in: path
+          required: true
+          schema: {type: integer}
+      responses:
+        '200':
+          description: Process updated.
+    delete:
+      operationId: processes_delete
+      summary: Delete an automation process
+      tags: [Automation]
+      parameters:
+        - name: processId
+          in: path
+          required: true
+          schema: {type: integer}
+      responses:
+        '200':
+          description: Process deleted.
+  /api/process-tasks:
+    get:
+      operationId: processTasks_list
+      summary: List open tasks across automation processes
+      tags: [Automation]
+      responses:
+        '200':
+          description: Process task inbox.
+  /api/process-tasks/{taskId}/complete:
+    post:
+      operationId: processTasks_complete
+      summary: Complete an automation process task
+      tags: [Automation]
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: {type: integer}
+      responses:
+        '200':
+          description: Task completed.
+  /api/process-instances:
+    get:
+      operationId: processInstances_forEntity
+      summary: List process instances linked to an entity
+      tags: [Automation]
+      responses:
+        '200':
+          description: Linked process instances.
+  /api/task-documents:
+    get:
+      operationId: taskDocuments_list
+      summary: List standalone task documents
+      tags: [Tasks]
+      responses:
+        '200':
+          description: Task documents.
+    post:
+      operationId: taskDocuments_create
+      summary: Create a standalone task document
+      tags: [Tasks]
+      responses:
+        '201':
+          description: Task document created.
+  /api/task-documents/{documentId}:
+    get:
+      operationId: taskDocuments_get
+      summary: Get a standalone task document
+      tags: [Tasks]
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema: {type: integer}
+      responses:
+        '200':
+          description: Task document.
+    patch:
+      operationId: taskDocuments_update
+      summary: Update a standalone task document
+      tags: [Tasks]
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema: {type: integer}
+      responses:
+        '200':
+          description: Task document updated.
+    delete:
+      operationId: taskDocuments_delete
+      summary: Delete a standalone task document
+      tags: [Tasks]
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema: {type: integer}
+      responses:
+        '200':
+          description: Task document deleted.
+  /api/app-settings:
+    get:
+      operationId: appSettings_get
+      summary: Get application branding and safe venue settings
+      tags: [Admin]
+      responses:
+        '200':
+          description: Application settings.
+    put:
+      operationId: appSettings_update
+      summary: Update application branding and safe venue settings
+      tags: [Admin]
+      responses:
+        '200':
+          description: Application settings updated.
+  /api/ai/ask:
+    post:
+      operationId: ai_ask
+      summary: Ask the assistant or create a proposed action
+      tags: [AI Assistant]
+      responses:
+        '200':
+          description: Assistant response or proposal.
+  /api/ai/proposals/{proposalId}/apply:
+    post:
+      operationId: ai_applyProposal
+      summary: Apply a stored assistant proposal
+      tags: [AI Assistant]
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema: {type: integer}
+      responses:
+        '200':
+          description: Proposal applied.
+  /api/ai/proposals/{proposalId}:
+    delete:
+      operationId: ai_discardProposal
+      summary: Discard a stored assistant proposal
+      tags: [AI Assistant]
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema: {type: integer}
+      responses:
+        '200':
+          description: Proposal discarded.
+  /feeds/public-events.ics:
+    get:
+      operationId: feeds_publicEventsIcsAlias
+      summary: Friendly alias for the public iCalendar feed
+      tags: [Feeds]
+      security: []
+      responses:
+        '200':
+          description: iCalendar feed.
+  /feeds/public-events.rss:
+    get:
+      operationId: feeds_publicEventsRssAlias
+      summary: Friendly alias for the public RSS feed
+      tags: [Feeds]
+      security: []
+      responses:
+        '200':
+          description: RSS feed.
+  /feeds/public-events.json:
+    get:
+      operationId: feeds_publicEventsJsonAlias
+      summary: Friendly alias for the public JSON feed
+      tags: [Feeds]
+      security: []
+      responses:
+        '200':
+          description: JSON feed.
   /super:
     get:
       operationId: superAdmin_ui

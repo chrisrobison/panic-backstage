@@ -4,7 +4,7 @@
 // calls (claim/status/reassign/etc.) and bubbles `inbox-lead-changed` so the
 // shell reloads the list row + detail panel without this component needing
 // to know how those are rendered.
-import { esc, api, publish, PanicElement, $, $$ } from '../core.js';
+import { esc, api, publish, openModal, PanicElement, $, $$ } from '../core.js';
 import './inbox-conversation.js';
 import { statusLabel, ALL_STATUSES, REASON_REQUIRED_STATUSES, relativeTime, scoreTone, initials, avatarColor } from './inbox-shared.js';
 
@@ -22,15 +22,16 @@ class InboxWorkspace extends PanicElement {
   connect() { this.render(); }
 
   render() {
-    const { lead } = this.data;
+    const { lead, capabilities = {}, pendingApproval } = this.data;
     if (!lead) {
       this.innerHTML = `<div class="ib-empty-main"><i class="fa-regular fa-comments" aria-hidden="true"></i><p>Select an inquiry to get started.</p></div>`;
       return;
     }
 
     const name = lead.contact_org || lead.contact_name || 'Unknown';
-    const canClaim = !lead.claimed_by_user_id && lead.status !== 'onboarded';
+    const canClaim = capabilities.claim && !lead.claimed_by_user_id && lead.status !== 'onboarded';
     const tone = scoreTone(lead.inquiry_score);
+    const canManage = capabilities.manage !== false;
 
     this.innerHTML = `
       <div class="ib-workspace">
@@ -49,7 +50,7 @@ class InboxWorkspace extends PanicElement {
           <div class="ib-status-bar">
             <div class="ib-status-field">
               <label>Status</label>
-              <select data-status-select>
+              <select data-status-select ${canManage ? '' : 'disabled'}>
                 ${ALL_STATUSES.map((s) => `<option value="${s}" ${s === lead.status ? 'selected' : ''}>${esc(statusLabel(s))}</option>`).join('')}
               </select>
             </div>
@@ -74,6 +75,10 @@ class InboxWorkspace extends PanicElement {
                 : lead.claimed_by_user_id ? `<button type="button" class="button secondary" data-release-claim>Release Claim</button>` : ''}
             </div>
           </div>
+          ${pendingApproval ? `<div class="ib-stale-warning">
+            <span><i class="fa-solid fa-user-shield" aria-hidden="true"></i> ${esc(pendingApproval.requested_by_name || 'A booker')} requested ${esc(statusLabel(pendingApproval.requested_status))}: ${esc(pendingApproval.reason || 'No reason supplied')}</span>
+            <span><button type="button" class="small" data-approval="approve">Approve</button> <button type="button" class="small secondary" data-approval="deny">Deny</button></span>
+          </div>` : ''}
 
           <nav class="ib-tabs" data-tabs>
             ${TABS.map(([id, label]) => `<a href="#" class="${this.activeTab === id ? 'active' : ''}" data-tab="${id}">${esc(label)}</a>`).join('')}
@@ -82,17 +87,17 @@ class InboxWorkspace extends PanicElement {
 
         <div class="ib-tab-body" data-tab-body></div>
 
-        <div class="ib-action-bar">
+        ${canManage ? `<div class="ib-action-bar">
           <button type="button" class="button primary-green" data-action="onboard"><i class="fa-solid fa-user-plus" aria-hidden="true"></i> Onboard Lead</button>
           <button type="button" class="button secondary" data-action="availability"><i class="fa-regular fa-calendar-check" aria-hidden="true"></i> Send Availability</button>
           <button type="button" class="button secondary" data-action="proposal"><i class="fa-regular fa-file-lines" aria-hidden="true"></i> Send Proposal</button>
           <button type="button" class="button secondary" data-action="tour"><i class="fa-solid fa-people-group" aria-hidden="true"></i> Schedule Tour</button>
-          <button type="button" class="button secondary" data-action="task"><i class="fa-solid fa-list-check" aria-hidden="true"></i> Add Task</button>
-          <button type="button" class="button secondary" data-action="reassign"><i class="fa-solid fa-right-left" aria-hidden="true"></i> Reassign</button>
+          ${capabilities.tasks ? '<button type="button" class="button secondary" data-action="task"><i class="fa-solid fa-list-check" aria-hidden="true"></i> Add Task</button>' : ''}
+          ${capabilities.reassign ? '<button type="button" class="button secondary" data-action="reassign"><i class="fa-solid fa-right-left" aria-hidden="true"></i> Reassign</button>' : ''}
           <button type="button" class="button secondary" data-action="decline"><i class="fa-regular fa-circle-xmark" aria-hidden="true"></i> Decline</button>
           <button type="button" class="button secondary" data-action="archive"><i class="fa-solid fa-box-archive" aria-hidden="true"></i> Archive</button>
           <button type="button" class="button secondary" data-action="more"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i> More Actions</button>
-        </div>
+        </div>` : ''}
       </div>`;
 
     this.bind();
@@ -108,6 +113,12 @@ class InboxWorkspace extends PanicElement {
     $('[data-action="archive"]', this)?.addEventListener('click', () => this.changeStatus('archived'));
     $('[data-action="onboard"]', this)?.addEventListener('click', () => this.openOnboard());
     $('[data-action="reassign"]', this)?.addEventListener('click', () => this.openReassign());
+    $('[data-action="availability"]', this)?.addEventListener('click', () => this.prefillTemplate('availability'));
+    $('[data-action="proposal"]', this)?.addEventListener('click', () => this.prefillTemplate('proposal'));
+    $('[data-action="tour"]', this)?.addEventListener('click', () => this.openTour());
+    $('[data-action="task"]', this)?.addEventListener('click', () => this.openTask());
+    $('[data-action="more"]', this)?.addEventListener('click', () => this.openMoreActions());
+    $$('[data-approval]', this).forEach((button) => button.addEventListener('click', () => this.decideApproval(button.dataset.approval)));
     this.addEventListener('inbox-message-sent', () => this.notifyChanged(), { signal: this.abort.signal });
   }
 
@@ -118,7 +129,7 @@ class InboxWorkspace extends PanicElement {
 
     if (this.activeTab === 'conversation') {
       const el = document.createElement('pb-inbox-conversation');
-      el.data = { leadId: lead.id, lead };
+      el.data = { leadId: lead.id, lead, replyTemplates: this.data.replyTemplates || [] };
       wrap.replaceChildren(el);
       return;
     }
@@ -151,7 +162,8 @@ class InboxWorkspace extends PanicElement {
       return;
     }
     if (this.activeTab === 'tasks') {
-      wrap.innerHTML = '<div class="empty-state padded">Tasks linked to this inquiry appear here (see the Tasks app).</div>';
+      wrap.innerHTML = '<div class="padded" data-tasks-body>Loading…</div>';
+      this.loadTasks(lead.id);
       return;
     }
     if (this.activeTab === 'files') {
@@ -181,10 +193,24 @@ class InboxWorkspace extends PanicElement {
       const res = await api(`/leads/${leadId}/attachments`);
       const rows = res.attachments || [];
       wrap.innerHTML = rows.length
-        ? `<div class="padded">${rows.map((a) => `<div class="ib-detail-row"><span class="k">${esc(a.filename)}</span><span class="v">${esc(new Date(a.created_at.replace(' ', 'T') + 'Z').toLocaleDateString())}</span></div>`).join('')}</div>`
+        ? `<div class="padded">${rows.map((a) => `<div class="ib-detail-row"><a class="k" href="${esc(a.storage_path)}" target="_blank" rel="noopener">${esc(a.filename)}</a><span class="v">${esc(new Date(a.created_at.replace(' ', 'T') + 'Z').toLocaleDateString())}</span></div>`).join('')}</div>`
         : '<div class="empty-state padded">No files yet.</div>';
     } catch (err) {
       wrap.innerHTML = `<div class="empty-state padded">${esc(err.message)}</div>`;
+    }
+  }
+
+  async loadTasks(leadId) {
+    const wrap = $('[data-tasks-body]', this);
+    try {
+      const res = await api(`/leads/${leadId}/tasks`);
+      if (!wrap) return;
+      const rows = res.tasks || [];
+      wrap.innerHTML = rows.length
+        ? rows.map((task) => `<div class="ib-detail-row"><span class="k">${esc(task.title)}</span><span class="v">${esc(task.assignee_name || 'Unassigned')} · ${esc(task.due_date || task.status.replace(/_/g, ' '))}</span></div>`).join('')
+        : '<div class="empty-state">No linked tasks yet.</div>';
+    } catch (err) {
+      if (wrap) wrap.innerHTML = `<div class="empty-state">${esc(err.message)}</div>`;
     }
   }
 
@@ -210,12 +236,14 @@ class InboxWorkspace extends PanicElement {
     }
   }
 
-  async changeStatus(status) {
+  async changeStatus(status, suppliedReason = null) {
     const { lead } = this.data;
-    let reason = null;
-    if (REASON_REQUIRED_STATUSES.includes(status)) {
-      reason = window.prompt(`A reason is required to mark this inquiry as "${statusLabel(status)}":`);
-      if (reason === null || reason.trim() === '') return;
+    let reason = suppliedReason;
+    if (REASON_REQUIRED_STATUSES.includes(status) && !String(reason || '').trim()) {
+      const select = $('[data-status-select]', this);
+      if (select) select.value = lead.status;
+      this.openStatusReason(status);
+      return;
     }
     try {
       const res = await api(`/leads/${lead.id}/status`, { method: 'POST', body: JSON.stringify({ status, reason }) });
@@ -230,15 +258,142 @@ class InboxWorkspace extends PanicElement {
     }
   }
 
+  openStatusReason(status) {
+    const { dialog, close } = openModal({
+      title: statusLabel(status),
+      bodyHtml: `<form class="grid-form padded" data-status-reason-form>
+        <label class="wide">Reason<textarea name="reason" required></textarea></label>
+        <div class="wide"><button type="submit">Confirm</button></div>
+      </form>`,
+    });
+    $('[data-status-reason-form]', dialog)?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const reason = String(new FormData(event.currentTarget).get('reason') || '').trim();
+      if (!reason) return;
+      close();
+      await this.changeStatus(status, reason);
+    });
+  }
+
   openReassign() {
-    const { lead } = this.data;
-    const userId = window.prompt('Reassign to user id:');
-    if (!userId) return;
-    const reason = window.prompt('Reason for reassignment (required):');
-    if (!reason) return;
-    api(`/leads/${lead.id}/reassign`, { method: 'POST', body: JSON.stringify({ user_id: Number(userId), reason }) })
-      .then(() => { publish('toast.show', { message: 'Reassigned.' }); this.notifyChanged(); })
-      .catch((err) => publish('toast.show', { message: err.message, tone: 'error' }));
+    const { lead, users = [] } = this.data;
+    const { dialog, close } = openModal({
+      title: 'Reassign Inquiry',
+      bodyHtml: `<form class="grid-form padded" data-reassign-form>
+        <label class="wide">Assign to<select name="user_id" required><option value="">Select a person</option>${users.map((user) => `<option value="${user.id}">${esc(user.name)} · ${esc(user.role)}</option>`).join('')}</select></label>
+        <label class="wide">Reason<textarea name="reason" required></textarea></label>
+        <div class="wide"><button type="submit">Reassign</button></div>
+      </form>`,
+    });
+    $('[data-reassign-form]', dialog)?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+      try {
+        await api(`/leads/${lead.id}/reassign`, { method: 'POST', body: JSON.stringify({ user_id: Number(values.user_id), reason: values.reason }) });
+        close();
+        publish('toast.show', { message: 'Inquiry reassigned.' });
+        this.notifyChanged();
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
+  }
+
+  prefillTemplate(kind, replacements = {}) {
+    const template = (this.data.replyTemplates || []).find((item) => item.kind === kind);
+    if (!template) {
+      publish('toast.show', { message: `No ${kind.replace(/_/g, ' ')} template is configured.`, tone: 'error' });
+      return;
+    }
+    this.activeTab = 'conversation';
+    this.render();
+    $('pb-inbox-conversation', this)?.prefillTemplate(template, replacements);
+  }
+
+  openTour() {
+    const { dialog, close } = openModal({
+      title: 'Schedule Venue Tour',
+      bodyHtml: `<form class="grid-form padded" data-tour-form>
+        <label>Date<input type="date" name="date" required></label>
+        <label>Time<input type="time" name="time" required></label>
+        <div class="wide"><button type="submit">Prepare Confirmation</button></div>
+      </form>`,
+    });
+    $('[data-tour-form]', dialog)?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+      const when = new Date(`${values.date}T${values.time}`);
+      const label = Number.isNaN(when.getTime()) ? `${values.date} at ${values.time}` : when.toLocaleString([], { dateStyle: 'long', timeStyle: 'short' });
+      close();
+      this.activeTab = 'conversation';
+      this.render();
+      $('pb-inbox-conversation', this)?.prefill({
+        subject: 'Re: venue tour',
+        body: `We have scheduled your venue tour for ${label}. Please reply to confirm that this still works for you.`,
+        workflowAction: 'tour',
+      });
+    });
+  }
+
+  openTask() {
+    const users = this.data.users || [];
+    const { dialog, close } = openModal({
+      title: 'Add Inquiry Task',
+      bodyHtml: `<form class="grid-form padded" data-task-form>
+        <label class="wide">Task<input type="text" name="title" required></label>
+        <label>Due date<input type="date" name="due_date"></label>
+        <label>Priority<select name="priority"><option>medium</option><option>high</option><option>urgent</option><option>low</option></select></label>
+        <label class="wide">Assignee<select name="assignee_user_id"><option value="">Me</option>${users.map((user) => `<option value="${user.id}">${esc(user.name)}</option>`).join('')}</select></label>
+        <label class="wide">Details<textarea name="description"></textarea></label>
+        <div class="wide"><button type="submit">Add Task</button></div>
+      </form>`,
+    });
+    $('[data-task-form]', dialog)?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+      try {
+        await api(`/leads/${this.data.lead.id}/tasks`, { method: 'POST', body: JSON.stringify(values) });
+        close();
+        publish('toast.show', { message: 'Task linked to this inquiry.' });
+        this.activeTab = 'tasks';
+        this.render();
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
+  }
+
+  openMoreActions() {
+    const { dialog, close } = openModal({
+      title: 'More Inquiry Actions',
+      bodyHtml: `<form class="grid-form padded" data-more-form>
+        <label class="wide">Action<select name="status"><option value="awaiting_customer">Awaiting customer</option><option value="on_hold">Put on hold</option><option value="lost">Mark lost</option><option value="spam">Mark spam</option><option value="duplicate">Mark duplicate</option></select></label>
+        <label class="wide">Reason<textarea name="reason"></textarea></label>
+        <div class="wide"><button type="submit">Apply Action</button></div>
+      </form>`,
+    });
+    $('[data-more-form]', dialog)?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+      if (REASON_REQUIRED_STATUSES.includes(values.status) && !String(values.reason || '').trim()) {
+        publish('toast.show', { message: 'A reason is required for this action.', tone: 'error' });
+        return;
+      }
+      close();
+      await this.changeStatus(values.status, values.reason || null);
+    });
+  }
+
+  async decideApproval(decision) {
+    const approval = this.data.pendingApproval;
+    if (!approval) return;
+    try {
+      await api(`/inbox/approvals/${approval.id}`, { method: 'POST', body: JSON.stringify({ decision }) });
+      publish('toast.show', { message: decision === 'approve' ? 'Request approved.' : 'Request denied.' });
+      this.notifyChanged();
+    } catch (err) {
+      publish('toast.show', { message: err.message, tone: 'error' });
+    }
   }
 
   openOnboard() {

@@ -1,4 +1,9 @@
 RewriteEngine On
+
+# Legacy event-asset URLs are authorization-gated. This explicit rule runs
+# even though public/uploads is a real symlinked directory.
+RewriteRule ^uploads/(.+)$ files.php?_path=uploads/$1 [L,QSA]
+
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^api/ api/index.php [L]

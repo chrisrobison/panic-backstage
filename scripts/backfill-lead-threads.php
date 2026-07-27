@@ -6,10 +6,9 @@ declare(strict_types=1);
  * Panic\Leads\ThreadMatcher existed (see scripts/ingest-booking-email.php
  * and docs/booking-email-import.md#threading). Every reply back then
  * created its own brand-new `leads` row instead of being folded into the
- * original inquiry's conversation. This walks the existing
- * lead_intake_emails/leads data in chronological order and applies the same
- * header-based thread match ThreadMatcher uses for new mail, against the
- * emails that are ALREADY in the database.
+ * original inquiry's conversation. This builds connected components from
+ * every email's own Message-ID plus its complete References ancestry. That
+ * means two messages which share an unimported parent are still grouped.
  *
  * Deliberately HEADER-ONLY (In-Reply-To/References) — NOT ThreadMatcher's
  * subject+sender fallback. A real reply-chain match via these headers is
@@ -24,9 +23,10 @@ declare(strict_types=1);
  *
  * A merge is only ever APPLIED automatically when the later ("duplicate")
  * lead shows no sign of having been worked — see unsafeReasons() for the
- * exact checks (still in an automatic-pipeline status, nobody claimed/owns
- * it, no real reply was sent, no human-authored note, no attachments, no
- * linked task, not converted to an event). When that holds:
+ * exact checks (still in an active pipeline status, nobody is assigned to,
+ * claiming, or owning it, no real reply was sent, no human-authored note,
+ * no attachments, no linked task, not converted to an event). Two spam
+ * records may also converge when their canonical thread is already spam.
  *   - lead_intake_emails / lead_messages / lead_notes / lead_attachments
  *     rows move to the earlier (canonical) lead
  *   - an audit lead_note is added to the canonical lead
@@ -51,6 +51,7 @@ use Panic\Database;
 use Panic\Env;
 use Panic\LeadEmailParser;
 use Panic\Leads\StatusMachine;
+use Panic\Leads\ThreadMatcher;
 
 Env::load($root . '/.env');
 
@@ -59,10 +60,12 @@ $apply = in_array('--apply', array_slice($argv, 1), true);
 $db = new Database();
 
 $rows = $db->all(
-    "SELECT id, lead_id, message_id, raw_email
-     FROM lead_intake_emails
-     WHERE lead_id IS NOT NULL AND raw_email IS NOT NULL AND raw_email != ''
-     ORDER BY COALESCE(received_at, created_at) ASC, id ASC"
+    "SELECT ie.id, ie.lead_id, ie.message_id, ie.raw_email,
+            lm.id AS lead_message_id
+     FROM lead_intake_emails ie
+     LEFT JOIN lead_messages lm ON lm.intake_email_id = ie.id
+     WHERE ie.lead_id IS NOT NULL AND ie.raw_email IS NOT NULL AND ie.raw_email != ''
+     ORDER BY COALESCE(ie.received_at, ie.created_at) ASC, ie.id ASC"
 );
 
 $parser = new LeadEmailParser(false); // enabled:false — no LLM; only the deterministic header extraction is needed here.
@@ -70,8 +73,13 @@ $parser = new LeadEmailParser(false); // enabled:false — no LLM; only the dete
 $merged = [];
 $flagged = [];
 $parseErrors = 0;
+$referenceRows = 0;
+$leadOrder = [];
+$adjacency = [];
+$tokenOwners = [];
+$matcher = new ThreadMatcher();
 
-foreach ($rows as $row) {
+foreach ($rows as $position => $row) {
     try {
         $meta = $parser->parse((string) $row['raw_email'])['meta'];
     } catch (\Throwable $e) {
@@ -83,41 +91,82 @@ foreach ($rows as $row) {
         array_merge($meta['in_reply_to'] ? [$meta['in_reply_to']] : [], $meta['reference_ids'] ?? []),
         static fn ($id) => $id !== null && $id !== '' && $id !== $row['message_id']
     )));
-    if ($referenceIds === []) {
-        continue;
+
+    if ($apply && !empty($row['lead_message_id'])) {
+        $matcher->recordReferences($db, (int) $row['lead_message_id'], $referenceIds);
+        $referenceRows += count($referenceIds);
     }
 
     $currentLeadId = (int) $row['lead_id'];
-    $placeholders = implode(',', array_fill(0, count($referenceIds), '?'));
-    $match = $db->one(
-        "SELECT lead_id FROM lead_messages
-         WHERE external_message_id IN ($placeholders) AND lead_id != ?
-         ORDER BY id ASC LIMIT 1",
-        [...$referenceIds, $currentLeadId]
-    );
-    if ($match === null) {
+    $leadOrder[$currentLeadId] ??= $position;
+    $adjacency[$currentLeadId] ??= [];
+
+    $tokens = array_values(array_unique(array_filter([
+        $row['message_id'],
+        ...$referenceIds,
+    ], static fn ($id) => $id !== null && trim((string) $id) !== '')));
+    foreach ($tokens as $token) {
+        $token = trim((string) $token, " \t<>");
+        foreach ($tokenOwners[$token] ?? [] as $otherLeadId) {
+            if ($otherLeadId === $currentLeadId) {
+                continue;
+            }
+            $adjacency[$currentLeadId][$otherLeadId] = true;
+            $adjacency[$otherLeadId][$currentLeadId] = true;
+        }
+        $tokenOwners[$token][$currentLeadId] = $currentLeadId;
+    }
+}
+
+// Traverse each exact References graph and use the chronologically earliest
+// imported lead as its canonical inquiry.
+$seen = [];
+foreach (array_keys($adjacency) as $leadId) {
+    if (isset($seen[$leadId])) {
         continue;
     }
-    $canonicalId = (int) $match['lead_id'];
-
-    $reasons = unsafeReasons($db, $currentLeadId);
-    if ($reasons !== []) {
-        $flagged[] = ['lead_id' => $currentLeadId, 'canonical' => $canonicalId, 'why' => $reasons];
+    $component = [];
+    $queue = [$leadId];
+    while ($queue !== []) {
+        $candidate = array_pop($queue);
+        if (isset($seen[$candidate])) {
+            continue;
+        }
+        $seen[$candidate] = true;
+        $component[] = $candidate;
+        foreach (array_keys($adjacency[$candidate] ?? []) as $neighbor) {
+            if (!isset($seen[$neighbor])) {
+                $queue[] = $neighbor;
+            }
+        }
+    }
+    if (count($component) < 2) {
         continue;
     }
-
-    if ($apply) {
-        mergeLead($db, $currentLeadId, $canonicalId);
+    usort($component, static fn (int $a, int $b): int => ($leadOrder[$a] <=> $leadOrder[$b]) ?: ($a <=> $b));
+    $canonicalId = array_shift($component);
+    foreach ($component as $duplicateId) {
+        $reasons = unsafeReasons($db, $duplicateId, $canonicalId);
+        if ($reasons !== []) {
+            $flagged[] = ['lead_id' => $duplicateId, 'canonical' => $canonicalId, 'why' => $reasons];
+            continue;
+        }
+        if ($apply) {
+            mergeLead($db, $duplicateId, $canonicalId);
+        }
+        $merged[] = ['from' => $duplicateId, 'to' => $canonicalId];
     }
-    $merged[] = ['from' => $currentLeadId, 'to' => $canonicalId];
 }
 
 // ── Report ──────────────────────────────────────────────────────────────────
 echo "Scanned " . count($rows) . " existing intake email(s).\n";
+if ($apply) {
+    echo "  Indexed {$referenceRows} References value(s) for future matching.\n";
+}
 if ($parseErrors > 0) {
     echo "  {$parseErrors} raw message(s) failed to re-parse and were skipped.\n";
 }
-echo "\n" . ($apply ? 'Merged' : 'Would merge') . ' ' . count($merged) . " duplicate lead(s) found via a reply-chain header match:\n";
+echo "\n" . ($apply ? 'Merged' : 'Would merge') . ' ' . count($merged) . " duplicate lead(s) found via a connected References chain:\n";
 foreach ($merged as $m) {
     echo "  lead #{$m['from']}  →  lead #{$m['to']}\n";
 }
@@ -140,7 +189,7 @@ if (!$apply) {
  *
  * @return list<string>
  */
-function unsafeReasons(Database $db, int $leadId): array
+function unsafeReasons(Database $db, int $leadId, int $canonicalId): array
 {
     $reasons = [];
     $lead = $db->one('SELECT * FROM leads WHERE id = ?', [$leadId]);
@@ -148,8 +197,13 @@ function unsafeReasons(Database $db, int $leadId): array
         return ['lead row not found'];
     }
 
-    if (!in_array((string) $lead['status'], ['new', 'classified', 'assigned'], true)) {
+    $canonical = $db->one('SELECT status FROM leads WHERE id = ?', [$canonicalId]);
+    $sameSpamThread = $lead['status'] === 'spam' && ($canonical['status'] ?? null) === 'spam';
+    if (!$sameSpamThread && !in_array((string) $lead['status'], ['new', 'classified', 'assigned', 'evaluating', 'triage'], true)) {
         $reasons[] = "status is '{$lead['status']}' (past the automatic pipeline stages)";
+    }
+    if (!empty($lead['assigned_to_user_id'])) {
+        $reasons[] = 'assigned to a staff member';
     }
     if (!empty($lead['claimed_by_user_id'])) {
         $reasons[] = 'claimed by a staff member';
@@ -202,6 +256,8 @@ function mergeLead(Database $db, int $duplicateId, int $canonicalId): void
 
     $db->pdo()->beginTransaction();
     try {
+        ensureConversationRows($db, $canonicalId);
+        ensureConversationRows($db, $duplicateId);
         $db->run('UPDATE lead_intake_emails SET lead_id = ? WHERE lead_id = ?', [$canonicalId, $duplicateId]);
         $db->run('UPDATE lead_messages SET lead_id = ? WHERE lead_id = ?', [$canonicalId, $duplicateId]);
         $db->run('UPDATE lead_notes SET lead_id = ? WHERE lead_id = ?', [$canonicalId, $duplicateId]);
@@ -231,5 +287,47 @@ function mergeLead(Database $db, int $duplicateId, int $canonicalId): void
     } catch (\Throwable $e) {
         $db->pdo()->rollBack();
         throw $e;
+    }
+}
+
+/**
+ * Older imports do not always have the normalized lead_messages row that the
+ * conversation UI reads. Rebuild any missing row before its intake is moved.
+ */
+function ensureConversationRows(Database $db, int $leadId): void
+{
+    $intakes = $db->all(
+        "SELECT ie.*
+         FROM lead_intake_emails ie
+         WHERE ie.lead_id = ? AND ie.raw_email IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM lead_messages lm WHERE lm.intake_email_id = ie.id
+           )
+         ORDER BY COALESCE(ie.received_at, ie.created_at), ie.id",
+        [$leadId]
+    );
+    if ($intakes === []) {
+        return;
+    }
+
+    $parser = new LeadEmailParser(false);
+    $matcher = new ThreadMatcher();
+    foreach ($intakes as $intake) {
+        $meta = $parser->parse((string) $intake['raw_email'])['meta'];
+        $messageId = $db->insert(
+            'INSERT INTO lead_messages
+             (lead_id, direction, channel, status, from_name, from_email, to_recipients,
+              subject, body_text, body_html, external_message_id, in_reply_to, checksum,
+              intake_email_id, is_read)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)',
+            [
+                $leadId, 'inbound', 'email', 'received',
+                $meta['from_name'], $meta['from_email'], $meta['to_recipients'],
+                $meta['subject'], $meta['body_text'], $meta['body_html'],
+                $meta['message_id'], $meta['in_reply_to'],
+                hash('sha256', (string) $meta['body_text']), $intake['id'],
+            ]
+        );
+        $matcher->recordReferences($db, $messageId, $meta['reference_ids'] ?? []);
     }
 }

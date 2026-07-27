@@ -54,13 +54,16 @@ use Panic\Env;
 use Panic\LeadEmailParser;
 use Panic\Leads\Acknowledgment;
 use Panic\Leads\Classifier;
+use Panic\Leads\IntakeGate;
 use Panic\Leads\RoutingEngine;
+use Panic\Leads\StatusMachine;
 use Panic\Leads\ThreadMatcher;
 
 Env::load($root . '/.env');
 
 $args   = array_slice($argv, 1);
 $dryRun = in_array('--dry-run', $args, true);
+$forceInquiry = in_array('--force-inquiry', $args, true);
 $file   = null;
 foreach ($args as $a) {
     if (str_starts_with($a, '--file=')) {
@@ -125,6 +128,32 @@ try {
     // References headers, then a subject+sender fallback).
     $referenceIds = $meta['reference_ids'] ?? [];
     $existingLeadId = (new ThreadMatcher())->findLeadId($db, $referenceIds, $lead['contact_email'], $meta['subject'] ?? null);
+
+    // A bookings mailbox still receives newsletters, provider notifications,
+    // and unrelated correspondence. Keep those raw messages for audit/review,
+    // but do not create lead rows for them. Thread matching deliberately runs
+    // first so a terse reply to an existing inquiry is never quarantined.
+    if ($existingLeadId === null && !$forceInquiry) {
+        $disposition = (new IntakeGate())->evaluate($raw, $lead, $meta);
+        if (!$disposition['accept']) {
+            $intakeId = $db->insert(
+                'INSERT INTO lead_intake_emails
+                 (lead_id, channel, message_id, from_name, from_email, reply_to, to_recipients,
+                  subject, parse_method, status, disposition_reason, parsed_json, raw_email, received_at)
+                 VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                [
+                    'email', $meta['message_id'], $meta['from_name'], $meta['from_email'],
+                    $meta['reply_to'], $meta['to_recipients'], $meta['subject'],
+                    $meta['parse_method'], 'skipped', $disposition['reason'],
+                    json_encode($lead, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                    $raw, $meta['received_at'],
+                ]
+            );
+            $log("Quarantined intake #{$intakeId}: {$disposition['reason']} (from="
+                . ($meta['from_email'] ?? '-') . ', subject=' . ($meta['subject'] ?? '-') . ').');
+            exit(0);
+        }
+    }
 
     $db->pdo()->beginTransaction();
 
@@ -214,6 +243,7 @@ try {
             $messageId, $meta['in_reply_to'] ?? null, $checksum, $intakeEmailId,
         ]
     );
+    (new ThreadMatcher())->recordReferences($db, $messageRowId, $referenceIds);
 
     $db->pdo()->commit();
 
@@ -240,6 +270,30 @@ try {
         }
     } catch (\Throwable $e) {
         $log("Classification failed for lead #{$leadId}: " . $e->getMessage());
+    }
+
+    // Very-high-confidence spam is retained as a lead and conversation for
+    // review, but removed from the active triage queue before routing or an
+    // acknowledgment can fire.
+    $classification = $db->one(
+        'SELECT spam_probability FROM lead_classifications WHERE lead_id = ? AND is_current = 1',
+        [$leadId]
+    );
+    if ($classification !== null && (float) ($classification['spam_probability'] ?? 0) >= 0.90) {
+        $freshLead = $db->one('SELECT * FROM leads WHERE id = ?', [$leadId]);
+        if ($freshLead !== null) {
+            (new StatusMachine($db))->transition(
+                $freshLead,
+                'spam',
+                null,
+                'Automatically quarantined: classifier spam probability was at least 90%.',
+                true,
+                true,
+                'automation'
+            );
+        }
+        $log("Lead #{$leadId} quarantined as high-confidence spam.");
+        exit(0);
     }
 
     // Deterministic routing runs after classification (if any) so it can use

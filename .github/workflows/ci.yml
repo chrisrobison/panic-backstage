@@ -11,7 +11,7 @@ env:
   PHP_EXTENSIONS: mbstring, pdo_mysql, gd, curl, openssl, json
 
 jobs:
-  # ── Fast syntax check across every PHP file ─────────────────────────────────
+  # ── Syntax, PHPStan, route contract, and deployment-surface checks ──────────
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -21,11 +21,13 @@ jobs:
           php-version: ${{ env.PHP_VERSION }}
           extensions: ${{ env.PHP_EXTENSIONS }}
           coverage: none
-      - name: php -l every source file
-        run: |
-          set -e
-          find src public scripts database tests -name '*.php' -print0 \
-            | xargs -0 -n1 -P4 php -l
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install development analysis tools
+        run: composer install --no-interaction --no-progress
+      - name: Static analysis and API contract
+        run: ./scripts/static-analysis.sh
 
   # ── Hermetic PHP tests: no DB, no network, no seed data ─────────────────────
   unit-tests:
@@ -52,7 +54,7 @@ jobs:
         image: mariadb:10.7
         env:
           MARIADB_ROOT_PASSWORD: root
-          MARIADB_DATABASE: panic_backstage
+          MARIADB_DATABASE: panic_backstage_ci
         ports:
           - 3306:3306
         options: >-
@@ -79,7 +81,7 @@ jobs:
             echo "DB_PORT=3306"
             echo "DB_USER=root"
             echo "DB_PASSWORD=root"
-            echo "DB_NAME=panic_backstage"
+            echo "DB_NAME=panic_backstage_ci"
             echo "APP_URL=http://127.0.0.1:8090"
             echo "JWT_SECRET=$(openssl rand -hex 48)"
             echo "SUPER_DB_NAME="
@@ -131,7 +133,7 @@ jobs:
         image: mariadb:10.7
         env:
           MARIADB_ROOT_PASSWORD: root
-          MARIADB_DATABASE: panic_backstage
+          MARIADB_DATABASE: panic_backstage_ci
         ports:
           - 3306:3306
         options: >-
@@ -168,7 +170,7 @@ jobs:
             echo "DB_PORT=3306"
             echo "DB_USER=root"
             echo "DB_PASSWORD=root"
-            echo "DB_NAME=panic_backstage"
+            echo "DB_NAME=panic_backstage_ci"
             echo "APP_URL=http://127.0.0.1:8099"
             echo "JWT_SECRET=$(openssl rand -hex 48)"
             echo "SUPER_DB_NAME="
@@ -181,7 +183,9 @@ jobs:
         # Captures the UI_EVENT_ID=<id> line seed.php prints (the richly
         # populated "Local Band Showcase" demo event) so 10-workspace.test.mjs
         # and 20-ticketing.test.mjs get a real event instead of skipping.
-        run: php database/seed.php | tee /tmp/seed-output.log
+        run: |
+          set -o pipefail
+          php database/seed.php | tee /tmp/seed-output.log
       - name: Apply migrations
         run: php scripts/migrate.php
       - name: Export UI_EVENT_ID

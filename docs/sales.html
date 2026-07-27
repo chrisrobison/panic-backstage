@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Outbound sales playbook for private events, conference afterparties, and referral partnerships at The Mab.">
+  <title>The Mab | Outbound Sales Playbook</title>
+  <style>
+    :root {
+      --ink: #171717;
+      --muted: #66615b;
+      --paper: #f5f1ea;
+      --surface: #fffdf9;
+      --line: #d9d1c5;
+      --dark: #171717;
+      --red: #a22921;
+      --red-dark: #761b16;
+      --gold: #b78a3d;
+      --shadow: 0 18px 55px rgba(29, 22, 17, 0.10);
+      --radius: 18px;
+      --max: 1180px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 0%, rgba(162, 41, 33, 0.08), transparent 32rem),
+        linear-gradient(180deg, #f8f5ef 0%, var(--paper) 100%);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+
+    a {
+      color: var(--red-dark);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    a:hover { color: var(--red); }
+
+    .page {
+      width: min(var(--max), calc(100% - 36px));
+      margin: 28px auto 64px;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      min-height: 440px;
+      padding: clamp(34px, 7vw, 82px);
+      color: white;
+      border-radius: 26px;
+      background:
+        linear-gradient(135deg, rgba(0,0,0,0.95), rgba(32,18,16,0.94) 55%, rgba(92,25,20,0.92)),
+        repeating-linear-gradient(90deg, transparent 0 22px, rgba(255,255,255,0.025) 22px 23px);
+      box-shadow: var(--shadow);
+    }
+
+    .hero::before {
+      content: "THE MAB";
+      position: absolute;
+      right: -18px;
+      bottom: -53px;
+      font-size: clamp(76px, 16vw, 210px);
+      font-weight: 900;
+      letter-spacing: -0.08em;
+      line-height: 0.9;
+      color: rgba(255,255,255,0.045);
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 28px;
+      color: #f0c486;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.17em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 34px;
+      height: 2px;
+      background: currentColor;
+    }
+
+    h1, h2, h3 {
+      line-height: 1.08;
+      margin-top: 0;
+    }
+
+    h1 {
+      max-width: 850px;
+      margin-bottom: 20px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(3.2rem, 8vw, 7rem);
+      font-weight: 700;
+      letter-spacing: -0.055em;
+    }
+
+    .hero-subtitle {
+      max-width: 720px;
+      margin: 0;
+      color: rgba(255,255,255,0.78);
+      font-size: clamp(1.1rem, 2vw, 1.35rem);
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 36px;
+    }
+
+    .tag {
+      padding: 9px 13px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: rgba(255,255,255,0.86);
+      font-size: 0.9rem;
+      backdrop-filter: blur(8px);
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin: 18px 0;
+    }
+
+    .button {
+      appearance: none;
+      border: 1px solid var(--dark);
+      border-radius: 999px;
+      padding: 10px 16px;
+      color: white;
+      background: var(--dark);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .button:hover { background: var(--red-dark); border-color: var(--red-dark); }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 26px;
+      align-items: start;
+    }
+
+    .toc {
+      position: sticky;
+      top: 18px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,253,249,0.86);
+      box-shadow: 0 10px 28px rgba(20, 17, 13, 0.06);
+      backdrop-filter: blur(14px);
+    }
+
+    .toc strong {
+      display: block;
+      margin-bottom: 12px;
+      font-size: 0.76rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .toc a {
+      display: block;
+      padding: 6px 0;
+      color: var(--muted);
+      font-size: 0.91rem;
+      text-decoration: none;
+    }
+
+    .toc a:hover { color: var(--red); }
+
+    main { min-width: 0; }
+
+    .section {
+      margin-bottom: 26px;
+      padding: clamp(24px, 4vw, 44px);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 0 10px 35px rgba(21, 17, 13, 0.055);
+      scroll-margin-top: 20px;
+    }
+
+    .section-number {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--red);
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .section h2 {
+      margin-bottom: 20px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(2rem, 4vw, 3.25rem);
+      letter-spacing: -0.035em;
+    }
+
+    .section h3 {
+      margin: 30px 0 12px;
+      color: var(--red-dark);
+      font-size: 1.15rem;
+    }
+
+    .lead {
+      color: #3e3934;
+      font-size: 1.08rem;
+    }
+
+    .thesis {
+      position: relative;
+      margin: 0 0 26px;
+      padding: 26px 28px 26px 34px;
+      border-left: 6px solid var(--red);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      background: var(--dark);
+      color: white;
+      box-shadow: var(--shadow);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(1.25rem, 3vw, 1.75rem);
+      line-height: 1.35;
+    }
+
+    .grid-3, .grid-2 {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    .card {
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: #fff;
+    }
+
+    .card h3 {
+      margin-top: 0;
+      color: var(--ink);
+      font-size: 1.05rem;
+    }
+
+    .card p:last-child { margin-bottom: 0; }
+
+    .metric {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 145px;
+      border-top: 4px solid var(--red);
+    }
+
+    .metric strong {
+      display: block;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 2.2rem;
+      line-height: 1;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    ul, ol { padding-left: 1.2rem; }
+    li + li { margin-top: 7px; }
+
+    .checklist {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .checklist li {
+      position: relative;
+      padding-left: 30px;
+    }
+
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: var(--red);
+      font-weight: 900;
+    }
+
+    .angles {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .angles li {
+      margin: 0;
+      padding: 17px 18px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #faf7f1;
+      font-weight: 700;
+    }
+
+    .quote {
+      margin: 24px 0;
+      padding: 24px 26px;
+      border-radius: 14px;
+      background: #f2e8dc;
+      color: #3a2a22;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 1.24rem;
+      line-height: 1.45;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 20px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+
+    table {
+      width: 100%;
+      min-width: 720px;
+      border-collapse: collapse;
+      background: white;
+      font-size: 0.92rem;
+    }
+
+    th {
+      padding: 14px 16px;
+      color: white;
+      background: var(--dark);
+      text-align: left;
+      font-size: 0.76rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    td {
+      padding: 15px 16px;
+      border-top: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    tbody tr:nth-child(even) { background: #faf7f2; }
+
+    .priority-list {
+      counter-reset: priority;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .priority-list li {
+      counter-increment: priority;
+      position: relative;
+      margin: 0;
+      min-height: 74px;
+      padding: 18px 18px 18px 58px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: white;
+      font-weight: 700;
+    }
+
+    .priority-list li::before {
+      content: counter(priority);
+      position: absolute;
+      left: 17px;
+      top: 15px;
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 50%;
+      color: white;
+      background: var(--red);
+      font-size: 0.8rem;
+    }
+
+    .resource-list {
+      display: grid;
+      gap: 10px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .resource-list li {
+      margin: 0;
+      padding: 15px 17px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: white;
+    }
+
+    .resource-list a {
+      display: inline-block;
+      font-weight: 800;
+    }
+
+    .footer {
+      margin-top: 26px;
+      padding: 32px;
+      border-radius: var(--radius);
+      color: white;
+      background: var(--dark);
+      text-align: center;
+    }
+
+    .footer strong {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 1.4rem;
+    }
+
+    .footer p {
+      max-width: 780px;
+      margin: 10px auto 0;
+      color: rgba(255,255,255,0.68);
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .toc { position: static; }
+      .grid-3 { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .page { width: min(100% - 20px, var(--max)); margin-top: 10px; }
+      .hero { border-radius: 18px; padding: 32px 24px; min-height: 400px; }
+      h1 { font-size: 3.35rem; }
+      .grid-3, .grid-2, .angles, .priority-list { grid-template-columns: 1fr; }
+      .section { padding: 25px 21px; }
+      .toolbar { justify-content: stretch; }
+      .button { width: 100%; }
+    }
+
+    @media print {
+      @page { margin: 0.55in; }
+      body { background: white; font-size: 10pt; }
+      .page { width: 100%; margin: 0; }
+      .hero {
+        min-height: auto;
+        padding: 34px;
+        border-radius: 0;
+        box-shadow: none;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+      .hero::before, .toolbar, .toc { display: none; }
+      .layout { display: block; }
+      .section {
+        break-inside: avoid;
+        box-shadow: none;
+        margin-bottom: 14px;
+        padding: 24px;
+      }
+      .thesis, th, .footer {
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+      a { color: inherit; text-decoration: none; }
+      .table-wrap { overflow: visible; }
+      table { min-width: 0; font-size: 8.5pt; }
+      .grid-3 { grid-template-columns: repeat(3, 1fr); }
+      .grid-2, .angles, .priority-list { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <header class="hero">
+      <div class="eyebrow">Private Events & Partnerships</div>
+      <h1>Outbound Sales Playbook</h1>
+      <p class="hero-subtitle">
+        A practical guide for building a repeatable pipeline of conference afterparties,
+        corporate events, private celebrations, and high-value referral partners for The Mab.
+      </p>
+      <div class="hero-meta">
+        <span class="tag">Prospective Outbound Sales Representative</span>
+        <span class="tag">San Francisco</span>
+        <span class="tag">Pipeline • Outreach • Partnerships</span>
+      </div>
+    </header>
+
+    <div class="toolbar">
+      <button class="button" onclick="window.print()">Print / Save as PDF</button>
+    </div>
+
+    <blockquote class="thesis">
+      Do not hunt for random people who may need a venue once. Build relationships with the people whose job is to solve venue problems repeatedly.
+    </blockquote>
+
+    <div class="layout">
+      <aside class="toc" aria-label="Table of contents">
+        <strong>Contents</strong>
+        <a href="#objective">1. Role Objective</a>
+        <a href="#segments">2. Buyer Segments</a>
+        <a href="#rhythm">3. Weekly Rhythm</a>
+        <a href="#conference-workflow">4. Conference Workflow</a>
+        <a href="#crm">5. CRM Requirements</a>
+        <a href="#pitch">6. Pitch Guidance</a>
+        <a href="#sales-kit">7. Required Sales Kit</a>
+        <a href="#first-30">8. First 30 Days</a>
+        <a href="#targets">9. Initial Targets</a>
+        <a href="#reporting">10. Reporting</a>
+        <a href="#resources">11. Resources</a>
+        <a href="#bottom-line">12. Bottom Line</a>
+      </aside>
+
+      <main>
+        <section class="section" id="objective">
+          <span class="section-number">Section 01</span>
+          <h2>Role Objective</h2>
+          <p class="lead">
+            The outbound salesperson is responsible for building a repeatable pipeline of
+            private-event buyers and referral partners for The Mab.
+          </p>
+          <p>
+            The goal is to make The Mab known among the local people and companies that regularly
+            influence venue decisions: conference sponsors, event planners, destination management
+            companies, hotel sales teams, caterers, AV vendors, and corporate event buyers.
+          </p>
+
+          <h3>Positioning</h3>
+          <ul class="checklist">
+            <li>The Mab is not just a rentable room. It is a historic San Francisco music venue with a full bar, stage, sound infrastructure, and a story clients can use.</li>
+            <li>Lead with specific use cases: conference afterparties, investor receptions, startup launches, corporate happy hours, private karaoke or live-band parties, birthdays, and bar/bat mitzvahs.</li>
+            <li>Avoid generic language such as “venue rental” when a sharper phrase will do. Sell a memorable event, not square footage.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="segments">
+          <span class="section-number">Section 02</span>
+          <h2>Primary Buyer and Referral Segments</h2>
+          <p class="lead">
+            Focus on repeat buyers and people who influence multiple venue decisions every year.
+          </p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Segment</th>
+                  <th>Why It Matters</th>
+                  <th>Target Roles</th>
+                  <th>First Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Conference sponsors and exhibitors</strong></td>
+                  <td>Companies in town for major SF conferences often need customer dinners, investor parties, recruiting mixers, sales happy hours, product launches, VIP afterparties, and team celebrations.</td>
+                  <td>Field Marketing, Event Marketing, Experiential Marketing, Partner Marketing, Brand Marketing, Developer Relations, Community, Executive Assistants.</td>
+                  <td>Use the SF Travel and Moscone calendars to identify upcoming conferences; then research sponsors, exhibitors, speakers, side events, and afterparty pages.</td>
+                </tr>
+                <tr>
+                  <td><strong>Event and meeting planners</strong></td>
+                  <td>One planner can bring multiple bookings per year. They are relationship multipliers and should be treated as long-term partners.</td>
+                  <td>Corporate event planners, meeting planners, wedding planners, bar/bat mitzvah planners, local independent producers.</td>
+                  <td>Build a planner list from MPI Northern California, ILEA Northern California, PartySlate, LinkedIn, and referrals. Invite qualified planners for a walkthrough.</td>
+                </tr>
+                <tr>
+                  <td><strong>Destination management companies</strong></td>
+                  <td>DMCs build full experiences for visiting corporate groups: transportation, dinners, activities, entertainment, and private parties.</td>
+                  <td>DMC owners, producers, account directors, operations managers, corporate event producers.</td>
+                  <td>Create a Bay Area DMC list and send each a concise venue packet. Follow up with an offer for a private tour.</td>
+                </tr>
+                <tr>
+                  <td><strong>Hotels near business corridors</strong></td>
+                  <td>Hotels often receive overflow requests or have clients who want a more memorable offsite event than a ballroom.</td>
+                  <td>Hotel sales directors, catering sales managers, group sales managers, convention services managers, concierge teams.</td>
+                  <td>Target hotels near Moscone, Union Square, FiDi, North Beach, and the Embarcadero. Ask to be their recommendation for offsite parties with character.</td>
+                </tr>
+                <tr>
+                  <td><strong>Caterers, AV, entertainment, and event vendors</strong></td>
+                  <td>These vendors hear about events early and can influence venue choice before the client starts searching publicly.</td>
+                  <td>Caterers, AV companies, DJs, lighting vendors, photographers, photo booths, florists, designers, security, transportation.</td>
+                  <td>Build reciprocal relationships. Make the vendor look good, document their capabilities, and ask for referral opportunities.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="quote">
+            “When a client wants something more interesting than a hotel ballroom, The Mab should be on your shortlist.”
+          </div>
+        </section>
+
+        <section class="section" id="rhythm">
+          <span class="section-number">Section 03</span>
+          <h2>Weekly Outbound Rhythm</h2>
+          <p class="lead">
+            These are minimum weekly activity targets. Every action and result should be recorded in the CRM or shared tracker.
+          </p>
+
+          <div class="grid-3">
+            <div class="card metric"><strong>50</strong><span>Conference and company contacts</span></div>
+            <div class="card metric"><strong>25</strong><span>Planners and DMC contacts</span></div>
+            <div class="card metric"><strong>10</strong><span>Hotel contacts</span></div>
+            <div class="card metric"><strong>10</strong><span>Vendor contacts</span></div>
+            <div class="card metric"><strong>10+</strong><span>Follow-up touches</span></div>
+            <div class="card metric"><strong>2</strong><span>Tours, calls, or coffee meetings booked</span></div>
+          </div>
+
+          <h3>Operating principle</h3>
+          <p>
+            The goal is not to “go viral.” The goal is to become known among the 200–500 local people
+            who repeatedly influence venue decisions.
+          </p>
+        </section>
+
+        <section class="section" id="conference-workflow">
+          <span class="section-number">Section 04</span>
+          <h2>Conference Calendar Workflow</h2>
+          <p class="lead">
+            Use San Francisco conference calendars as the primary hunting ground. Conferences create temporary clusters of companies with active event budgets.
+          </p>
+
+          <ol>
+            <li>Find upcoming San Francisco conferences using SF Travel, Moscone, hotel event listings, trade association calendars, and major industry calendars.</li>
+            <li>Open the official conference website and collect sponsor, exhibitor, speaker, and side-event information.</li>
+            <li>For each sponsor or exhibitor, identify people in field marketing, event marketing, developer relations, community, brand marketing, partner marketing, workplace experience, and executive assistant roles.</li>
+            <li>Send a concise, specific pitch 90–120 days before the event.</li>
+            <li>Follow up again 45 days before the event.</li>
+            <li>Follow up again 14 days before the event with a last-minute availability message.</li>
+            <li>Log every touch, next action, and follow-up date in the CRM.</li>
+          </ol>
+
+          <h3>Priority conference categories</h3>
+          <div class="grid-2">
+            <ul class="checklist">
+              <li>Dreamforce and enterprise software</li>
+              <li>AI and machine learning</li>
+              <li>Security</li>
+              <li>Crypto and Web3</li>
+            </ul>
+            <ul class="checklist">
+              <li>Developer tools and infrastructure</li>
+              <li>Biotech and life sciences</li>
+              <li>VC portfolio and founder events</li>
+              <li>Major citywide conventions</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section" id="crm">
+          <span class="section-number">Section 05</span>
+          <h2>CRM and Lead Tracker Requirements</h2>
+          <p class="lead">
+            Every lead must be trackable. A lead without a next action is not a lead; it is trivia wearing a name tag.
+          </p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Required Entry</th>
+                  <th>Discipline</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Company / Planner</strong></td><td>Organization, planner, hotel, vendor, or DMC name.</td><td>Required</td></tr>
+                <tr><td><strong>Contact Name</strong></td><td>Specific human contact. Avoid info@ unless no better path exists.</td><td>Required</td></tr>
+                <tr><td><strong>Role</strong></td><td>Event Marketing, EA, DMC, planner, hotel sales, etc.</td><td>Required</td></tr>
+                <tr><td><strong>Email / LinkedIn</strong></td><td>Primary outreach path and backup contact path.</td><td>Required</td></tr>
+                <tr><td><strong>Segment</strong></td><td>Conference, corporate, wedding, mitzvah, hotel, DMC, vendor, VC, etc.</td><td>Required</td></tr>
+                <tr><td><strong>Upcoming Trigger</strong></td><td>Dreamforce, product launch, holiday party, client event, offsite, etc.</td><td>Required when known</td></tr>
+                <tr><td><strong>Budget Likelihood</strong></td><td>Low, medium, high, or unknown.</td><td>Required</td></tr>
+                <tr><td><strong>Last Contacted</strong></td><td>Date of most recent outreach.</td><td>Required after first touch</td></tr>
+                <tr><td><strong>Follow-up Date</strong></td><td>Next planned follow-up date.</td><td>Required after first touch</td></tr>
+                <tr><td><strong>Status</strong></td><td>New, contacted, warm, toured, proposal, booked, dead, nurture.</td><td>Required</td></tr>
+                <tr><td><strong>Notes</strong></td><td>What they care about, constraints, objections, timing, and referral potential.</td><td>Required when meaningful</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="pitch">
+          <span class="section-number">Section 06</span>
+          <h2>Pitch Guidance</h2>
+          <p class="lead">
+            The pitch should be specific, use-case driven, and understandable within five seconds. Do not pitch the space as a generic venue rental.
+          </p>
+
+          <h3>Use these angles</h3>
+          <ul class="angles">
+            <li>Conference afterparty at a legendary San Francisco music venue.</li>
+            <li>Investor reception that does not feel like another hotel ballroom.</li>
+            <li>Startup launch party with actual San Francisco character.</li>
+            <li>Private karaoke or live-band party in North Beach.</li>
+            <li>Corporate happy hour with history, stage, sound, and bar built in.</li>
+            <li>Holiday party for teams that want something more memorable than a beige room.</li>
+          </ul>
+
+          <h3>Qualification questions</h3>
+          <ul class="checklist">
+            <li>What type of event is being planned?</li>
+            <li>What date or date range is needed?</li>
+            <li>What is the expected guest count?</li>
+            <li>Hosted bar, cash bar, or drink tickets?</li>
+            <li>Is live music, DJ, karaoke, speaking program, projection, or stage production required?</li>
+            <li>What are the catering needs? Will an outside caterer be used?</li>
+            <li>What is the budget range and decision timeline?</li>
+            <li>Who else is involved in the decision?</li>
+          </ul>
+        </section>
+
+        <section class="section" id="sales-kit">
+          <span class="section-number">Section 07</span>
+          <h2>Required Sales Kit Before Heavy Outreach</h2>
+          <p class="lead">
+            Outreach creates interest. The sales kit converts that interest into tours and proposals.
+          </p>
+          <ul class="checklist">
+            <li>Private-events landing page with inquiry form and fast-response phone/text path.</li>
+            <li>PDF venue deck suitable for planners and corporate buyers.</li>
+            <li>10–15 strong venue photos, including stages, bars, exterior, and setup examples.</li>
+            <li>Capacity sheet for upstairs and downstairs spaces.</li>
+            <li>Simple floor plan for each rentable area.</li>
+            <li>Pricing ranges and example packages.</li>
+            <li>Bar package options and hosted-bar guidance.</li>
+            <li>Sample packages: conference afterparty, investor reception, product launch, birthday, mitzvah, wedding reception, karaoke/live-band party.</li>
+            <li>FAQ covering insurance, catering, sound, curfew, parking, load-in, security, staffing, and cleanup.</li>
+            <li>Approved historical venue copy and approved artist-history references.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="first-30">
+          <span class="section-number">Section 08</span>
+          <h2>First 30 Days</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Timing</th>
+                  <th>Goal</th>
+                  <th>Expected Output</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Week 1</strong></td>
+                  <td>Build the foundation</td>
+                  <td>Set up CRM fields, collect source calendars, compile the first 150 leads, identify 25 high-value planners/DMCs, and confirm sales-kit gaps.</td>
+                </tr>
+                <tr>
+                  <td><strong>Week 2</strong></td>
+                  <td>Begin targeted outreach</td>
+                  <td>Send the first 75–100 tailored emails/messages, prioritize upcoming conference sponsors/exhibitors, and start planner/DMC introductions.</td>
+                </tr>
+                <tr>
+                  <td><strong>Week 3</strong></td>
+                  <td>Follow up and book tours</td>
+                  <td>Follow up on every Week 2 touch, push warm contacts toward venue tours, and add hotels and vendors to the pipeline.</td>
+                </tr>
+                <tr>
+                  <td><strong>Week 4</strong></td>
+                  <td>Report pipeline and refine</td>
+                  <td>Deliver a pipeline report: leads created, contacts reached, replies, tours booked, proposals requested, objections, and recommended next focus.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="targets">
+          <span class="section-number">Section 09</span>
+          <h2>Initial Target List</h2>
+          <p class="lead">
+            Start with the highest-likelihood buyers and referrers. Conference afterparties and corporate events generally move faster and often have clearer budgets than weddings or mitzvahs.
+          </p>
+          <ol class="priority-list">
+            <li>Dreamforce sponsors and exhibitors</li>
+            <li>AI conference sponsors and exhibitors</li>
+            <li>Security conference sponsors and exhibitors</li>
+            <li>Crypto and Web3 conference sponsors and exhibitors</li>
+            <li>Developer tools and infrastructure companies</li>
+            <li>VC firms with San Francisco portfolio events</li>
+            <li>Bay Area destination management companies</li>
+            <li>Hotel group-sales and convention-services teams</li>
+          </ol>
+        </section>
+
+        <section class="section" id="reporting">
+          <span class="section-number">Section 10</span>
+          <h2>Reporting Expectations</h2>
+          <ul class="checklist">
+            <li>Weekly pipeline report with activity counts, new leads, contacted leads, replies, tours booked, proposals requested, and closed bookings.</li>
+            <li>Top 10 warm opportunities with next action and expected value.</li>
+            <li>Conference-based lead list for the next 90–120 days.</li>
+            <li>List of blockers: missing assets, pricing confusion, response delays, venue availability, decision-maker access, or prospect objections.</li>
+            <li>Recommendations for the following week based on reply patterns and buyer interest.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="resources">
+          <span class="section-number">Section 11</span>
+          <h2>Resource Links</h2>
+          <p class="lead">
+            Use these sources as starting points and verify details weekly. Conference calendars and membership pages change frequently.
+          </p>
+          <ul class="resource-list">
+            <li><a href="https://portal.sftravel.com/calendar_public/home_sfdc.cfm" target="_blank" rel="noopener">San Francisco Travel Convention Calendar</a><br>Primary source for citywide convention dates and demand windows.</li>
+            <li><a href="https://www.mpi.org/chapters/northern-california" target="_blank" rel="noopener">MPI Northern California Chapter</a><br>Meeting professionals and repeat venue buyers.</li>
+            <li><a href="https://www.ileancc.org/" target="_blank" rel="noopener">ILEA Northern California</a><br>Live-event professionals, planners, and production partners.</li>
+            <li><a href="https://www.entiredestinationmanagement.com/" target="_blank" rel="noopener">Entire Destination Management</a><br>Example of the type of DMC referral partner The Mab should know.</li>
+            <li><a href="https://www.cvent.com/meeting-event-planning/usa/ca/san-francisco" target="_blank" rel="noopener">Cvent — San Francisco Meetings and Events</a><br>Market research and venue-demand context.</li>
+          </ul>
+        </section>
+
+        <section class="section" id="bottom-line">
+          <span class="section-number">Section 12</span>
+          <h2>Bottom Line</h2>
+          <p class="lead">
+            A single corporate buyer may book once. A strong planner, DMC, hotel contact, or vendor partner can send qualified opportunities all year.
+          </p>
+          <p>
+            Build that network deliberately, document it carefully, and make The Mab the first venue
+            people think of when a client wants a private event with real San Francisco character.
+          </p>
+        </section>
+      </main>
+    </div>
+
+    <footer class="footer">
+      <strong>The Mab Outbound Sales Playbook</strong>
+      <p>Build relationships. Track every next action. Sell an event people will remember—not merely a room they can rent.</p>
+    </footer>
+  </div>
+</body>
+</html>

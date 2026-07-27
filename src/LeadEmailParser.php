@@ -237,6 +237,14 @@ final class LeadEmailParser
      */
     public static function normalizeSubject(?string $subject): string
     {
+        return mb_strtolower(self::canonicalSubject($subject));
+    }
+
+    /**
+     * Return a display-ready conversation subject while preserving its case.
+     */
+    public static function canonicalSubject(?string $subject): string
+    {
         $s = trim((string) $subject);
         if ($s === '') {
             return '';
@@ -246,7 +254,7 @@ final class LeadEmailParser
             $s = trim((string) preg_replace(self::REPLY_PREFIX, '', $s));
         } while ($s !== $prev);
         $s = (string) preg_replace('/\s+/', ' ', $s);
-        return mb_strtolower($s);
+        return $s;
     }
 
     /**

@@ -3,12 +3,10 @@
  * Tests for src/Leads/Classifier.php — the Booking Inbox's AI classification
  * scoring/gating logic (database/migrations/074_add_booking_inbox_classification.sql).
  *
- * Hermetic: the constructor's $enabled param is forced explicitly (rather
- * than left null to auto-detect via ClaudeCli::isAvailable(), which would
- * make these tests depend on whether a real `claude` binary happens to be
- * installed on the box running them), so classify() short-circuits before
- * ever spawning a subprocess or touching the DB. score() is a pure function
- * over already-extracted data.
+ * The constructor's $enabled param is forced explicitly so these tests do
+ * not depend on a real `claude` binary. classify() short-circuits before a
+ * query, but Database establishes its PDO connection eagerly, so this
+ * script is grouped with DB-backed tests. score() remains pure.
  *
  * Run with: php tests/leads_classifier_test.php
  */

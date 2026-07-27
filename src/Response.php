@@ -7,16 +7,18 @@ final class Response
 {
     public function __construct(private readonly mixed $body, private readonly int $status = 200, private readonly array $headers = []) {}
 
-    public static function json(mixed $body, int $status = 200): self
+    public static function json(mixed $body, int $status = 200, array $headers = []): self
     {
         // No-store: these are dynamic, per-request API responses with no
         // Last-Modified/ETag, so there's no reason a browser (or an
         // intermediate proxy) should ever cache one. Cheap defense-in-depth
         // for every JSON endpoint.
-        return new self($body, $status, [
+        return new self($body, $status, array_merge([
             'Content-Type' => 'application/json; charset=utf-8',
             'Cache-Control' => 'no-store',
-        ]);
+            'X-Content-Type-Options' => 'nosniff',
+            'Referrer-Policy' => 'no-referrer',
+        ], $headers));
     }
 
     public static function noContent(): self
@@ -49,11 +51,22 @@ final class Response
         ]);
     }
 
+    public function withHeader(string $name, string|array $value): self
+    {
+        return new self($this->body, $this->status, [...$this->headers, $name => $value]);
+    }
+
     public function send(): void
     {
         http_response_code($this->status);
         foreach ($this->headers as $name => $value) {
-            header("$name: $value");
+            if (is_array($value)) {
+                foreach ($value as $headerValue) {
+                    header("$name: $headerValue", false);
+                }
+            } else {
+                header("$name: $value", true);
+            }
         }
         if ($this->status === 204 || isset($this->headers['Location'])) {
             return;

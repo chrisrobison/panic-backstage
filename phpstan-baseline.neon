@@ -1,0 +1,427 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Property Panic\\Accounting\:\:\$root is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: src/Accounting.php
+
+		-
+			message: '#^Match arm comparison between mixed and ''verify\-email'' is always false\.$#'
+			identifier: match.alwaysFalse
+			count: 1
+			path: src/AuthEndpoint.php
+
+		-
+			message: '#^Parameter \#2 \$callback of function array_filter expects \(callable\(string\)\: bool\)\|null, ''strlen'' given\.$#'
+			identifier: argument.type
+			count: 2
+			path: src/ContractModules.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between mixed and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 2
+			path: src/ContractRenderer.php
+
+		-
+			message: '#^Method Panic\\ContractSignatureProviders\\DropboxSignProvider\:\:apiRequest\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: src/ContractSignatureProviders/DropboxSignProvider.php
+
+		-
+			message: '#^Property Panic\\ContractSignatureProviders\\DropboxSignProvider\:\:\$apiKey is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: src/ContractSignatureProviders/DropboxSignProvider.php
+
+		-
+			message: '#^Property Panic\\ContractSignatureProviders\\DropboxSignProvider\:\:\$baseUrl is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: src/ContractSignatureProviders/DropboxSignProvider.php
+
+		-
+			message: '#^Property Panic\\ContractSignatureProviders\\DropboxSignProvider\:\:\$webhookSecret is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: src/ContractSignatureProviders/DropboxSignProvider.php
+
+		-
+			message: '#^Method Panic\\ContractSignatureProviders\\InternalProvider\:\:parseWebhook\(\) should return array\{event\: string, envelope_id\: string, \.\.\.\} but returns array\{\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/ContractSignatureProviders/InternalProvider.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between mixed and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Env.php
+
+		-
+			message: '#^If condition is always true\.$#'
+			identifier: if.alwaysTrue
+			count: 1
+			path: src/Events.php
+
+		-
+			message: '#^Offset ''av_requirements''\|''catering_notes''\|''client_org''\|''contract_url''\|''deposit_amount''\|''end_date''\|''estimated_guests''\|''load_in_time''\|''potential_revenue''\|''settlement_doc_url''\|''ticket_system''\|''ticket_url''\|''venue_contract_url''\|''walkthrough_done'' on array\{title\: ''Title'', event_type\: ''Event Type'', status\: ''Status'', date\: ''Date'', end_date\: ''End Date'', doors_time\: ''Doors Time'', show_time\: ''Show Time'', end_time\: ''End Time'', \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/Events.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/Events.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between mixed and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Events.php
+
+		-
+			message: '#^Match arm comparison between ''change_order'' and ''change_order'' is always true\.$#'
+			identifier: match.alwaysTrue
+			count: 1
+			path: src/Events/Execution.php
+
+		-
+			message: '#^Call to function in_array\(\) with arguments ''adjustment''\|''artist_payout''\|''credit''\|''deposit_received''\|''invoice_payment''\|''outstanding_balance''\|''promoter_payout''\|''staff_payout''\|''vendor_payout'', array\{''deposit_received'', ''invoice_payment'', ''credit'', ''outstanding_balance'', ''artist_payout'', ''promoter_payout'', ''vendor_payout'', ''staff_payout'', \.\.\.\} and true will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: src/Events/Ledger.php
+
+		-
+			message: '#^Offset ''date'' on array\{external_id\: ''A'', referral_source\: ''B'', promoter_name\: ''C'', title\: ''D'', date\: ''E'', potential_revenue\: ''F'', capacity\: ''K'', room\: ''L'', \.\.\.\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/GoogleSheets.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between ''E'' and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/GoogleSheets.php
+
+		-
+			message: '#^Method Panic\\Http\\SuperController\:\:fetchTenant\(\) should never return but return statement found\.$#'
+			identifier: return.never
+			count: 1
+			path: src/Http/SuperController.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 5
+			path: src/Http/SuperController.php
+
+		-
+			message: '#^Class Panic\\Events\\Stream not found\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Kernel.php
+
+		-
+			message: '#^Parameter \#2 \$callback of function array_filter expects \(callable\(string\)\: bool\)\|null, ''strlen'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Kernel.php
+
+		-
+			message: '#^Method Panic\\LeadEmailParser\:\:matchLabel\(\) never assigns null to &\$rest so it can be removed from the by\-ref type\.$#'
+			identifier: parameterByRef.unusedType
+			count: 1
+			path: src/LeadEmailParser.php
+
+		-
+			message: '#^Offset \*NEVER\* on array\{\} in isset\(\) does not exist\.$#'
+			identifier: isset.offset
+			count: 1
+			path: src/LeadEmailParser.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between null and null will always evaluate to false\.$#'
+			identifier: notIdentical.alwaysFalse
+			count: 1
+			path: src/LeadEmailParser.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between ''outbound'' and ''outbound'' will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 1
+			path: src/LeadsInbox.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: src/Messages.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<\(int\|string\)\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: src/NavItems.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 2
+			path: src/NavItems.php
+
+		-
+			message: '#^Call to an undefined method Panic\\Request\:\:json\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Promote/ActionEndpoint.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\BlueSkyAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\error_message\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/BlueSkyAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\BlueSkyAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\external_url\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/BlueSkyAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\BlueSkyAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\response_json\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/BlueSkyAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\BlueSkyAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\status\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/BlueSkyAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\BlueSkyAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: ''failed'', external_url\: null, error_message\: string, response_json\: null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/BlueSkyAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\BlueSkyAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: ''queued''\|''sent'', external_url\: string\|null, error_message\: null, response_json\: non\-falsy\-string\|null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/BlueSkyAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\FacebookAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\error_message\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/FacebookAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\FacebookAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\external_url\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/FacebookAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\FacebookAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\response_json\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/FacebookAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\FacebookAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\status\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/FacebookAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\FacebookAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: ''failed'', external_url\: null, error_message\: string, response_json\: null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/FacebookAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\FacebookAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: ''queued''\|''sent'', external_url\: mixed, error_message\: null, response_json\: non\-falsy\-string\|null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/FacebookAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\InstagramAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\error_message\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/InstagramAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\InstagramAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\external_url\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/InstagramAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\InstagramAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\response_json\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/InstagramAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\InstagramAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\status\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/InstagramAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\InstagramAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: ''failed'', external_url\: null, error_message\: string, response_json\: null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/InstagramAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\InstagramAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: ''needs_auth'', external_url\: null, error_message\: ''Instagram requires…'', response_json\: null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/InstagramAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\InstagramAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: ''queued''\|''sent'', external_url\: string\|null, error_message\: null, response_json\: non\-falsy\-string\|null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/InstagramAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\ThreadsAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\error_message\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/ThreadsAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\ThreadsAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\external_url\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/ThreadsAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\ThreadsAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\response_json\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/ThreadsAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\ThreadsAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\status\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/ThreadsAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\ThreadsAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: ''failed'', external_url\: null, error_message\: string, response_json\: null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/ThreadsAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\ThreadsAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: ''queued''\|''sent'', external_url\: string\|null, error_message\: null, response_json\: non\-falsy\-string\|null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/ThreadsAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\TikTokAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\error_message\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/TikTokAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\TikTokAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\external_url\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/TikTokAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\TikTokAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\response_json\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/TikTokAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\TikTokAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\status\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/TikTokAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\TikTokAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: ''failed'', external_url\: null, error_message\: string, response_json\: null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/TikTokAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\TikTokAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: ''needs_auth'', external_url\: null, error_message\: ''TikTok requires a…'', response_json\: null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/TikTokAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\TikTokAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: mixed, external_url\: non\-falsy\-string\|null, error_message\: null, response_json\: non\-falsy\-string\|null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/TikTokAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\TwitterAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\error_message\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/TwitterAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\TwitterAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\external_url\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/TwitterAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\TwitterAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\response_json\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/TwitterAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\TwitterAdapter\:\:dispatch\(\) has invalid return type Panic\\Promote\\Adapters\\status\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Promote/Adapters/TwitterAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\TwitterAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: ''failed'', external_url\: null, error_message\: string, response_json\: null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/TwitterAdapter.php
+
+		-
+			message: '#^Method Panic\\Promote\\Adapters\\TwitterAdapter\:\:dispatch\(\) should return array\{Panic\\Promote\\Adapters\\status, Panic\\Promote\\Adapters\\external_url, Panic\\Promote\\Adapters\\error_message, Panic\\Promote\\Adapters\\response_json\} but returns array\{status\: ''queued''\|''sent'', external_url\: non\-falsy\-string, error_message\: null, response_json\: non\-falsy\-string\|null\}\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Promote/Adapters/TwitterAdapter.php
+
+		-
+			message: '#^Function Panic\\seed_demo_data not found\.$#'
+			identifier: function.notFound
+			count: 2
+			path: src/Tenant/TenantProvisioner.php
+
+		-
+			message: '#^Parameter \#2 \$callback of function array_filter expects \(callable\(string\)\: bool\)\|null, ''strlen'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/TicketView.php
+
+		-
+			message: '#^Parameter \#1 \$array \(non\-empty\-list\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: src/UserEmails.php

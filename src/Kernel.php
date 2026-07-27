@@ -42,8 +42,19 @@ final class Kernel
         // Populate $auth->user() from Bearer token if present
         $this->auth->authenticate($request);
 
+        // HttpOnly-cookie sessions need an explicit same-origin check on
+        // unsafe requests. SameSite=Lax is the browser backstop; validating
+        // an Origin header when one is present also covers same-site sibling
+        // applications and future cookie-policy changes.
+        if ($this->auth->authenticationSource() === 'cookie'
+            && !$request->isSafeMethod()
+            && !$this->hasSameOrigin($request)
+        ) {
+            return Response::json(['error' => 'Cross-origin request denied'], 403);
+        }
+
         // Revocation check: a stolen or otherwise-compromised bearer token
-        // must not remain usable for its full 90-day life. Every access
+        // must not remain usable for even its short remaining lifetime. Every access
         // token embeds the token_version that was current at issuance time;
         // if it no longer matches users.token_version (bumped on password
         // change — see AuthEndpoint::setPassword) the token is dead even
@@ -76,9 +87,40 @@ final class Kernel
             $endpoint = new $class($this->db, $this->auth, $params, $this->root);
             return $endpoint->handle($request);
         } catch (\Throwable $error) {
-            error_log((string) $error);
-            return Response::json(['error' => 'Server error', 'detail' => $error->getMessage()], 500);
+            $errorId = bin2hex(random_bytes(8));
+            error_log("[error_id={$errorId}] " . (string) $error);
+            return Response::json(['error' => 'Server error', 'error_id' => $errorId], 500);
         }
+    }
+
+    private function hasSameOrigin(Request $request): bool
+    {
+        $origin = trim((string) ($request->header('Origin') ?? ''));
+        if ($origin === '') {
+            return true;
+        }
+        if ($origin === 'null') {
+            return false;
+        }
+        $originParts = parse_url($origin);
+        if (!is_array($originParts) || empty($originParts['scheme']) || empty($originParts['host'])) {
+            return false;
+        }
+
+        $appUrl = (string) (getenv('APP_URL') ?: '');
+        $expectedParts = parse_url($appUrl);
+        $expectedHost = strtolower((string) ($expectedParts['host'] ?? \Panic\Tenant\TenantContext::host()));
+        $expectedScheme = strtolower((string) ($expectedParts['scheme'] ?? (!empty($_SERVER['HTTPS']) ? 'https' : 'http')));
+        $expectedPort = (int) ($expectedParts['port'] ?? ($expectedScheme === 'https' ? 443 : 80));
+
+        $originScheme = strtolower((string) $originParts['scheme']);
+        $originHost = strtolower((string) $originParts['host']);
+        $originPort = (int) ($originParts['port'] ?? ($originScheme === 'https' ? 443 : 80));
+
+        return $expectedHost !== ''
+            && hash_equals($expectedHost, $originHost)
+            && hash_equals($expectedScheme, $originScheme)
+            && $expectedPort === $originPort;
     }
 
     private function resolve(string $path): array
@@ -363,9 +405,9 @@ final class Kernel
             // set of child names from the original Leads pipeline
             // (notes/evaluation/convert, src/Leads.php, unchanged).
             if (in_array($child, [
-                'claim', 'release-claim', 'assign', 'reassign', 'status',
+                'detail', 'claim', 'release-claim', 'assign', 'reassign', 'status',
                 'messages', 'drafts', 'presence', 'attachments',
-                'classification', 'onboard', 'audit',
+                'classification', 'onboard', 'audit', 'tasks',
             ], true)) {
                 return [LeadsInbox::class, ['leadId' => $leadId, 'child' => $child]];
             }
@@ -377,7 +419,11 @@ final class Kernel
         // Booking Inbox — cross-lead endpoints: GET /api/inbox/changes,
         // GET /api/inbox/counts (src/Inbox.php).
         if ($segments[0] === 'inbox') {
-            return [Inbox::class, ['action' => $segments[1] ?? null]];
+            return [Inbox::class, [
+                'action' => $segments[1] ?? null,
+                'approvalId' => $this->intOrNull($segments[2] ?? null),
+                'itemId' => $this->intOrNull($segments[2] ?? null),
+            ]];
         }
 
         // Booking Inbox — routing-rule administration (src/RoutingRules.php):

@@ -150,7 +150,7 @@ class AppShell extends PanicElement {
       <button id="logout" class="logout">Logout</button>
     </header>
     <main id="app" class="workspace"><pb-loading-state></pb-loading-state></main>
-    <footer class="app-footer"><span></span><strong><span class="bolt small-bolt"></span>Built for venues. Run by humans.</strong><span>Demo-ready local and staging paths</span></footer>
+    <footer class="app-footer"><span></span><strong><span class="bolt small-bolt"></span>Built for venues. Run by humans.</strong><span>Inquiry → event → settlement</span></footer>
     <nav class="mobile-tabs" aria-label="Mobile navigation">
       <a data-nav="dashboard" href="#dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a>
       <a data-nav="calendar" href="#calendar"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i>Calendar</a>
@@ -162,10 +162,7 @@ class AppShell extends PanicElement {
     <pb-toast-stack></pb-toast-stack>
     <pb-ai-drawer></pb-ai-drawer>`;
     $('#logout', this).addEventListener('click', async () => {
-      const refreshToken = getRefreshToken();
-      if (refreshToken) {
-        await api('/auth/logout', { method: 'POST', body: JSON.stringify({ refresh_token: refreshToken }) }).catch(() => {});
-      }
+      await api('/auth/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => {});
       clearTokens();
       location.href = appUrl('login.html');
     });

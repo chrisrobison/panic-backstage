@@ -1,11 +1,9 @@
 <?php
 /**
  * Tests for src/Leads/ClaimService.php — only the guard that rejects an
- * unknown claim-preserving action before any DB access (validated first,
- * inside recordPreservingAction(), before the lead_claims lookup). The
- * claim/release/extend paths themselves are DB-writing and are exercised
- * via the ingestion-pipeline integration testing instead, same split as
- * RoutingEngine.
+ * unknown claim-preserving action before any query. Database establishes
+ * its PDO connection eagerly, so this runs in the DB-backed suite even
+ * though the tested service path performs no reads or writes.
  *
  * Run with: php tests/leads_claim_service_test.php
  */

@@ -7738,7 +7738,9 @@ pb-inbox-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: co
 .ib-list-item-time { font-size: 11px; color: var(--muted); flex-shrink: 0; }
 .ib-list-item-meta { font-size: 12.5px; color: var(--muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ib-list-item-row2 { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.ib-thread-count { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
 .ib-list-item-icons { margin-left: auto; display: flex; gap: 6px; color: var(--muted); font-size: 12px; }
+.ib-list-item-icons .ib-unread-dot { color: var(--blue); font-size: 8px; align-self: center; }
 .ib-sla-warning { color: var(--danger, #b91c1c); font-weight: 700; }
 .ib-cat-badge {
   display: inline-block;
@@ -7803,8 +7805,8 @@ pb-inbox-workspace {
 .ib-score-ring.low { color: var(--muted); }
 .ib-claim-btn { margin-left: auto; }
 
-.ib-tabs { flex-shrink: 0; display: flex; gap: 4px; margin-top: 14px; border-bottom: 1px solid var(--line); padding: 0 2px; }
-.ib-tabs a { padding: 10px 12px; font-size: 13.5px; font-weight: 700; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; }
+.ib-tabs { flex-shrink: 0; display: flex; gap: 0; margin-top: 14px; border-bottom: 1px solid var(--line); padding: 0 2px; overflow-x: auto; white-space: nowrap; scrollbar-width: thin; }
+.ib-tabs a { flex: 0 0 auto; padding: 10px 4px; font-size: 12.5px; font-weight: 700; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; }
 .ib-tabs a.active { color: var(--blue); border-bottom-color: var(--blue); }
 .ib-tabs a:hover { color: var(--ink); }
 
@@ -7826,9 +7828,16 @@ pb-inbox-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direc
 .ib-msg-head .name { font-weight: 750; }
 .ib-msg-head .via { color: var(--muted); }
 .ib-msg-body { padding: 12px 14px; border-radius: 10px; background: var(--bg); white-space: pre-wrap; font-size: 14px; line-height: 1.5; }
+.ib-msg-body a { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+.ib-msg-body a:hover { color: var(--ink); }
+.ib-msg-body-html { padding: 0; overflow: hidden; background: #fff; border: 1px solid var(--line); }
+.ib-email-frame { display: block; width: 100%; height: min(560px, 55vh); min-height: 280px; border: 0; background: #fff; }
 .ib-msg.outbound .ib-msg-body { background: color-mix(in srgb, var(--blue) 12%, var(--panel)); }
 .ib-msg.internal_note .ib-msg-body { background: #fef9c3; border: 1px dashed #d4af17; }
 .ib-msg.system .ib-msg-body { background: transparent; color: var(--muted); font-style: italic; padding: 2px 0; }
+.ib-msg.failed .ib-msg-body { background: #fef2f2; border: 1px solid #fecaca; }
+.ib-msg-subject { font-size: 12px; font-weight: 750; margin: 0 0 5px; }
+.ib-msg-error { color: #991b1b; font-size: 12px; margin-top: 5px; max-width: 520px; }
 .ib-presence-banner { flex-shrink: 0; padding: 6px 24px; background: #fef3c7; color: #92400e; font-size: 12.5px; font-weight: 700; }
 .ib-stale-warning { flex-shrink: 0; padding: 8px 24px; background: #fee2e2; color: #991b1b; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px; justify-content: space-between; }
 
@@ -7836,14 +7845,19 @@ pb-inbox-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direc
 .ib-composer-modes { display: flex; gap: 4px; margin-bottom: 6px; }
 .ib-composer-modes button { padding: 6px 10px; border: none; background: none; color: var(--muted); border-bottom: 2px solid transparent; cursor: pointer; }
 .ib-composer-modes button.active { color: var(--blue); border-bottom-color: var(--blue); }
+.ib-composer-subject { width: 100%; margin-bottom: 6px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
 .ib-composer textarea { width: 100%; min-height: 70px; resize: vertical; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; font-size: 14px; }
+.ib-composer-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ib-composer-attachments > span { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; }
+.ib-composer-attachments > span > button { flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); padding: 0 2px; cursor: pointer; }
 .ib-composer-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
 .ib-composer-tools { display: flex; gap: 6px; color: var(--muted); }
 .ib-composer-tools button { background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px 6px; font-size: 14px; }
 .ib-composer-tools button:hover { color: var(--ink); }
 
 /* ── Bottom action bar ─────────────────────────────────────────────────────── */
-.ib-action-bar { flex-shrink: 0; display: flex; gap: 10px; padding: 12px 24px; border-top: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+.ib-action-bar { flex-shrink: 0; display: flex; gap: 10px; padding: 12px 24px; border-top: 1px solid var(--line); background: var(--panel); overflow-x: auto; scrollbar-width: thin; }
+.ib-action-bar .button { flex: 0 0 auto; }
 .ib-action-bar .button.primary-green { background: var(--green, #16a34a); border-color: var(--green, #16a34a); color: #fff; }
 
 /* ── Right column: detail panel ───────────────────────────────────────────── */
@@ -7877,6 +7891,6 @@ pb-inbox-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direc
   .ib-workspace { display: block; }
   .ib-tab-body { max-height: none; overflow: visible; }
   .ib-thread { max-height: 40vh; }
-  .ib-back-to-list { display: inline-flex !important; }
+  .ib-back-to-list { display: inline-flex !important; margin-left: 16px; }
 }
 .ib-back-to-list { display: none; background: none; border: none; color: var(--blue); font-weight: 700; cursor: pointer; padding: 4px 0 10px; align-items: center; gap: 6px; }

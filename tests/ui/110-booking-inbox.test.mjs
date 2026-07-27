@@ -25,7 +25,140 @@ test('Clicking a queue row opens the workspace with a matching header and the de
   assert.ok(await page.exists('.ib-tabs a.active'), 'a tab is active (Conversation by default)');
   assert.ok(await page.exists('.ib-status-bar select'), 'status dropdown is present');
   assert.ok(await page.exists('.ib-action-bar [data-action="onboard"]'), 'Onboard Lead action is present');
+  assert.ok(await page.exists('.ib-composer [data-subject]'), 'reply composer includes an email subject');
+  assert.ok(await page.exists('.ib-composer [data-attach]'), 'reply composer includes attachment upload');
+  assert.ok(await page.exists('.ib-composer [data-template]'), 'reply composer includes template insertion');
+  assert.ok(await page.exists('.ib-action-bar [data-action="task"]'), 'linked task action is present');
+  assert.ok(await page.exists('.ib-action-bar [data-action="reassign"]'), 'reassignment action is present');
   assert.ok(await page.exists('.ib-detail'), 'detail panel renders');
+});
+
+test('Conversation bodies render safe, clickable web links', async (page) => {
+  await page.goto('#inbox-all');
+  assert.ok(
+    await page.until(`customElements.get('pb-inbox-conversation')`),
+    'conversation component is registered',
+  );
+  const rendered = await page.eval(`(() => {
+    const component = document.createElement('pb-inbox-conversation');
+    const host = document.createElement('div');
+    host.innerHTML = component.messageHtml({
+      direction: 'inbound',
+      channel: 'email',
+      created_at: '2026-07-26 12:00:00',
+      body_text: 'Visit https://example.com/show?ref=inbox&day=2. Also www.themab.org/calendar! <img src=x onerror=alert(1)>',
+    });
+    const links = [...host.querySelectorAll('.ib-msg-body a')];
+    return {
+      links: links.map((link) => ({
+        href: link.getAttribute('href'),
+        text: link.textContent,
+        target: link.target,
+        rel: link.rel,
+      })),
+      bodyText: host.querySelector('.ib-msg-body')?.textContent,
+      injectedImages: host.querySelectorAll('img').length,
+    };
+  })()`);
+  assert.equal(rendered.links.length, 2, 'http and www URLs are both linked');
+  assert.equal(rendered.links[0].href, 'https://example.com/show?ref=inbox&day=2', 'query string remains part of the URL');
+  assert.equal(rendered.links[0].text, 'https://example.com/show?ref=inbox&day=2', 'sentence punctuation is not included in the link');
+  assert.equal(rendered.links[1].href, 'https://www.themab.org/calendar', 'www URLs receive a safe https scheme');
+  assert.equal(rendered.links[0].target, '_blank', 'links open in a new tab');
+  assert.includes(rendered.links[0].rel, 'noopener', 'links cannot access the opener window');
+  assert.equal(rendered.injectedImages, 0, 'message HTML remains escaped');
+  assert.includes(rendered.bodyText, '<img src=x onerror=alert(1)>', 'escaped markup remains visible as text');
+});
+
+test('HTML email bodies render in a tracking-safe sandbox', async (page) => {
+  await page.goto('#inbox-all');
+  await page.until(`customElements.get('pb-inbox-conversation')`);
+  const rendered = await page.eval(`(() => {
+    const component = document.createElement('pb-inbox-conversation');
+    const host = document.createElement('div');
+    host.innerHTML = component.messageHtml({
+      id: 999,
+      direction: 'inbound',
+      channel: 'email',
+      from_name: 'Safety Test',
+      created_at: '2026-07-26 12:00:00',
+      body_text: 'Plain fallback',
+      body_html: '<style>p{font-weight:bold}</style><p onclick="alert(1)">Formatted <a href="https://example.com/show">link</a></p><script>alert(1)</script><form action="https://bad.example"><input></form><img src="https://tracker.example/pixel.gif" alt="Poster"><a href="javascript:alert(1)">unsafe</a>',
+    });
+    const frame = host.querySelector('.ib-email-frame');
+    const email = new DOMParser().parseFromString(frame.getAttribute('srcdoc'), 'text/html');
+    const links = [...email.querySelectorAll('a')];
+    return {
+      sandbox: frame.getAttribute('sandbox'),
+      referrerPolicy: frame.getAttribute('referrerpolicy'),
+      scripts: email.querySelectorAll('script').length,
+      forms: email.querySelectorAll('form,input').length,
+      remoteImages: [...email.querySelectorAll('img')].filter((img) => /^https?:/i.test(img.src)).length,
+      placeholder: email.querySelector('.email-image-placeholder')?.textContent,
+      eventHandlers: email.querySelectorAll('[onclick],[onerror],[onload]').length,
+      safeHref: links[0]?.getAttribute('href'),
+      safeTarget: links[0]?.target,
+      unsafeHref: links[1]?.getAttribute('href'),
+      hasCsp: !!email.querySelector('meta[http-equiv="Content-Security-Policy"]'),
+    };
+  })()`);
+  assert.notOk(rendered.sandbox.includes('allow-scripts'), 'email scripts are disabled by the iframe sandbox');
+  assert.notOk(rendered.sandbox.includes('allow-forms'), 'email forms are disabled by the iframe sandbox');
+  assert.equal(rendered.referrerPolicy, 'no-referrer', 'email navigation does not leak the inbox URL');
+  assert.equal(rendered.scripts, 0, 'script elements are removed');
+  assert.equal(rendered.forms, 0, 'form controls are removed');
+  assert.equal(rendered.remoteImages, 0, 'remote tracking images are blocked');
+  assert.equal(rendered.placeholder, '[Image: Poster]', 'blocked images retain useful alt text');
+  assert.equal(rendered.eventHandlers, 0, 'inline event handlers are removed');
+  assert.equal(rendered.safeHref, 'https://example.com/show', 'safe HTML links are preserved');
+  assert.equal(rendered.safeTarget, '_blank', 'HTML links open outside the sandbox');
+  assert.equal(rendered.unsafeHref, null, 'javascript links are disabled');
+  assert.ok(rendered.hasCsp, 'HTML email document has a restrictive content security policy');
+});
+
+test('Reason-required Booking Inbox actions use an in-app confirmation dialog', async (page) => {
+  await page.goto('#inbox-unassigned');
+  await page.until(`document.querySelectorAll('.ib-list-item').length > 0`);
+  await page.click('.ib-list-item');
+  await page.until(`document.querySelector('[data-action="decline"]')`);
+  await page.click('[data-action="decline"]');
+  assert.ok(await page.until(`document.querySelector('[data-status-reason-form] textarea[required]')`), 'decline opens a required reason form');
+  await page.click('.modal-backdrop [data-close]');
+  assert.notOk(await page.exists('.modal-backdrop'), 'closing the reason form makes no change');
+});
+
+test('Reply templates can be selected without leaving the inquiry workspace', async (page) => {
+  await page.goto('#inbox-unassigned');
+  await page.until(`document.querySelectorAll('.ib-list-item').length > 0`);
+  await page.click('.ib-list-item');
+  await page.until(`document.querySelector('.ib-composer [data-template]')`);
+  await page.click('.ib-composer [data-template]');
+  assert.ok(await page.until(`document.querySelector('[data-template-form] select[name="template_id"] option')`), 'template picker contains configured templates');
+  await page.click('.modal-backdrop [data-close]');
+});
+
+test('Managers can open the quarantined-mail review queue', async (page) => {
+  await page.goto('#inbox-unassigned');
+  await page.until(`document.querySelector('[data-quarantine]')`);
+  await page.click('[data-quarantine]');
+  assert.ok(
+    await page.until(`document.querySelector('.modal-backdrop .section-head h2')?.textContent === 'Quarantined Mail'`),
+    'quarantine review opens in an in-app dialog',
+  );
+  await page.click('.modal-backdrop [data-close]');
+});
+
+test('Managers can open an audited classification-correction form', async (page) => {
+  await page.goto('#inbox-unassigned');
+  await page.until(`document.querySelectorAll('.ib-list-item').length > 0`);
+  await page.click('.ib-list-item');
+  await page.until(`document.querySelector('[data-edit-classification]')`);
+  await page.click('[data-edit-classification]');
+  assert.ok(
+    await page.until(`document.querySelector('[data-classification-form] input[name="event_category"]')`),
+    'classification correction fields open in an in-app dialog',
+  );
+  await page.click('.modal-backdrop [data-close]');
 });
 
 test('Switching the saved-view dropdown reloads the queue', async (page) => {

@@ -3,9 +3,7 @@ declare(strict_types=1);
 
 namespace Panic;
 
-use Panic\Leads\Acknowledgment;
-use Panic\Leads\Classifier;
-use Panic\Leads\RoutingEngine;
+use Panic\Jobs\JobQueue;
 
 /**
  * Public booking-inquiry intake (unauthenticated, cross-origin).
@@ -72,7 +70,7 @@ final class PublicInquiry extends BaseEndpoint
         // every input do. Respond exactly like a successful submission so
         // there's no observable signal that anything was different.
         if (trim((string) ($b['company'] ?? '')) !== '') {
-            return $this->respond(['ok' => true]);
+            return $this->respond(['ok' => true], 202);
         }
 
         $email = trim((string) ($b['contact_email'] ?? ''));
@@ -115,113 +113,74 @@ final class PublicInquiry extends BaseEndpoint
             $budget = max(0, min(99999999.99, (float) $b['budget']));
         }
 
-        $id = $this->db->insert(
-            'INSERT INTO leads (status, source, contact_name, contact_email, contact_org, contact_phone,
-             event_name, event_type, desired_date, desired_date_alt, projected_attendance, budget, notes,
-             risk_level)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            [
-                'new',
-                'website',
-                $this->clip($name, self::MAX_STR_LEN),
-                $this->clip($email, self::MAX_STR_LEN),
-                $this->clip((string) ($b['contact_org'] ?? ''), self::MAX_STR_LEN) ?: null,
-                $this->clip((string) ($b['contact_phone'] ?? ''), self::MAX_PHONE_LEN) ?: null,
-                $this->clip((string) ($b['event_name'] ?? ''), self::MAX_STR_LEN) ?: null,
-                $eventType ?: null,
-                $desiredDate,
-                $desiredDateAlt,
-                $attendance,
-                $budget,
-                $this->clip($message, self::MAX_MESSAGE_LEN),
-                'unknown',
-            ]
-        );
-
-        $origin = $request->header('Origin') ?: $request->header('Referer') ?: 'unknown origin';
-        $this->db->run(
-            "INSERT INTO lead_notes (lead_id, user_id, type, body) VALUES (?, NULL, 'audit', ?)",
-            [$id, "Submitted via embedded booking-inquiry widget from {$origin} (IP {$ip})"]
-        );
-
-        // Booking Inbox conversation feed — same message the widget submitted,
-        // normalized, so it renders in the Conversation tab like any other
-        // inbound message (see database/migrations/072_add_booking_inbox_messages.sql).
-        $messageRowId = $this->db->insert(
-            'INSERT INTO lead_messages (lead_id, direction, channel, status, from_name, from_email, subject, body_text, checksum)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [$id, 'inbound', 'manual', 'received', $name, $email, 'Website booking inquiry', $message, hash('sha256', $message)]
-        );
-
-        $this->classifyAndAcknowledge($id, $message, $messageRowId);
-        $this->notifyAdmins($id, $name, $email);
-
-        return $this->respond(['ok' => true]);
-    }
-
-    /**
-     * Best-effort AI classification + auto-acknowledgment for a freshly
-     * created website inquiry. Never allowed to fail the request — a slow or
-     * unavailable Anthropic call, or a mail hiccup, must not turn a
-     * successful public submission into a 500 for the visitor.
-     */
-    private function classifyAndAcknowledge(int $leadId, string $message, int $messageRowId): void
-    {
-        try {
-            $classifier = new Classifier();
-            if ($classifier->isEnabled()) {
-                $classifier->classify($this->db, $leadId, $message, 'Website booking inquiry', $messageRowId);
-            }
-        } catch (\Throwable $e) {
-            @error_log("public-inquiry classification failed for lead {$leadId}: {$e->getMessage()}");
+        $pdo = $this->db->pdo();
+        $ownsTransaction = !$pdo->inTransaction();
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
         }
-
         try {
-            $lead = $this->db->one('SELECT * FROM leads WHERE id = ?', [$leadId]);
-            if ($lead !== null) {
-                (new RoutingEngine())->route($this->db, $lead);
-            }
-        } catch (\Throwable $e) {
-            @error_log("public-inquiry routing failed for lead {$leadId}: {$e->getMessage()}");
-        }
-
-        try {
-            $lead = $this->db->one('SELECT * FROM leads WHERE id = ?', [$leadId]);
-            if ($lead !== null) {
-                (new Acknowledgment($this->root))->maybeSend($this->db, $lead);
-            }
-        } catch (\Throwable $e) {
-            @error_log("public-inquiry auto-acknowledgment failed for lead {$leadId}: {$e->getMessage()}");
-        }
-    }
-
-    /** Best-effort admin alert so a public inquiry doesn't sit unseen in the pipeline. Never throws. */
-    private function notifyAdmins(int $leadId, string $name, string $email): void
-    {
-        try {
-            $admins = $this->db->all(
-                "SELECT name, email, notify_event_updates FROM users
-                 WHERE role = 'venue_admin' AND email IS NOT NULL AND email != '' AND email NOT LIKE '%.local' AND is_hidden = 0"
+            $id = $this->db->insert(
+                'INSERT INTO leads (status, source, contact_name, contact_email, contact_org, contact_phone,
+                 event_name, event_type, desired_date, desired_date_alt, projected_attendance, budget, notes,
+                 risk_level)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                [
+                    'new',
+                    'website',
+                    $this->clip($name, self::MAX_STR_LEN),
+                    $this->clip($email, self::MAX_STR_LEN),
+                    $this->clip((string) ($b['contact_org'] ?? ''), self::MAX_STR_LEN) ?: null,
+                    $this->clip((string) ($b['contact_phone'] ?? ''), self::MAX_PHONE_LEN) ?: null,
+                    $this->clip((string) ($b['event_name'] ?? ''), self::MAX_STR_LEN) ?: null,
+                    $eventType ?: null,
+                    $desiredDate,
+                    $desiredDateAlt,
+                    $attendance,
+                    $budget,
+                    $this->clip($message, self::MAX_MESSAGE_LEN),
+                    'unknown',
+                ]
             );
-            if (!$admins) {
-                return;
-            }
-            $link = rtrim((string) (getenv('APP_URL') ?: ''), '/') . '/#leads';
-            $subject = "[Backstage] New booking inquiry: " . $name;
-            $text = "A new booking inquiry came in through the website widget.\n\n"
-                . "From: {$name} <{$email}>\n\n"
-                . "Review it in the Leads pipeline: {$link}\n";
 
-            $mailer = new Mailer($this->root, $this->db);
-            foreach ($admins as $admin) {
-                if (!NotificationPreferences::wants($admin, NotificationPreferences::EVENT_UPDATES)) {
-                    continue;
-                }
-                $mailer->send($admin['email'], $subject, $text);
+            $origin = $request->header('Origin') ?: $request->header('Referer') ?: 'unknown origin';
+            $this->db->run(
+                "INSERT INTO lead_notes (lead_id, user_id, type, body) VALUES (?, NULL, 'audit', ?)",
+                [$id, "Submitted via embedded booking-inquiry widget from {$origin} (IP {$ip})"]
+            );
+
+            // Booking Inbox conversation feed — same message the widget
+            // submitted, normalized for the Conversation tab.
+            $messageRowId = $this->db->insert(
+                'INSERT INTO lead_messages (lead_id, direction, channel, status, from_name, from_email, subject, body_text, checksum)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [$id, 'inbound', 'manual', 'received', $name, $email, 'Website booking inquiry', $message, hash('sha256', $message)]
+            );
+
+            // Persist slow work before acknowledging the visitor. Both jobs
+            // are unique per lead and commit with the lead itself.
+            $queue = new JobQueue($this->db);
+            $queue->enqueue(
+                'public_inquiry_followup',
+                ['lead_id' => $id, 'message_id' => $messageRowId],
+                "public-inquiry-followup:{$id}"
+            );
+            $queue->enqueue(
+                'public_inquiry_admin_notification',
+                ['lead_id' => $id],
+                "public-inquiry-admin-notification:{$id}"
+            );
+
+            if ($ownsTransaction) {
+                $pdo->commit();
             }
-        } catch (\Throwable $e) {
-            @error_log("public-inquiry notification failed for lead {$leadId}: {$e->getMessage()}");
+        } catch (\Throwable $error) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $error;
         }
+
+        return $this->respond(['ok' => true], 202);
     }
 
     private function parseDate(mixed $value): ?string

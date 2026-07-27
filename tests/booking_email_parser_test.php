@@ -121,6 +121,7 @@ ok(LeadEmailParser::normalizeSubject('Fwd: RE: Booking inquiry') === 'booking in
 ok(LeadEmailParser::normalizeSubject('RE: [2]: Booking inquiry') === 'booking inquiry' || LeadEmailParser::normalizeSubject('RE: Booking inquiry') === 'booking inquiry', 'bracketed reply count tolerated');
 ok(LeadEmailParser::normalizeSubject('Booking Inquiry') === 'booking inquiry',           'case-folded even with no prefix');
 ok(LeadEmailParser::normalizeSubject('') === '' && LeadEmailParser::normalizeSubject(null) === '', 'blank/null subject → empty string, never matches');
+ok(LeadEmailParser::canonicalSubject('Fwd: Re: KALX promotion with the Mab') === 'KALX promotion with the Mab', 'canonical subject strips reply prefixes but preserves display case');
 
 ok(LeadEmailParser::hasReplyPrefix('Re: Booking inquiry') === true,      'hasReplyPrefix: Re: prefix detected');
 ok(LeadEmailParser::hasReplyPrefix('Fwd: Booking inquiry') === true,     'hasReplyPrefix: Fwd: prefix detected');

@@ -8,7 +8,7 @@ namespace Panic;
  *
  * Responsibilities:
  *   - Parse + validate a Bearer token from an incoming request
- *   - Issue signed access tokens (60-minute JWT)
+ *   - Issue short-lived signed access tokens (15 minutes by default)
  *   - Generate and hash opaque tokens (magic links, refresh tokens)
  *
  * Refresh-token DB operations live in AuthEndpoint to keep this class
@@ -16,7 +16,13 @@ namespace Panic;
  */
 final class Auth
 {
+    public const ACCESS_COOKIE = 'backstage_access';
+    public const REFRESH_COOKIE = 'backstage_refresh';
+    private const DEFAULT_ACCESS_TTL_SECONDS = 900;
+
     private ?array $currentUser = null;
+    private ?string $currentAccessToken = null;
+    private ?string $authenticationSource = null;
     private string $secret;
 
     public function __construct()
@@ -29,17 +35,27 @@ final class Auth
     // -------------------------------------------------------------------------
 
     /**
-     * Read Authorization: Bearer <token> from the request and, if valid,
-     * populate the current user.  Called once per request in the Kernel.
+     * Read a Bearer token or the HttpOnly browser access cookie and, if
+     * valid, populate the current user. Called once per request in Kernel.
      */
     public function authenticate(Request $request): void
     {
         $header = $request->header('Authorization') ?? '';
-        if (!str_starts_with($header, 'Bearer ')) {
-            return;
+        $token = str_starts_with($header, 'Bearer ')
+            ? trim(substr($header, 7))
+            : '';
+        $source = 'bearer';
+
+        // Browser sessions use HttpOnly cookies. Bearer authentication stays
+        // available for API clients and for migrating pre-cookie sessions.
+        if ($token === '' || $this->validateAccessToken($token) === null) {
+            $token = trim((string) $request->cookie(self::ACCESS_COOKIE, ''));
+            $source = 'cookie';
         }
-        $payload = $this->validateAccessToken(substr($header, 7));
+        $payload = $token !== '' ? $this->validateAccessToken($token) : null;
         if ($payload !== null) {
+            $this->currentAccessToken = $token;
+            $this->authenticationSource = $source;
             $this->currentUser = [
                 'id'            => (int) ($payload['sub'] ?? 0),
                 'name'          => (string) ($payload['name'] ?? ''),
@@ -58,6 +74,8 @@ final class Auth
     public function clearUser(): void
     {
         $this->currentUser = null;
+        $this->currentAccessToken = null;
+        $this->authenticationSource = null;
     }
 
     /**
@@ -73,6 +91,7 @@ final class Auth
             'email' => (string) $user['email'],
             'role'  => (string) $user['role'],
         ];
+        $this->authenticationSource = 'direct';
     }
 
     /** Returns the currently authenticated user, or null. */
@@ -81,12 +100,22 @@ final class Auth
         return $this->currentUser;
     }
 
+    public function authenticationSource(): ?string
+    {
+        return $this->authenticationSource;
+    }
+
+    public function accessToken(): ?string
+    {
+        return $this->currentAccessToken;
+    }
+
     // -------------------------------------------------------------------------
     // Token helpers
     // -------------------------------------------------------------------------
 
     /**
-     * Issue a signed HS256 access token valid for 90 days.
+     * Issue a short-lived signed HS256 access token.
      *
      * Embeds the user's current token_version as the `tv` claim so the token
      * can be revoked before its natural expiry: Kernel::handle() re-checks
@@ -103,8 +132,14 @@ final class Auth
             'role'  => $user['role'],
             'tv'    => (int) ($user['token_version'] ?? 0),
             'iat'   => time(),
-            'exp'   => time() + (90 * 24 * 3600),  // 90 days
+            'exp'   => time() + self::accessTtlSeconds(),
         ]);
+    }
+
+    public static function accessTtlSeconds(): int
+    {
+        $configured = (int) (getenv('ACCESS_TOKEN_TTL_SECONDS') ?: self::DEFAULT_ACCESS_TTL_SECONDS);
+        return max(300, min(3600, $configured));
     }
 
     /** Generate a cryptographically random opaque token (hex string). */
@@ -144,16 +179,37 @@ final class Auth
             return null;
         }
         [$header, $body, $sig] = $parts;
+        $headerData = $this->decodePart($header);
+        if (!is_array($headerData)
+            || ($headerData['alg'] ?? null) !== 'HS256'
+            || ($headerData['typ'] ?? null) !== 'JWT'
+        ) {
+            return null;
+        }
         $expected = $this->b64u(hash_hmac('sha256', "$header.$body", $this->secret, true));
         if (!hash_equals($expected, $sig)) {
             return null;
         }
-        $pad  = strlen($body) % 4 === 0 ? 0 : 4 - (strlen($body) % 4);
-        $data = json_decode(base64_decode(strtr($body, '-_', '+/') . str_repeat('=', $pad)), true);
-        if (!is_array($data) || (int) ($data['exp'] ?? 0) < time()) {
+        $data = $this->decodePart($body);
+        if (!is_array($data)
+            || (int) ($data['sub'] ?? 0) <= 0
+            || (int) ($data['exp'] ?? 0) <= time()
+            || (int) ($data['iat'] ?? 0) > time() + 60
+        ) {
             return null;
         }
         return $data;
+    }
+
+    private function decodePart(string $part): ?array
+    {
+        $pad = strlen($part) % 4 === 0 ? 0 : 4 - (strlen($part) % 4);
+        $raw = base64_decode(strtr($part, '-_', '+/') . str_repeat('=', $pad), true);
+        if ($raw === false) {
+            return null;
+        }
+        $decoded = json_decode($raw, true);
+        return is_array($decoded) ? $decoded : null;
     }
 
     private function b64u(string $data): string

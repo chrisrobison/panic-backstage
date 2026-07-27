@@ -83,11 +83,12 @@ final class Invites extends BaseEndpoint
 
         $this->auth->setUser($user);
 
-        return $this->ok([
+        $accessToken = $this->auth->issueAccessToken($user);
+        return Response::json([
             'event_id'      => (int) $invite['event_id'],
-            'access_token'  => $this->auth->issueAccessToken($user),
+            'access_token'  => $accessToken,
             'refresh_token' => $refreshToken,
-            'expires_in'    => 3600,
+            'expires_in'    => Auth::accessTtlSeconds(),
             'user'          => [
                 'id'    => (int) $user['id'],
                 'name'  => $user['name'],
@@ -95,6 +96,8 @@ final class Invites extends BaseEndpoint
                 'role'  => $user['role'],
             ],
             'capabilities'  => $this->globalCapabilities(),
+        ], 200, [
+            'Set-Cookie' => SessionCookies::issue($accessToken, $refreshToken),
         ]);
     }
 }

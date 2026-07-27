@@ -69,6 +69,22 @@ try {
     $found = $matcher->findLeadId($db, ["nothing-matches-{$marker}@x.invalid"], null, null);
     ok($found === null, 'header match: no id overlap → null');
 
+    // The original parent may not have reached this inbox. Persisted ancestry
+    // still lets a second participant's reply converge on the same lead.
+    $messageA = (int) $db->one(
+        'SELECT id FROM lead_messages WHERE lead_id = ? ORDER BY id DESC LIMIT 1',
+        [$leadA]
+    )['id'];
+    $sharedAncestor = "missing-parent-{$marker}@example.invalid";
+    $matcher->recordReferences($db, $messageA, [$sharedAncestor]);
+    $found = $matcher->findLeadId(
+        $db,
+        [$sharedAncestor],
+        "different-participant-{$marker}@example.invalid",
+        "Re: A shared conversation"
+    );
+    ok($found === $leadA, 'shared References ancestry resolves across participants when the parent is absent');
+
     // ── Scenario B: subject + sender fallback (no header overlap) ───────────
     $leadB = $db->insert(
         "INSERT INTO leads (contact_email, notes) VALUES (?, ?)",

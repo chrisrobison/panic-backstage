@@ -1,100 +1,158 @@
 <?php
+declare(strict_types=1);
 
 /**
- * Per-tenant static file gateway.
+ * Authorized tenant file gateway.
  *
- * Serves files from clients/{slug}/{path} via the /files/{path} URL prefix.
- * The clients/ directory lives outside public/ so it is never directly
- * web-accessible; all reads must come through this gateway.
- *
- * Security measures:
- *   - Path component whitelist (no "..", no shell metacharacters)
- *   - realpath() check ensures the resolved path stays inside clients/{slug}/
- *   - In multi-tenant mode the slug is derived from the authoritative
- *     TenantContext (DB-backed hostname lookup), not from user input
- *   - In single-tenant mode falls back to storage/ for backward compatibility
- *
- * Apache routes here via:
- *   RewriteRule ^files/(.+)$ public/files.php?_path=$1 [L,QSA]
+ * Public event artwork is available only after approval on an explicitly
+ * public event. Every other file requires a valid Backstage session plus
+ * event/lead row access. No arbitrary path inside storage/ or clients/ can
+ * be fetched merely by knowing its name.
  */
-
-declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
+use Panic\Auth;
+use Panic\Capabilities;
+use Panic\Database;
+use Panic\Env;
+use Panic\Request;
+use Panic\Tenant\TenantContext;
+
 $root = dirname(__DIR__);
-Panic\Env::load($root . '/.env');
+Env::load($root . '/.env');
+set_exception_handler(static function (\Throwable $error): never {
+    $errorId = bin2hex(random_bytes(8));
+    error_log("[file_error_id={$errorId}] " . (string) $error);
+    file_error(500, 'Server error', $errorId);
+});
 
-// ── Resolve the client directory ──────────────────────────────────────────────
+$ctx = null;
+if ((string) (getenv('SUPER_DB_NAME') ?: '') !== '') {
+    $ctx = TenantContext::resolve();
+    TenantContext::setCurrent($ctx);
+}
+$db = new Database($ctx?->db);
 
-$superDbName = (string)(getenv('SUPER_DB_NAME') ?: '');
-if ($superDbName !== '') {
-    // Multi-tenant: resolve tenant from HTTP_HOST; exits with 4xx on failure.
-    $ctx       = Panic\Tenant\TenantContext::resolve();
-    $clientDir = $root . '/clients/' . $ctx->tenant['slug'];
+$path = trim((string) ($_GET['_path'] ?? ''), '/');
+if ($path === ''
+    || !preg_match('#^[A-Za-z0-9._/\-]+$#', $path)
+    || str_contains($path, '..')
+) {
+    file_error(400, 'Invalid path');
+}
+// New private paths are stored with a `files/` URL prefix. Preserve old
+// single-tenant `uploads/...` event-asset rows while still forcing their
+// requests through this gateway.
+$storedPath = str_starts_with($path, 'uploads/') ? $path : 'files/' . $path;
+
+$auth = new Auth();
+$request = Request::fromGlobals();
+$auth->authenticate($request);
+if ($user = $auth->user()) {
+    $row = $db->one('SELECT token_version FROM users WHERE id = ?', [$user['id']]);
+    if ($row === null || (int) $row['token_version'] !== (int) ($user['token_version'] ?? 0)) {
+        $auth->clearUser();
+    }
+}
+
+$authorized = false;
+$public = false;
+
+$asset = $db->one(
+    'SELECT a.event_id, a.asset_type, a.approval_status,
+            e.public_visibility, e.status
+     FROM event_assets a
+     JOIN events e ON e.id = a.event_id
+     WHERE a.file_path = ?
+     LIMIT 1',
+    [$storedPath]
+);
+if ($asset !== null) {
+    $publicTypes = [
+        'flyer', 'poster', 'band_photo', 'logo', 'social_square',
+        'social_story', 'press_photo', 'qr_code',
+    ];
+    $public = (int) ($asset['public_visibility'] ?? 0) === 1
+        && $asset['approval_status'] === 'approved'
+        && !in_array($asset['status'], ['empty', 'canceled'], true)
+        && in_array($asset['asset_type'], $publicTypes, true);
+    $authorized = $public || (
+        $auth->user() !== null
+        && Capabilities::hasEvent(
+            $db,
+            (int) $asset['event_id'],
+            (int) $auth->user()['id'],
+            (string) $auth->user()['role'],
+            'read_event'
+        )
+    );
 } else {
-    // Single-tenant fallback: serve from storage/ so existing installs keep
-    // working if they adopt the /files/ URL prefix.
-    $clientDir = $root . '/storage';
+    $attachment = $db->one(
+        'SELECT a.lead_id, l.assigned_to_user_id, l.owner_user_id,
+                l.claimed_by_user_id, l.point_person_id
+         FROM lead_attachments a
+         JOIN leads l ON l.id = a.lead_id
+         WHERE a.storage_path = ?
+         LIMIT 1',
+        [$storedPath]
+    );
+    if ($attachment !== null && $auth->user() !== null) {
+        $userId = (int) $auth->user()['id'];
+        $role = (string) $auth->user()['role'];
+        $authorized = $role === 'venue_admin'
+            || $role === 'global_viewer'
+            || Capabilities::hasGlobal($role, 'manage_booking_inbox')
+            || (int) ($attachment['assigned_to_user_id'] ?? 0) === $userId
+            || (int) ($attachment['owner_user_id'] ?? 0) === $userId
+            || (int) ($attachment['claimed_by_user_id'] ?? 0) === $userId
+            || (int) ($attachment['point_person_id'] ?? 0) === $userId
+            || $db->one(
+                'SELECT id FROM lead_watchers WHERE lead_id = ? AND user_id = ?',
+                [$attachment['lead_id'], $userId]
+            ) !== null;
+    }
 }
 
-// ── Validate the requested path ───────────────────────────────────────────────
-
-$path = trim((string)($_GET['_path'] ?? ''), '/');
-
-// Whitelist: only letters, digits, hyphens, underscores, dots, and forward
-// slashes. This rejects "..", null bytes, shell metacharacters, etc.
-if ($path === '' || !preg_match('#^[A-Za-z0-9._/\-]+$#', $path)) {
-    http_response_code(400);
-    header('Content-Type: application/json');
-    echo json_encode(['error' => 'Invalid path']);
-    exit;
+if (!$authorized) {
+    file_error($auth->user() === null ? 401 : 403, $auth->user() === null ? 'Authentication required' : 'Forbidden');
 }
 
-// ── Resolve and confirm the file is inside the client directory ───────────────
-
-$candidatePath = $clientDir . '/' . $path;
-$file          = realpath($candidatePath);
-$base          = realpath($clientDir);
-
-if ($base === false) {
-    // Client directory has not been provisioned yet.
-    http_response_code(404);
-    header('Content-Type: application/json');
-    echo json_encode(['error' => 'Not found']);
-    exit;
+$base = realpath(TenantContext::clientDir($root));
+$file = realpath(TenantContext::clientDir($root) . '/' . $path);
+if ($base === false
+    || $file === false
+    || !str_starts_with($file, $base . DIRECTORY_SEPARATOR)
+    || !is_file($file)
+) {
+    file_error(404, 'Not found');
 }
-
-// Directory-traversal guard: the resolved path must start with the client root.
-if ($file === false || !str_starts_with($file, $base . DIRECTORY_SEPARATOR)) {
-    http_response_code(404);
-    header('Content-Type: application/json');
-    echo json_encode(['error' => 'Not found']);
-    exit;
-}
-
-if (!is_file($file)) {
-    http_response_code(404);
-    header('Content-Type: application/json');
-    echo json_encode(['error' => 'Not found']);
-    exit;
-}
-
-// ── Stream the file ───────────────────────────────────────────────────────────
 
 $mime = mime_content_type($file) ?: 'application/octet-stream';
 $size = filesize($file);
-
-// Prevent uploaded HTML/SVG from being executed as a page.
 header('X-Content-Type-Options: nosniff');
-header('Content-Security-Policy: default-src \'none\'');
-
-// Cache: private (tenant-specific), revalidate after 1 hour.
-header('Cache-Control: private, max-age=3600, must-revalidate');
-
+header("Content-Security-Policy: default-src 'none'; sandbox");
+header('Referrer-Policy: no-referrer');
+header($public
+    ? 'Cache-Control: public, max-age=3600, must-revalidate'
+    : 'Cache-Control: private, no-store');
 header('Content-Type: ' . $mime);
 if ($size !== false) {
     header('Content-Length: ' . $size);
 }
-
 readfile($file);
+
+/** @return never */
+function file_error(int $status, string $message, ?string $errorId = null): never
+{
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    header('X-Content-Type-Options: nosniff');
+    $body = ['error' => $message];
+    if ($errorId !== null) {
+        $body['error_id'] = $errorId;
+    }
+    echo json_encode($body);
+    exit;
+}

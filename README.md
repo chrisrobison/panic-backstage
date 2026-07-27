@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/chrisrobison/panic-backstage/actions/workflows/ci.yml/badge.svg)](https://github.com/chrisrobison/panic-backstage/actions/workflows/ci.yml)
 
-Panic Backstage helps venues track every show from hold to settlement, including lineup, schedule, artwork, ticketing, open items, and event readiness.
+Panic Backstage is a venue operating system for the full inquiry-to-settlement lifecycle: booking intake, event onboarding, contracts, production, ticketing, show execution, and closeout.
 
 The app is intentionally boring to run:
 
@@ -10,7 +10,7 @@ The app is intentionally boring to run:
 - no Composer runtime dependencies
 - no npm, bundler, or frontend build step
 - MySQL with native PDO prepared statements (one database, or one database per tenant in SaaS mode)
-- stateless JWT auth (HS256, no library) with magic-link and passkey/WebAuthn sign-in — no server-side sessions in the tenant apps
+- short-lived HS256 session tokens in Secure HttpOnly cookies (Bearer tokens remain available for API clients), with rotating refresh tokens, magic links, and passkey/WebAuthn sign-in
 - static HTML/CSS/native Web Components that call JSON endpoints under `/api`
 - LARC/PAN loaded from a pinned CDN module for component coordination
 - optional multi-tenant SaaS mode: per-venue database + hostname, resolved per request (off by default — see [Multi-Tenant / SaaS Mode](#multi-tenant--saas-mode))
@@ -19,7 +19,19 @@ The app is intentionally boring to run:
 
 Panic Backstage is API-first. PHP endpoint classes return JSON only; HTML pages are static and use browser-native Web Components, `fetch()`, and LARC/PAN topic events to load and mutate data.
 
-The full API surface — every route, request/response schema, auth requirement, and required capability — is documented as an OpenAPI 3.0 spec at [`docs/openapi.yaml`](docs/openapi.yaml). Paste it into [Swagger Editor](https://editor.swagger.io/) or [Redocly](https://redocly.github.io/redoc/) for a browsable reference. It's maintained by hand alongside `src/Kernel.php` — update both together when routes change.
+The full API surface — routes, request/response schemas, auth requirements, and required capabilities — is documented as an OpenAPI 3.0 spec at [`docs/openapi.yaml`](docs/openapi.yaml). Paste it into [Swagger Editor](https://editor.swagger.io/) or [Redocly](https://redocly.github.io/redoc/) for a browsable reference. `scripts/check-openapi-routes.php` checks the spec against the real router in CI, including explicit child-route coverage for the Booking Inbox.
+
+## Product Spine
+
+The product has one canonical name, **Panic Backstage**, and one primary business spine:
+
+```text
+Inquiry → Qualified booking → Event → Contract/payment → Execution → Settlement
+```
+
+Booking Inbox and Leads own intake and qualification. Onboarding creates the event exactly once. Contracts and payments advance the commercial commitment. Event workspaces own production and show execution. Settlement and closeout finish the record. Contacts, campaigns/Promote, Tasks, Messages, reporting, and automation support that spine; they are not separate systems of record or independent product brands.
+
+Venue names and optional tenant shell labels remain configurable. Older internal `Processes\CenterStage` namespaces are compatibility implementation details, not a user-facing product name; new code and UI should use “Backstage.” See [`docs/PRODUCT-BOUNDARIES.md`](docs/PRODUCT-BOUNDARIES.md).
 
 The custom kernel in `src/Kernel.php` resolves constrained API paths to endpoint classes:
 
@@ -105,7 +117,7 @@ src/
   Request.php             HTTP request wrapper
   Response.php            JSON response wrapper
   Database.php            PDO wrapper (single-tenant DB_*, or an injected tenant PDO)
-  Auth.php                Stateless JWT auth (HS256) — Bearer tokens, magic links, refresh tokens
+  Auth.php                Short-lived HS256 access tokens — HttpOnly cookie/Bearer, magic links, refresh tokens
   Webauthn.php            Passkey / WebAuthn registration + login
   Identity.php            Email → user resolution across primary + verified aliases
   Support.php             Small helper functions
@@ -119,6 +131,7 @@ src/
   StaffMembers.php        Venue staff roster
   NotificationPreferences.php  Per-user email/notification opt-ins
   Mailer.php              Sendmail/MIME mailer; mirrors staff email into the inbox
+  Jobs/                   Durable database queue + worker dispatch
   WizardDefaults.php      Admin-configurable event-wizard defaults
   Contracts.php / Contract*.php  Deal builder, clause library, rendering, e-signature
   Promote.php             Campaign CRUD top-level endpoint
@@ -166,6 +179,8 @@ database/
 
 scripts/
   migrate.php             Scope-aware migration runner (single / super / tenant / tenants)
+  run-background-jobs.php Durable job worker (single / tenant / tenants)
+  static-analysis.sh      PHPStan, syntax, route-contract, and security checks
 
 storage/                  Single-tenant data root (uploads, mail, logs)
   uploads/events/
@@ -181,7 +196,7 @@ clients/                  SaaS per-tenant data roots: clients/<slug>/{assets,log
 - MySQL 8 or newer
 - PHP PDO MySQL extension
 
-No Composer or Node install is required.
+No Composer or Node install is required to run the application. Contributors install the locked Composer development dependency to run PHPStan; there are still no Composer runtime packages or frontend build dependencies.
 
 The frontend uses this pinned LARC module directly in the browser:
 
@@ -512,22 +527,23 @@ re-commit it when the layout itself has changed.
 
 ## Deployment Notes
 
-Use `public/` as the web root.
+Use `public/` as the web root whenever the host allows it. When this checkout must live below a broader document root, the root `.htaccess` enforces the same boundary by denying source, scripts, migrations, tests, tenant data, secrets, and internal documents.
 
 For Apache, the included `public/.htaccess` routes API requests to `public/api/index.php`.
 
-For Nginx/PHP-FPM, route `/api/*` to `public/api/index.php` and serve static files from `public/`. If the app is mounted under a subdirectory such as `/backstage`, route that prefix to `public/` and set `APP_BASE_PATH=/backstage` if the server does not expose the prefix through `SCRIPT_NAME`. Uploads should resolve through the `public/uploads` symlink to `storage/uploads`.
+For Nginx/PHP-FPM, route `/api/*` to `public/api/index.php` and serve static files from `public/`. If the app is mounted under a subdirectory such as `/backstage`, route that prefix to `public/` and set `APP_BASE_PATH=/backstage` if the server does not expose the prefix through `SCRIPT_NAME`. Route `/files/*` and legacy `/uploads/*` through `public/files.php`; never serve tenant storage or the `public/uploads` symlink directly.
 
 ### Uploads must never execute (security)
 
-Uploaded files are untrusted. The upload endpoint already validates each file by
-its detected MIME type and writes it under a server-generated name whose
-extension is derived from that type (never from the client filename), so a
-disguised script can't be stored as `.php`. Enforce the same rule at the web
-server as defense-in-depth so a single bug can't become remote code execution:
+Uploaded files are untrusted. Event and inquiry uploads are stored outside the
+document root, use a server-generated extension derived from detected MIME
+type, and are streamed only through `public/files.php`, which resolves a
+database record and applies event/lead authorization. Legacy `/uploads/*` URLs
+are rewritten to that gateway. Enforce the same no-execution rule at the web
+server as defense in depth:
 
-- **Apache:** handled automatically by `storage/uploads/.htaccess`, which turns
-  the PHP engine off and denies any scriptable file in the uploads tree. This
+- **Apache:** handled automatically by the included upload `.htaccess`, which
+  turns the PHP engine off and denies any scriptable file in the uploads tree. This
   requires the vhost to allow those overrides (`AllowOverride` including
   `Options` and `FileInfo` — the same overrides the app's rewrites already need).
 - **Nginx/PHP-FPM:** `.htaccess` is ignored, so add a location block that serves
@@ -535,11 +551,10 @@ server as defense-in-depth so a single bug can't become remote code execution:
 
   ```nginx
   location ^~ /uploads/ {
-      alias /path/to/app/storage/uploads/;
-      add_header X-Content-Type-Options "nosniff" always;
-      types { } default_type application/octet-stream;   # don't infer active types
-      location ~ \.(php|phtml|phar|phps?|pht|cgi|pl|py|sh|s?html)$ { deny all; }
-      # Critically: do NOT include fastcgi_pass in this block.
+      include fastcgi_params;
+      fastcgi_param SCRIPT_FILENAME /path/to/app/public/files.php;
+      fastcgi_param QUERY_STRING "_path=$uri";
+      fastcgi_pass unix:/run/php/php8.2-fpm.sock;
   }
   ```
 
@@ -549,7 +564,9 @@ Staging checklist:
 
 - PHP 8.2+, PDO MySQL, and fileinfo enabled.
 - `.env` uses staging database credentials and `APP_BASE_PATH` when mounted below `/`.
-- `storage/uploads/events` is writable by the PHP process.
+- Run `php scripts/migrate.php` (and `php scripts/migrate.php tenants` in SaaS mode).
+- `storage/assets` or each `clients/<slug>/assets` directory is writable by the PHP process.
+- Install `scripts/cron-background-jobs.sh` once per minute so public-inquiry follow-up jobs drain.
 - The server can reach `https://cdn.jsdelivr.net/npm/@larcjs/core@3.0.1/pan.mjs`, or LARC should be vendored in a future offline-demo pass.
 - Run `php database/seed.php` only when resetting demo data is acceptable.
 
@@ -642,10 +659,12 @@ theme classes.
 <script src="https://panicbooking.com/backstage/assets/panic-booking-inquiry.js"></script>
 ```
 
-Every submission is created as a normal `leads` row (`source = website`,
-`status = new`) — it lands in the same **Leads** pipeline as any other
-inquiry, no separate inbox to check, and venue admins with email
-notifications enabled get pinged immediately. A honeypot field plus a
+Every submission and its follow-up jobs are committed atomically. The inquiry
+is a normal `leads` row (`source = website`, `status = new`) in the same
+Booking Inbox as every other inquiry. A durable worker then performs
+classification, routing, acknowledgment, and venue-admin notification with
+bounded retries, so a slow AI or mail provider never holds the public request
+open. A honeypot field plus a
 per-IP/per-email rate limit (`src/RateLimiter.php`, the same mechanism the
 auth endpoints use) guard against spam.
 
@@ -764,9 +783,11 @@ remains the global log of every transactional email the system has sent.
 
 ## Core Workflow
 
-- `/` shows the staff dashboard after login.
-- Venue admins can create events from templates and see all events.
-- Each event workspace manages overview, lineup, tasks, open items, run sheet, assets, settlement, and activity.
+- Public forms and booking email create auditable inquiries in Booking Inbox.
+- Qualification, assignment, claims, and status changes happen on the lead; onboarding atomically creates one event and applies its task template.
+- Contracts, signatures, deposits, and payments move the event from proposal to committed booking.
+- The event workspace manages lineup, production tasks, run sheet, assets, ticketing, guest list, staffing, and show execution.
+- Settlement, reporting, and closeout complete the same lifecycle record.
 - Public event pages are loaded by `public/event.html?slug=event-slug`.
 - Public event API responses only include events with `public_visibility` enabled.
 - Web Components publish PAN-compatible topics such as `app.route.changed`, `events.loaded`, `event.saved`, `event.assetUploaded`, `event.openItemResolved`, `event.publicationChanged`, `toast.show`, and `api.error`.
@@ -856,8 +877,9 @@ After logging in as the seeded admin:
 Useful checks:
 
 ```bash
-find src public database scripts -name '*.php' -print -exec php -l {} \;
-node --check public/assets/app.js
+composer install
+./scripts/static-analysis.sh
+./tests/run-php-tests.sh
 php database/seed.php
 php -S localhost:8000 -t public public/router.php
 php scripts/endpoint-smoke.php http://localhost:8000
@@ -892,9 +914,9 @@ changes. It shares its browser/CDP/login machinery with
 
 ### CI
 
-`.github/workflows/ci.yml` runs on every push to `main` and every pull
-request, four jobs: a `php -l` sweep of every source file; the hermetic PHP
-suite; the API integration suite; and the headless-Chromium UI suite — the
+.github/workflows/ci.yml runs on every push to `main` and every pull
+request, four jobs: syntax checks plus PHPStan/API-contract/security analysis;
+the hermetic PHP suite; the API integration suite; and the headless-Chromium UI suite — the
 latter two each against their own MariaDB service container, seeded fresh
 every run (`php database/seed.php && php scripts/migrate.php`,
 `admin@venue.local` / `changeme`). `seed_demo_data()` returns

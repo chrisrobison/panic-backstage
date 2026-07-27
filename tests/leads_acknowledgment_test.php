@@ -3,10 +3,10 @@
  * Tests for src/Leads/Acknowledgment.php — the Booking Inbox's send-once
  * auto-acknowledgment gate.
  *
- * Only exercises the guards that return before any DB read/write (blank
- * email, internal/manual source, spam/duplicate status) — genuinely
- * hermetic. The send-once dedup check, settings lookup, and actual send are
- * DB/mail-dependent and belong in the integration suite instead.
+ * Exercises the guards that return before any DB write (blank email,
+ * internal/manual source, spam/duplicate status). Database is an eager
+ * concrete dependency, and the freeform-email case performs one read, so
+ * this script belongs in the DB-backed suite even though it never sends.
  *
  * Run with: php tests/leads_acknowledgment_test.php
  */

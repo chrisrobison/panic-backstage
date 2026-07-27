@@ -39,47 +39,75 @@ final class ClaimService
     public function claim(Database $db, array $lead, int $userId): array
     {
         $leadId = (int) $lead['id'];
-
-        $active = $db->one(
-            "SELECT c.*, u.name claimed_by_name FROM lead_claims c
-             LEFT JOIN users u ON u.id = c.claimed_by_user_id
-             WHERE c.lead_id = ? AND c.status = 'active' LIMIT 1",
-            [$leadId]
-        );
-        if ($active !== null) {
-            if ((int) $active['claimed_by_user_id'] === $userId) {
-                return ['ok' => true, 'expiresAt' => $active['expires_at'], 'alreadyOwn' => true];
-            }
-            return [
-                'ok' => false, 'code' => 409,
-                'error' => "Already claimed by {$active['claimed_by_name']}, expires {$active['expires_at']}.",
-            ];
+        $pdo = $db->pdo();
+        $ownsTransaction = !$pdo->inTransaction();
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
         }
 
-        $sla = SlaSettings::forLead($db, $lead);
-        $expiresAt = $sla !== null
-            ? BusinessHours::addBusinessHours(
-                new \DateTimeImmutable('now', new \DateTimeZone('UTC')),
-                $sla['response_deadline_hours'], $sla['timezone'],
-                $sla['business_hours_start'], $sla['business_hours_end'], $sla['business_days']
-              )->format('Y-m-d H:i:s')
-            : null;
+        try {
+            // Serialize every claim attempt on the lead row. The unique
+            // (lead_id, active_slot) index is the final database backstop.
+            $lockedLead = $db->one('SELECT * FROM leads WHERE id = ? FOR UPDATE', [$leadId]);
+            if ($lockedLead === null) {
+                if ($ownsTransaction) {
+                    $pdo->rollBack();
+                }
+                return ['ok' => false, 'code' => 404, 'error' => 'Inquiry not found'];
+            }
+            $lead = $lockedLead;
 
-        $db->run(
-            'INSERT INTO lead_claims (lead_id, claimed_by_user_id, claimed_at, expires_at, status)
-             VALUES (?, ?, NOW(), ?, ?)',
-            [$leadId, $userId, $expiresAt, 'active']
-        );
-        $db->run(
-            'UPDATE leads SET claimed_by_user_id = ?, claimed_at = NOW(), claim_expires_at = ?,
-                               status = IF(status IN (?, ?, ?), ?, status)
-             WHERE id = ?',
-            [$userId, $expiresAt, 'new', 'classified', 'assigned', 'claimed', $leadId]
-        );
+            $active = $db->one(
+                "SELECT c.*, u.name claimed_by_name FROM lead_claims c
+                 LEFT JOIN users u ON u.id = c.claimed_by_user_id
+                 WHERE c.lead_id = ? AND c.status = 'active' LIMIT 1",
+                [$leadId]
+            );
+            if ($active !== null) {
+                $result = (int) $active['claimed_by_user_id'] === $userId
+                    ? ['ok' => true, 'expiresAt' => $active['expires_at'], 'alreadyOwn' => true]
+                    : [
+                        'ok' => false, 'code' => 409,
+                        'error' => "Already claimed by {$active['claimed_by_name']}, expires {$active['expires_at']}.",
+                    ];
+                if ($ownsTransaction) {
+                    $pdo->commit();
+                }
+                return $result;
+            }
 
-        log_lead_activity($db, $leadId, $userId, 'claimed', ['expires_at' => $expiresAt]);
+            $sla = SlaSettings::forLead($db, $lead);
+            $expiresAt = $sla !== null
+                ? BusinessHours::addBusinessHours(
+                    new \DateTimeImmutable('now', new \DateTimeZone('UTC')),
+                    $sla['response_deadline_hours'], $sla['timezone'],
+                    $sla['business_hours_start'], $sla['business_hours_end'], $sla['business_days']
+                  )->format('Y-m-d H:i:s')
+                : null;
 
-        return ['ok' => true, 'expiresAt' => $expiresAt];
+            $db->run(
+                'INSERT INTO lead_claims (lead_id, claimed_by_user_id, claimed_at, expires_at, status, active_slot)
+                 VALUES (?, ?, NOW(), ?, ?, 1)',
+                [$leadId, $userId, $expiresAt, 'active']
+            );
+            $db->run(
+                'UPDATE leads SET claimed_by_user_id = ?, claimed_at = NOW(), claim_expires_at = ?,
+                                   status = IF(status IN (?, ?, ?), ?, status)
+                 WHERE id = ?',
+                [$userId, $expiresAt, 'new', 'classified', 'assigned', 'claimed', $leadId]
+            );
+
+            log_lead_activity($db, $leadId, $userId, 'claimed', ['expires_at' => $expiresAt]);
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
+            return ['ok' => true, 'expiresAt' => $expiresAt];
+        } catch (\Throwable $e) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 
     /**
@@ -94,7 +122,7 @@ final class ClaimService
         $status = $source === 'automation' ? 'expired' : 'released';
 
         $db->run(
-            "UPDATE lead_claims SET status = ?, released_at = NOW(), released_by_user_id = ?, released_reason = ?
+            "UPDATE lead_claims SET status = ?, active_slot = NULL, released_at = NOW(), released_by_user_id = ?, released_reason = ?
              WHERE lead_id = ? AND status = 'active'",
             [$status, $releasedByUserId, $reason, $leadId]
         );

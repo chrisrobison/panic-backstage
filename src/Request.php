@@ -11,7 +11,8 @@ final class Request
         private readonly array $query,
         private readonly array $body,
         private readonly array $files,
-        private readonly array $headers
+        private readonly array $headers,
+        private readonly array $cookies = []
     ) {}
 
     public static function fromGlobals(): self
@@ -26,7 +27,15 @@ final class Request
         } elseif (in_array($method, ['PATCH', 'PUT', 'DELETE'], true)) {
             parse_str(file_get_contents('php://input') ?: '', $body);
         }
-        return new self($method, $path, $_GET, $body, $_FILES, function_exists('getallheaders') ? getallheaders() : []);
+        return new self(
+            $method,
+            $path,
+            $_GET,
+            $body,
+            $_FILES,
+            function_exists('getallheaders') ? getallheaders() : [],
+            $_COOKIE
+        );
     }
 
     public function method(): string { return $this->method; }
@@ -34,6 +43,7 @@ final class Request
     public function query(?string $key = null, mixed $default = null): mixed { return $key === null ? $this->query : ($this->query[$key] ?? $default); }
     public function body(?string $key = null, mixed $default = null): mixed { return $key === null ? $this->body : ($this->body[$key] ?? $default); }
     public function files(): array { return $this->files; }
+    public function cookie(string $name, mixed $default = null): mixed { return $this->cookies[$name] ?? $default; }
     public function header(string $name): ?string
     {
         foreach ($this->headers as $key => $value) {

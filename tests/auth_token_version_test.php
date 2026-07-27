@@ -68,5 +68,21 @@ ok($auth3->user() === null, 'clearUser() drops the authenticated user (used on t
 $tampered = substr($token, 0, -1) . (substr($token, -1) === 'A' ? 'B' : 'A');
 ok(authFor($tampered) === null, 'tampered signature is rejected (tv claim does not weaken sig check)');
 
+// ── 5. Browser cookie authentication uses the same validation path ─────────
+$cookieAuth = new Auth();
+$cookieRequest = new Request('GET', '/', [], [], [], [], [Auth::ACCESS_COOKIE => $token]);
+$cookieAuth->authenticate($cookieRequest);
+ok($cookieAuth->user() !== null, 'valid HttpOnly access-cookie value authenticates');
+ok($cookieAuth->authenticationSource() === 'cookie', 'authentication source records cookie use');
+
+// ── 6. Access TTL is short and configuration is bounded ────────────────────
+putenv('ACCESS_TOKEN_TTL_SECONDS');
+ok(Auth::accessTtlSeconds() === 900, 'access-token TTL defaults to 15 minutes');
+putenv('ACCESS_TOKEN_TTL_SECONDS=10');
+ok(Auth::accessTtlSeconds() === 300, 'access-token TTL has a five-minute lower bound');
+putenv('ACCESS_TOKEN_TTL_SECONDS=999999');
+ok(Auth::accessTtlSeconds() === 3600, 'access-token TTL has a one-hour upper bound');
+putenv('ACCESS_TOKEN_TTL_SECONDS');
+
 echo "\nAuth token_version: $passed passed, $failed failed.\n";
 exit($failed > 0 ? 1 : 0);

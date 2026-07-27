@@ -79,13 +79,13 @@ final class Acknowledgment
             return false;
         }
 
-        $already = $db->one(
-            "SELECT id FROM lead_messages
+        $existingAck = $db->one(
+            "SELECT * FROM lead_messages
              WHERE lead_id = ? AND JSON_UNQUOTE(JSON_EXTRACT(raw_headers_json, '$.kind')) = ?
              LIMIT 1",
             [$leadId, self::MARKER]
         );
-        if ($already !== null) {
+        if ($existingAck !== null && $existingAck['status'] === 'sent') {
             return false;
         }
 
@@ -106,16 +106,21 @@ final class Acknowledgment
         // Threaded against whatever inbound message(s) triggered this lead so
         // far (normally just the one that created it) — see the class
         // docblock and Panic\Leads\ThreadMatcher.
-        $priorMessageIds = array_column(
-            $db->all(
+        $priorRows = $existingAck === null
+            ? $db->all(
                 "SELECT external_message_id FROM lead_messages
                  WHERE lead_id = ? AND external_message_id IS NOT NULL
                  ORDER BY id ASC",
                 [$leadId]
-            ),
-            'external_message_id'
-        );
-        $externalMessageId = Mailer::generateMessageId('bookings@themab.org');
+            )
+            : $db->all(
+                "SELECT external_message_id FROM lead_messages
+                 WHERE lead_id = ? AND id != ? AND external_message_id IS NOT NULL
+                 ORDER BY id ASC",
+                [$leadId, $existingAck['id']]
+            );
+        $priorMessageIds = array_column($priorRows, 'external_message_id');
+        $externalMessageId = $existingAck['external_message_id'] ?? Mailer::generateMessageId('bookings@themab.org');
 
         $mailer = new Mailer($this->root, $db, 'bookings@themab.org', 'Mabuhay Gardens Booking Team');
         $mailer->send(
@@ -130,23 +135,38 @@ final class Acknowledgment
             $priorMessageIds !== [] ? end($priorMessageIds) : null,
             $priorMessageIds
         );
+        $accepted = $mailer->deliveryAccepted();
 
-        $db->insert(
-            'INSERT INTO lead_messages
-             (lead_id, direction, channel, status, from_name, from_email, to_recipients, subject,
-              body_text, external_message_id, in_reply_to, raw_headers_json, is_read)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
-            [
-                $leadId, 'outbound', 'email', 'sent',
-                'Mabuhay Gardens Booking Team', 'bookings@themab.org', $email, $subject,
-                $body, $externalMessageId, $priorMessageIds !== [] ? end($priorMessageIds) : null,
-                json_encode(['kind' => self::MARKER]),
-            ]
-        );
+        if ($existingAck !== null) {
+            $db->run(
+                'UPDATE lead_messages
+                 SET status = ?, delivery_attempted_at = NOW(), delivery_error = ?
+                 WHERE id = ?',
+                [$accepted ? 'sent' : 'failed', $accepted ? null : $mailer->deliveryError(), $existingAck['id']]
+            );
+        } else {
+            $db->insert(
+                'INSERT INTO lead_messages
+                 (lead_id, direction, channel, status, from_name, from_email, to_recipients, subject,
+                  body_text, external_message_id, in_reply_to, raw_headers_json, is_read,
+                  delivery_attempted_at, delivery_error)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), ?)',
+                [
+                    $leadId, 'outbound', 'email', $accepted ? 'sent' : 'failed',
+                    'Mabuhay Gardens Booking Team', 'bookings@themab.org', $email, $subject,
+                    $body, $externalMessageId, $priorMessageIds !== [] ? end($priorMessageIds) : null,
+                    json_encode(['kind' => self::MARKER]),
+                    $accepted ? null : $mailer->deliveryError(),
+                ]
+            );
+        }
 
-        log_lead_activity($db, $leadId, null, 'auto_acknowledged', ['to' => $email]);
+        log_lead_activity($db, $leadId, null, $accepted ? 'auto_acknowledged' : 'auto_acknowledgment_failed', [
+            'to' => $email,
+            'error' => $accepted ? null : $mailer->deliveryError(),
+        ]);
 
-        return true;
+        return $accepted;
     }
 
     /**

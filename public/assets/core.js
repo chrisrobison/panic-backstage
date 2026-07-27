@@ -3,17 +3,34 @@ const TOKEN_KEY   = 'backstage_access_token';
 
 const REFRESH_KEY = 'backstage_refresh_token';
 
-const getToken        = () => localStorage.getItem(TOKEN_KEY);
+// One-release migration from the old persistent localStorage session. Access
+// tokens live only for this tab; new refresh tokens are HttpOnly cookies and
+// are never written by JavaScript.
+let _accessToken = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+let _legacyRefreshToken = sessionStorage.getItem(REFRESH_KEY) || localStorage.getItem(REFRESH_KEY);
+if (_accessToken) sessionStorage.setItem(TOKEN_KEY, _accessToken);
+if (_legacyRefreshToken) sessionStorage.setItem(REFRESH_KEY, _legacyRefreshToken);
+localStorage.removeItem(TOKEN_KEY);
+localStorage.removeItem(REFRESH_KEY);
 
-const getRefreshToken = () => localStorage.getItem(REFRESH_KEY);
+const getToken = () => _accessToken;
+
+const getRefreshToken = () => _legacyRefreshToken;
 
 const setTokens = (access, refresh) => {
-  localStorage.setItem(TOKEN_KEY, access);
-  if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
+  _accessToken = access || null;
+  if (_accessToken) sessionStorage.setItem(TOKEN_KEY, _accessToken);
+  else sessionStorage.removeItem(TOKEN_KEY);
+  // Deliberately ignore newly-issued refresh tokens. The server placed the
+  // authoritative copy in an HttpOnly cookie.
 };
 
 const clearTokens = () => {
-  localStorage.removeItem(TOKEN_KEY);
+  _accessToken = null;
+  _legacyRefreshToken = null;
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(REFRESH_KEY);
+  localStorage.removeItem(TOKEN_KEY); // clean up pre-cookie releases
   localStorage.removeItem(REFRESH_KEY);
 };
 
@@ -157,17 +174,18 @@ async function api(path, options = {}) {
 
 async function tryRefresh() {
   const refreshToken = getRefreshToken();
-  if (!refreshToken) return null;
   try {
     const response = await fetch(apiUrl('/auth/refresh'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
     });
     if (!response.ok) return null;
     const data = await response.json();
     if (data.access_token) {
       setTokens(data.access_token, data.refresh_token);
+      _legacyRefreshToken = null;
+      sessionStorage.removeItem(REFRESH_KEY);
       return data.access_token;
     }
   } catch { /* network error */ }

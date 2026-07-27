@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use Panic\Leads\StatusMachine;
+
 use function Panic\boolish;
 use function Panic\date_or_null;
 
@@ -239,17 +241,36 @@ final class Leads extends BaseEndpoint
 
         $b = $request->body();
 
-        // Status transitions — record audit note
+        // Status transitions are governed by the same state machine used by
+        // the Booking Inbox. The legacy Leads UI remains a second lens, not a
+        // way around required reasons, terminal-state protection, or audit.
         $newStatus = $b['status'] ?? $lead['status'];
         if (!in_array($newStatus, self::STATUSES, true)) {
             $newStatus = $lead['status'];
+        }
+        if ($newStatus !== $lead['status']) {
+            $reason = trim((string) ($b['status_note'] ?? $b['decline_reason'] ?? ''));
+            $transition = (new StatusMachine($this->db))->transition(
+                $lead,
+                (string) $newStatus,
+                $this->userId(),
+                $reason,
+                $this->hasGlobalCapability('override_lead_claims'),
+                $this->hasGlobalCapability('decline_high_value_leads')
+            );
+            if (!$transition['ok']) {
+                return Response::json(
+                    array_diff_key($transition, ['ok' => true]),
+                    $transition['code'] ?? 422
+                );
+            }
         }
 
         $sets   = [];
         $params = [];
 
         $fields = [
-            'status', 'source', 'contact_name', 'contact_email', 'contact_org', 'contact_phone',
+            'source', 'contact_name', 'contact_email', 'contact_org', 'contact_phone',
             'event_name', 'event_type', 'band_name', 'desired_date', 'desired_date_alt', 'rooms_requested',
             'projected_attendance', 'budget', 'is_private', 'alcohol_plan', 'notes',
             'point_person_id', 'risk_level', 'decline_reason', 'decision_notes',
@@ -322,7 +343,23 @@ final class Leads extends BaseEndpoint
         if (!$this->isVenueAdmin()) {
             return $this->forbidden('Only venue admins can delete leads');
         }
-        $this->db->run('DELETE FROM leads WHERE id = ?', [$id]);
+        $lead = $this->db->one('SELECT * FROM leads WHERE id = ?', [$id]);
+        if (!$lead) {
+            return $this->notFound('Lead not found');
+        }
+        if ($lead['status'] !== 'archived') {
+            $result = (new StatusMachine($this->db))->transition(
+                $lead,
+                'archived',
+                $this->userId(),
+                'Archived from the Leads pipeline',
+                true,
+                true
+            );
+            if (!$result['ok']) {
+                return Response::json(['error' => $result['error'] ?? 'Could not archive inquiry'], $result['code'] ?? 422);
+            }
+        }
         return Response::noContent();
     }
 

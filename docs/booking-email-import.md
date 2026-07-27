@@ -1,10 +1,10 @@
 # Booking-email import
 
 Booking requests sent to **bookings@themab.org** arrive as freeform or
-semi-structured email. This pipeline parses each one and creates a row in the
-`leads` table (`source = email`, `status = new`) so they show up in the Leads
-inbox alongside manually-entered leads — with as much detail carried over as the
-message allows.
+semi-structured email. This pipeline parses each message and creates a row in
+the `leads` table (`source = email`, `status = new`) when it contains booking
+signals. Mailing-list and unrelated automated messages are retained in the
+intake quarantine without entering the active inquiry queue.
 
 ## How it flows
 
@@ -20,7 +20,9 @@ bookings@themab.org  ──(Google Workspace forward)──▶  the server mailb
         ├─▶  src/LeadEmailParser.php  — MIME decode + field extraction
         │
         ▼
-   leads (new)  +  lead_intake_emails (raw + dedup + audit)  +  lead_notes (audit)
+   IntakeGate
+        ├─ inquiry   → leads + lead_messages + lead_intake_emails
+        └─ noise     → lead_intake_emails (skipped; raw retained)
 ```
 
 The `unseen` keyword means the message is **also delivered to the inbox as
@@ -34,11 +36,12 @@ new `leads` row, `src/Leads/ThreadMatcher.php` checks whether the inbound
 email is obviously a continuation of one we already have:
 
 1. **Threading headers** — the email's `In-Reply-To`/`References` ids are
-   checked against `lead_messages.external_message_id`, which every message
-   on a lead carries: its own `Message-ID` for inbound mail, and (since this
-   feature landed) a real generated `Message-ID` for every outbound send too
-   — staff replies (`LeadsInbox.php`) and the auto-acknowledgment
-   (`Leads/Acknowledgment.php`). A hit is exact.
+   checked against both `lead_messages.external_message_id` and the indexed
+   ancestry in `lead_message_references`. The latter matters when the original
+   parent email never reached this inbox: two replies that cite the same
+   missing parent still share an exact RFC thread identity. Inbound messages
+   carry their source `Message-ID`; outbound sends carry a generated
+   `Message-ID` (`LeadsInbox.php` and `Leads/Acknowledgment.php`).
 2. **Subject + sender fallback** — for webmail clients that drop
    `References` on forward: if the subject, normalized (`Re:`/`Fwd:`/`Fw:`/
    `Aw:` prefixes stripped — `LeadEmailParser::normalizeSubject()`), matches
@@ -54,31 +57,57 @@ new message on the lead's Conversation tab via the existing Inbox polling
 (`Inbox::changes()`) — no separate notification needed.
 
 No match (a first inquiry, or a reply to a pre-threading message with no
-recoverable subject/sender match) falls through to lead creation exactly as
-before.
+recoverable subject/sender match) falls through to the intake gate before any
+new lead is created.
+
+## Intake quarantine
+
+`src/Leads/IntakeGate.php` rejects list mail, bulk/automated senders without
+booking signals, newsletter content fingerprints (unsubscribe/browser-view
+language, campaign-provider links, marketing subjects, and high link density),
+automated non-inquiry notifications, and messages with no
+event/date/attendance signal. Jotform submissions always pass, and thread
+matching runs before this gate so a short reply to an existing inquiry is
+never filtered.
+
+Skipped mail keeps its raw RFC 822 payload and parsed metadata in
+`lead_intake_emails`. Venue administrators can review it from the shield
+button in the Booking Inbox queue. Promoting a false positive creates an
+unread conversation, then runs classification and deterministic routing.
+
+Existing untouched leads can be rechecked after filter improvements:
+
+```
+php scripts/quarantine-booking-inbox-noise.php          # dry run
+php scripts/quarantine-booking-inbox-noise.php --apply  # quarantine safe matches
+```
+
+The recheck refuses to change assigned, claimed, owned, answered, annotated,
+task-linked, attachment-bearing, or event-linked inquiries.
 
 ## Backfilling threads for already-imported email
 
-`scripts/backfill-lead-threads.php` retroactively applies the same
-header-based thread match to `leads`/`lead_intake_emails` rows that were
-already imported before ThreadMatcher existed. Deliberately header-only (no
-subject+sender fallback) — see the script's own docblock for why running
-that heuristic across *all* history is riskier than scoping it to a 180-day
-window against one sender the way ThreadMatcher does for new mail.
+`scripts/backfill-lead-threads.php` builds connected components from each
+stored email's own Message-ID and complete References ancestry. It therefore
+recovers direct reply chains and siblings that share an unimported parent,
+then populates `lead_message_references` for future matching. It remains
+deliberately header-only (no subject+sender fallback) because exact RFC
+ancestry is safe to apply across history while repeated subject lines are not.
 
 ```
 php scripts/backfill-lead-threads.php            # dry run (default) — reports, writes nothing
 php scripts/backfill-lead-threads.php --apply     # writes the safe merges
 ```
 
-A merge only ever runs automatically when the duplicate lead shows no sign of
-having been worked (still an automatic-pipeline status, unclaimed, no owner,
-no real reply sent, no human note/attachment/linked task, not converted).
+A merge only ever runs automatically when the later lead shows no conflicting
+ownership or business work (unassigned, unclaimed, no owner, no real reply
+sent, no human note/attachment/linked task, not converted). Legacy active
+pipeline statuses may converge, and two spam records may converge when their
+canonical thread is also spam.
 Anything else is printed under "needs manual review" and left completely
 untouched. Applied merges move the conversation (messages/notes/attachments)
-onto the earlier lead and mark the duplicate `status = 'duplicate'` — nothing
-is deleted, and it's idempotent (safe to re-run; already-merged leads won't
-match again).
+onto the earliest lead and mark the duplicate `status = 'duplicate'` —
+nothing is deleted, and it is idempotent.
 
 ## Auto-acknowledgment gating
 
@@ -166,6 +195,9 @@ Fields populated where present: `contact_name`, `contact_email`, `contact_org`,
   `lead_intake_emails` (raw message retained) rather than bouncing the email.
 - **Deduplication:** re-delivery of the same `Message-ID` is detected and
   skipped (it won't create a second lead).
+- **Historical rebuild:** `php scripts/backfill-booking-inbox.php` is a dry-run
+  report; add `--apply` to rebuild legacy conversation rows and quarantine
+  untouched obvious noise.
 - **Log:** `storage/logs/booking-intake.log` (override with `BOOKING_INTAKE_LOG`).
 - **Re-import / debug:** the raw message is kept in
   `lead_intake_emails.raw_email`; pipe it back through the script to re-parse.
@@ -178,6 +210,9 @@ php scripts/ingest-booking-email.php --dry-run --file=message.eml
 
 # Import a saved message:
 php scripts/ingest-booking-email.php --file=message.eml
+
+# Override the intake gate for a verified inquiry:
+php scripts/ingest-booking-email.php --force-inquiry --file=message.eml
 
 # From stdin (how Exim invokes it):
 php scripts/ingest-booking-email.php < message.eml

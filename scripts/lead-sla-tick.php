@@ -26,10 +26,9 @@ declare(strict_types=1);
  * past this state>`, so an overlapping/duplicate run is a no-op for rows
  * another run already moved past the deadline.
  *
- * This script only ever touches Booking Inbox rows (leads/lead_claims) — it
- * is intentionally NOT wired into the live crontab as part of this change;
- * see the crontab line in docs/booking-inbox.md for the operator to add
- * deliberately once ready.
+ * This script only ever touches Booking Inbox rows (leads/lead_claims). The
+ * production wrapper is installed in cron every five minutes; the wrapper
+ * prevents overlapping runs and keeps a bounded log.
  *
  * Exit codes:
  *   0  success (zero or more leads processed)

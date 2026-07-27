@@ -158,7 +158,7 @@ export class ProcessInspectorElement extends HTMLElement {
     return `<details class="proc-inspector-group">
       <summary>Action</summary>
       <form class="grid-form padded" data-form="action">
-        <label class="wide">CenterStage operation / connector<input type="text" name="operation" value="${esc(cfg.operation || '')}" placeholder="e.g. events.update_status"${disabledAttr}></label>
+        <label class="wide">Backstage operation / connector<input type="text" name="operation" value="${esc(cfg.operation || '')}" placeholder="e.g. events.update_status"${disabledAttr}></label>
         <label class="wide">Field mappings (JSON)<textarea name="fieldMappings" placeholder='{ "status": "booked" }'${disabledAttr}>${esc(cfg.fieldMappings || '')}</textarea></label>
         <label>Idempotency key<input type="text" name="idempotencyKey" value="${esc(cfg.idempotencyKey || '')}" placeholder="instance.id + node.id"${disabledAttr}></label>
         <label>On error<select name="errorHandling"${disabledAttr}>

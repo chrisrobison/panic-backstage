@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** — Harden booking inbox and CI workflows
 - **Added** `leads` — Backfill thread grouping for already-imported booking emails
 - **Fixed** `leads` — Don't auto-acknowledge freeform emails or anything that looks like a reply
 - **Fixed** `booking-inbox` — Fix unscrollable list/conversation panes and dead Event Info tab

@@ -160,13 +160,49 @@ final class Classifier
      */
     public function recordCorrection(Database $db, int $leadId, int $userId, array $fields): int
     {
+        $current = $db->one(
+            'SELECT extracted_json FROM lead_classifications WHERE lead_id = ? AND is_current = 1',
+            [$leadId]
+        );
+        $existing = $current !== null ? json_decode((string) $current['extracted_json'], true) : [];
+        if (!is_array($existing)) {
+            $existing = [];
+        }
+        $extracted = array_merge(
+            array_intersect_key($existing, array_flip(self::FIELDS)),
+            array_intersect_key($fields, array_flip(self::FIELDS))
+        );
+
         $db->run('UPDATE lead_classifications SET is_current = 0 WHERE lead_id = ? AND is_current = 1', [$leadId]);
 
-        $extracted = array_intersect_key($fields, array_flip(self::FIELDS));
         $id = $db->insert(
             'INSERT INTO lead_classifications (lead_id, source, extracted_json, is_current, corrected_by_user_id)
              VALUES (?, ?, ?, 1, ?)',
             [$leadId, 'human_correction', json_encode($extracted, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $userId]
+        );
+
+        $db->run(
+            'UPDATE leads
+             SET event_type = COALESCE(?, event_type),
+                 event_category = COALESCE(?, event_category),
+                 music_genre = COALESCE(?, music_genre),
+                 age_restriction = COALESCE(?, age_restriction),
+                 projected_attendance = COALESCE(?, projected_attendance),
+                 budget = COALESCE(?, budget)
+             WHERE id = ?',
+            [
+                $extracted['event_type'] ?? null,
+                $extracted['event_category'] ?? null,
+                $extracted['music_genre'] ?? null,
+                $extracted['age_restriction'] ?? null,
+                isset($extracted['attendance']) && is_numeric($extracted['attendance'])
+                    ? (int) $extracted['attendance']
+                    : null,
+                isset($extracted['budget']) && is_numeric($extracted['budget'])
+                    ? (float) $extracted['budget']
+                    : null,
+                $leadId,
+            ]
         );
 
         log_lead_activity($db, $leadId, $userId, 'classification_corrected', ['classification_id' => $id]);

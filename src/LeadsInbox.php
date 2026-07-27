@@ -61,6 +61,7 @@ final class LeadsInbox extends BaseEndpoint
         }
 
         return match ($child) {
+            'detail' => $this->detail($request, $lead),
             'claim' => $this->claim($request, $lead),
             'release-claim' => $this->releaseClaim($request, $lead),
             'assign' => $this->assign($request, $lead),
@@ -73,6 +74,7 @@ final class LeadsInbox extends BaseEndpoint
             'classification' => $this->classification($request, $lead),
             'onboard' => $this->onboard($request, $lead),
             'audit' => $this->audit($request, $lead),
+            'tasks' => $this->tasks($request, $lead),
             default => Response::json(['error' => 'Unknown Booking Inbox action'], 404),
         };
     }
@@ -112,6 +114,63 @@ final class LeadsInbox extends BaseEndpoint
             return true;
         }
         return $this->hasGlobalCapability('manage_assigned_leads') && $this->inScope($lead);
+    }
+
+    /** Scoped detail payload used by the Booking Inbox shell. */
+    private function detail(Request $request, array $lead): Response
+    {
+        if ($request->method() !== 'GET') {
+            return Response::methodNotAllowed();
+        }
+        $row = $this->db->one(
+            "SELECT l.*, au.name assigned_to_name, cu.name claimed_by_name,
+                    ou.name owner_name, pp.name point_person_name
+             FROM leads l
+             LEFT JOIN users au ON au.id = l.assigned_to_user_id
+             LEFT JOIN users cu ON cu.id = l.claimed_by_user_id
+             LEFT JOIN users ou ON ou.id = l.owner_user_id
+             LEFT JOIN users pp ON pp.id = l.point_person_id
+             WHERE l.id = ?",
+            [$lead['id']]
+        );
+        $routed = $this->db->one(
+            "SELECT details_json FROM lead_audit_log
+             WHERE lead_id = ? AND action IN ('routed','manually_assigned','reassigned')
+             ORDER BY id DESC LIMIT 1",
+            [$lead['id']]
+        );
+        $routingDetails = $routed ? json_decode((string) $routed['details_json'], true) : null;
+        $pendingApproval = null;
+        if ($this->hasGlobalCapability('override_lead_claims')) {
+            $pendingApproval = $this->db->one(
+                "SELECT ar.*, u.name requested_by_name
+                 FROM lead_approval_requests ar
+                 LEFT JOIN users u ON u.id = ar.requested_by_user_id
+                 WHERE ar.lead_id = ? AND ar.status = 'pending'
+                 ORDER BY ar.id DESC LIMIT 1",
+                [$lead['id']]
+            );
+        }
+
+        return $this->ok([
+            'lead' => $row,
+            'duplicates' => \Panic\Leads\Onboarding::findDuplicates($this->db, $lead),
+            'routing' => $routingDetails,
+            'pending_approval' => $pendingApproval,
+            'users' => $this->hasGlobalCapability('manage_booking_inbox')
+                ? $this->db->all("SELECT id, name, role FROM users WHERE is_hidden = 0 ORDER BY name")
+                : [],
+            'reply_templates' => $this->db->all(
+                'SELECT id, name, kind, subject, body_text FROM lead_reply_templates WHERE is_active = 1 ORDER BY sort_order, name'
+            ),
+            'capabilities' => [
+                'manage' => $this->canManage($lead),
+                'claim' => $this->hasGlobalCapability('claim_leads'),
+                'reassign' => $this->hasGlobalCapability('manage_booking_inbox'),
+                'approve' => $this->hasGlobalCapability('override_lead_claims'),
+                'tasks' => $this->hasGlobalCapability('manage_tasks_app'),
+            ],
+        ]);
     }
 
     // ── Claim / release ───────────────────────────────────────────────────────
@@ -168,13 +227,35 @@ final class LeadsInbox extends BaseEndpoint
         }
         $toUserId = $request->body('user_id') !== null ? (int) $request->body('user_id') : null;
         $reason = trim((string) $request->body('reason', 'Manually assigned'));
+        if ($toUserId !== null && $toUserId > 0
+            && $this->db->one('SELECT id FROM users WHERE id = ? AND is_hidden = 0', [$toUserId]) === null
+        ) {
+            return Response::json(['error' => 'The selected assignee is not available'], 422);
+        }
+        if ($toUserId !== null && $toUserId <= 0) {
+            $toUserId = null;
+        }
 
-        $this->db->run(
-            'INSERT INTO lead_assignments (lead_id, assigned_to_user_id, assigned_by_user_id, reason) VALUES (?, ?, ?, ?)',
-            [$lead['id'], $toUserId, $this->userId(), $reason]
-        );
-        $this->db->run('UPDATE leads SET assigned_to_user_id = ?, assigned_at = NOW() WHERE id = ?', [$toUserId, $lead['id']]);
-        log_lead_activity($this->db, (int) $lead['id'], $this->userId(), 'manually_assigned', ['to' => $toUserId, 'reason' => $reason]);
+        $pdo = $this->db->pdo();
+        $pdo->beginTransaction();
+        try {
+            $this->db->one('SELECT id FROM leads WHERE id = ? FOR UPDATE', [$lead['id']]);
+            $this->db->run(
+                'INSERT INTO lead_assignments (lead_id, assigned_to_user_id, assigned_by_user_id, reason) VALUES (?, ?, ?, ?)',
+                [$lead['id'], $toUserId, $this->userId(), $reason]
+            );
+            $this->db->run(
+                'UPDATE leads SET assigned_to_user_id = ?, assigned_at = IF(? IS NULL, NULL, NOW()) WHERE id = ?',
+                [$toUserId, $toUserId, $lead['id']]
+            );
+            log_lead_activity($this->db, (int) $lead['id'], $this->userId(), 'manually_assigned', ['to' => $toUserId, 'reason' => $reason]);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
 
         return $this->ok(['assigned_to_user_id' => $toUserId]);
     }
@@ -203,14 +284,38 @@ final class LeadsInbox extends BaseEndpoint
         if ($toUserId <= 0) {
             return Response::json(['error' => 'user_id is required'], 422);
         }
+        if ($this->db->one('SELECT id FROM users WHERE id = ? AND is_hidden = 0', [$toUserId]) === null) {
+            return Response::json(['error' => 'The selected assignee is not available'], 422);
+        }
 
-        $this->db->run(
-            'INSERT INTO lead_assignments (lead_id, assigned_to_user_id, assigned_by_user_id, reason) VALUES (?, ?, ?, ?)',
-            [$lead['id'], $toUserId, $this->userId(), $reason]
-        );
-        $this->db->run('UPDATE leads SET assigned_to_user_id = ?, assigned_at = NOW(), claimed_by_user_id = NULL, claim_expires_at = NULL WHERE id = ?', [$toUserId, $lead['id']]);
-        $this->db->run("UPDATE lead_claims SET status = 'released', released_at = NOW(), released_by_user_id = ?, released_reason = 'Reassigned' WHERE lead_id = ? AND status = 'active'", [$this->userId(), $lead['id']]);
-        log_lead_activity($this->db, (int) $lead['id'], $this->userId(), 'reassigned', ['to' => $toUserId, 'reason' => $reason]);
+        $pdo = $this->db->pdo();
+        $pdo->beginTransaction();
+        try {
+            $this->db->one('SELECT id FROM leads WHERE id = ? FOR UPDATE', [$lead['id']]);
+            $this->db->run(
+                'INSERT INTO lead_assignments (lead_id, assigned_to_user_id, assigned_by_user_id, reason) VALUES (?, ?, ?, ?)',
+                [$lead['id'], $toUserId, $this->userId(), $reason]
+            );
+            $this->db->run(
+                'UPDATE leads SET assigned_to_user_id = ?, assigned_at = NOW(), claimed_by_user_id = NULL,
+                                  claimed_at = NULL, claim_expires_at = NULL WHERE id = ?',
+                [$toUserId, $lead['id']]
+            );
+            $this->db->run(
+                "UPDATE lead_claims
+                 SET status = 'released', active_slot = NULL, released_at = NOW(),
+                     released_by_user_id = ?, released_reason = 'Reassigned'
+                 WHERE lead_id = ? AND status = 'active'",
+                [$this->userId(), $lead['id']]
+            );
+            log_lead_activity($this->db, (int) $lead['id'], $this->userId(), 'reassigned', ['to' => $toUserId, 'reason' => $reason]);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
 
         return $this->ok(['assigned_to_user_id' => $toUserId]);
     }
@@ -257,7 +362,11 @@ final class LeadsInbox extends BaseEndpoint
                  WHERE m.lead_id = ? ORDER BY m.created_at ASC, m.id ASC",
                 [$lead['id']]
             );
-            log_lead_activity($this->db, (int) $lead['id'], $this->userId(), 'viewed');
+            $this->db->run(
+                "UPDATE lead_messages SET is_read = 1
+                 WHERE lead_id = ? AND direction = 'inbound' AND is_read = 0",
+                [$lead['id']]
+            );
             return $this->ok(['messages' => $rows]);
         }
 
@@ -273,19 +382,7 @@ final class LeadsInbox extends BaseEndpoint
             return Response::json(['error' => 'direction must be outbound or internal_note'], 422);
         }
 
-        // Duplicate-send / stale-thread guard: the composer must have been
-        // looking at the true latest message, or a newer one has arrived
-        // since and this send is blocked until the sender reviews it.
         $basedOnMessageId = $request->body('based_on_message_id') !== null ? (int) $request->body('based_on_message_id') : null;
-        $latest = $this->db->one('SELECT id FROM lead_messages WHERE lead_id = ? ORDER BY id DESC LIMIT 1', [$lead['id']]);
-        $latestId = $latest !== null ? (int) $latest['id'] : null;
-        if ($direction === 'outbound' && $basedOnMessageId !== null && $latestId !== null && $basedOnMessageId !== $latestId) {
-            return Response::json([
-                'error' => 'A new message has arrived on this thread since you started composing. Please review it before sending.',
-                'latest_message_id' => $latestId,
-            ], 409);
-        }
-
         $subject = (string) $request->body('subject', '');
         $bodyText = (string) $request->body('body_text', '');
         $bodyHtml = $request->body('body_html');
@@ -293,9 +390,28 @@ final class LeadsInbox extends BaseEndpoint
             return Response::json(['error' => 'A message body is required'], 422);
         }
 
-        $status = $direction === 'outbound' ? 'sent' : 'sent';
-        $fromName = $direction === 'outbound' ? 'Mabuhay Gardens Booking Team' : $this->auth->user()['name'] ?? 'Staff';
-        $fromEmail = $direction === 'outbound' ? 'bookings@themab.org' : null;
+        if ($direction === 'outbound' && !filter_var(trim((string) ($lead['contact_email'] ?? '')), FILTER_VALIDATE_EMAIL)) {
+            return Response::json(['error' => 'A valid contact email is required before sending a reply'], 422);
+        }
+
+        if ($direction === 'internal_note') {
+            $id = $this->db->insert(
+                'INSERT INTO lead_messages
+                 (lead_id, direction, channel, status, from_name, body_text, body_html, sent_by_user_id, checksum)
+                 VALUES (?,?,?,?,?,?,?,?,?)',
+                [
+                    $lead['id'], 'internal_note', 'manual', 'sent',
+                    $this->auth->user()['name'] ?? 'Staff', $bodyText ?: null, $bodyHtml ?: null,
+                    $this->userId(), hash('sha256', $bodyText . $bodyHtml),
+                ]
+            );
+            log_lead_activity($this->db, (int) $lead['id'], $this->userId(), 'internal_note_added', ['message_id' => $id]);
+            $this->db->run('DELETE FROM lead_drafts WHERE lead_id = ? AND user_id = ?', [$lead['id'], $this->userId()]);
+            return $this->ok(['message' => $this->db->one('SELECT * FROM lead_messages WHERE id = ?', [$id])]);
+        }
+
+        $fromName = 'Mabuhay Gardens Booking Team';
+        $fromEmail = 'bookings@themab.org';
 
         // A real Message-ID, generated before the row is written so the id
         // persisted here matches the one that goes out on the wire — that's
@@ -304,46 +420,136 @@ final class LeadsInbox extends BaseEndpoint
         // lead's conversation via In-Reply-To/References so both the
         // customer's mail client and our own matching see one thread.
         $externalMessageId = $direction === 'outbound' ? Mailer::generateMessageId($fromEmail) : null;
-        $priorMessageIds = $direction === 'outbound'
-            ? array_column(
-                $this->db->all(
-                    "SELECT external_message_id FROM lead_messages
-                     WHERE lead_id = ? AND external_message_id IS NOT NULL
-                     ORDER BY id ASC",
-                    [$lead['id']]
-                ),
-                'external_message_id'
-            )
-            : [];
+        $idempotencyKey = trim((string) $request->body('idempotency_key', ''));
+        if ($idempotencyKey === '' || !preg_match('/^[A-Za-z0-9._:-]{8,64}$/', $idempotencyKey)) {
+            return Response::json(['error' => 'A valid idempotency_key is required for outbound replies'], 422);
+        }
+        $attachmentIds = array_values(array_unique(array_filter(
+            array_map('intval', is_array($request->body('attachment_ids', [])) ? $request->body('attachment_ids', []) : []),
+            static fn (int $id): bool => $id > 0
+        )));
+        if (count($attachmentIds) > 5) {
+            return Response::json(['error' => 'A reply may include at most five attachments'], 422);
+        }
 
-        $id = $this->db->insert(
-            'INSERT INTO lead_messages (lead_id, direction, channel, status, from_name, from_email, to_recipients, subject, body_text, body_html, sent_by_user_id, checksum, external_message_id, in_reply_to)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            [
-                $lead['id'], $direction, $direction === 'outbound' ? 'email' : 'manual', $status,
-                $fromName, $fromEmail, $direction === 'outbound' ? $lead['contact_email'] : null,
-                $subject ?: null, $bodyText ?: null, $bodyHtml ?: null, $this->userId(),
-                hash('sha256', $bodyText . $bodyHtml),
-                $externalMessageId, $priorMessageIds !== [] ? end($priorMessageIds) : null,
-            ]
+        $pdo = $this->db->pdo();
+        $pdo->beginTransaction();
+        try {
+            $this->db->one('SELECT id FROM leads WHERE id = ? FOR UPDATE', [$lead['id']]);
+            $existingSend = $this->db->one(
+                'SELECT * FROM lead_messages WHERE lead_id = ? AND idempotency_key = ?',
+                [$lead['id'], $idempotencyKey]
+            );
+            if ($existingSend !== null) {
+                if ($existingSend['status'] === 'sent') {
+                    $pdo->commit();
+                    return $this->ok(['message' => $existingSend, 'idempotent_replay' => true]);
+                }
+                $queuedRecently = $existingSend['status'] === 'queued'
+                    && strtotime((string) $existingSend['created_at']) > time() - 600;
+                if ($queuedRecently) {
+                    $pdo->rollBack();
+                    return Response::json(['error' => 'This reply is already being delivered'], 409);
+                }
+
+                $id = (int) $existingSend['id'];
+                $subject = (string) ($existingSend['subject'] ?? '');
+                $bodyText = (string) ($existingSend['body_text'] ?? '');
+                $bodyHtml = $existingSend['body_html'];
+                $externalMessageId = (string) $existingSend['external_message_id'];
+                $priorMessageIds = array_column(
+                    $this->db->all(
+                        "SELECT external_message_id FROM lead_messages
+                         WHERE lead_id = ? AND id <> ? AND external_message_id IS NOT NULL
+                         ORDER BY id ASC",
+                        [$lead['id'], $id]
+                    ),
+                    'external_message_id'
+                );
+                $this->db->run(
+                    "UPDATE lead_messages
+                     SET status = 'queued', delivery_error = NULL, sent_by_user_id = ?
+                     WHERE id = ?",
+                    [$this->userId(), $id]
+                );
+                $attachmentRows = $this->outboundAttachmentRows((int) $lead['id'], $attachmentIds, $id);
+                if ($attachmentIds !== []) {
+                    $this->linkAttachmentsToMessage($attachmentIds, $id);
+                }
+                $mailAttachments = $this->mailAttachments($attachmentRows, (int) $lead['id']);
+                $pdo->commit();
+            } else {
+                $attachmentRows = $this->outboundAttachmentRows((int) $lead['id'], $attachmentIds, null);
+                $priorMessageIds = array_column(
+                    $this->db->all(
+                        "SELECT external_message_id FROM lead_messages
+                         WHERE lead_id = ? AND external_message_id IS NOT NULL
+                         ORDER BY id ASC",
+                        [$lead['id']]
+                    ),
+                    'external_message_id'
+                );
+                $latest = $this->db->one('SELECT id FROM lead_messages WHERE lead_id = ? ORDER BY id DESC LIMIT 1', [$lead['id']]);
+                $latestId = $latest !== null ? (int) $latest['id'] : null;
+                if ($basedOnMessageId !== null && $latestId !== null && $basedOnMessageId !== $latestId) {
+                    $pdo->rollBack();
+                    return Response::json([
+                        'error' => 'A new message has arrived on this thread since you started composing. Please review it before sending.',
+                        'latest_message_id' => $latestId,
+                    ], 409);
+                }
+
+                $id = $this->db->insert(
+                    'INSERT INTO lead_messages
+                     (lead_id, direction, channel, status, from_name, from_email, to_recipients, subject,
+                      body_text, body_html, sent_by_user_id, checksum, idempotency_key, external_message_id, in_reply_to)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                    [
+                        $lead['id'], 'outbound', 'email', 'queued', $fromName, $fromEmail, $lead['contact_email'],
+                        $subject ?: null, $bodyText ?: null, $bodyHtml ?: null, $this->userId(),
+                        hash('sha256', $bodyText . $bodyHtml), $idempotencyKey,
+                        $externalMessageId, $priorMessageIds !== [] ? end($priorMessageIds) : null,
+                    ]
+                );
+                if ($attachmentIds !== []) {
+                    $this->linkAttachmentsToMessage($attachmentIds, $id);
+                }
+                $mailAttachments = $this->mailAttachments($attachmentRows, (int) $lead['id']);
+                $pdo->commit();
+            }
+        } catch (\InvalidArgumentException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            return Response::json(['error' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        $mailer = (new Mailer($this->root, $this->db, 'bookings@themab.org', 'Mabuhay Gardens Booking Team'))
+            ->skipInboxCopy();
+        $mailer->send(
+            (string) $lead['contact_email'],
+            $subject ?: 'Re: your inquiry',
+            $bodyText,
+            $bodyHtml ?: null,
+            null,
+            [],
+            $mailAttachments,
+            $externalMessageId,
+            $priorMessageIds !== [] ? end($priorMessageIds) : null,
+            $priorMessageIds
+        );
+        $deliveryAccepted = $mailer->deliveryAccepted();
+        $this->db->run(
+            'UPDATE lead_messages SET status = ?, delivery_attempted_at = NOW(), delivery_error = ? WHERE id = ?',
+            [$deliveryAccepted ? 'sent' : 'failed', $deliveryAccepted ? null : $mailer->deliveryError(), $id]
         );
 
-        if ($direction === 'outbound') {
-            $mailer = new Mailer($this->root, $this->db, 'bookings@themab.org', 'Mabuhay Gardens Booking Team');
-            if (trim((string) $lead['contact_email']) !== '') {
-                $mailer->send(
-                    (string) $lead['contact_email'],
-                    $subject ?: 'Re: your inquiry',
-                    $bodyText,
-                    $bodyHtml ?: null,
-                    null,
-                    [],
-                    [],
-                    $externalMessageId,
-                    $priorMessageIds !== [] ? end($priorMessageIds) : null,
-                    $priorMessageIds
-                );
-            }
+        if ($deliveryAccepted) {
             $this->db->run('UPDATE leads SET first_response_at = COALESCE(first_response_at, NOW()) WHERE id = ?', [$lead['id']]);
             (new ClaimService())->recordPreservingAction($this->db, $lead, (int) $this->userId(), 'sent_response');
             // First meaningful outbound reply, with nobody yet marked as the
@@ -353,15 +559,134 @@ final class LeadsInbox extends BaseEndpoint
                 $this->db->run('UPDATE leads SET owner_user_id = ?, owned_since = NOW() WHERE id = ?', [$this->userId(), $lead['id']]);
             }
             log_lead_activity($this->db, (int) $lead['id'], $this->userId(), 'response_sent', ['message_id' => $id]);
+            $this->applyDeliveredWorkflowAction($lead, (string) $request->body('workflow_action', ''), $id);
         } else {
-            log_lead_activity($this->db, (int) $lead['id'], $this->userId(), 'internal_note_added', ['message_id' => $id]);
+            log_lead_activity($this->db, (int) $lead['id'], $this->userId(), 'response_failed', [
+                'message_id' => $id,
+                'error' => $mailer->deliveryError(),
+            ]);
         }
 
-        // A sent reply/note clears this user's draft slot, if any.
-        $this->db->run('DELETE FROM lead_drafts WHERE lead_id = ? AND user_id = ?', [$lead['id'], $this->userId()]);
+        if ($deliveryAccepted) {
+            $this->db->run('DELETE FROM lead_drafts WHERE lead_id = ? AND user_id = ?', [$lead['id'], $this->userId()]);
+        }
 
         $message = $this->db->one('SELECT * FROM lead_messages WHERE id = ?', [$id]);
+        if (!$deliveryAccepted) {
+            return Response::json([
+                'error' => 'The reply was saved but the mail server did not accept it. It is marked failed and can be retried.',
+                'message' => $message,
+            ], 502);
+        }
         return $this->ok(['message' => $message]);
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function outboundAttachmentRows(int $leadId, array $attachmentIds, ?int $messageId): array
+    {
+        if ($attachmentIds === []) {
+            if ($messageId === null) {
+                return [];
+            }
+            $rows = $this->db->all(
+                'SELECT * FROM lead_attachments WHERE lead_id = ? AND message_id = ? ORDER BY id FOR UPDATE',
+                [$leadId, $messageId]
+            );
+            $attachmentIds = array_map('intval', array_column($rows, 'id'));
+        } else {
+            $placeholders = implode(',', array_fill(0, count($attachmentIds), '?'));
+            $messageClause = $messageId === null ? 'message_id IS NULL' : '(message_id IS NULL OR message_id = ?)';
+            $params = [$leadId, $this->userId(), ...$attachmentIds];
+            if ($messageId !== null) {
+                $params[] = $messageId;
+            }
+            $rows = $this->db->all(
+                "SELECT * FROM lead_attachments
+                 WHERE lead_id = ? AND uploaded_by_user_id = ?
+                   AND id IN ({$placeholders}) AND {$messageClause}
+                 ORDER BY id FOR UPDATE",
+                $params
+            );
+        }
+        if (count($rows) !== count($attachmentIds)) {
+            throw new \InvalidArgumentException('One or more selected attachments are unavailable');
+        }
+        $total = array_sum(array_map(static fn (array $row): int => (int) ($row['size_bytes'] ?? 0), $rows));
+        if ($total > 20 * 1024 * 1024) {
+            throw new \InvalidArgumentException('Reply attachments may total at most 20 MB');
+        }
+        return $rows;
+    }
+
+    private function linkAttachmentsToMessage(array $attachmentIds, int $messageId): void
+    {
+        $placeholders = implode(',', array_fill(0, count($attachmentIds), '?'));
+        $this->db->run(
+            "UPDATE lead_attachments SET message_id = ? WHERE id IN ({$placeholders})",
+            [$messageId, ...$attachmentIds]
+        );
+    }
+
+    /** @return list<array{filename:string,mime:string,bytes:string}> */
+    private function mailAttachments(array $rows, int $leadId): array
+    {
+        $attachments = [];
+        foreach ($rows as $row) {
+            $storagePath = (string) $row['storage_path'];
+            if (str_starts_with($storagePath, 'files/')) {
+                $path = \Panic\Tenant\TenantContext::clientDir($this->root)
+                    . '/' . substr($storagePath, 6);
+            } else {
+                // Backward compatibility for attachments created before
+                // private file delivery was introduced.
+                $path = $this->root . '/public/' . ltrim($storagePath, '/');
+            }
+            $bytes = @file_get_contents($path);
+            if ($bytes === false) {
+                throw new \RuntimeException('Could not read selected attachment: ' . $row['filename']);
+            }
+            $attachments[] = [
+                'filename' => (string) $row['filename'],
+                'mime' => (string) ($row['mime_type'] ?: 'application/octet-stream'),
+                'bytes' => $bytes,
+            ];
+        }
+        return $attachments;
+    }
+
+    private function applyDeliveredWorkflowAction(array $lead, string $action, int $messageId): void
+    {
+        $map = [
+            'availability' => ['status' => 'availability_sent', 'preserving' => 'sent_availability'],
+            'proposal' => ['status' => 'proposal_sent', 'preserving' => null],
+            'tour' => ['status' => 'tour_scheduled', 'preserving' => 'scheduled_tour'],
+            'follow_up' => ['status' => 'awaiting_customer', 'preserving' => 'requested_information'],
+        ];
+        if (!isset($map[$action])) {
+            return;
+        }
+        $spec = $map[$action];
+        if ($spec['preserving'] !== null) {
+            (new ClaimService())->recordPreservingAction(
+                $this->db,
+                $lead,
+                (int) $this->userId(),
+                $spec['preserving']
+            );
+        }
+        $freshLead = $this->db->one('SELECT * FROM leads WHERE id = ?', [$lead['id']]);
+        if ($freshLead !== null && !in_array($freshLead['status'], StatusMachine::TERMINAL_STATUSES, true)) {
+            (new StatusMachine($this->db))->transition(
+                $freshLead,
+                $spec['status'],
+                $this->userId(),
+                'Updated after delivered workflow reply',
+                $this->hasGlobalCapability('override_lead_claims'),
+                $this->hasGlobalCapability('decline_high_value_leads'),
+                'human',
+                $messageId
+            );
+        }
     }
 
     // ── Drafts (save-in-progress reply, optimistic-concurrency token) ───────
@@ -445,20 +770,22 @@ final class LeadsInbox extends BaseEndpoint
         if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             return Response::json(['error' => 'No file uploaded'], 422);
         }
-
-        $ctx = \Panic\Tenant\TenantContext::current();
-        if ($ctx !== null) {
-            $dir = $this->root . '/clients/' . $ctx->tenant['slug'] . '/assets/leads/' . $lead['id'];
-            $path = 'files/assets/leads/' . $lead['id'] . '/';
-        } else {
-            $dir = $this->root . '/public/uploads/leads/' . $lead['id'];
-            $path = 'uploads/leads/' . $lead['id'] . '/';
+        if ((int) ($file['size'] ?? 0) > 20 * 1024 * 1024) {
+            return Response::json(['error' => 'Attachments must be 20 MB or smaller'], 422);
         }
+
+        // Attachments are private operational records, never public web
+        // assets. Store them outside public/ in both deployment modes and
+        // serve them only through public/files.php's authorization checks.
+        $dir = \Panic\Tenant\TenantContext::clientDir($this->root)
+            . '/assets/leads/' . $lead['id'];
+        $path = 'files/assets/leads/' . $lead['id'] . '/';
         if (!is_dir($dir)) {
             mkdir($dir, 0775, true);
         }
         $filename = time() . '-' . bin2hex(random_bytes(4)) . '-' . slugify(pathinfo($file['name'], PATHINFO_FILENAME));
-        $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+        $mime = mime_content_type($file['tmp_name']) ?: 'application/octet-stream';
+        $ext = $this->safeAttachmentExtension($mime);
         if ($ext !== '') {
             $filename .= '.' . $ext;
         }
@@ -468,10 +795,31 @@ final class LeadsInbox extends BaseEndpoint
 
         $id = $this->db->insert(
             'INSERT INTO lead_attachments (lead_id, filename, mime_type, size_bytes, storage_path, uploaded_by_user_id) VALUES (?,?,?,?,?,?)',
-            [$lead['id'], $file['name'], mime_content_type($dir . '/' . $filename) ?: null, $file['size'] ?? null, $path . $filename, $this->userId()]
+            [$lead['id'], $file['name'], $mime, $file['size'] ?? null, $path . $filename, $this->userId()]
         );
         log_lead_activity($this->db, (int) $lead['id'], $this->userId(), 'attachment_uploaded', ['attachment_id' => $id]);
         return $this->ok(['id' => $id]);
+    }
+
+    private function safeAttachmentExtension(string $mime): string
+    {
+        return [
+            'application/pdf' => 'pdf',
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            'text/plain' => 'txt',
+            'text/csv' => 'csv',
+            'text/calendar' => 'ics',
+            'application/zip' => 'zip',
+            'application/msword' => 'doc',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
+            'application/vnd.ms-excel' => 'xls',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
+            'application/vnd.ms-powerpoint' => 'ppt',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation' => 'pptx',
+        ][$mime] ?? 'bin';
     }
 
     // ── Classification ────────────────────────────────────────────────────────
@@ -511,6 +859,71 @@ final class LeadsInbox extends BaseEndpoint
             [$lead['id']]
         );
         return $this->ok(['audit' => $rows]);
+    }
+
+    // ── Linked Tasks ───────────────────────────────────────────────────────────
+
+    private function tasks(Request $request, array $lead): Response
+    {
+        if ($request->method() === 'GET') {
+            return $this->ok(['tasks' => $this->db->all(
+                "SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date,
+                        t.assignee_user_id, u.name assignee_name, d.id document_id, d.name document_name
+                 FROM tasks t
+                 JOIN task_documents d ON d.id = t.document_id
+                 LEFT JOIN users u ON u.id = t.assignee_user_id
+                 WHERE t.related_lead_id = ?
+                 ORDER BY t.status = 'done', t.due_date IS NULL, t.due_date, t.id DESC",
+                [$lead['id']]
+            )]);
+        }
+        if ($request->method() !== 'POST') {
+            return Response::methodNotAllowed();
+        }
+        if (!$this->canManage($lead) || !$this->hasGlobalCapability('manage_tasks_app')) {
+            return $this->forbidden('You do not have permission to create linked tasks');
+        }
+        $title = trim((string) $request->body('title', ''));
+        if ($title === '') {
+            return Response::json(['error' => 'Task title is required'], 422);
+        }
+        $priority = (string) $request->body('priority', 'medium');
+        if (!in_array($priority, ['low', 'medium', 'high', 'urgent'], true)) {
+            $priority = 'medium';
+        }
+        $assignee = $request->body('assignee_user_id') ? (int) $request->body('assignee_user_id') : $this->userId();
+        if ($assignee && !$this->db->one('SELECT id FROM users WHERE id = ? AND is_hidden = 0', [$assignee])) {
+            return Response::json(['error' => 'Assignee not found'], 422);
+        }
+
+        $document = $this->db->one("SELECT id FROM task_documents WHERE name = 'Booking Inbox Follow-up' LIMIT 1");
+        if ($document === null) {
+            $documentId = $this->db->insert(
+                "INSERT INTO task_documents (name, icon, color, status, owner_user_id, sort_order)
+                 VALUES ('Booking Inbox Follow-up', 'fa-solid fa-inbox', '#2563eb', 'on_track', ?, 0)",
+                [$this->userId()]
+            );
+        } else {
+            $documentId = (int) $document['id'];
+        }
+        $sort = (int) ($this->db->one(
+            'SELECT COALESCE(MAX(sort_order), 0) + 10 n FROM tasks WHERE document_id = ? AND parent_task_id IS NULL',
+            [$documentId]
+        )['n'] ?? 10);
+        $id = $this->db->insert(
+            'INSERT INTO tasks
+             (document_id, related_lead_id, title, description, status, priority,
+              assignee_user_id, due_date, sort_order, created_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?)',
+            [
+                $documentId, $lead['id'], $title,
+                trim((string) $request->body('description', '')) ?: null,
+                'not_started', $priority, $assignee,
+                date_or_null($request->body('due_date')), $sort, $this->userId(),
+            ]
+        );
+        log_lead_activity($this->db, (int) $lead['id'], $this->userId(), 'linked_task_created', ['task_id' => $id]);
+        return $this->ok(['id' => $id]);
     }
 
     // ── Onboard Lead ──────────────────────────────────────────────────────────

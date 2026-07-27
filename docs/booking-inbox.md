@@ -87,18 +87,20 @@ given lead (venue defaults, adjusted for `high_value_threshold`).
 - `assigned` leads past `sla_claim_due_at` → returned to the unassigned queue.
 - `claimed` leads past `claim_expires_at` → released/escalated.
 
-**This script is shipped but deliberately not wired into cron on this box** —
-there is no staging environment here, so enabling a new scheduled job against
-production is left as a separate, deliberate operator action. To enable it:
+This script is enabled in the production crontab every five minutes:
 
 ```
 */5 * * * * /home/cdr/domains/panicbooking.com/www/backstage/scripts/cron-lead-sla-tick.sh
 ```
 
 (Same shape as the existing `cron-process-tick.sh`: `flock`-guarded, logs to
-`storage/logs/lead-sla-tick.log`, rotates at 1 MB.) It is a no-op until a lead
-actually has an `sla_claim_due_at`/`claim_expires_at` in the past, so adding it
-is low-risk — but that judgment call belongs to whoever owns this crontab.
+`storage/logs/lead-sla-tick.log`, rotates at 1 MB.)
+
+`scripts/classify-lead-backlog.php` retries active inquiries that have an
+inbound message but no current classification. Its cron wrapper processes two
+at a time every fifteen minutes, so a temporary model/CLI outage does not leave
+an inquiry permanently unclassified and the historical backlog drains without
+rerouting leads that a person has already claimed or owned.
 
 ### Untrusted-input discipline (AI classification)
 
@@ -264,7 +266,7 @@ list/workspace/detail components each react to just their slice — the same
 
 ## Setup
 
-1. **Migrations** (`071`–`082`) are additive/idempotent — `php
+1. **Migrations** (`071`–`083`) are additive/idempotent — `php
    scripts/migrate.php` applies them in order. Already applied on this box.
 2. **The local `claude` CLI** (`CLAUDE_CLI_BIN`/`CLAUDE_CLI_HOME` in `.env`,
    see `src/Ai/ClaudeCli.php`) enables AI classification, riding that CLI's
@@ -282,7 +284,8 @@ list/workspace/detail components each react to just their slice — the same
    short-circuits to `null` — the lead is left unclassified and routes to
    unassigned triage (the deterministic parts of the pipeline — dedup, acknowledgment, claim,
    status machine, onboarding — are unaffected).
-3. **SLA cron** — not enabled; see the crontab line above when you're ready.
+3. **SLA cron** — enabled every five minutes through
+   `scripts/cron-lead-sla-tick.sh`.
 4. **Ingestion** — reuses the existing `bookings@themab.org` Exim pipe (see
    `docs/booking-email-import.md`); no additional mail setup needed.
 

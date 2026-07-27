@@ -64,30 +64,48 @@ final class Onboarding
         if (!$availability['available']) {
             $warnings[] = "Potential calendar conflict: event #{$availability['conflict_event_id']} is already on the calendar for {$date} at this venue.";
         }
-
-        $result = self::createEventFromLead($db, $lead, $input, $userId, 'onboarded');
-
-        $tasksCreated = 0;
-        if (!empty($input['task_template_id'])) {
-            $tasksCreated = self::applyTaskTemplate($db, $result['event_id'], (int) $input['task_template_id'], $userId);
+        if ($warnings !== [] && !boolish($input['confirm_warnings'] ?? false)) {
+            throw new \RuntimeException('Review and explicitly confirm the duplicate/calendar warnings before onboarding.');
         }
 
-        log_lead_activity($db, (int) $lead['id'], $userId, 'onboarded', [
-            'event_id' => $result['event_id'],
-            'warnings' => $warnings,
-            'tasks_created' => $tasksCreated,
-        ]);
-        $db->run(
-            'INSERT INTO lead_status_history (lead_id, from_status, to_status, user_id, reason, source) VALUES (?,?,?,?,?,?)',
-            [$lead['id'], $lead['status'], 'onboarded', $userId, 'Onboarded to event #' . $result['event_id'], 'human']
-        );
+        $pdo = $db->pdo();
+        $ownsTransaction = !$pdo->inTransaction();
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
+        try {
+            $result = self::createEventFromLead($db, $lead, $input, $userId, 'onboarded');
 
-        return [
-            'event_id' => $result['event_id'],
-            'event_url' => '#event-' . $result['event_id'],
-            'warnings' => $warnings,
-            'tasks_created' => $tasksCreated,
-        ];
+            $tasksCreated = 0;
+            if (!empty($input['task_template_id'])) {
+                $tasksCreated = self::applyTaskTemplate($db, $result['event_id'], (int) $input['task_template_id'], $userId);
+            }
+
+            log_lead_activity($db, (int) $lead['id'], $userId, 'onboarded', [
+                'event_id' => $result['event_id'],
+                'warnings' => $warnings,
+                'tasks_created' => $tasksCreated,
+            ]);
+            $db->run(
+                'INSERT INTO lead_status_history (lead_id, from_status, to_status, user_id, reason, source) VALUES (?,?,?,?,?,?)',
+                [$lead['id'], $lead['status'], 'onboarded', $userId, 'Onboarded to event #' . $result['event_id'], 'human']
+            );
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
+
+            return [
+                'event_id' => $result['event_id'],
+                'event_url' => '#event-' . $result['event_id'],
+                'warnings' => $warnings,
+                'tasks_created' => $tasksCreated,
+            ];
+        } catch (\Throwable $e) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 
     /**
@@ -116,8 +134,20 @@ final class Onboarding
         }
 
         $pdo = $db->pdo();
-        $pdo->beginTransaction();
+        $ownsTransaction = !$pdo->inTransaction();
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
         try {
+            $current = $db->one('SELECT status, converted_event_id FROM leads WHERE id = ? FOR UPDATE', [$leadId]);
+            if ($current === null) {
+                throw new \RuntimeException('Inquiry no longer exists.');
+            }
+            if (!empty($current['converted_event_id'])
+                || in_array($current['status'], self::NON_ONBOARDABLE_STATUSES, true)
+            ) {
+                throw new \RuntimeException("This inquiry is already {$current['status']} and cannot be onboarded again.");
+            }
             $eventId = $db->insert(
                 'INSERT INTO events
                  (venue_id, title, slug, event_type, status, date, lead_id, is_private,
@@ -129,7 +159,11 @@ final class Onboarding
                     $venueId, $title, $slug, $type, 'proposed', $date, $leadId, $isPrivate,
                     $lead['contact_name'], $lead['contact_email'], $lead['contact_phone'],
                     $lead['contact_org'], $lead['contact_name'], $lead['contact_email'], $lead['contact_phone'],
-                    $lead['projected_attendance'], $lead['notes'], $userId,
+                    isset($overrides['estimated_guests']) && $overrides['estimated_guests'] !== ''
+                        ? (int) $overrides['estimated_guests']
+                        : $lead['projected_attendance'],
+                    array_key_exists('notes', $overrides) ? $overrides['notes'] : $lead['notes'],
+                    $userId,
                 ]
             );
 
@@ -143,11 +177,21 @@ final class Onboarding
             );
             log_activity($db, $eventId, $userId, 'event created from lead', ['lead_id' => $leadId, 'source' => $lead['source']]);
 
-            $pdo->commit();
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
         } catch (\Throwable $e) {
-            $pdo->rollBack();
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             error_log('Lead onboarding/convert failed: ' . $e->getMessage());
-            throw new \RuntimeException('Conversion failed: ' . $e->getMessage(), 0, $e);
+            if ($e instanceof \PDOException) {
+                throw new \RuntimeException('Could not create the event. Please try again.', 0, $e);
+            }
+            if ($e instanceof \RuntimeException) {
+                throw $e;
+            }
+            throw new \RuntimeException('Could not create the event. Please try again.', 0, $e);
         }
 
         return ['event_id' => $eventId, 'title' => $title, 'venue_id' => $venueId];

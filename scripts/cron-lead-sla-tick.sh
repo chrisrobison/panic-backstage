@@ -10,10 +10,8 @@
 # timestamped output appended to storage/logs/lead-sla-tick.log, PATH set
 # explicitly because cron starts with a minimal environment.
 #
-# Deliberately NOT added to this box's live crontab by this change — see
-# docs/booking-inbox.md for why (this repo has no staging environment;
-# enabling a new scheduled job against production is left as a deliberate,
-# separate step for an operator to take).
+# Installed in the production crontab every five minutes. Keep the flock and
+# log rotation here so a slow run cannot overlap the next scheduled tick.
 
 set -uo pipefail
 

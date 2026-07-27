@@ -74,6 +74,60 @@ final class StatusMachine
         string $source = 'human',
         ?int $relatedMessageId = null
     ): array {
+        // Preserve the pure validation fast path used by hermetic callers and
+        // avoid taking a DB lock for requests that cannot possibly mutate.
+        // Target/reason validation is independent of DB state and can fail
+        // before a lock. No-op/terminal checks must use the fresh locked row.
+        $preview = self::preview($lead, $toStatus, $reason, $hasOverrideCapability);
+        if (($preview['code'] ?? null) === 422) {
+            return $preview;
+        }
+
+        $pdo = $this->db->pdo();
+        $ownsTransaction = !$pdo->inTransaction();
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
+        try {
+            // The caller's lead snapshot may be stale. Serialize transitions
+            // and derive from_status from the authoritative locked row.
+            $fresh = $this->db->one('SELECT * FROM leads WHERE id = ? FOR UPDATE', [(int) $lead['id']]);
+            if ($fresh === null) {
+                $result = ['ok' => false, 'code' => 404, 'error' => 'Inquiry not found'];
+            } else {
+                $result = $this->transitionLocked(
+                    $fresh,
+                    $toStatus,
+                    $userId,
+                    $reason,
+                    $hasOverrideCapability,
+                    $hasDeclineHighValueCapability,
+                    $source,
+                    $relatedMessageId
+                );
+            }
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
+            return $result;
+        } catch (\Throwable $e) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    private function transitionLocked(
+        array $lead,
+        string $toStatus,
+        ?int $userId,
+        ?string $reason,
+        bool $hasOverrideCapability,
+        bool $hasDeclineHighValueCapability,
+        string $source = 'human',
+        ?int $relatedMessageId = null
+    ): array {
         $fromStatus = (string) $lead['status'];
 
         if (!in_array($toStatus, self::STATUSES, true)) {
@@ -101,6 +155,19 @@ final class StatusMachine
             && !$hasOverrideCapability
             && $this->isHighValue($lead)
         ) {
+            $existing = $this->db->one(
+                "SELECT id FROM lead_approval_requests
+                 WHERE lead_id = ? AND requested_status = ? AND status = 'pending'
+                 ORDER BY id DESC LIMIT 1",
+                [(int) $lead['id'], $toStatus]
+            );
+            if ($existing !== null) {
+                return [
+                    'ok' => false, 'code' => 202, 'pendingApproval' => true,
+                    'approvalRequestId' => (int) $existing['id'],
+                    'error' => 'This change is already waiting for manager approval.',
+                ];
+            }
             $requestId = $this->db->insert(
                 'INSERT INTO lead_approval_requests (lead_id, requested_by_user_id, requested_status, reason)
                  VALUES (?, ?, ?, ?)',
@@ -122,6 +189,32 @@ final class StatusMachine
         return ['ok' => true, 'status' => $toStatus];
     }
 
+    public static function preview(
+        array $lead,
+        string $toStatus,
+        ?string $reason,
+        bool $hasOverrideCapability
+    ): array {
+        $fromStatus = (string) ($lead['status'] ?? '');
+        if (!in_array($toStatus, self::STATUSES, true)) {
+            return ['ok' => false, 'code' => 422, 'error' => "Unknown status: $toStatus"];
+        }
+        if ($toStatus === $fromStatus) {
+            return ['ok' => true, 'status' => $toStatus, 'unchanged' => true];
+        }
+        if (in_array($fromStatus, self::TERMINAL_STATUSES, true) && !$hasOverrideCapability) {
+            return [
+                'ok' => false,
+                'code' => 409,
+                'error' => "This inquiry is $fromStatus. Reopening it requires a manager override.",
+            ];
+        }
+        if (in_array($toStatus, self::REASON_REQUIRED, true) && trim((string) $reason) === '') {
+            return ['ok' => false, 'code' => 422, 'error' => "A reason is required to mark an inquiry as $toStatus."];
+        }
+        return ['ok' => true, 'status' => $toStatus];
+    }
+
     /**
      * Apply an already-approved transition (e.g. a manager resolving a
      * lead_approval_requests row) without re-running the gates above.
@@ -134,7 +227,26 @@ final class StatusMachine
         string $source = 'human',
         ?int $relatedMessageId = null
     ): void {
-        $this->apply($lead, (string) $lead['status'], $toStatus, $userId, $reason, $source, $relatedMessageId);
+        $pdo = $this->db->pdo();
+        $ownsTransaction = !$pdo->inTransaction();
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
+        try {
+            $fresh = $this->db->one('SELECT * FROM leads WHERE id = ? FOR UPDATE', [(int) $lead['id']]);
+            if ($fresh === null) {
+                throw new \RuntimeException('Inquiry not found');
+            }
+            $this->apply($fresh, (string) $fresh['status'], $toStatus, $userId, $reason, $source, $relatedMessageId);
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
+        } catch (\Throwable $e) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
     }
 
     private function apply(

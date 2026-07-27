@@ -1,6 +1,21 @@
 Options -Indexes
 RewriteEngine On
 
+# ── Security boundary: only explicitly-public application files may run ──────
+# This checkout is deployed below the parent site's document root, so changing
+# the vhost DocumentRoot to public/ is not always available. Treat this file as
+# the equivalent boundary: source, operational scripts, migrations, tests,
+# secrets, and internal documents are never HTTP resources.
+RewriteRule (^|/)\.(?!well-known/) - [F,L]
+RewriteRule ^(?:src|scripts|database|tests|clients|storage|vendor|\.git|\.github|\.claude)(?:/|$) - [F,L,NC]
+RewriteRule ^(?:README(?:\.md)?|CHANGELOG\.md|run-tests\.sh|dns\.log|composer\.(?:json|lock)|phpstan(?:-baseline)?\.neon|\.env(?:\..*)?)$ - [F,L,NC]
+
+# A small set of operator-facing manuals is intentionally public. Everything
+# else under docs/ includes implementation plans, spreadsheets, contracts, and
+# other internal material and must stay off the web.
+RewriteRule ^docs/(?:ops-manual|event-intake-status|contracts|public-calendar-api|promote-guide|training|sales)\.html$ - [L,NC]
+RewriteRule ^docs(?:/|$) - [F,L,NC]
+
 # Never let the browser hold a stale HTML shell. The shell references its JS/CSS
 # with ?v= cache-busting query strings, so if index.html itself is cached the
 # version bump never reaches the client and they run old code. Force HTML to
@@ -45,9 +60,13 @@ RewriteRule ^storage/ - [F,L]
 # This keeps clients/{slug}/ outside the web root while still serving assets,
 # mail attachments, and contract PDFs under a clean per-tenant URL.
 RewriteRule ^files/(.+)$ public/files.php?_path=$1 [L,QSA]
+# Backward-compatible URLs for legacy single-tenant event assets. These used
+# to be served straight from the public/uploads symlink; they now pass through
+# the same DB-backed authorization checks as /files.
+RewriteRule ^uploads/(.+)$ public/files.php?_path=uploads/$1 [L,QSA]
 
 RewriteRule ^$ public/index.html [L]
-RewriteRule ^(assets|uploads)/(.*)$ public/$1/$2 [L]
+RewriteRule ^assets/(.*)$ public/assets/$1 [L]
 RewriteRule ^api(?:/(.*))?$ public/api/index.php [L,QSA]
 # Public ticket-view pretty URLs (/t/{token}) must reach the PHP kernel, not
 # the SPA catch-all below. Mirror the rule in public/.htaccess here so the

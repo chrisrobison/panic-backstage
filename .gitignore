@@ -1,4 +1,5 @@
 .env
+/vendor/
 storage/uploads/events/*
 !storage/uploads/events/.gitkeep
 storage/logs/*

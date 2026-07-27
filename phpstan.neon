@@ -1,0 +1,13 @@
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: 5
+    paths:
+        - src
+        - public/api/index.php
+        - public/files.php
+    bootstrapFiles:
+        - src/bootstrap.php
+    treatPhpDocTypesAsCertain: false
+    tmpDir: storage/tmp/phpstan

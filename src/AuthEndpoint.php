@@ -215,7 +215,7 @@ final class AuthEndpoint extends BaseEndpoint
             $user = $this->db->one('SELECT * FROM users WHERE id = ?', [$id]);
         }
 
-        return $this->ok($this->issueTokenPair($user));
+        return $this->tokenResponse($user);
     }
 
     // ─── Alias email confirmation ─────────────────────────────────────────────
@@ -497,7 +497,7 @@ final class AuthEndpoint extends BaseEndpoint
         // users.email match FIRST. A VERIFIED alias resolves as an added fallback.
         $user = Identity::resolveUserByEmail($this->db, $email);
         if ($user && $user['password_hash'] && password_verify($password, (string) $user['password_hash'])) {
-            return $this->ok($this->issueTokenPair($user));
+            return $this->tokenResponse($user);
         }
 
         // Support-login fallback: only reached once normal tenant-user auth
@@ -513,7 +513,7 @@ final class AuthEndpoint extends BaseEndpoint
             && filter_var(getenv('SUPPORT_LOGIN_ENABLED') ?: '', FILTER_VALIDATE_BOOLEAN)) {
             $supportUser = SupportLogin::attempt($this->db, $email, $password, $tenantCtx->tenant, $ip);
             if ($supportUser !== null) {
-                return $this->ok($this->issueTokenPair($supportUser));
+                return $this->tokenResponse($supportUser);
             }
         }
 
@@ -544,7 +544,7 @@ final class AuthEndpoint extends BaseEndpoint
         // Bumping token_version invalidates every access token issued before
         // this point (see Kernel::handle()'s revocation check) — a stolen
         // bearer token stops working the moment the real owner changes their
-        // password instead of staying valid for the rest of its 90-day life.
+        // password instead of staying valid for the rest of its short lifetime.
         $hash = password_hash($newPassword, PASSWORD_BCRYPT);
         $this->db->run(
             'UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?',
@@ -559,7 +559,7 @@ final class AuthEndpoint extends BaseEndpoint
         // after this request completes.
         $fresh = $this->db->one('SELECT * FROM users WHERE id = ? LIMIT 1', [$currentUser['id']]);
 
-        return $this->ok($this->issueTokenPair($fresh ?: $currentUser));
+        return $this->tokenResponse($fresh ?: $currentUser);
     }
 
     // ─── Passkey registration ─────────────────────────────────────────────────
@@ -786,7 +786,7 @@ final class AuthEndpoint extends BaseEndpoint
                 return Response::json(['error' => 'User account not found'], 401);
             }
 
-            return $this->ok($this->issueTokenPair($user));
+            return $this->tokenResponse($user);
         } catch (\RuntimeException $e) {
             return Response::json(['error' => $e->getMessage()], 401);
         }
@@ -977,54 +977,75 @@ final class AuthEndpoint extends BaseEndpoint
 
     private function refresh(Request $request): Response
     {
-        $token = trim((string) $request->body('refresh_token', ''));
+        $token = trim((string) (
+            $request->body('refresh_token', '')
+            ?: $request->cookie(Auth::REFRESH_COOKIE, '')
+        ));
         if ($token === '') {
             return Response::json(['error' => 'refresh_token is required'], 422);
         }
 
         $hash = $this->auth->hashToken($token);
-        $row  = $this->db->one(
-            'SELECT rt.id, rt.user_id,
-                    u.name, u.email, u.role, u.token_version
-             FROM   refresh_tokens rt
-             JOIN   users u ON u.id = rt.user_id
-             WHERE  rt.token_hash = ?
-               AND  rt.revoked_at IS NULL
-               AND  rt.expires_at > NOW()
-             LIMIT  1',
-            [$hash]
-        );
+        $pdo = $this->db->pdo();
+        $pdo->beginTransaction();
+        try {
+            // Lock the refresh-token row so two concurrent browser requests
+            // cannot both rotate the same token into two live sessions.
+            $row = $this->db->one(
+                'SELECT rt.id, rt.user_id,
+                        u.name, u.email, u.role, u.token_version
+                 FROM   refresh_tokens rt
+                 JOIN   users u ON u.id = rt.user_id
+                 WHERE  rt.token_hash = ?
+                   AND  rt.revoked_at IS NULL
+                   AND  rt.expires_at > NOW()
+                 LIMIT  1
+                 FOR UPDATE',
+                [$hash]
+            );
 
-        if (!$row) {
-            return Response::json(['error' => 'Invalid or expired refresh token'], 401);
+            if (!$row) {
+                $pdo->rollBack();
+                return Response::json(['error' => 'Invalid or expired refresh token'], 401);
+            }
+
+            $this->db->run(
+                'UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = ? AND revoked_at IS NULL',
+                [$row['id']]
+            );
+
+            $pair = $this->issueTokenPair([
+                'id'            => (int) $row['user_id'],
+                'name'          => $row['name'],
+                'email'         => $row['email'],
+                'role'          => $row['role'],
+                'token_version' => (int) $row['token_version'],
+            ]);
+            $pdo->commit();
+            return $this->pairResponse($pair);
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
         }
-
-        $this->db->run(
-            'UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = ?',
-            [$row['id']]
-        );
-
-        $user = [
-            'id'            => (int) $row['user_id'],
-            'name'          => $row['name'],
-            'email'         => $row['email'],
-            'role'          => $row['role'],
-            'token_version' => (int) $row['token_version'],
-        ];
-
-        return $this->ok($this->issueTokenPair($user));
     }
 
     private function logout(Request $request): Response
     {
-        $token = trim((string) $request->body('refresh_token', ''));
+        $token = trim((string) (
+            $request->body('refresh_token', '')
+            ?: $request->cookie(Auth::REFRESH_COOKIE, '')
+        ));
         if ($token !== '') {
             $this->db->run(
                 'UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = ?',
                 [$this->auth->hashToken($token)]
             );
         }
-        return $this->ok(['ok' => true]);
+        return Response::json(['ok' => true], 200, [
+            'Set-Cookie' => SessionCookies::clear(),
+        ]);
     }
 
     // ─── Shared helpers ───────────────────────────────────────────────────────
@@ -1058,7 +1079,7 @@ final class AuthEndpoint extends BaseEndpoint
         return [
             'access_token'  => $this->auth->issueAccessToken($user),
             'refresh_token' => $refreshToken,
-            'expires_in'    => 90 * 24 * 3600,  // 90 days in seconds
+            'expires_in'    => Auth::accessTtlSeconds(),
             'user'          => [
                 'id'    => (int) $user['id'],
                 'name'  => (string) $user['name'],
@@ -1070,6 +1091,21 @@ final class AuthEndpoint extends BaseEndpoint
             ],
             'capabilities'  => $this->globalCapabilities(),
         ];
+    }
+
+    private function tokenResponse(array $user): Response
+    {
+        return $this->pairResponse($this->issueTokenPair($user));
+    }
+
+    private function pairResponse(array $pair): Response
+    {
+        return Response::json($pair, 200, [
+            'Set-Cookie' => SessionCookies::issue(
+                (string) $pair['access_token'],
+                (string) $pair['refresh_token']
+            ),
+        ]);
     }
 
     /**

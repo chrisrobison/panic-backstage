@@ -15,11 +15,10 @@ use Panic\LeadEmailParser;
  * Two signals are tried, most-trustworthy first:
  *
  *   1. Threading headers. The inbound message's In-Reply-To/References ids
- *      are checked against lead_messages.external_message_id — populated for
- *      every inbound email (its own Message-ID) and, since this feature
- *      landed, every outbound send too (Mailer::generateMessageId(), see
- *      LeadsInbox.php and Leads\Acknowledgment). A hit here is exact: mail
- *      clients don't fabricate these ids.
+ *      are checked against both prior messages and their saved References
+ *      ancestry. This also catches two replies with a shared parent when that
+ *      original parent was never imported. A hit is exact: mail clients don't
+ *      fabricate these ids.
  *
  *   2. Subject + sender fallback, for the cases headers miss — a webmail
  *      client that drops References on forward, or a customer who starts a
@@ -69,10 +68,43 @@ final class ThreadMatcher
         $row = $db->one(
             "SELECT lead_id FROM lead_messages
              WHERE external_message_id IN ($placeholders)
-             ORDER BY id DESC LIMIT 1",
+             ORDER BY id ASC LIMIT 1",
+            $ids
+        );
+        if ($row !== null) {
+            return (int) $row['lead_id'];
+        }
+
+        $row = $db->one(
+            "SELECT m.lead_id
+             FROM lead_message_references r
+             JOIN lead_messages m ON m.id = r.lead_message_id
+             WHERE r.reference_id IN ($placeholders)
+             GROUP BY m.lead_id
+             ORDER BY MIN(m.id) ASC
+             LIMIT 1",
             $ids
         );
         return $row !== null ? (int) $row['lead_id'] : null;
+    }
+
+    /**
+     * Save the complete References ancestry for a persisted message.
+     *
+     * @param list<string> $referenceIds
+     */
+    public function recordReferences(Database $db, int $leadMessageId, array $referenceIds): void
+    {
+        $ids = array_values(array_unique(array_filter(array_map(
+            static fn($id): string => trim((string) $id, " \t<>"),
+            $referenceIds
+        ))));
+        foreach ($ids as $ordinal => $referenceId) {
+            $db->run(
+                'INSERT IGNORE INTO lead_message_references (lead_message_id, reference_id, ordinal) VALUES (?,?,?)',
+                [$leadMessageId, $referenceId, $ordinal]
+            );
+        }
     }
 
     private function matchBySubject(Database $db, ?string $contactEmail, ?string $subject): ?int

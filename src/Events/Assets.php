@@ -68,17 +68,10 @@ final class Assets extends BaseEndpoint
         $base = slugify(pathinfo($file['name'], PATHINFO_FILENAME));
         $filename = time() . '-' . bin2hex(random_bytes(4)) . '-' . $base . '.' . $ext;
 
-        // Multi-tenant: store under clients/{slug}/assets/events/{id}/
-        //               and expose as /files/assets/events/{id}/{file}.
-        // Single-tenant fallback: public/uploads/events/{id}/ (unchanged behaviour).
-        $ctx = TenantContext::current();
-        if ($ctx !== null) {
-            $dir  = $this->root . '/clients/' . $ctx->tenant['slug'] . '/assets/events/' . $eventId;
-            $path = 'files/assets/events/' . $eventId . '/' . $filename;
-        } else {
-            $dir  = $this->root . '/public/uploads/events/' . $eventId;
-            $path = 'uploads/events/' . $eventId . '/' . $filename;
-        }
+        // Store outside the document root in both deployment modes. The
+        // /files gateway performs row-level authorization before streaming.
+        $dir  = TenantContext::clientDir($this->root) . '/assets/events/' . $eventId;
+        $path = 'files/assets/events/' . $eventId . '/' . $filename;
 
         if (!is_dir($dir)) {
             mkdir($dir, 0775, true);
@@ -111,21 +104,19 @@ final class Assets extends BaseEndpoint
         if ($asset && !empty($asset['file_path'])) {
             $filePath = (string) $asset['file_path'];
             if (str_starts_with($filePath, 'files/')) {
-                // Multi-tenant path: clients/{slug}/{relative}
-                $ctx = TenantContext::current();
-                if ($ctx !== null) {
-                    $relative  = substr($filePath, 6); // strip 'files/'
-                    $clientDir = $this->root . '/clients/' . $ctx->tenant['slug'];
-                    $base      = realpath($clientDir);
-                    $file      = realpath($clientDir . '/' . $relative);
-                    if ($file && $base && str_starts_with($file, $base . DIRECTORY_SEPARATOR) && is_file($file)) {
-                        unlink($file);
-                    }
+                $relative  = substr($filePath, 6); // strip 'files/'
+                $clientDir = TenantContext::clientDir($this->root);
+                $base      = realpath($clientDir);
+                $file      = realpath($clientDir . '/' . $relative);
+                if ($file && $base && str_starts_with($file, $base . DIRECTORY_SEPARATOR) && is_file($file)) {
+                    unlink($file);
                 }
             } else {
-                // Legacy single-tenant path: public/uploads/...
-                $file    = realpath($this->root . '/public/' . $filePath);
-                $uploads = realpath($this->root . '/public/uploads');
+                // Legacy single-tenant path: storage/uploads/... Existing
+                // URLs remain valid, but Apache now sends them through the
+                // same authorized file gateway.
+                $file    = realpath(TenantContext::clientDir($this->root) . '/' . $filePath);
+                $uploads = realpath(TenantContext::clientDir($this->root) . '/uploads');
                 if ($file && $uploads && str_starts_with($file, $uploads) && is_file($file)) {
                     unlink($file);
                 }

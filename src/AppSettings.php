@@ -15,8 +15,8 @@ namespace Panic;
  * Two distinct stores, one form:
  *  - `settings` (brand_name, logo_url) → the app_settings DB singleton. These
  *    have no existing home: brand_name is deliberately separate from
- *    venues.name (a venue can be "Mabuhay Gardens" while wanting the app
- *    itself branded "Mabuhay Backstage"), and there's no logo column on
+ *    venues.name (a venue can keep its venue name while choosing a different
+ *    tenant-specific app-shell label), and there's no logo column on
  *    venues at all.
  *  - `env` (venue_email, manager_name/email/phone, hashtags, tiktok_handle,
  *    press_email) → an explicit allow-listed subset of the venue-identity env

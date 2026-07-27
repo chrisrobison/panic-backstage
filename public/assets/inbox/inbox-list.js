@@ -21,12 +21,13 @@ class InboxList extends PanicElement {
   }
 
   render() {
-    const { leads, view, selectedLeadId, q } = this.data;
+    const { leads, view, selectedLeadId, q, canReviewQuarantine } = this.data;
 
     this.innerHTML = `
       <div class="ib-list-head">
         <div class="ib-list-head-row">
           <h2>${leads.length} Inquir${leads.length === 1 ? 'y' : 'ies'}</h2>
+          ${canReviewQuarantine ? '<button type="button" class="small secondary" data-quarantine title="Review quarantined mail" aria-label="Review quarantined mail"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></button>' : ''}
         </div>
         <div class="ib-list-search">
           <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
@@ -51,6 +52,9 @@ class InboxList extends PanicElement {
     $('[data-view-select]', this)?.addEventListener('change', (e) => {
       this.dispatchEvent(new CustomEvent('inbox-view-change', { bubbles: true, detail: { view: e.target.value } }));
     });
+    $('[data-quarantine]', this)?.addEventListener('click', () => {
+      this.dispatchEvent(new CustomEvent('inbox-open-quarantine', { bubbles: true }));
+    });
     $$('.ib-list-item', this).forEach((row) => {
       row.addEventListener('click', () => {
         this.dispatchEvent(new CustomEvent('inbox-open-lead', { bubbles: true, detail: { leadId: Number(row.dataset.leadId) } }));
@@ -61,23 +65,29 @@ class InboxList extends PanicElement {
   rowHtml(lead, selectedLeadId) {
     const name = lead.contact_org || lead.contact_name || 'Unknown';
     const active = Number(lead.id) === Number(selectedLeadId) ? ' active' : '';
+    const unread = Number(lead.has_unread) ? ' unread' : '';
     const category = lead.event_category || lead.event_type;
     const sla = lead.status === 'assigned' ? slaCountdown(lead.sla_claim_due_at, 'Claim expires')
       : lead.status === 'claimed' ? slaCountdown(lead.claim_expires_at, 'Response due') : null;
+    const messageCount = Number(lead.message_count || 0);
+    const participantCount = Number(lead.participant_count || 0);
+    const subject = lead.conversation_subject || lead.event_name || statusLabel(lead.status);
 
     return `
-      <div class="ib-list-item${active}" data-lead-id="${esc(String(lead.id))}">
+      <div class="ib-list-item${active}${unread}" data-lead-id="${esc(String(lead.id))}">
         <span class="ib-avatar" style="background:${avatarColor(name)}">${esc(initials(name))}</span>
         <div class="ib-list-item-body">
           <div class="ib-list-item-top">
             <span class="ib-list-item-name">${esc(name)}</span>
-            <span class="ib-list-item-time">${esc(relativeTime(lead.created_at))}</span>
+            <span class="ib-list-item-time">${esc(relativeTime(lead.latest_message_at || lead.created_at))}</span>
           </div>
-          <div class="ib-list-item-meta">${esc(lead.event_name || statusLabel(lead.status))}${lead.projected_attendance ? ` • ${esc(String(lead.projected_attendance))} guests` : ''}</div>
+          <div class="ib-list-item-meta">${esc(subject)}${lead.projected_attendance ? ` • ${esc(String(lead.projected_attendance))} guests` : ''}</div>
           <div class="ib-list-item-row2">
             ${category ? `<span class="ib-cat-badge ${categoryClass(category)}">${esc(category)}</span>` : ''}
+            ${messageCount > 1 ? `<span class="ib-thread-count" title="${esc(String(messageCount))} messages in this conversation"><i class="fa-regular fa-comments" aria-hidden="true"></i> ${esc(String(messageCount))} messages${participantCount > 1 ? ` · ${esc(String(participantCount))} people` : ''}</span>` : ''}
             ${sla && sla.overdue ? '<span class="ib-sla-warning"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> overdue</span>' : ''}
             <span class="ib-list-item-icons">
+              ${Number(lead.has_unread) ? '<i class="fa-solid fa-circle ib-unread-dot" title="Unread reply" aria-hidden="true"></i>' : ''}
               <i class="fa-regular fa-envelope" title="Email" aria-hidden="true"></i>
               <i class="fa-regular fa-comment" title="Has notes" aria-hidden="true"></i>
             </span>

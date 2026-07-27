@@ -19,6 +19,7 @@ export async function openOnboardDialog(lead, onDone) {
       <form class="grid-form padded" data-onboard-form>
         <p class="muted wide">Review the extracted details below, correct anything that's wrong, then confirm to create the event opportunity. This does <strong>not</strong> mark the event as booked.</p>
         <div class="wide" data-onboard-preview><p class="muted">Checking for duplicates and calendar conflicts…</p></div>
+        <label class="wide" data-confirm-warnings hidden><span><input type="checkbox" name="confirm_warnings" value="1"> I reviewed these warnings and still want to create the event.</span></label>
         <label>Event title<input type="text" name="title" value="${esc(lead.event_name || '')}" required></label>
         <label>Event type
           <select name="event_type">
@@ -62,6 +63,8 @@ export async function openOnboardDialog(lead, onDone) {
       parts.push(`<div class="ib-conflict-warning"><i class="fa-solid fa-clone" aria-hidden="true"></i> Possible duplicate ${esc(dup.kind)} #${esc(String(dup.id))}: ${esc(dup.label)}</div>`);
     }
     previewBox.innerHTML = parts.length ? parts.join('') : '<p class="muted">No duplicates or calendar conflicts found.</p>';
+    const confirm = $('[data-confirm-warnings]', form);
+    if (confirm) confirm.hidden = parts.length === 0;
   }
 
   $('[data-date-input]', form)?.addEventListener('change', loadPreview);

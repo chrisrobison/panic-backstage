@@ -1,0 +1,8 @@
+<FilesMatch "^(?!(?:ops-manual|event-intake-status|contracts|public-calendar-api|promote-guide|training|sales)\.html$).+">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Deny from all
+  </IfModule>
+</FilesMatch>
