@@ -23,16 +23,16 @@ fi
 vendor/bin/phpstan analyse --memory-limit=1G --no-progress
 
 for deny_file in src/.htaccess scripts/.htaccess database/.htaccess tests/.htaccess; do
-  rg -q 'Require all denied' "$deny_file" \
+  grep -Eq 'Require all denied' "$deny_file" \
     || { echo "$deny_file does not deny web access" >&2; exit 1; }
 done
 
-rg -q 'vendor' .htaccess \
-  && rg -q 'composer' .htaccess \
-  && rg -q 'phpstan' .htaccess \
+grep -Eq 'vendor' .htaccess \
+  && grep -Eq 'composer' .htaccess \
+  && grep -Eq 'phpstan' .htaccess \
   || { echo "Root .htaccess does not block development-only files" >&2; exit 1; }
 
-rg -q 'php[0-9]*|phtml|phar|cgi|pl|py|sh' public/uploads/.htaccess \
+grep -Eq 'php[0-9]*|phtml|phar|cgi|pl|py|sh' public/uploads/.htaccess \
   || { echo "public/uploads/.htaccess does not block executable uploads" >&2; exit 1; }
 
 if find public/uploads -type f \
