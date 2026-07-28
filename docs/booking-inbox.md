@@ -68,6 +68,12 @@ These are deliberately distinct, per spec:
 - **Owned** — set once the inquiry is onboarded into a real event; survives
   reassignment of day-to-day claims. `leads.owner_user_id` + `owned_since`.
 
+`assign` vs. `reassign` are also permission-distinct, not just semantically
+distinct: `reassign` (`manage_booking_inbox`) lets any Trusted booker hand off
+an inquiry currently their own to someone else. `assign` targets *any*
+inquiry regardless of current owner/claimant, so it's gated to venue admins
+only (`BaseEndpoint::isVenueAdmin()`) — see `LeadsInbox::assign()`.
+
 A fixed list of **claim-preserving actions**
 (`ClaimService::PRESERVING_ACTIONS`: send reply, schedule tour, send
 availability, log call, request info, manager-approved follow-up task) both

@@ -17227,9 +17227,10 @@ paths:
       operationId: leadsInbox_assign
       summary: Manually (re)assign an inquiry
       description: >-
-        Requires `view_booking_inbox` + `manage_booking_inbox`. Writes a new lead_assignments
-        history row and updates leads.assigned_to_user_id/assigned_at. Unlike reassign, no reason
-        is required and this does not touch an existing claim.
+        Requires the venue_admin role (not just `manage_booking_inbox` — unlike reassign, this can
+        target any inquiry regardless of current owner/claimant, so it's reserved for venue admins).
+        Writes a new lead_assignments history row and updates leads.assigned_to_user_id/assigned_at.
+        Unlike reassign, no reason is required and this does not touch an existing claim.
       tags:
         - Booking Inbox
       parameters:
@@ -17258,7 +17259,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '403':
-          description: Missing manage_booking_inbox, or no access to this row.
+          description: Caller is not a venue_admin.
           content:
             application/json:
               schema:

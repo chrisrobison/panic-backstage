@@ -93,6 +93,7 @@ class InboxWorkspace extends PanicElement {
           <button type="button" class="button secondary" data-action="proposal"><i class="fa-regular fa-file-lines" aria-hidden="true"></i> Send Proposal</button>
           <button type="button" class="button secondary" data-action="tour"><i class="fa-solid fa-people-group" aria-hidden="true"></i> Schedule Tour</button>
           ${capabilities.tasks ? '<button type="button" class="button secondary" data-action="task"><i class="fa-solid fa-list-check" aria-hidden="true"></i> Add Task</button>' : ''}
+          ${capabilities.assign ? '<button type="button" class="button secondary" data-action="assign"><i class="fa-solid fa-user-check" aria-hidden="true"></i> Assign</button>' : ''}
           ${capabilities.reassign ? '<button type="button" class="button secondary" data-action="reassign"><i class="fa-solid fa-right-left" aria-hidden="true"></i> Reassign</button>' : ''}
           <button type="button" class="button secondary" data-action="decline"><i class="fa-regular fa-circle-xmark" aria-hidden="true"></i> Decline</button>
           <button type="button" class="button secondary" data-action="archive"><i class="fa-solid fa-box-archive" aria-hidden="true"></i> Archive</button>
@@ -112,6 +113,7 @@ class InboxWorkspace extends PanicElement {
     $('[data-action="decline"]', this)?.addEventListener('click', () => this.changeStatus('declined'));
     $('[data-action="archive"]', this)?.addEventListener('click', () => this.changeStatus('archived'));
     $('[data-action="onboard"]', this)?.addEventListener('click', () => this.openOnboard());
+    $('[data-action="assign"]', this)?.addEventListener('click', () => this.openAssign());
     $('[data-action="reassign"]', this)?.addEventListener('click', () => this.openReassign());
     $('[data-action="availability"]', this)?.addEventListener('click', () => this.prefillTemplate('availability'));
     $('[data-action="proposal"]', this)?.addEventListener('click', () => this.prefillTemplate('proposal'));
@@ -292,6 +294,30 @@ class InboxWorkspace extends PanicElement {
         await api(`/leads/${lead.id}/reassign`, { method: 'POST', body: JSON.stringify({ user_id: Number(values.user_id), reason: values.reason }) });
         close();
         publish('toast.show', { message: 'Inquiry reassigned.' });
+        this.notifyChanged();
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
+  }
+
+  openAssign() {
+    const { lead, users = [] } = this.data;
+    const { dialog, close } = openModal({
+      title: 'Assign Inquiry',
+      bodyHtml: `<form class="grid-form padded" data-assign-form>
+        <label class="wide">Assign to<select name="user_id" required><option value="">Select a person</option>${users.map((user) => `<option value="${user.id}">${esc(user.name)} · ${esc(user.role)}</option>`).join('')}</select></label>
+        <label class="wide">Note (optional)<textarea name="reason"></textarea></label>
+        <div class="wide"><button type="submit">Assign</button></div>
+      </form>`,
+    });
+    $('[data-assign-form]', dialog)?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+      try {
+        await api(`/leads/${lead.id}/assign`, { method: 'POST', body: JSON.stringify({ user_id: Number(values.user_id), reason: values.reason || undefined }) });
+        close();
+        publish('toast.show', { message: 'Inquiry assigned.' });
         this.notifyChanged();
       } catch (err) {
         publish('toast.show', { message: err.message, tone: 'error' });

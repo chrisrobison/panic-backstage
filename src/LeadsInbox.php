@@ -167,6 +167,7 @@ final class LeadsInbox extends BaseEndpoint
                 'manage' => $this->canManage($lead),
                 'claim' => $this->hasGlobalCapability('claim_leads'),
                 'reassign' => $this->hasGlobalCapability('manage_booking_inbox'),
+                'assign' => $this->isVenueAdmin(),
                 'approve' => $this->hasGlobalCapability('override_lead_claims'),
                 'tasks' => $this->hasGlobalCapability('manage_tasks_app'),
             ],
@@ -222,8 +223,11 @@ final class LeadsInbox extends BaseEndpoint
         if ($request->method() !== 'POST') {
             return Response::methodNotAllowed();
         }
-        if ($denied = $this->requireGlobalCapability('manage_booking_inbox')) {
-            return $denied;
+        // Unlike reassign() (available to any Trusted booker for leads
+        // currently their own), assign() can target any inquiry regardless
+        // of current owner/claimant, so it's reserved for venue admins.
+        if (!$this->isVenueAdmin()) {
+            return $this->forbidden('Only a venue administrator can assign an inquiry');
         }
         $toUserId = $request->body('user_id') !== null ? (int) $request->body('user_id') : null;
         $reason = trim((string) $request->body('reason', 'Manually assigned'));
