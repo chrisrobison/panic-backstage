@@ -47,8 +47,10 @@ final class Mailer
      * @param string|null   $fromAddress   Override the MAIL_FROM_ADDRESS env
      *                                     default — used by the Booking Inbox's
      *                                     outbound mail (auto-acknowledgment and
-     *                                     staff replies) so every message appears
-     *                                     to come from bookings@themab.org
+     *                                     staff replies, see
+     *                                     Panic\Leads\OutboundIdentity) so every
+     *                                     message appears to come from the
+     *                                     venue's configured intake mailbox
      *                                     regardless of which staff member sent
      *                                     it, and Reply-To routes back to the
      *                                     same address so replies re-enter

@@ -107,3 +107,75 @@ export function scoreTone(score) {
   if (score >= 40) return 'medium';
   return 'low';
 }
+
+/** Terminal-ish lead statuses where there's no forward-moving deal action left to promote. */
+const TERMINAL_LEAD_STATUSES = ['onboarded', 'converted', 'booked', 'lost', 'declined', 'spam', 'duplicate', 'archived', 'canceled'];
+
+/**
+ * Ranks the Booking Inbox workspace's bottom action bar into three tiers so
+ * the 1-2 next-legal actions dominate instead of a flat 9-button wall:
+ *
+ *   primary   — filled/primary-styled, 1-2 buttons, the obvious next step
+ *   secondary — outline-styled supporting actions, capped around 2-3
+ *   overflow  — everything else, tucked behind a "More" menu (assign/
+ *               reassign/decline/archive/other status changes)
+ *
+ * Pure function of (lead, capabilities) — no DOM/API access — so the
+ * ranking rules can be read/adjusted in one place without touching
+ * inbox-workspace.js's render/bind wiring. Release-claim and approve/deny
+ * already live in the workspace header and are deliberately not repeated
+ * here. See docs/booking-inbox.md's action-bar ranking rules.
+ *
+ * @return {{primary: Array<object>, secondary: Array<object>, overflow: Array<object>}}
+ */
+export function computeActionBar(lead, capabilities = {}) {
+  const overflow = [];
+  if (capabilities.assign) overflow.push({ id: 'assign', label: 'Assign', icon: 'fa-solid fa-user-check' });
+  if (capabilities.reassign) overflow.push({ id: 'reassign', label: 'Reassign', icon: 'fa-solid fa-right-left' });
+  overflow.push(
+    { id: 'decline', label: 'Decline', icon: 'fa-regular fa-circle-xmark' },
+    { id: 'archive', label: 'Archive', icon: 'fa-solid fa-box-archive' },
+    { id: 'more', label: 'Other status…', icon: 'fa-solid fa-ellipsis' },
+  );
+
+  if (capabilities.manage === false) {
+    return { primary: [], secondary: [], overflow: [] };
+  }
+
+  const task = { id: 'task', label: 'Add Task', icon: 'fa-solid fa-list-check' };
+  const status = lead?.status;
+
+  if (TERMINAL_LEAD_STATUSES.includes(status)) {
+    // Nothing left to move forward on the deal itself once terminal — Add
+    // Task is still useful (e.g. a follow-up on an onboarded event); the
+    // rest stays reachable via overflow for reopen-adjacent corrections.
+    return { primary: [], secondary: capabilities.tasks ? [task] : [], overflow };
+  }
+
+  const availability = { id: 'availability', label: 'Send Availability', icon: 'fa-regular fa-calendar-check' };
+  const proposal = { id: 'proposal', label: 'Send Proposal', icon: 'fa-regular fa-file-lines' };
+  const tour = { id: 'tour', label: 'Schedule Tour', icon: 'fa-solid fa-people-group' };
+  const onboard = { id: 'onboard', label: 'Onboard Lead', icon: 'fa-solid fa-user-plus', tone: 'primary-green' };
+
+  let primary;
+  let secondary;
+  if (status === 'availability_sent') {
+    primary = [proposal];
+    secondary = [tour];
+  } else if (status === 'tour_scheduled') {
+    primary = [proposal];
+    secondary = [availability];
+  } else if (status === 'proposal_sent' || status === 'negotiating') {
+    primary = [onboard];
+    secondary = [tour];
+  } else {
+    // new / classified / assigned / claimed / acknowledged / qualifying /
+    // awaiting_customer / on_hold — earliest stages default to Onboard as
+    // the single next legal step, with Send Availability as the runner-up.
+    primary = [onboard];
+    secondary = [availability];
+  }
+  if (capabilities.tasks) secondary.push(task);
+
+  return { primary, secondary, overflow };
+}

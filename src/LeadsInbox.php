@@ -5,6 +5,7 @@ namespace Panic;
 
 use Panic\Leads\ClaimService;
 use Panic\Leads\Classifier;
+use Panic\Leads\OutboundIdentity;
 use Panic\Leads\RoutingEngine;
 use Panic\Leads\StatusMachine;
 use function Panic\log_lead_activity;
@@ -81,13 +82,36 @@ final class LeadsInbox extends BaseEndpoint
 
     // ── Scope helpers ─────────────────────────────────────────────────────────
 
-    /** Full pipeline access, or a row this restricted user is actually attached to. */
+    /**
+     * The open, unclaimed triage queue: no assignee, no active claim, and
+     * still in an early status. Same set src/Inbox.php's 'unassigned' saved
+     * view and counts() query use — kept in sync with
+     * BaseEndpoint::leadScopeSql()'s widened restricted-booker visibility.
+     */
+    private const OPEN_TRIAGE_STATUSES = ['new', 'classified'];
+
+    private function isOpenTriage(array $lead): bool
+    {
+        return (int) ($lead['assigned_to_user_id'] ?? 0) === 0
+            && (int) ($lead['claimed_by_user_id'] ?? 0) === 0
+            && in_array((string) ($lead['status'] ?? ''), self::OPEN_TRIAGE_STATUSES, true);
+    }
+
+    /**
+     * Full pipeline access, or a row this restricted user is actually
+     * attached to, or (for anyone who can claim_leads at all) a row still
+     * sitting in the open triage queue — mirrors leadScopeSql() so a
+     * restricted booker can open exactly the rows the Inbox list shows them.
+     */
     private function canView(array $lead): bool
     {
         if ($this->hasGlobalCapability('manage_booking_inbox') || $this->isVenueAdmin() || $this->isGlobalViewer()) {
             return true;
         }
-        return $this->inScope($lead);
+        if ($this->inScope($lead)) {
+            return true;
+        }
+        return $this->hasGlobalCapability('claim_leads') && $this->isOpenTriage($lead);
     }
 
     private function inScope(array $lead): bool
@@ -114,6 +138,38 @@ final class LeadsInbox extends BaseEndpoint
             return true;
         }
         return $this->hasGlobalCapability('manage_assigned_leads') && $this->inScope($lead);
+    }
+
+    /**
+     * Per-lead claim eligibility (docs/booking-inbox.md "Claim vs. Assign vs.
+     * Own" + the restricted-booker policy table below). Backs both the
+     * claim() write path and detail()'s capabilities.claim, so the Claim
+     * button only ever renders when clicking it would actually succeed.
+     *
+     * | Role                                              | May claim when                                                          |
+     * |----------------------------------------------------|--------------------------------------------------------------------------|
+     * | manage_booking_inbox (venue admin / Trusted booker) | any visible lead with no active claim                                    |
+     * | claim_leads only (Restricted external booker)       | assigned to them, or owner, or watcher, OR unassigned+unclaimed and      |
+     * |                                                      | status is in the open triage set (new/classified)                       |
+     *
+     * TODO(docs/booking-inbox.md "approved categories"): once a per-role
+     * category allow-list exists, the open-triage branch below should also
+     * check it before letting a restricted booker self-serve an unassigned
+     * lead outside their approved categories.
+     */
+    private function canClaim(array $lead): bool
+    {
+        if (!$this->hasGlobalCapability('claim_leads')) {
+            return false;
+        }
+        $claimedBy = (int) ($lead['claimed_by_user_id'] ?? 0);
+        if ($claimedBy !== 0 && $claimedBy !== $this->userId()) {
+            return false; // someone else already actively holds this claim
+        }
+        if ($this->hasGlobalCapability('manage_booking_inbox')) {
+            return true;
+        }
+        return $this->inScope($lead) || $this->isOpenTriage($lead);
     }
 
     /** Scoped detail payload used by the Booking Inbox shell. */
@@ -157,6 +213,10 @@ final class LeadsInbox extends BaseEndpoint
             'duplicates' => \Panic\Leads\Onboarding::findDuplicates($this->db, $lead),
             'routing' => $routingDetails,
             'pending_approval' => $pendingApproval,
+            // Used to prefill reply-template {{venue_name}} tokens (see
+            // inbox-conversation.js::prefillTemplate) with the same identity
+            // Acknowledgment.php/messages() actually send from.
+            'venue_name' => OutboundIdentity::resolve($this->db)['venue_name'],
             'users' => $this->hasGlobalCapability('manage_booking_inbox')
                 ? $this->db->all("SELECT id, name, role FROM users WHERE is_hidden = 0 ORDER BY name")
                 : [],
@@ -165,7 +225,7 @@ final class LeadsInbox extends BaseEndpoint
             ),
             'capabilities' => [
                 'manage' => $this->canManage($lead),
-                'claim' => $this->hasGlobalCapability('claim_leads'),
+                'claim' => $this->canClaim($lead),
                 'reassign' => $this->hasGlobalCapability('manage_booking_inbox'),
                 'assign' => $this->isVenueAdmin(),
                 'approve' => $this->hasGlobalCapability('override_lead_claims'),
@@ -184,15 +244,10 @@ final class LeadsInbox extends BaseEndpoint
         if ($denied = $this->requireGlobalCapability('claim_leads')) {
             return $denied;
         }
-        // Restricted bookers may only claim inquiries that are currently
-        // unassigned or already theirs — a lightweight stand-in for the
-        // spec's "approved categories" concept until a full per-role
-        // category allow-list exists (see docs/booking-inbox.md).
-        if (!$this->hasGlobalCapability('manage_booking_inbox')) {
-            $assignedTo = (int) ($lead['assigned_to_user_id'] ?? 0);
-            if ($assignedTo !== 0 && $assignedTo !== $this->userId()) {
-                return $this->forbidden('This inquiry is assigned to someone else');
-            }
+        // See canClaim()'s docblock for the full restricted-booker policy
+        // table (docs/booking-inbox.md).
+        if (!$this->canClaim($lead)) {
+            return $this->forbidden('This inquiry is not available for you to claim');
         }
 
         $result = (new ClaimService())->claim($this->db, $lead, (int) $this->userId());
@@ -414,8 +469,9 @@ final class LeadsInbox extends BaseEndpoint
             return $this->ok(['message' => $this->db->one('SELECT * FROM lead_messages WHERE id = ?', [$id])]);
         }
 
-        $fromName = 'Mabuhay Gardens Booking Team';
-        $fromEmail = 'bookings@themab.org';
+        $identity = OutboundIdentity::resolve($this->db);
+        $fromName = $identity['from_name'];
+        $fromEmail = $identity['from_email'];
 
         // A real Message-ID, generated before the row is written so the id
         // persisted here matches the one that goes out on the wire — that's
@@ -533,7 +589,7 @@ final class LeadsInbox extends BaseEndpoint
             throw $e;
         }
 
-        $mailer = (new Mailer($this->root, $this->db, 'bookings@themab.org', 'Mabuhay Gardens Booking Team'))
+        $mailer = (new Mailer($this->root, $this->db, $fromEmail, $fromName))
             ->skipInboxCopy();
         $mailer->send(
             (string) $lead['contact_email'],

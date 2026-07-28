@@ -7856,9 +7856,49 @@ pb-inbox-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direc
 .ib-composer-tools button:hover { color: var(--ink); }
 
 /* ── Bottom action bar ─────────────────────────────────────────────────────── */
-.ib-action-bar { flex-shrink: 0; display: flex; gap: 10px; padding: 12px 24px; border-top: 1px solid var(--line); background: var(--panel); overflow-x: auto; scrollbar-width: thin; }
+/* Tiered ranking (primary/secondary/overflow) — see
+   inbox-shared.js::computeActionBar() — keeps the 1-2 next-legal actions
+   visually dominant instead of a flat wall of buttons. */
+.ib-action-bar { flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 12px 24px; border-top: 1px solid var(--line); background: var(--panel); overflow-x: auto; scrollbar-width: thin; }
 .ib-action-bar .button { flex: 0 0 auto; }
 .ib-action-bar .button.primary-green { background: var(--green, #16a34a); border-color: var(--green, #16a34a); color: #fff; }
+.ib-overflow { position: relative; flex: 0 0 auto; }
+.ib-overflow-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .16);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 20;
+}
+.ib-overflow-menu button {
+  background: none;
+  border: none;
+  color: var(--ink);
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.ib-overflow-menu button:hover { background: var(--bg); }
+.ib-overflow-menu button i { width: 14px; text-align: center; color: var(--muted); }
+/* The [hidden] attribute toggles the menu (see inbox-workspace.js's
+   this._overflowOpen) — an author-stylesheet display:flex above would
+   otherwise win over the UA [hidden]{display:none} default. */
+.ib-overflow-menu[hidden] { display: none; }
 
 /* ── Right column: detail panel ───────────────────────────────────────────── */
 .ib-detail { width: 300px; flex: 0 0 300px; border-left: 1px solid var(--line); overflow-y: auto; padding: 18px; background: var(--panel); }

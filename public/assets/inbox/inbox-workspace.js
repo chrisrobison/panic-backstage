@@ -6,7 +6,24 @@
 // to know how those are rendered.
 import { esc, api, publish, openModal, PanicElement, $, $$ } from '../core.js';
 import './inbox-conversation.js';
-import { statusLabel, ALL_STATUSES, REASON_REQUIRED_STATUSES, relativeTime, scoreTone, initials, avatarColor } from './inbox-shared.js';
+import { statusLabel, ALL_STATUSES, REASON_REQUIRED_STATUSES, relativeTime, scoreTone, initials, avatarColor, computeActionBar } from './inbox-shared.js';
+
+// Maps an action-bar data-action id to the workspace method that handles it
+// — one delegated listener on .ib-action-bar (see bind()) instead of a
+// separate addEventListener per button, whether the button is a visible
+// primary/secondary control or tucked inside the overflow "More" menu.
+const ACTION_HANDLERS = {
+  onboard: (self) => self.openOnboard(),
+  availability: (self) => self.prefillTemplate('availability'),
+  proposal: (self) => self.prefillTemplate('proposal'),
+  tour: (self) => self.openTour(),
+  task: (self) => self.openTask(),
+  assign: (self) => self.openAssign(),
+  reassign: (self) => self.openReassign(),
+  decline: (self) => self.changeStatus('declined'),
+  archive: (self) => self.changeStatus('archived'),
+  more: (self) => self.openMoreActions(),
+};
 
 const TABS = [['conversation', 'Conversation'], ['details', 'Details'], ['event-info', 'Event Info'], ['files', 'Files'], ['notes', 'Notes'], ['tasks', 'Tasks'], ['history', 'History']];
 
@@ -15,11 +32,29 @@ class InboxWorkspace extends PanicElement {
     const changed = !this._data || this._data.lead?.id !== value?.lead?.id;
     this._data = value || {};
     this.activeTab = changed ? 'conversation' : (this.activeTab || 'conversation');
+    if (changed) this._overflowOpen = false;
     this.render();
   }
   get data() { return this._data || {}; }
 
-  connect() { this.render(); }
+  connect() {
+    this.render();
+    // Close the action-bar overflow menu on an outside click/Escape — a
+    // single listener for the component's lifetime rather than one added
+    // per render().
+    document.addEventListener('click', (e) => {
+      if (this._overflowOpen && !e.target.closest('.ib-overflow')) {
+        this._overflowOpen = false;
+        this.render();
+      }
+    }, { signal: this.abort.signal });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this._overflowOpen) {
+        this._overflowOpen = false;
+        this.render();
+      }
+    }, { signal: this.abort.signal });
+  }
 
   render() {
     const { lead, capabilities = {}, pendingApproval } = this.data;
@@ -87,22 +122,40 @@ class InboxWorkspace extends PanicElement {
 
         <div class="ib-tab-body" data-tab-body></div>
 
-        ${canManage ? `<div class="ib-action-bar">
-          <button type="button" class="button primary-green" data-action="onboard"><i class="fa-solid fa-user-plus" aria-hidden="true"></i> Onboard Lead</button>
-          <button type="button" class="button secondary" data-action="availability"><i class="fa-regular fa-calendar-check" aria-hidden="true"></i> Send Availability</button>
-          <button type="button" class="button secondary" data-action="proposal"><i class="fa-regular fa-file-lines" aria-hidden="true"></i> Send Proposal</button>
-          <button type="button" class="button secondary" data-action="tour"><i class="fa-solid fa-people-group" aria-hidden="true"></i> Schedule Tour</button>
-          ${capabilities.tasks ? '<button type="button" class="button secondary" data-action="task"><i class="fa-solid fa-list-check" aria-hidden="true"></i> Add Task</button>' : ''}
-          ${capabilities.assign ? '<button type="button" class="button secondary" data-action="assign"><i class="fa-solid fa-user-check" aria-hidden="true"></i> Assign</button>' : ''}
-          ${capabilities.reassign ? '<button type="button" class="button secondary" data-action="reassign"><i class="fa-solid fa-right-left" aria-hidden="true"></i> Reassign</button>' : ''}
-          <button type="button" class="button secondary" data-action="decline"><i class="fa-regular fa-circle-xmark" aria-hidden="true"></i> Decline</button>
-          <button type="button" class="button secondary" data-action="archive"><i class="fa-solid fa-box-archive" aria-hidden="true"></i> Archive</button>
-          <button type="button" class="button secondary" data-action="more"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i> More Actions</button>
-        </div>` : ''}
+        ${this.renderActionBar(lead, capabilities, canManage)}
       </div>`;
 
     this.bind();
     this.mountTab();
+  }
+
+  /**
+   * Renders the bottom action bar as three tiers (see
+   * inbox-shared.js::computeActionBar): primary/secondary buttons visible
+   * directly in the bar, and an overflow "More" menu for the rest. The
+   * overflow menu is always rendered in the DOM (so data-action wiring and
+   * keyboard access work the same as any other button) — just hidden until
+   * toggled open, per this._overflowOpen.
+   */
+  renderActionBar(lead, capabilities, canManage) {
+    if (!canManage) return '';
+    const { primary, secondary, overflow } = computeActionBar(lead, capabilities);
+    if (!primary.length && !secondary.length && !overflow.length) return '';
+
+    const button = (action, tone) => `<button type="button" class="button ${tone === 'primary' ? (action.tone || '') : 'secondary'}" data-action="${action.id}">
+      <i class="${action.icon}" aria-hidden="true"></i> ${esc(action.label)}</button>`;
+
+    return `<div class="ib-action-bar">
+      ${primary.map((a) => button(a, 'primary')).join('')}
+      ${secondary.map((a) => button(a, 'secondary')).join('')}
+      ${overflow.length ? `<div class="ib-overflow" data-overflow>
+        <button type="button" class="button secondary" data-action="more-menu" aria-haspopup="true" aria-expanded="${this._overflowOpen ? 'true' : 'false'}">
+          <i class="fa-solid fa-ellipsis" aria-hidden="true"></i> More</button>
+        <div class="ib-overflow-menu" data-overflow-menu ${this._overflowOpen ? '' : 'hidden'}>
+          ${overflow.map((a) => `<button type="button" data-action="${a.id}"><i class="${a.icon}" aria-hidden="true"></i> ${esc(a.label)}</button>`).join('')}
+        </div>
+      </div>` : ''}
+    </div>`;
   }
 
   bind() {
@@ -110,18 +163,30 @@ class InboxWorkspace extends PanicElement {
     $('[data-release-claim]', this)?.addEventListener('click', () => this.releaseClaim());
     $('[data-status-select]', this)?.addEventListener('change', (e) => this.changeStatus(e.target.value));
     $$('[data-tab]', this).forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); this.activeTab = a.dataset.tab; this.render(); }));
-    $('[data-action="decline"]', this)?.addEventListener('click', () => this.changeStatus('declined'));
-    $('[data-action="archive"]', this)?.addEventListener('click', () => this.changeStatus('archived'));
-    $('[data-action="onboard"]', this)?.addEventListener('click', () => this.openOnboard());
-    $('[data-action="assign"]', this)?.addEventListener('click', () => this.openAssign());
-    $('[data-action="reassign"]', this)?.addEventListener('click', () => this.openReassign());
-    $('[data-action="availability"]', this)?.addEventListener('click', () => this.prefillTemplate('availability'));
-    $('[data-action="proposal"]', this)?.addEventListener('click', () => this.prefillTemplate('proposal'));
-    $('[data-action="tour"]', this)?.addEventListener('click', () => this.openTour());
-    $('[data-action="task"]', this)?.addEventListener('click', () => this.openTask());
-    $('[data-action="more"]', this)?.addEventListener('click', () => this.openMoreActions());
     $$('[data-approval]', this).forEach((button) => button.addEventListener('click', () => this.decideApproval(button.dataset.approval)));
     this.addEventListener('inbox-message-sent', () => this.notifyChanged(), { signal: this.abort.signal });
+
+    // Single delegated listener for every action-bar button (primary,
+    // secondary, and overflow) instead of one addEventListener per action.
+    $('.ib-action-bar', this)?.addEventListener('click', (e) => {
+      if (e.target.closest('[data-action="more-menu"]')) {
+        this._overflowOpen = !this._overflowOpen;
+        this.render();
+        return;
+      }
+      const target = e.target.closest('[data-action]');
+      if (!target) return;
+      const fromOverflow = !!target.closest('[data-overflow-menu]');
+      const handler = ACTION_HANDLERS[target.dataset.action];
+      if (handler) handler(this);
+      // Picking an overflow item always closes the menu, whether the
+      // action opens a modal (assign/reassign/task/other status) or
+      // applies directly (decline/archive).
+      if (fromOverflow) {
+        this._overflowOpen = false;
+        this.render();
+      }
+    });
   }
 
   mountTab() {
@@ -131,7 +196,7 @@ class InboxWorkspace extends PanicElement {
 
     if (this.activeTab === 'conversation') {
       const el = document.createElement('pb-inbox-conversation');
-      el.data = { leadId: lead.id, lead, replyTemplates: this.data.replyTemplates || [] };
+      el.data = { leadId: lead.id, lead, replyTemplates: this.data.replyTemplates || [], venueName: this.data.venueName || '' };
       wrap.replaceChildren(el);
       return;
     }

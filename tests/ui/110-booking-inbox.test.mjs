@@ -33,6 +33,36 @@ test('Clicking a queue row opens the workspace with a matching header and the de
   assert.ok(await page.exists('.ib-detail'), 'detail panel renders');
 });
 
+test('The action bar promotes Onboard as primary and tucks Decline/Archive/Reassign behind a "More" menu', async (page) => {
+  await page.goto('#inbox-unassigned');
+  await page.until(`document.querySelectorAll('.ib-list-item').length > 0`);
+  await page.click('.ib-list-item');
+  await page.until(`document.querySelector('.ib-action-bar [data-action="onboard"]')`);
+
+  assert.ok(await page.exists('.ib-action-bar .button.primary-green[data-action="onboard"]'), 'Onboard Lead renders with primary (green) styling');
+  assert.ok(
+    await page.eval(`!!document.querySelector('.ib-overflow-menu[data-overflow-menu][hidden]')`),
+    'the overflow menu starts closed',
+  );
+  assert.ok(
+    await page.eval(`!!document.querySelector('.ib-overflow-menu [data-action="decline"]') && !!document.querySelector('.ib-overflow-menu [data-action="archive"]')`),
+    'Decline and Archive live inside the overflow menu, not as top-level bar buttons',
+  );
+
+  await page.click('[data-action="more-menu"]');
+  assert.ok(
+    await page.until(`!document.querySelector('.ib-overflow-menu')?.hasAttribute('hidden')`),
+    'clicking "More" opens the overflow menu',
+  );
+  assert.ok(await page.exists('.ib-overflow-menu [data-action="reassign"]'), 'Reassign is reachable from the open overflow menu');
+
+  await page.eval(`document.body.click()`);
+  assert.ok(
+    await page.until(`document.querySelector('.ib-overflow-menu')?.hasAttribute('hidden')`),
+    'clicking outside the menu closes it again',
+  );
+});
+
 test('Conversation bodies render safe, clickable web links', async (page) => {
   await page.goto('#inbox-all');
   assert.ok(

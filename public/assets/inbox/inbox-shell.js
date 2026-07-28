@@ -164,6 +164,7 @@ class InboxApp extends PanicElement {
       replyTemplates: this.selectedContext.reply_templates || [],
       pendingApproval: this.selectedContext.pending_approval || null,
       capabilities: this.selectedContext.capabilities || {},
+      venueName: this.selectedContext.venue_name || '',
     };
   }
 

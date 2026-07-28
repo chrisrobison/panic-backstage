@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `booking-inbox` — Venue-configurable outbound identity, restricted-booker claim policy, tiered action bar
+- **Added** `booking-inbox` — Venue-configurable outbound identity, restricted-booker claim policy, tiered action bar
 - **Documentation** `help` — Refresh screenshots and cover 9 new modules
 - **Added** `booking-inbox` — Add venue-admin-only Assign action
 - **Changed** — Store access token in localStorage, not sessionStorage

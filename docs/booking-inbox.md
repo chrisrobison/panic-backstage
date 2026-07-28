@@ -320,3 +320,94 @@ behavior and, where a write path must be exercised (e.g. the approval
 revision-invalidation logic), that's done via a live curl round-trip against
 a throwaway post/lead that is created and deleted in the same pass, not left
 in the UI test files.
+
+DB-backed tests (`RUN_DB_TESTS=1 ./tests/run-php-tests.sh`) that exercise the
+claim eligibility policy and outbound identity end-to-end, each creating and
+cleaning up its own throwaway rows:
+
+```
+tests/booking_inbox_role_scope_db_test.php   — restricted-booker visibility + claim policy (table below)
+tests/leads_acknowledgment_test.php          — auto-ack, settings-derived From
+```
+
+## Operator runbook
+
+Practical guidance for staff actually working the Inbox day to day — not a
+restatement of the architecture above.
+
+### Claim vs. wait for assignment
+
+- If an inquiry already shows an **Owner** or is in someone's **Assigned**
+  queue, don't claim it out from under them — use **Assign**/**Reassign**
+  (venue admin / trusted booker only) if it genuinely needs to move.
+- If an inquiry is sitting **unassigned** (the "Unassigned" saved view) and
+  you're the person who'd naturally handle it, claim it before replying —
+  claiming is what starts the SLA response clock and stops a second person
+  from also replying to the same customer.
+- Don't claim something you don't intend to work in the next few minutes
+  just to "reserve" it — the claim expires on its own (see SLA tick below)
+  and gets returned to the queue, which is the intended behavior, not a bug.
+
+### What a restricted (external) booker can see and claim
+
+A Restricted external booker (`promoter` role — `claim_leads` without
+`manage_booking_inbox`) is scoped to:
+
+| They can... | When |
+|---|---|
+| **See** an inquiry | it's assigned to them, they own it, they're a watcher, **or** it's still unassigned/unclaimed and in the open triage set (`new`/`classified`) |
+| **Claim** an inquiry | assigned to them, owner, watcher, **or** unassigned+unclaimed and in the open triage set |
+| **Claim** an inquiry assigned to someone else | never — always rejected, both in the UI and at the API |
+
+In practice: a restricted booker can self-serve fresh, not-yet-triaged
+inquiries out of the unassigned queue, but can't reach into another
+person's assigned or claimed work. See `LeadsInbox::canClaim()` for the
+exact rule and `tests/booking_inbox_role_scope_db_test.php` for the test
+matrix.
+
+### Quarantine: promote vs. leave skipped
+
+Quarantined mail (the intake filter's low-confidence/junk bucket, reviewed
+via the "Quarantined Mail" dialog off the Inbox) should be **promoted** to a
+real inquiry when it's a genuine, if messy, booking request that the filter
+misjudged — a legitimate inquiry stuck in quarantine helps no one. Leave it
+**skipped**/quarantined when it's actually spam, an automated bounce/vendor
+notice, or unrelated correspondence that happened to hit the intake mailbox
+— promoting those just pollutes the triage queue with noise every booker
+then has to re-triage.
+
+### SLA tick
+
+`scripts/lead-sla-tick.php` (cron every 5 minutes, see Setup above) does two
+things automatically — nothing to do manually here:
+
+- **Assigned but never claimed** past `sla_claim_due_at` → returned to the
+  unassigned queue so someone else can pick it up.
+- **Claimed but gone stale** past `claim_expires_at` → claim released
+  (`claim_expired`), lead returned to assigned/unassigned.
+
+If an inquiry keeps bouncing back to unassigned, that's the tick doing its
+job — the fix is claiming it and then actually taking a claim-preserving
+action (reply, log a call, schedule a tour, etc.) before the deadline, not
+disabling the sweep.
+
+### High-value decline → approval, not a direct decline
+
+Declining/losing/archiving a lead above `lead_inbox_settings.high_value_threshold`
+requires `decline_high_value_leads`. A booker without that capability who
+tries anyway doesn't get blocked outright — a `lead_approval_requests` row
+is created instead, and the inquiry stays in its current status until a
+manager approves or denies it from the Inbox header's approval banner. This
+is intentional friction on high-value inquiries, not a bug — don't route
+around it by marking the lead `archived`/`on_hold` as a workaround; put in
+the approval request and follow up with a manager.
+
+### Outbound identity
+
+Auto-acknowledgments and manual replies both send from the same
+venue-configured identity (`lead_inbox_settings.from_name`/`from_email`,
+see `Panic\Leads\OutboundIdentity`) rather than a hard-coded address. If
+that ever needs to change: `from_email` **must** stay the mailbox the Exim
+ingestion pipe reads (`docs/booking-email-import.md`) — Mailer always sets
+Reply-To to the same address as From, so pointing `from_email` anywhere
+else means customer replies stop threading back into the Inbox.

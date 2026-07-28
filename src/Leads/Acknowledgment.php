@@ -13,7 +13,8 @@ use function Panic\log_lead_activity;
  * lead — the spec's neutral acknowledgment message. Sent at most once per
  * lead, never for spam/duplicate/internal sources, gated per-venue by
  * lead_inbox_settings.ack_enabled (migration 075), and always appears to
- * come from bookings@themab.org via Mailer's from-address override so a
+ * come from the venue's configured outbound identity (see
+ * OutboundIdentity::resolve()) via Mailer's from-address override so a
  * customer reply lands back in the same mailbox the ingestion pipe reads
  * (docs/booking-email-import.md).
  *
@@ -120,9 +121,10 @@ final class Acknowledgment
                 [$leadId, $existingAck['id']]
             );
         $priorMessageIds = array_column($priorRows, 'external_message_id');
-        $externalMessageId = $existingAck['external_message_id'] ?? Mailer::generateMessageId('bookings@themab.org');
+        $identity = OutboundIdentity::resolve($db);
+        $externalMessageId = $existingAck['external_message_id'] ?? Mailer::generateMessageId($identity['from_email']);
 
-        $mailer = new Mailer($this->root, $db, 'bookings@themab.org', 'Mabuhay Gardens Booking Team');
+        $mailer = new Mailer($this->root, $db, $identity['from_email'], $identity['from_name']);
         $mailer->send(
             $email,
             $subject,
@@ -153,7 +155,7 @@ final class Acknowledgment
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), ?)',
                 [
                     $leadId, 'outbound', 'email', $accepted ? 'sent' : 'failed',
-                    'Mabuhay Gardens Booking Team', 'bookings@themab.org', $email, $subject,
+                    $identity['from_name'], $identity['from_email'], $email, $subject,
                     $body, $externalMessageId, $priorMessageIds !== [] ? end($priorMessageIds) : null,
                     json_encode(['kind' => self::MARKER]),
                     $accepted ? null : $mailer->deliveryError(),

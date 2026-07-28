@@ -387,6 +387,7 @@ class InboxConversation extends PanicElement {
       desired_date: lead.desired_date || 'your preferred date',
       event_name: lead.event_name || 'your event',
       contact_name: lead.contact_name || 'there',
+      venue_name: this.data.venueName || 'our venue',
       ...replacements,
     };
     const replace = (value) => String(value || '').replace(/\{\{(\w+)\}\}/g, (_, key) => values[key] ?? '');

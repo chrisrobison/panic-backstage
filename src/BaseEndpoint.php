@@ -135,6 +135,16 @@ abstract class BaseEndpoint implements Endpoint
      * global viewers, and anyone with manage_booking_inbox (Trusted booker)
      * see everything.
      *
+     * A restricted booker who holds claim_leads (but not manage_booking_inbox
+     * — the `promoter` role) can ALSO see rows still sitting in the open,
+     * unclaimed triage queue (`assigned_to_user_id`/`claimed_by_user_id` both
+     * null, status new/classified — same set src/Inbox.php's 'unassigned'
+     * view and counts() query use). Without this they could never reach the
+     * unassigned queue to claim from it at all, making
+     * LeadsInbox::canClaim()'s "claim an unassigned open-triage lead" branch
+     * unreachable through the UI — see docs/booking-inbox.md's claim
+     * eligibility table.
+     *
      * @return array{0: string, 1: list<int>}
      */
     protected function leadScopeSql(string $leadAlias = 'l'): array
@@ -143,11 +153,19 @@ abstract class BaseEndpoint implements Endpoint
             return ['1=1', []];
         }
         $me = (int) $this->userId();
-        return [
-            "($leadAlias.assigned_to_user_id = ? OR $leadAlias.owner_user_id = ? OR $leadAlias.claimed_by_user_id = ?"
-                . " OR $leadAlias.point_person_id = ? OR EXISTS (SELECT 1 FROM lead_watchers lw WHERE lw.lead_id = $leadAlias.id AND lw.user_id = ?))",
-            [$me, $me, $me, $me, $me],
-        ];
+        $ownedOrWatched = "($leadAlias.assigned_to_user_id = ? OR $leadAlias.owner_user_id = ? OR $leadAlias.claimed_by_user_id = ?"
+            . " OR $leadAlias.point_person_id = ? OR EXISTS (SELECT 1 FROM lead_watchers lw WHERE lw.lead_id = $leadAlias.id AND lw.user_id = ?))";
+        $params = [$me, $me, $me, $me, $me];
+
+        if ($this->hasGlobalCapability('claim_leads')) {
+            return [
+                "($ownedOrWatched OR ($leadAlias.assigned_to_user_id IS NULL AND $leadAlias.claimed_by_user_id IS NULL"
+                    . " AND $leadAlias.status IN ('new', 'classified')))",
+                $params,
+            ];
+        }
+
+        return [$ownedOrWatched, $params];
     }
 
     protected function assignmentUsersForEvent(int $eventId): array
