@@ -7859,7 +7859,14 @@ pb-inbox-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direc
 /* Tiered ranking (primary/secondary/overflow) — see
    inbox-shared.js::computeActionBar() — keeps the 1-2 next-legal actions
    visually dominant instead of a flat wall of buttons. */
-.ib-action-bar { flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 12px 24px; border-top: 1px solid var(--line); background: var(--panel); overflow-x: auto; scrollbar-width: thin; }
+/* flex-wrap (not overflow-x: auto) — the tiered bar only ever shows ~4-5
+   buttons now, so wrapping to a second line on a narrow viewport reads
+   better than horizontal scrolling. Also load-bearing for the overflow
+   menu below: setting overflow-x without overflow-y forces the UA to
+   compute overflow-y as auto too (CSS Overflow spec), which would clip
+   .ib-overflow-menu's absolutely-positioned popover (bottom: calc(100% +
+   6px) — deliberately positioned *outside* this container's own box). */
+.ib-action-bar { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 24px; border-top: 1px solid var(--line); background: var(--panel); }
 .ib-action-bar .button { flex: 0 0 auto; }
 .ib-action-bar .button.primary-green { background: var(--green, #16a34a); border-color: var(--green, #16a34a); color: #fff; }
 .ib-overflow { position: relative; flex: 0 0 auto; }

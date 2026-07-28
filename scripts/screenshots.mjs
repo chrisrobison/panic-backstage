@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 // Regenerate the in-app help screenshots under public/assets/help/:
 // dashboard, contacts, listmaster, event, ticketing, contract, leads,
-// promote, automation, tasks-app, ai-assistant, admin-users,
-// admin-navigation, vendors, execution.
+// booking-inbox-workspace, booking-inbox-overflow, promote, automation,
+// tasks-app, ai-assistant, admin-users, admin-navigation, vendors, execution.
 //
 // Self-contained: starts a local PHP dev server if one isn't already running,
 // mints a *non-destructive* magic-link token for an admin (no password is set
 // or changed), drives headless Chromium over the DevTools Protocol to log in
 // and capture each screen, then cleans up. No npm dependencies — the browser /
-// CDP / login machinery is the shared kit in tests/ui/browser.mjs.
+// CDP / login machinery is the shared kit in tests/ui/browser.mjs. The two
+// Booking Inbox workspace shots also shell out to the `mysql` CLI (same
+// credentials as `.env`) to create and delete one throwaway, entirely
+// synthetic inquiry — see the comment at that shot for why.
 //
 // Usage:
 //   node scripts/screenshots.mjs
@@ -27,10 +30,35 @@
 // ticketing panel to appear; the contract id must exist. Override the ids for
 // your own data.
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sleep, readBasePath, startDevServer, mintLogin, launchBrowser, seedAuth } from '../tests/ui/browser.mjs';
+
+// Minimal KEY=VALUE .env reader — this script has no npm deps (no dotenv),
+// and only needs a handful of DB_* values for the throwaway Booking Inbox
+// demo lead below.
+function readEnvFile(root) {
+  const out = {};
+  for (const line of readFileSync(path.join(root, '.env'), 'utf8').split('\n')) {
+    const m = line.match(/^([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
+  return out;
+}
+
+// Runs a statement (or `;`-joined statements) via the `mysql` CLI against the
+// same database `.env` points at. `-N -B` suppresses column headers/borders
+// so a trailing SELECT's result can be read straight off stdout.
+function runSql(env, sql) {
+  const args = [
+    '-h', env.DB_HOST || '127.0.0.1', '-P', String(env.DB_PORT || '3306'),
+    '-u', env.DB_USER, `-p${env.DB_PASSWORD}`, '-N', '-B', env.DB_NAME, '-e', sql,
+  ];
+  return execFileSync('mysql', args, { encoding: 'utf8' });
+}
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const EMAIL = process.env.SHOT_EMAIL || 'admin@mabuhay.local';
@@ -198,6 +226,99 @@ async function main() {
       }
     } else {
       log('WARN: Booking Inbox list did not load — skipping leads.png');
+    }
+
+    // ── Booking Inbox workspace (claim button + tiered action bar) ───────
+    // Unlike leads.png above (deliberately captured with nothing selected,
+    // to avoid leaking real customer PII into the workspace/detail panes),
+    // this shot needs an actual inquiry open. Rather than redact a real
+    // customer's data in place, create one throwaway, entirely-synthetic
+    // inquiry — same "created and deleted in the same pass" convention as
+    // tests/booking_inbox_role_scope_db_test.php — and narrow the list to
+    // just that one row via the search box, so nothing real ever appears
+    // anywhere in the shot, including the sidebar behind the open workspace.
+    //
+    // Widened viewport: the 3-column layout (nav + workspace + detail panel)
+    // at the standard WIDTH leaves the action bar narrower than its 4 buttons
+    // (Onboard/Send Availability/Add Task/More), so .ib-action-bar's
+    // overflow-x:auto clips the last one or two out of frame. Temporarily
+    // capture at 1800px so the full tiered bar — including the More button
+    // and its opened overflow menu — fits without needing to scroll it.
+    {
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1800, height: HEIGHT, deviceScaleFactor: SCALE, mobile: false });
+      const env = readEnvFile(ROOT);
+      const marker = 'PB Screenshot Demo ' + randomBytes(3).toString('hex');
+      let demoLeadId = null;
+      try {
+        // INSERT + SELECT LAST_INSERT_ID() must run in the same mysql CLI
+        // invocation (same connection/session) — LAST_INSERT_ID() is
+        // per-connection, so a separate invocation always reads back 0.
+        const insertOut = runSql(env, `INSERT INTO leads
+            (status, source, contact_name, contact_email, contact_org, contact_phone,
+             event_name, event_type, event_category, music_genre, projected_attendance, budget, desired_date)
+          VALUES ('new', 'website', 'Jordan Rivera', 'jordan.rivera@example.invalid', ${JSON.stringify(marker)}, '(415) 555-0142',
+            CONCAT(${JSON.stringify(marker)}, ' — Indie Rock Night'), 'Public Show', 'Music', 'Indie Rock', 250, 3500,
+            DATE_ADD(CURDATE(), INTERVAL 45 DAY));
+          SELECT LAST_INSERT_ID();`.replace(/\n\s*/g, ' '));
+        demoLeadId = Number(insertOut.trim().split('\n').pop());
+        if (!demoLeadId) throw new Error('could not read back the inserted demo lead id: ' + JSON.stringify(insertOut));
+        runSql(env, `INSERT INTO lead_messages
+            (lead_id, direction, channel, status, from_name, from_email, subject, body_text, is_read)
+          VALUES (${demoLeadId}, 'inbound', 'email', 'received', 'Jordan Rivera', 'jordan.rivera@example.invalid',
+            'Booking inquiry for a Saturday night show',
+            'Hi! We are looking to book a Saturday night this fall for an indie rock showcase, roughly 250 people. Could you let us know availability and pricing?', 1)`.replace(/\n\s*/g, ' '));
+
+        await gotoHash('#inbox-unassigned');
+        await cdp.until(`document.querySelector('.ib-list-search input')`, 8000);
+        await cdp.eval(`(()=>{const i=document.querySelector('.ib-list-search input');i.value=${JSON.stringify(marker)};i.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+        const found = await cdp.until(
+          `document.querySelectorAll('.ib-list-item').length===1 && document.querySelector('.ib-list-item')?.textContent.includes(${JSON.stringify(marker)})`,
+          6000
+        );
+        if (found) {
+          await cdp.eval(`document.querySelector('.ib-list-item').click()`);
+          await cdp.until(`document.querySelector('.ib-action-bar [data-action="onboard"]') && document.querySelector('.ib-claim-btn button')`, 8000);
+          await sleep(500); await cdp.eval(`window.scrollTo(0,0)`); await sleep(200);
+          await shoot('booking-inbox-workspace');
+
+          // Same view with the "More" overflow menu open — shows Assign/
+          // Reassign/Decline/Archive/other status changes (see
+          // inbox-shared.js::computeActionBar()).
+          if (await cdp.until(`document.querySelector('[data-action="more-menu"]')`, 4000)) {
+            await cdp.eval(`document.querySelector('[data-action="more-menu"]').click()`);
+            await cdp.until(`!document.querySelector('.ib-overflow-menu')?.hasAttribute('hidden')`, 4000);
+            await sleep(300);
+            await shoot('booking-inbox-overflow');
+          } else {
+            log('WARN: overflow "More" button not present — skipping booking-inbox-overflow.png');
+          }
+        } else {
+          log('WARN: synthetic demo lead did not surface in the filtered list — skipping booking-inbox-workspace/overflow.png');
+        }
+      } catch (e) {
+        log('WARN: Booking Inbox workspace shot failed:', e.message || e);
+      } finally {
+        // Clean up by id (the normal case) AND by the unique marker (belt
+        // and suspenders — e.g. if LAST_INSERT_ID() couldn't be read back
+        // but the row was still inserted, this still finds and removes it
+        // rather than leaving a synthetic row behind in the live database).
+        {
+          try {
+            if (demoLeadId) {
+              runSql(env, `DELETE FROM lead_messages WHERE lead_id = ${demoLeadId}`);
+              runSql(env, `DELETE FROM lead_audit_log WHERE lead_id = ${demoLeadId}`);
+              runSql(env, `DELETE FROM leads WHERE id = ${demoLeadId}`);
+            }
+            runSql(env, `DELETE m FROM lead_messages m JOIN leads l ON l.id = m.lead_id WHERE l.contact_org = ${JSON.stringify(marker)}`);
+            runSql(env, `DELETE a FROM lead_audit_log a JOIN leads l ON l.id = a.lead_id WHERE l.contact_org = ${JSON.stringify(marker)}`);
+            runSql(env, `DELETE FROM leads WHERE contact_org = ${JSON.stringify(marker)}`);
+            log('cleaned up synthetic demo lead', demoLeadId || '(by marker)');
+          } catch (cleanupErr) {
+            log('WARN: failed to clean up demo lead', demoLeadId, '—', cleanupErr.message || cleanupErr);
+          }
+        }
+      }
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: WIDTH, height: HEIGHT, deviceScaleFactor: SCALE, mobile: false });
     }
 
     // ── Promote ──────────────────────────────────────────────────────────

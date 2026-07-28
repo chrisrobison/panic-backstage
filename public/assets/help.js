@@ -1885,6 +1885,11 @@ const HELP_CONTENT = {
     <p>Every claim has a countdown. Doing anything that counts as real progress — sending a reply, logging a call, sending availability or a proposal, scheduling a tour — automatically extends it. Sitting on a claim without acting on it lets the countdown run out and returns the inquiry to the shared queue so someone else can pick it up (the same automatic sweep also returns an <em>assigned</em>-but-never-claimed inquiry to the unassigned queue past its own deadline).</p>
     <div class="tip"><strong>Tip:</strong> A silent, indefinitely-held claim is exactly how an inquiry gets lost — the booker thinks someone's on it, and nobody actually is. The countdown (and the specific list of actions that reset it) exists so "claimed" always means "actively being worked," not "reserved."</div>
 
+    <figure class="help-shot">
+      <img src="./assets/help/booking-inbox-workspace.png" alt="An open Booking Inbox inquiry: header with status, owner, source, inquiry score, and a Claim Inquiry button; a conversation thread below; and a bottom action bar showing Onboard Lead (primary), Send Availability, Add Task, and More" loading="lazy">
+      <figcaption>An open inquiry — the Claim Inquiry button sits in the header; the tiered action bar (described below) sits at the bottom.</figcaption>
+    </figure>
+
     <h3>Who can claim what</h3>
     <p>Every venue admin and Trusted booker can claim any inquiry that has no active claim. A <strong>Restricted external booker</strong> — someone with narrower access, not the full pipeline — is scoped more tightly:</p>
     <table>
@@ -1902,6 +1907,10 @@ const HELP_CONTENT = {
       <li><strong>Secondary (outline buttons)</strong> — one or two supporting actions, like sending availability or adding a task.</li>
       <li><strong>More</strong> — everything else: Assign, Reassign, Decline, Archive, and the other status changes (mark lost/spam/duplicate, put on hold, awaiting customer). Same actions as before, just one click further away instead of crowding the bar.</li>
     </ul>
+    <figure class="help-shot">
+      <img src="./assets/help/booking-inbox-overflow.png" alt="The Booking Inbox action bar's More menu opened, showing Assign, Reassign, Decline, Archive, and Other status options" loading="lazy">
+      <figcaption>The More menu — Assign, Reassign, Decline, Archive, and the remaining status changes, one click away instead of crowding the bar.</figcaption>
+    </figure>
     <p>Anything that requires a reason (Decline, Archive, Lost, Spam, Duplicate) still prompts you for one, wherever you trigger it from.</p>
 
     <div class="warn"><strong>Important:</strong> Declining, losing, or archiving an inquiry above your venue's high-value threshold isn't allowed for a Restricted booker — it instead files an approval request for a manager, so a promising booking can't be quietly turned away. See <a href="#help-booking-inbox-onboard">Onboarding from the Inbox</a>.</div>
