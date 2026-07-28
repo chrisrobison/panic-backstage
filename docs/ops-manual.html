@@ -1133,9 +1133,14 @@
     <a href="#lead-convert" class="section">Converting to an event</a>
     <a href="#inbox-overview" class="section">The Booking Inbox</a>
     <a href="#inbox-claim" class="section">Claiming, assigning &amp; ownership</a>
+    <a href="#inbox-eligibility" class="section">Who can claim what</a>
+    <a href="#inbox-action-bar" class="section">The action bar</a>
     <a href="#inbox-conversation" class="section">Replying &amp; internal notes</a>
+    <a href="#inbox-quarantine" class="section">Quarantined mail</a>
     <a href="#inbox-routing" class="section">Understanding routing</a>
+    <a href="#inbox-sla" class="section">SLA timers</a>
     <a href="#inbox-onboard" class="section">Onboarding from the Inbox</a>
+    <a href="#inbox-identity" class="section">Outbound sender identity</a>
 
     <div class="nav-section">Part II — Booking</div>
     <a href="#booking" class="chapter">Chapter 2: Booking a Show</a>
@@ -1612,7 +1617,7 @@
 
     <p>The Leads Inbox (above) is where you evaluate a deal. The <strong>Booking Inbox</strong> — a separate <span class="ui-label">Inbox</span> item in the left nav — is where you actually work an inquiry day to day: read the messages, claim it so nobody else steps on it, reply, and hand it off when it's ready to become an event. Both views are the same underlying inquiry; Inbox is just the working desk, not a second database.</p>
 
-    <p>Inquiries arrive automatically from the <code>bookings@themab.org</code> mailbox and the public inquiry form, get an instant neutral acknowledgment reply, and are read by an AI classifier that fills in event type, genre, dates, attendance, and a spam score — nobody has to type that in by hand. A routing rule (set up by a venue admin, see below) then either points the inquiry at a specific person or drops it in the shared unassigned queue.</p>
+    <p>Inquiries arrive automatically from the venue's configured intake mailbox and the public inquiry form, get an instant neutral acknowledgment reply, and are read by an AI classifier that fills in event type, genre, dates, attendance, and a spam score — nobody has to type that in by hand. A routing rule (set up by a venue admin, see below) then either points the inquiry at a specific person or drops it in the shared unassigned queue.</p>
 
     <h3 id="inbox-claim">Claiming, assigning &amp; ownership</h3>
     <p>These are three different things in the Inbox, on purpose:</p>
@@ -1628,18 +1633,62 @@
       <p>A silent, indefinitely-held claim is exactly how an inquiry gets lost — the booker thinks someone's on it, and nobody actually is. The countdown (and the specific list of actions that reset it) exists so "claimed" always means "actively being worked," not "reserved."</p>
     </div>
 
+    <h3 id="inbox-eligibility">Who can claim what</h3>
+    <p>Every venue admin and Trusted booker (staff with full Booking Inbox access) can claim any inquiry that doesn't already have an active claim. A <strong>Restricted external booker</strong> — someone brought in for a specific act of business, without full access to the whole pipeline — is scoped more tightly:</p>
+
+    <table>
+      <tr><th>You are...</th><th>You may claim...</th></tr>
+      <tr><td>Venue admin / Trusted booker</td><td>Any visible inquiry that has no active claim.</td></tr>
+      <tr><td>Restricted external booker</td><td>An inquiry already assigned to you, that you own, or that you're watching — <strong>or</strong> an unassigned, unclaimed inquiry still sitting in the fresh triage queue (status <em>New</em>/<em>Classified</em>).</td></tr>
+      <tr><td>Restricted external booker</td><td>Never someone else's assigned inquiry — the Claim button won't even appear on it, and the server rejects the request if you try to hit the API directly.</td></tr>
+    </table>
+
+    <p>In practice: a Restricted booker can self-serve fresh, not-yet-triaged inquiries straight out of the unassigned queue — that's deliberate, so a booker with a specific specialty can pick up matching inquiries without waiting on a manager — but can't reach into another person's already-assigned or already-claimed work. The unassigned/all-inquiries views a Restricted booker sees are scoped to show exactly the rows they're allowed to claim, so there's no dead-end row that looks claimable but isn't.</p>
+
+    <h3 id="inbox-action-bar">The action bar</h3>
+    <p>The bottom of the workspace shows a short row of buttons rather than every possible action at once — the goal is that the 1-2 things you'd actually do next are the ones you see:</p>
+    <ul>
+      <li><strong>Primary (filled button)</strong> — the obvious next step: <span class="ui-label button">Onboard Lead</span> for most open inquiries, or <span class="ui-label button">Send Proposal</span> once availability or a tour has already gone out.</li>
+      <li><strong>Secondary (outline buttons)</strong> — one or two supporting actions, like sending availability or adding a task.</li>
+      <li><strong><span class="ui-label button">More</span></strong> — everything else lives here: Assign, Reassign, Decline, Archive, and the other status changes (mark lost/spam/duplicate, put on hold, awaiting customer). These are exactly as functional as before; they're just tucked behind one click instead of crowding the bar.</li>
+    </ul>
+    <p>Anything that requires a reason (Decline, Archive, Lost, Spam, Duplicate) still prompts you for one before applying, wherever you trigger it from.</p>
+
     <h3 id="inbox-conversation">Replying &amp; internal notes</h3>
     <p>Each inquiry has one conversation thread — inbound messages, your replies, and internal notes only your team can see, all in one place, plus a system log of status changes and reassignments. If a teammate has a draft reply open, you'll see a banner saying so before you start typing your own, so two people don't send two different answers to the same email.</p>
+    <p>The composer's <strong>template</strong> button inserts one of the venue's canned reply bodies (availability follow-up, proposal follow-up, schedule-a-tour, request-missing-information) and fills in the placeholders (preferred date, event name, contact name, venue name) automatically — edit the inserted text before sending like any other draft. You can also add a <strong>watcher</strong> to an inquiry so a colleague gets visibility without taking the claim — useful when a manager wants to keep an eye on a tricky one.</p>
+
+    <h3 id="inbox-quarantine">Quarantined mail</h3>
+    <p>Mail the intake filter isn't confident enough to auto-file as a real inquiry lands in a separate <strong>Quarantined Mail</strong> review queue (venue admins only) instead of silently disappearing or silently becoming a lead. For each item, decide:</p>
+    <ul>
+      <li><strong>Promote</strong> — it's a genuine, if messy, booking request the filter misjudged. Promoting turns it into a real inquiry in the normal queue.</li>
+      <li><strong>Leave it</strong> — it's actually spam, an automated bounce, a vendor notice, or unrelated correspondence that happened to hit the intake mailbox. Promoting these just pollutes the triage queue with noise everyone then has to re-triage.</li>
+    </ul>
 
     <h3 id="inbox-routing">Understanding how an inquiry got routed</h3>
     <p>Open the Details tab on any inquiry to see the AI's read on it (category, genre, dates, budget, confidence) and, if a routing rule matched, a plain-English explanation like "Routed to Kathy because: genre contains punk/ska (94% confidence)." If nothing matched confidently enough, it lands in the unassigned queue for a person to route by hand — the AI never assigns, deletes, or declines anything on its own; it only fills in fields for a human (or the deterministic routing rules) to act on.</p>
+
+    <h3 id="inbox-sla">SLA timers</h3>
+    <p>Two clocks run automatically, business-hours-aware (they pause overnight and on days the venue is closed rather than counting real wall-clock time):</p>
+    <ul>
+      <li>An <strong>assigned</strong> inquiry that nobody claims before its deadline is automatically returned to the unassigned queue, so it doesn't sit invisible in one person's queue forever.</li>
+      <li>A <strong>claimed</strong> inquiry whose countdown (see above) runs out has its claim automatically released — same effect as if the claimant had let it go themselves.</li>
+    </ul>
+    <p>Both sweeps run every five minutes in the background. If an inquiry keeps bouncing back to unassigned, that's this doing its job correctly — the fix is claiming it and then actually taking a claim-preserving action before the deadline, not a system malfunction.</p>
 
     <h3 id="inbox-onboard">Onboarding a lead from the Inbox</h3>
     <p>When an inquiry is ready to become a real booking, <span class="ui-label button">Onboard Lead</span> walks through duplicate-event and date-conflict checks, lets you pick the room/template/owner, and drops in a starter task checklist — then creates the event at <strong>Proposed</strong> status, the same as converting a lead from the pipeline view. Onboarding is a handoff into the normal booking workflow (Part II), not a shortcut that marks anything as booked.</p>
 
     <div class="callout warn">
       <span class="callout-title">Declining a high-value inquiry</span>
-      <p>If an inquiry is above your venue's high-value threshold, a restricted booker can't unilaterally decline/lose/archive it — that action instead files an approval request for a manager, so a promising booking can't be quietly turned away.</p>
+      <p>If an inquiry is above your venue's high-value threshold, a restricted booker can't unilaterally decline/lose/archive it — that action instead files an approval request for a manager, so a promising booking can't be quietly turned away. The inquiry stays in its current status, unchanged, until a manager approves or denies the request from the approval banner at the top of the workspace.</p>
+    </div>
+
+    <h3 id="inbox-identity">Outbound sender identity</h3>
+    <p>Automatic acknowledgments and staff replies both send from the same venue-configured identity (display name and address), set once by a venue admin rather than hard-coded per venue — so this same Booking Inbox works correctly for any venue Backstage is set up for, not just the one it originally shipped with.</p>
+    <div class="callout note">
+      <span class="callout-title">Keep the reply address pointed at the intake mailbox</span>
+      <p>Customer replies land back in the same mailbox this venue's automated intake reads. If that outbound address is ever reconfigured, it needs to stay the intake mailbox — pointing it anywhere else means customer replies stop threading back into the Inbox at all.</p>
     </div>
 
   </div><!-- /book-content -->

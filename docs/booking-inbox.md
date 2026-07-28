@@ -255,12 +255,15 @@ Capabilities added to `BaseEndpoint::GLOBAL_CAPABILITIES`:
 `promoter` (Restricted external booker: view + claim, scoped to
 assigned/watched rows only).
 
-> **Note on `docs/openapi.yaml`:** the Leads, Tasks, Promote, and Processes
-> modules were never added to the OpenAPI spec (it currently documents auth,
-> users, and events/contracts/tasks-under-events only) — this predates the
-> Booking Inbox work. Rather than bolt on partial coverage for just the new
-> routes above, leaving a confusing half-documented module, that gap is
-> flagged here for a dedicated future pass across all four modules at once.
+> **Note on `docs/openapi.yaml`:** the Leads, Booking Inbox, Tasks, Promote,
+> and Processes modules are now documented in the OpenAPI spec (all the
+> routes listed above, plus `/api/leads/{id}/*`, `/api/inbox/*`, and
+> `/api/routing-rules/*`) — the gap this note used to flag has been closed.
+> `scripts/check-openapi-routes.php` (`tests/openapi_route_drift_test.php`)
+> enforces that every Kernel-routed path, every Booking Inbox lead child, and
+> every Inbox cross-lead action stays documented going forward, so route
+> drift here is caught by the hermetic test suite rather than discovered
+> later.
 
 ## Realtime
 

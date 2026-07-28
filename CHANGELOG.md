@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** `booking-inbox` — Document Inbox workflows in help.js/ops-manual, refresh OpenAPI
 - **Added** `booking-inbox` — Venue-configurable outbound identity, restricted-booker claim policy, tiered action bar
 - **Added** `booking-inbox` — Venue-configurable outbound identity, restricted-booker claim policy, tiered action bar
 - **Documentation** `help` — Refresh screenshots and cover 9 new modules

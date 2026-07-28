@@ -5081,7 +5081,9 @@ components:
           type: string
           nullable: true
       description: >-
-        An outbound send also: mails the contact from bookings@themab.org, sets
+        An outbound send also: mails the contact from the venue's configured outbound identity
+        (lead_inbox_settings.from_name/from_email, see Panic\Leads\OutboundIdentity — falls back to
+        a generated "{venue name} Booking Team" / the intake mailbox if unset), sets
         first_response_at if unset, counts as a claim-preserving action, and establishes
         owner_user_id on the lead's first meaningful reply if nobody owns it yet.
     LeadDraft:
@@ -17058,7 +17060,11 @@ paths:
       summary: Get the Booking Inbox detail payload
       description: >-
         Returns the scoped inquiry record plus its classification, assignment, claim, routing
-        explanation, and capability flags used by the Booking Inbox workspace.
+        explanation, venue_name (for reply-template {{venue_name}} prefill, see
+        Panic\Leads\OutboundIdentity), and capability flags used by the Booking Inbox workspace.
+        A restricted booker (`claim_leads` without `manage_booking_inbox`) may open a row that is
+        assigned/owned/watched by them, or one still unassigned+unclaimed in the open triage set
+        (status `new`/`classified`) — see LeadsInbox::canView()/canClaim().
       tags:
         - Booking Inbox
       parameters:
@@ -17135,9 +17141,13 @@ paths:
       description: >-
         Requires `view_booking_inbox` + `claim_leads`. Only one active claim per lead
         (src/Leads/ClaimService.php) — claiming an already-actively-claimed lead is rejected with
-        who holds it and when it expires, rather than silently taking over. A restricted booker
-        (lacking `manage_booking_inbox`) may only claim inquiries that are currently unassigned or
-        already assigned to them.
+        who holds it and when it expires, rather than silently taking over. Per-lead eligibility is
+        enforced by LeadsInbox::canClaim(): a user with `manage_booking_inbox` may claim any
+        unclaimed visible lead; a restricted booker (`claim_leads` only) may claim a lead assigned
+        to them, that they own, or that they watch, OR an unassigned+unclaimed lead still in the
+        open triage set (status `new`/`classified`) — never a lead assigned to someone else. The
+        same check backs `capabilities.claim` in GET .../detail, so the Claim button only renders
+        when this would actually succeed.
       tags:
         - Booking Inbox
       parameters:
@@ -18146,7 +18156,11 @@ paths:
         unassigned, all, follow_up, archived, awaiting_first_response, claims_expiring,
         follow_up_overdue, high_value, recently_onboarded, declined) — the first five map 1:1 to
         left-nav routes; the rest are surfaced as an in-page dropdown. Results are always scoped by
-        `BaseEndpoint::leadScopeSql()` for a Restricted external booker. Capped at 200 rows.
+        `BaseEndpoint::leadScopeSql()` for a Restricted external booker (`claim_leads` without
+        `manage_booking_inbox`): rows assigned to/owned/watched by them, plus any row still
+        unassigned+unclaimed in the open triage set (status `new`/`classified`) — so their
+        `unassigned`/`all` views include exactly the rows LeadsInbox::canClaim() lets them claim.
+        Capped at 200 rows.
       tags:
         - Booking Inbox
       parameters:
