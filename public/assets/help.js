@@ -448,6 +448,10 @@ const HELP_CONTENT = {
   'tasks-app': `
     <h2>The Tasks app</h2>
     <p><strong>Tasks</strong> in the left sidebar is a standalone, ClickUp/Asana-style project manager — completely separate from the <a href="#help-tasks">Tasks tab inside an event</a>. It has no connection to events at all: no event picker, no event-scoped data, nothing. Use it for work that doesn't belong to a single show — a marketing campaign, a season-long project, a cross-event initiative, an admin to-do list.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/tasks-app.png" alt="The Tasks app: a sidebar of task documents on the left, and the selected document's task table with name, assignee, status, due date, and priority columns" loading="lazy">
+      <figcaption>The Tasks app — a document sidebar on the left, the selected document's task list (or board/timeline/calendar view) on the right.</figcaption>
+    </figure>
     <p class="help-tip">⚠️ <strong>Two things are both called "Tasks."</strong> The <a href="#help-tasks">Tasks tab</a> you'll find inside an individual event (door count, load-in checklist, etc.) and the <strong>Tasks app</strong> you'll find as its own item in the sidebar are unrelated features with different data, different fields, and different permissions. If someone says "check the tasks," confirm which one they mean.</p>
     <h3>Getting there</h3>
     <p>Click <strong>Tasks</strong> in the sidebar (URL <code>#tasks</code>). Opening a specific document directly uses <code>#tasks-&lt;id&gt;</code>. If you don't see Tasks in the sidebar at all, your account doesn't have the capability — ask a venue admin.</p>
@@ -1266,6 +1270,10 @@ const HELP_CONTENT = {
   'admin-users': `
     <h2>Managing login accounts</h2>
     <p>Admin &rarr; Users lists every account that can log into backstage. The table shows name, email, role, authentication methods (password and registered passkeys), and how many events each user owns or collaborates on.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/admin-users.png" alt="The Admin > Users table: name, email, role badge, authentication method, and owned/collaborating event counts for every login account" loading="lazy">
+      <figcaption>Admin &rarr; Users — every login account, its role, and how it authenticates.</figcaption>
+    </figure>
     <h3>Creating a user</h3>
     <p>Click the <em>+</em> button above the table to open the Add User dialog. Required: name, email, role. Password is optional — if you leave it blank, the user can still sign in via passkey or by requesting an email login link from the login page.</p>
     <h3>Editing a user</h3>
@@ -1394,6 +1402,10 @@ const HELP_CONTENT = {
   'admin-navigation': `
     <h2>Navigation manager</h2>
     <p>Admin &rarr; Navigation (<code>#admin-navigation</code>) edits the app shell's own sidebar — the same nav you're using right now. Restricted to venue admins.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/admin-navigation.png" alt="The Navigation manager: a draggable, nestable list of nav items on the left, an edit form in the middle, and a live preview of the real sidebar on the right" loading="lazy">
+      <figcaption>Admin &rarr; Navigation — edit the nav tree on the left; the live preview on the right renders it with the exact code the real sidebar uses.</figcaption>
+    </figure>
     <h3>Layout</h3>
     <p>Three panes: a draggable, nestable list of nav items on the left, an edit form for whichever item is selected in the middle, and a live preview on the right built from the exact same rendering code the real sidebar uses — so the preview can never drift from what actually ships once you save.</p>
     <h3>Editing an item</h3>
@@ -1437,6 +1449,10 @@ const HELP_CONTENT = {
   'ai-assistant': `
     <h2>AI Assistant</h2>
     <p>The AI Assistant is a slide-over panel from the right side of the screen — a chat, not a dialog box. It never darkens or blocks the rest of the app: everything behind it stays fully visible and clickable while it's open, so you can keep working and glance back at it. Close it with the <strong>×</strong> button or <kbd>Esc</kbd>.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/ai-assistant.png" alt="The AI Assistant slide-over panel open on the right side of the screen, with a prompt inviting a question about an event or events in general, and a message input at the bottom" loading="lazy">
+      <figcaption>The AI Assistant — a non-blocking side panel; the rest of the app stays visible and usable while it's open.</figcaption>
+    </figure>
     <p>Visible only to venue admins (the <code>use_ai_assistant</code> permission isn't granted to any other role today).</p>
 
     <h3>Opening it</h3>
@@ -1474,6 +1490,10 @@ const HELP_CONTENT = {
   'automation-overview': `
     <h2>What is Automation?</h2>
     <p><strong>Automation</strong> (sidebar group with sub-items Processes / Cases / Tasks / Activity / Connections) is a visual workflow builder: you draw a flowchart of the steps a piece of work goes through — a booking inquiry, for instance — and Backstage can then run that flowchart against a real event, stopping to ask a person for input where needed and, at a handful of steps, taking real actions against real data on its own.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/automation.png" alt="The Automation Processes list: a table of versioned process definitions with category, status, active/waiting/overdue case counts, and last-updated date" loading="lazy">
+      <figcaption>Automation &gt; Processes — each row is a versioned, publishable process definition; the counts show how many real cases are moving through it.</figcaption>
+    </figure>
     <p>The vocabulary:</p>
     <ul>
       <li><strong>Process</strong> — a named, reusable workflow definition (e.g. "Event Booking"). Editing a published process always creates a new draft version rather than changing the live one out from under any workflow currently running it.</li>
@@ -1719,6 +1739,10 @@ const HELP_CONTENT = {
   leads: `
     <h2>Leads Inbox</h2>
     <p>The Leads Inbox is the first stop for new booking inquiries. It lives at the top of the sidebar under the <strong>Leads</strong> nav item and collects every inbound request before it becomes a confirmed event.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/leads.png" alt="The Leads Inbox: a queue of inquiries in the left column with contact name, subject, and category badges, and an empty workspace prompting you to select one" loading="lazy">
+      <figcaption>The Leads Inbox — the queue on the left lists every inquiry; select one to open its conversation, details, and claim/assign actions.</figcaption>
+    </figure>
 
     <h3>Status pipeline</h3>
     <p>Leads move through a defined status pipeline:</p>
@@ -1831,6 +1855,10 @@ const HELP_CONTENT = {
   vendors: `
     <h2>Vendors &amp; COI Tracking</h2>
     <p>The Vendors panel tracks every external vendor hired for an event: caterers, photographers, security firms, AV companies, DJs, decorators, and any other outside party brought in for the show.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/vendors.png" alt="The Vendors tab on an event workspace, showing the empty Vendors panel with its add button" loading="lazy">
+      <figcaption>The Vendors tab, inside an event workspace — add a vendor to start tracking contact info, COI status, and payment.</figcaption>
+    </figure>
 
     <h3>Vendor columns</h3>
     <ul>
@@ -1882,6 +1910,10 @@ const HELP_CONTENT = {
   execution: `
     <h2>Live Execution Records</h2>
     <p>The Execution tab captures real-time records during the event: incidents, change orders, bar notes, property damage, overages, and other notable occurrences. These records create a factual, timestamped account of what actually happened night-of-show.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/execution.png" alt="The Execution tab on an event workspace, showing the record-type filter tabs (All, Change Orders, Bar Notes, Damage, Incidents, Other) and the Add Record button" loading="lazy">
+      <figcaption>The Execution tab, inside an event workspace — log a timestamped record, filterable by type.</figcaption>
+    </figure>
 
     <h3>Record types</h3>
     <ul>
@@ -2082,6 +2114,10 @@ const HELP_CONTENT = {
   'promote-overview': `
     <h2>What is Panic Promote?</h2>
     <p>Panic Promote is the built-in marketing engine for your venue. Once you have an event in Backstage, Promote helps you write, approve, and push announcements to every platform you use — Facebook, Instagram, Eventbrite, Luma, Foopee, Funcheap, your email list, and more — without leaving the app.</p>
+    <figure class="help-shot">
+      <img src="./assets/help/promote.png" alt="A Panic Promote campaign overview: the event's flyer and show details, a Promotion Health checklist, a Posts panel, and an Assets panel with approval-status badges" loading="lazy">
+      <figcaption>A campaign overview in Panic Promote — the Promotion Health checklist tracks what's left before an event is fully promoted.</figcaption>
+    </figure>
     <h3>The core workflow</h3>
     <ol>
       <li><strong>Open the event</strong> in the event workspace and click the <em>Promote</em> button in the top-right action bar.</li>

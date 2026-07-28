@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** `help` — Refresh screenshots and cover 9 new modules
 - **Added** `booking-inbox` — Add venue-admin-only Assign action
 - **Changed** — Store access token in localStorage, not sessionStorage
 - **Changed** — Extend default access-token lifetime to 1 week
