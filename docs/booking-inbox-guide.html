@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>The Booking Inbox — Workflow Guide — Mabuhay Backstage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+
+    :root {
+      --paper: #f7f4ec;
+      --paper-raised: #ffffff;
+      --ink: #201b14;
+      --ink-soft: #5c5346;
+      --line: #e3dbc9;
+      --stage: #18130d;
+      --stage-soft: #241c14;
+      --marquee: #b5720f;
+      --marquee-bright: #d99a2b;
+      --velvet: #a23c3c;
+      --house: #2f6f5e;
+      --code-bg: #eee5d0;
+      --shadow: 0 1px 2px rgba(24,19,13,.06), 0 10px 28px -14px rgba(24,19,13,.28);
+      --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+      --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #14110c;
+        --paper-raised: #1c1710;
+        --ink: #ece3d3;
+        --ink-soft: #b3a894;
+        --line: #35291b;
+        --stage: #0b0906;
+        --stage-soft: #191209;
+        --marquee: #e2a542;
+        --marquee-bright: #f2c374;
+        --velvet: #e08a8a;
+        --house: #74c2ab;
+        --code-bg: #201a11;
+        --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.65);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--paper); scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* ---- Stage header band ---- */
+    .stagehead {
+      background: linear-gradient(180deg, var(--stage) 0%, var(--stage-soft) 100%);
+      position: relative;
+      overflow: hidden;
+      padding: 4.5rem 1.5rem 3.25rem;
+    }
+    .stagehead::after {
+      content: "";
+      position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+      background: repeating-linear-gradient(90deg, var(--marquee-bright) 0 8px, transparent 8px 22px);
+      opacity: .85;
+    }
+    .stagehead-inner { max-width: 740px; margin: 0 auto; }
+    .kicker {
+      display: inline-block;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: .16em;
+      font-size: .74rem;
+      font-weight: 600;
+      color: var(--marquee-bright);
+      margin: 0 0 1rem;
+    }
+    .stagehead h1 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(2rem, 4.2vw, 3.1rem);
+      line-height: 1.1;
+      letter-spacing: -.01em;
+      margin: 0;
+      color: #fbf6e9;
+    }
+
+    main.page { max-width: 740px; margin: 0 auto; padding: 3.25rem 1.5rem 6rem; }
+
+    h2, h3, h4 { font-family: var(--font-display); color: var(--ink); }
+    h2 {
+      font-weight: 600; font-size: 1.7rem;
+      margin: 3.25rem 0 1.1rem;
+      scroll-margin-top: 1.75rem;
+      position: relative;
+    }
+    h3 {
+      font-weight: 600; font-size: 1.28rem;
+      margin: 2.25rem 0 .85rem;
+      scroll-margin-top: 1.75rem;
+      position: relative;
+    }
+    h4 {
+      font-family: var(--font-mono);
+      font-weight: 600; font-size: .82rem;
+      text-transform: uppercase; letter-spacing: .06em;
+      color: var(--ink-soft);
+      margin: 1.9rem 0 .6rem;
+      position: relative;
+    }
+    .anchor-link {
+      position: absolute; left: -1.2em; top: .12em;
+      color: var(--marquee); opacity: 0;
+      text-decoration: none; font-family: var(--font-mono); font-weight: 400;
+      font-size: .82em;
+      transition: opacity .12s ease;
+    }
+    h2:hover .anchor-link, h3:hover .anchor-link, h4:hover .anchor-link { opacity: .7; }
+    .anchor-link:hover { opacity: 1 !important; }
+
+    p { margin: 0 0 1.15rem; }
+    strong { color: var(--ink); font-weight: 600; }
+    em { color: var(--ink-soft); }
+    a { color: var(--marquee); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--marquee) 40%, transparent); text-underline-offset: 2px; }
+    a:hover { color: var(--velvet); text-decoration-color: currentColor; }
+
+    ul, ol { padding-left: 1.35rem; margin: 0 0 1.2rem; }
+    li { margin-bottom: .42rem; }
+    li > ul, li > ol { margin-top: .5rem; margin-bottom: 0; }
+
+    hr {
+      border: 0;
+      margin: 3.25rem auto;
+      height: 1.1rem;
+      background-image: radial-gradient(circle, var(--marquee) 1.6px, transparent 1.7px);
+      background-repeat: repeat-x;
+      background-position: center;
+      background-size: 18px 100%;
+      opacity: .55;
+    }
+
+    table {
+      width: 100%; border-collapse: collapse;
+      margin: 1.6rem 0 2rem;
+      font-size: .95rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      background: var(--paper-raised);
+    }
+    table col { width: auto !important; }
+    thead th {
+      background: var(--stage);
+      color: #f2ead8;
+      text-align: left;
+      padding: .7rem 1rem;
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      font-weight: 600;
+    }
+    tbody td { padding: .75rem 1rem; border-top: 1px solid var(--line); vertical-align: top; }
+    tbody tr:nth-child(even) { background: color-mix(in srgb, var(--stage) 3%, var(--paper-raised)); }
+    tbody tr:hover { background: color-mix(in srgb, var(--marquee) 9%, transparent); }
+
+    code {
+      font-family: var(--font-mono);
+      background: var(--code-bg);
+      padding: .16em .42em;
+      border-radius: 5px;
+      font-size: .87em;
+      color: var(--velvet);
+    }
+    pre {
+      background: var(--stage);
+      color: #e7dfcd;
+      padding: 1.1rem 1.3rem;
+      border-radius: 10px;
+      overflow-x: auto;
+      border-left: 3px solid var(--marquee);
+      box-shadow: var(--shadow);
+      margin: 1.5rem 0 1.9rem;
+    }
+    pre code { background: none; padding: 0; color: inherit; font-size: .85rem; line-height: 1.65; }
+
+    blockquote {
+      margin: 1.7rem 0; padding: 1.05rem 1.35rem;
+      border-left: 3px solid var(--marquee);
+      background: color-mix(in srgb, var(--marquee) 9%, var(--paper-raised));
+      border-radius: 0 10px 10px 0;
+      color: var(--ink-soft);
+      box-shadow: var(--shadow);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+    blockquote strong { color: var(--ink); }
+
+    /* ---- Table of contents card ---- */
+    .toc-card {
+      background: var(--paper-raised);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.4rem 1.7rem 1.4rem 2.4rem;
+      box-shadow: var(--shadow);
+      margin: 0 0 2rem;
+    }
+    .toc-card ol { margin-bottom: 0; }
+    .toc-card li { margin-bottom: .3rem; }
+    .toc-card a { text-decoration: none; }
+    .toc-card a:hover { text-decoration: underline; }
+
+    /* ---- Status badges ---- */
+    .badge {
+      display: inline-flex; align-items: center; gap: .45em;
+      font-family: var(--font-mono); font-size: .78em; font-weight: 600;
+      padding: .18em .6em; border-radius: 999px; white-space: nowrap;
+      vertical-align: .04em;
+    }
+    .badge::before { content: ""; width: .5em; height: .5em; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .badge-green  { color: #2f8f5b; background: rgba(47,143,91,.13); }
+    .badge-yellow { color: #ab7712; background: rgba(171,119,18,.15); }
+    .badge-blue   { color: #3568b0; background: rgba(53,104,176,.15); }
+    .badge-red    { color: #b0402f; background: rgba(176,64,47,.15); }
+    .badge-gray   { color: var(--ink-soft); background: rgba(120,110,95,.15); }
+
+    /* ---- Cue rail (persistent in-page nav) ---- */
+    .cue-rail {
+      position: fixed;
+      top: 7rem;
+      right: max(1rem, calc(50% - 370px - 240px));
+      width: 210px;
+      max-height: 72vh;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      display: none;
+    }
+    @media (min-width: 1240px) { .cue-rail { display: block; } }
+    .cue-rail .cue-title {
+      text-transform: uppercase; letter-spacing: .12em;
+      color: var(--ink-soft); margin-bottom: .7rem; font-weight: 600; font-size: .68rem;
+    }
+    .cue-rail a {
+      display: flex; gap: .55rem; align-items: baseline;
+      padding: .32rem 0 .32rem .75rem;
+      margin-bottom: .05rem;
+      color: var(--ink-soft);
+      text-decoration: none;
+      border-left: 2px solid var(--line);
+      line-height: 1.35;
+    }
+    .cue-rail a .n { color: var(--marquee); font-weight: 600; flex-shrink: 0; }
+    .cue-rail a.active { color: var(--ink); border-left-color: var(--marquee); }
+    .cue-rail a:hover { color: var(--ink); }
+
+    @media (max-width: 640px) {
+      .stagehead { padding: 3rem 1.25rem 2.25rem; }
+      main.page { padding: 2.25rem 1.25rem 4.5rem; }
+      h2 { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="stagehead"><div class="stagehead-inner">
+<p class="kicker">Mabuhay Backstage · Workflow Guide</p>
+<h1 id="the-booking-inbox-workflow-guide">The Booking Inbox — Workflow
+Guide</h1>
+</div></div>
+<main class="page">
+<p>A plain-language walkthrough of why the Booking Inbox exists, how an
+inquiry moves through it, and the exact path from a first message to a
+booked, contracted show.</p>
+<blockquote>
+<p><strong>Looking for the technical/architecture reference
+instead?</strong> See <a
+href="booking-inbox.html"><code>docs/booking-inbox.html</code></a>
+(source: <code>docs/booking-inbox.md</code>) — data model, API surface,
+migrations, and test suite. This guide is for the people actually
+working the Inbox day to day, not for extending the code.</p>
+</blockquote>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol type="1">
+<li><a href="#why-the-booking-inbox-exists">Why the Booking Inbox
+Exists</a></li>
+<li><a href="#how-an-inquiry-arrives">How an Inquiry Arrives</a></li>
+<li><a href="#assigned-claimed-owned">Assigned, Claimed, Owned</a></li>
+<li><a href="#working-an-inquiry">Working an Inquiry</a></li>
+<li><a href="#from-inquiry-to-booked-show">From Inquiry to Booked
+Show</a></li>
+<li><a href="#who-can-do-what">Who Can Do What</a></li>
+<li><a href="#operator-cheat-sheet">Operator Cheat Sheet</a></li>
+<li><a href="#where-to-go-next">Where to Go Next</a></li>
+</ol>
+<hr />
+<h2 id="why-the-booking-inbox-exists">Why the Booking Inbox Exists</h2>
+<p>Before the Booking Inbox, a booking inquiry’s life looked like this:
+it landed in a shared mailbox, someone eventually noticed it, replied
+from whatever account they happened to be in, and — if it turned into a
+real show — someone re-typed the details into a new event by hand.
+Nothing tracked who was actually working an inquiry versus who’d just
+glanced at it. Two people could reply to the same booker with two
+different answers. A promising inquiry could sit unanswered for a week
+because everyone assumed someone else had it. There was no record of
+<em>why</em> a booking was declined, and a manager had no way to see
+that a high-value inquiry had been quietly turned away.</p>
+<p>The Booking Inbox is the fix: a shared, auditable workspace where
+staff and outside bookers triage, claim, respond to, and hand off
+inbound inquiries — without anyone privately controlling, hiding, or
+deleting them.</p>
+<p><strong>It is not a second system.</strong> Backstage already has a
+<a href="ops-manual.html#lead-inbox">Leads pipeline</a> for evaluating
+deals. The Inbox is a second lens over those same rows, purpose-built
+for the day-to-day work:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th>What it’s for</th>
+<th>What it’s not</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Leads</strong></td>
+<td>Evaluating a deal — pipeline view, filtering, reporting</td>
+<td>The place you reply to a booker</td>
+</tr>
+<tr class="even">
+<td><strong>Booking Inbox</strong></td>
+<td>Working an inquiry — claim it, read the thread, reply, hand it
+off</td>
+<td>A separate database of inquiries</td>
+</tr>
+</tbody>
+</table>
+<p>Every inquiry you see in the Inbox is a lead row underneath.
+Converting it or onboarding it from either view does the same thing.</p>
+<p>The design leans on a few deliberate ideas, each solving a specific
+failure mode from the old workflow:</p>
+<ul>
+<li><strong>Claim, not just assign</strong> — assigning an inquiry to a
+person doesn’t mean anyone’s actually working it <em>right now</em>. A
+claim is a real-time “I’ve got this,” and only one person can hold it,
+so two people can’t step on each other mid-conversation.</li>
+<li><strong>AI classification, human decisions</strong> — every inquiry
+gets read by a classifier that fills in event type, genre, dates,
+attendance, and a spam score automatically. It never assigns, declines,
+or deletes anything on its own — it only saves a human (or a
+deterministic routing rule) the work of typing that in.</li>
+<li><strong>Deterministic routing</strong> — once the AI has read an
+inquiry, a plain rule set (not a model) decides who it goes to, and
+every decision is logged in plain English, including “nothing
+matched.”</li>
+<li><strong>Business-hours SLA timers</strong> — an inquiry that nobody
+claims, or a claim nobody acts on, ages out automatically and goes back
+to the shared queue — a stuck inquiry can’t hide in one person’s queue
+forever.</li>
+<li><strong>A hard gate on high-value declines</strong> — turning away a
+big booking isn’t a one-click action for everyone; above a threshold, it
+becomes an approval request instead.</li>
+<li><strong>Everything logged</strong> — every claim, reply, status
+change, and reassignment is written to an audit trail, so “what happened
+to this inquiry” is always answerable.</li>
+</ul>
+<hr />
+<h2 id="how-an-inquiry-arrives">How an Inquiry Arrives</h2>
+<p>Inquiries reach the Inbox two ways: through the venue’s configured
+intake mailbox, or through the public inquiry form on the venue’s
+website (the same drop-in widget used by the Leads pipeline). Either
+way, the same thing happens next:</p>
+<ol type="1">
+<li><strong>An instant, neutral acknowledgment</strong> goes out
+automatically, so the person who wrote in knows it was received — before
+any human has even looked at it.</li>
+<li><strong>An AI classifier reads the message</strong> and fills in ~24
+fields: event type, genre, category, requested dates, expected
+attendance, budget, production/stage/sound/lighting requirements,
+urgency, and a spam probability score, each with a confidence level.
+Nobody has to type this in by hand, and nothing here is a guess
+presented as fact — it’s all visible, and a human can always correct
+it.</li>
+<li><strong>A routing rule decides where it goes.</strong> Rules match
+on things like genre, category, attendance, or budget (e.g. “punk/ska →
+Kathy,” “comedy → Colleen”) and the first one that matches wins. If
+nothing matches confidently enough, the inquiry drops into the shared
+<strong>unassigned</strong> queue instead of being silently routed to
+the wrong person. Open the Details tab on any inquiry to see the
+plain-English reason — “Routed to Kathy because: genre contains punk/ska
+(94% confidence).”</li>
+<li><strong>Two clocks start</strong>, both aware of the venue’s
+business hours (they pause overnight and on closed days rather than
+counting real wall-clock time): a claim-due deadline on the assignment,
+and — once someone claims it — a claim-expiry countdown. Both are
+covered under <a href="#assigned-claimed-owned">Assigned, Claimed,
+Owned</a>.</li>
+</ol>
+<h3 id="mail-that-isnt-confident-enough-to-be-a-real-inquiry">Mail that
+isn’t confident enough to be a real inquiry</h3>
+<p>Some mail the intake filter isn’t sure about — an automated bounce, a
+vendor notice, or something that just doesn’t read like a booking
+request — lands in a separate <strong>Quarantined Mail</strong> queue
+instead of silently becoming a lead or silently disappearing. For each
+item, a venue admin decides:</p>
+<ul>
+<li><strong>Promote</strong> it — it’s a genuine, if messy, booking
+request the filter misjudged. This turns it into a real inquiry in the
+normal queue.</li>
+<li><strong>Leave it</strong> — it really is spam, a bounce, or
+unrelated correspondence. Promoting these just adds noise every booker
+then has to re-triage.</li>
+</ul>
+<hr />
+<h2 id="assigned-claimed-owned">Assigned, Claimed, Owned</h2>
+<p>These are three different things in the Inbox, on purpose —
+conflating them is exactly how inquiries used to get lost or
+double-worked.</p>
+<ul>
+<li><strong>Assigned</strong> — the routing rules (or a manager) pointed
+this inquiry at a person or team. Nobody has actually started working it
+yet.</li>
+<li><strong>Claimed</strong> — a specific person clicked <strong>Claim
+Inquiry</strong> and is actively on it right now. Only one active claim
+per inquiry — the system checks before letting a second person claim it
+— so two people can’t send conflicting replies to the same booker.</li>
+<li><strong>Owned</strong> — set automatically once the inquiry is
+onboarded into a real event. Ownership survives later claim changes; it
+marks “this is the deal this person is responsible for,” separate from
+who’s actively typing a reply today.</li>
+</ul>
+<p>A claim carries a countdown, and it exists to answer one question
+honestly: is someone <em>actually</em> working this, or did they just
+click a button to reserve it? A short, fixed list of
+<strong>claim-preserving actions</strong> — sending a reply, logging a
+call, sending availability or a proposal, scheduling a tour — extends
+the countdown, because each of those is genuine forward progress.
+Sitting on a claim without doing one of those lets it expire, and the
+inquiry goes back to the shared queue automatically.</p>
+<blockquote>
+<p><strong>Why you can’t just hold a claim forever:</strong> a
+silently-held, indefinite claim is exactly how an inquiry gets lost —
+the booker thinks someone’s on it, and nobody actually is. Don’t claim
+something you don’t intend to act on in the next few minutes just to
+“reserve” it; letting it expire back to the queue is the system working
+correctly, not a bug.</p>
+</blockquote>
+<hr />
+<h2 id="working-an-inquiry">Working an Inquiry</h2>
+<p>Opening an inquiry gives you one workspace with everything about
+it:</p>
+<ul>
+<li><strong>One conversation thread</strong> — inbound messages, your
+replies, internal notes only staff can see, and a system log of status
+changes and reassignments, all interleaved in order. If a teammate
+already has a draft reply open, you’ll see a banner before you start
+typing your own.</li>
+<li><strong>A tiered action bar</strong>, so the 1–2 things you’d
+actually do next are what you see, not a wall of buttons:
+<ul>
+<li><strong>Primary (filled button)</strong> — the obvious next step:
+usually <strong>Onboard Lead</strong>, or <strong>Send Proposal</strong>
+once availability or a tour has already gone out.</li>
+<li><strong>Secondary (outline buttons)</strong> — one or two supporting
+actions, like sending availability or adding a task.</li>
+<li><strong>More</strong> — everything else: Assign, Reassign, Decline,
+Archive, and the other status changes (lost, spam, duplicate, on hold,
+awaiting customer). Same actions as always, just one click further away
+instead of crowding the bar.</li>
+</ul></li>
+<li><strong>Reply templates</strong> — the composer can insert a canned
+body (availability follow-up, proposal follow-up, schedule-a-tour,
+request-missing-info) with placeholders like preferred date, event name,
+and contact name already filled in. Edit before sending like any other
+draft.</li>
+<li><strong>Watchers</strong> — add a colleague to an inquiry so they
+see the conversation and status changes without taking the claim. Useful
+when a manager wants visibility on a tricky one, or a second person
+needs context before a handoff.</li>
+</ul>
+<p>Anything that requires a reason — decline, archive, lost, spam,
+duplicate — prompts for one before it applies, no matter where you
+trigger it from. And if an inquiry is above the venue’s high-value
+threshold, a restricted booker can’t unilaterally decline, lose, or
+archive it — that action files an approval request for a manager
+instead, so a promising booking can’t be quietly turned away while it
+stays untouched in its current status.</p>
+<hr />
+<h2 id="from-inquiry-to-booked-show">From Inquiry to Booked Show</h2>
+<p>This is the full path, start to finish. Steps 1–3 happen in the
+Inbox; steps 4 onward happen in the event workspace the Inbox hands off
+into.</p>
+<ol type="1">
+<li><p><strong>The inquiry lands, gets classified, and gets
+routed</strong> (see <a href="#how-an-inquiry-arrives">How an Inquiry
+Arrives</a>) — either straight to you/your team, or into the shared
+unassigned queue.</p></li>
+<li><p><strong>Claim it.</strong> If it’s sitting in your assigned queue
+or the unassigned queue and you’re the right person to work it, click
+<strong>Claim Inquiry</strong> before you reply — claiming starts the
+response clock and stops anyone else from also answering the same
+booker.</p></li>
+<li><p><strong>Have the conversation.</strong> Reply, answer questions,
+send availability, propose terms, schedule a tour — whatever it takes to
+get the deal to a “yes.” Each of these is a claim-preserving action, so
+the countdown keeps resetting as long as you’re genuinely moving it
+forward.</p></li>
+<li><p><strong>Onboard the Lead.</strong> Once it’s ready to become a
+real booking, click <strong>Onboard Lead</strong>. The wizard:</p>
+<ul>
+<li>checks for a duplicate event (same contact/organization, overlapping
+date at the venue) and a date/room conflict;</li>
+<li>lets you pick the room, a starting template, and the event
+owner;</li>
+<li>drops in a starter task checklist;</li>
+<li>creates the event at <strong>Hold</strong> status.</li>
+</ul>
+<p>This is a <em>handoff</em>, not a shortcut — nothing is marked booked
+yet, and the original inquiry isn’t deleted. It stays visible from the
+new event’s workspace for later reference (useful for comparing what was
+projected at evaluation time against what actually happened).</p></li>
+<li><p><strong>Hold.</strong> The event now blocks the date on the
+calendar. If any of the baseline fields weren’t already carried over
+from the inquiry — event name, date, event type, venue, doors/end time,
+producer and booker contact info — fill them in now.</p></li>
+<li><p><strong>Advance to Intake Complete.</strong> This is the
+“everything we need to write the deal” checkpoint. It requires the
+deposit amount, advance ticket price, hard capacity, and age restriction
+on top of the Hold fields. The moment this status is set, venue admins
+are notified automatically to start drafting the contract.</p></li>
+<li><p><strong>Build and send the contract.</strong> In the event’s
+Contracts tab, the deal builder assembles a contract from structured
+terms and a clause library — you fill in terms, not boilerplate. Send it
+for e-signature, or attach a contract that was already signed outside
+the system.</p></li>
+<li><p><strong>Collect (or waive) the deposit.</strong> Record the
+payment in the Payments tab once it’s received, or mark it waived/not
+required if that’s the deal.</p></li>
+<li><p><strong>Advance to Booked.</strong> This is the biggest gate in
+the pipeline, and the system enforces it rather than trusting a person
+to remember: <strong>an event cannot become Booked without both a fully
+executed contract (signed — not merely sent or approved) <em>and</em>
+the deposit resolved (received, waived, or not required).</strong> Try
+to advance without either one and the status change is blocked with a
+specific message about what’s missing.</p></li>
+<li><p><strong>What Booked means.</strong> The date is now treated as a
+firm commitment. All venue admins are notified. The show moves out of
+the pending part of the pipeline into the active-show section, and the
+next job is collecting promotional assets (flyer, description, ticket
+link) to get it published and on sale.</p></li>
+</ol>
+<p>From here the show continues through the normal production pipeline
+(assets, promotion, the night itself, settlement) — the Inbox’s job ends
+at the handoff in step 4, and it did its job if that handoff happened
+cleanly, on time, with a full record of the conversation behind it.</p>
+<hr />
+<h2 id="who-can-do-what">Who Can Do What</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>You are…</th>
+<th>You may claim…</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Venue admin / Trusted booker (full Booking Inbox access)</td>
+<td>Any visible inquiry that has no active claim.</td>
+</tr>
+<tr class="even">
+<td>Restricted external booker (brought in for a specific act of
+business)</td>
+<td>An inquiry already assigned to you, that you own, or that you’re
+watching — <strong>or</strong> an unassigned, unclaimed inquiry still
+sitting in the fresh triage queue.</td>
+</tr>
+<tr class="odd">
+<td>Restricted external booker</td>
+<td>Never someone else’s already-assigned or already-claimed inquiry —
+the Claim button doesn’t even appear on it, and the server rejects a
+direct request too.</td>
+</tr>
+</tbody>
+</table>
+<p>In practice, a restricted booker can self-serve fresh,
+not-yet-triaged inquiries out of the unassigned queue — useful when
+someone’s brought in for a specific specialty — but can’t reach into
+another person’s active work.</p>
+<p><code>assign</code> and <code>reassign</code> are also
+permission-distinct: <strong>reassign</strong> lets any trusted booker
+hand off an inquiry that’s currently theirs to someone else.
+<strong>assign</strong> can target <em>any</em> inquiry regardless of
+current owner or claimant, so it’s restricted to venue admins.</p>
+<hr />
+<h2 id="operator-cheat-sheet">Operator Cheat Sheet</h2>
+<ul>
+<li><strong>Don’t claim something you don’t intend to work in the next
+few minutes.</strong> The countdown expiring and returning it to the
+queue is intended behavior, not a bug — use it, don’t fight it.</li>
+<li><strong>If an inquiry already has an Owner or sits in someone’s
+Assigned queue, don’t claim it out from under them.</strong> Use
+Assign/Reassign if it genuinely needs to move.</li>
+<li><strong>Quarantined mail:</strong> promote genuine-if-messy
+inquiries the filter misjudged; leave spam, bounces, and unrelated mail
+alone rather than polluting the triage queue.</li>
+<li><strong>A stuck “keeps bouncing back to unassigned” inquiry is the
+SLA sweep working correctly</strong> — the fix is claiming it and then
+taking a real, claim-preserving action before the deadline, not
+disabling the sweep.</li>
+<li><strong>High-value decline isn’t a workaround-able block.</strong>
+Don’t route around it by marking the inquiry on-hold/archived instead —
+file the approval request and follow up with a manager.</li>
+<li><strong>Outbound replies and auto-acknowledgments share one
+venue-configured sender identity.</strong> If that address ever needs to
+change, it must stay the mailbox the venue’s intake actually reads, or
+customer replies stop threading back into the Inbox.</li>
+</ul>
+<hr />
+<h2 id="where-to-go-next">Where to Go Next</h2>
+<ul>
+<li><strong>In-app help:</strong> Help → Booking Inbox (and the
+sub-topics under it) for the same material with screenshots, right where
+you’re working.</li>
+<li><strong>Full operations manual:</strong> <a
+href="ops-manual.html"><code>docs/ops-manual.html</code></a> — the
+Booking Inbox chapter covers this same ground as part of the complete
+booking pipeline (Parts I–II), alongside the rest of the venue’s
+day-to-day operations.</li>
+<li><strong>Technical/architecture reference:</strong> <a
+href="booking-inbox.html"><code>docs/booking-inbox.html</code></a>
+(source: <code>docs/booking-inbox.md</code>) — for anyone extending the
+system: data model, API surface, migrations, and test suite.</li>
+</ul>
+</main>
+<script>
+(function () {
+  var headings = Array.prototype.slice.call(document.querySelectorAll('main.page h2[id], main.page h3[id], main.page h4[id]'));
+  var labels = headings.map(function (h) { return h.textContent; });
+
+  headings.forEach(function (h) {
+    var a = document.createElement('a');
+    a.href = '#' + h.id;
+    a.className = 'anchor-link';
+    a.textContent = '#';
+    a.setAttribute('aria-hidden', 'true');
+    h.insertBefore(a, h.firstChild);
+  });
+
+  var sections = [];
+  headings.forEach(function (h, i) { if (h.tagName === 'H2') sections.push({ el: h, label: labels[i] }); });
+
+  if (sections.length) {
+    var rail = document.createElement('nav');
+    rail.className = 'cue-rail';
+    rail.setAttribute('aria-label', 'On this page');
+
+    var title = document.createElement('div');
+    title.className = 'cue-title';
+    title.textContent = 'On this page';
+    rail.appendChild(title);
+
+    var links = sections.map(function (s, i) {
+      var a = document.createElement('a');
+      a.href = '#' + s.el.id;
+      var n = document.createElement('span');
+      n.className = 'n';
+      n.textContent = String(i + 1).padStart(2, '0');
+      var label = document.createElement('span');
+      label.textContent = s.label;
+      a.appendChild(n);
+      a.appendChild(label);
+      rail.appendChild(a);
+      return { el: a, heading: s.el };
+    });
+
+    document.body.appendChild(rail);
+
+    var setActive = function () {
+      var y = window.scrollY + 130;
+      var current = null;
+      sections.forEach(function (s) { if (s.el.offsetTop <= y) current = s.el; });
+      links.forEach(function (l) { l.el.classList.toggle('active', l.heading === current); });
+    };
+    window.addEventListener('scroll', setActive, { passive: true });
+    setActive();
+  }
+})();
+</script>
+</body>
+</html>

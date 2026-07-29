@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** `booking-inbox` — Add standalone user workflow guide
 - **Fixed** `docs` — Allow public access to booking-inbox.html
 - **Fixed** `events` — Stop AI flyer generation from breaking under /tmp
 - **Fixed** `inbox` — Overflow menu clipped by action-bar overflow; add Booking Inbox screenshots
