@@ -7883,7 +7883,13 @@ pb-inbox-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direc
   display: flex;
   flex-direction: column;
   gap: 2px;
-  z-index: 20;
+  /* Was 20 — too low: it sat behind other always-mounted floating chrome,
+     most notably pb-ai-drawer (z-index: 90), so the popover could open
+     unreachable behind the AI Assistant tab/drawer. 95 clears every piece
+     of persistent app chrome (mobile nav drawer 60, AI drawer 90) while
+     staying below real modal overlays (.modal-backdrop and friends, 200+)
+     so a dialog opened from inside the menu still wins. */
+  z-index: 95;
 }
 .ib-overflow-menu button {
   background: none;
