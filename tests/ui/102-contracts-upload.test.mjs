@@ -23,7 +23,13 @@ const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk
 const FIXTURE = path.join(tmpdir(), 'pb-ui-test-contract-upload.png');
 writeFileSync(FIXTURE, Buffer.from(PNG_BASE64, 'base64'));
 
-const TITLE = 'PB UI TEST uploaded contract (safe to delete)';
+// Unique per run (not just a fixed string) — a previous run whose cleanup
+// silently failed (see the .catch() below) would otherwise leave a
+// same-titled row behind, and the `.find(c => c.title === TITLE)` lookup
+// below would have no way to tell that stale row apart from the one this
+// run just created, occasionally grabbing the wrong id and failing the
+// "renders as a row" assertion against a row that isn't the one on screen.
+const TITLE = `PB UI TEST uploaded contract ${Date.now()}-${Math.random().toString(16).slice(2, 8)} (safe to delete)`;
 const MODAL = '.modal-backdrop:has([data-form="new"])';
 
 async function apiFetch(page, apiPath, opts = {}) {
@@ -130,7 +136,16 @@ test('Choosing a file in Upload mode uploads it, attaches it, and auto-closes th
     await page.eval(`document.querySelector('.lightbox-backdrop')?.click()`);
     assert.notOk(await page.exists('.lightbox-backdrop'), 'lightbox closes on backdrop click');
   } finally {
-    if (contractId) await apiFetch(page, `/contracts/${contractId}`, { method: 'DELETE' }).catch(() => {});
-    if (assetId) await apiFetch(page, `/events/${page.eventId}/assets/${assetId}`, { method: 'DELETE' }).catch(() => {});
+    // Logged, not silently swallowed — a cleanup failure here is exactly how
+    // stale "PB UI TEST" debris accumulates across runs and starts colliding
+    // with future runs (see the TITLE comment above).
+    if (contractId) {
+      await apiFetch(page, `/contracts/${contractId}`, { method: 'DELETE' })
+        .catch((e) => console.error(`[cleanup] failed to delete throwaway contract ${contractId}:`, e.message));
+    }
+    if (assetId) {
+      await apiFetch(page, `/events/${page.eventId}/assets/${assetId}`, { method: 'DELETE' })
+        .catch((e) => console.error(`[cleanup] failed to delete throwaway asset ${assetId}:`, e.message));
+    }
   }
 });

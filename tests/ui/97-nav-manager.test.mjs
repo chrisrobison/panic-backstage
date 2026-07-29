@@ -91,7 +91,15 @@ test('Creating and hiding a nav item changes the real sidebar', async (page) => 
     await page.setValue(`${MODAL} [name="label"]`, CHILD_LABEL);
     await page.setValue(`${MODAL} [name="link"]`, 'admin-users');
     await page.click(`${MODAL} button[type="submit"]`);
-    await page.until(`document.querySelector('[data-nav-edit-form]')`);
+    // Unlike the root item's creation above — where nothing was selected
+    // yet, so waiting for [data-nav-edit-form] to exist genuinely waits for
+    // the post-create re-render — the root's own edit form is already on
+    // screen here (we clicked into it two lines up), so that selector is
+    // already true and resolves instantly, racing ahead of
+    // openCreateModal()'s async POST + load() + render(). Wait on the
+    // actual post-creation state (the list containing the new child) instead
+    // of a proxy element that was already present before the click.
+    await page.until(`document.querySelector('.nav-manager-list')?.textContent.includes(${JSON.stringify(CHILD_LABEL)})`, 8000);
     assert.includes(await page.text('.nav-manager-list'), CHILD_LABEL, 'child item appears nested under the root in the list');
 
     // --- hide the root item and confirm it disappears from the real sidebar ---
@@ -106,6 +114,9 @@ test('Creating and hiding a nav item changes the real sidebar', async (page) => 
     const sidebarText = await page.text('.side-nav');
     assert.notOk(sidebarText.includes(LABEL), 'hidden nav item no longer renders in the real sidebar');
   } finally {
-    if (rootId) await apiFetch(page, `/nav-items/${rootId}`, { method: 'DELETE' }).catch(() => {});
+    if (rootId) {
+      await apiFetch(page, `/nav-items/${rootId}`, { method: 'DELETE' })
+        .catch((e) => console.error(`[cleanup] failed to delete throwaway nav item ${rootId}:`, e.message));
+    }
   }
 });
