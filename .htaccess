@@ -13,7 +13,7 @@ RewriteRule ^(?:README(?:\.md)?|CHANGELOG\.md|run-tests\.sh|dns\.log|composer\.(
 # A small set of operator-facing manuals is intentionally public. Everything
 # else under docs/ includes implementation plans, spreadsheets, contracts, and
 # other internal material and must stay off the web.
-RewriteRule ^docs/(?:ops-manual|event-intake-status|contracts|public-calendar-api|promote-guide|training|sales)\.html$ - [L,NC]
+RewriteRule ^docs/(?:ops-manual|event-intake-status|contracts|public-calendar-api|promote-guide|training|sales|booking-inbox)\.html$ - [L,NC]
 RewriteRule ^docs(?:/|$) - [F,L,NC]
 
 # Never let the browser hold a stale HTML shell. The shell references its JS/CSS

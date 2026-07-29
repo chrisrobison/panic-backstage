@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `docs` — Allow public access to booking-inbox.html
 - **Fixed** `events` — Stop AI flyer generation from breaking under /tmp
 - **Fixed** `inbox` — Overflow menu clipped by action-bar overflow; add Booking Inbox screenshots
 - **Documentation** `booking-inbox` — Document Inbox workflows in help.js/ops-manual, refresh OpenAPI
