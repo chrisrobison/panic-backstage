@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `uploads
+was untracked, causing perms drift` — Gitignore storage/assets/ (was untracked, causing perms drift)
 - **Fixed** `ai` — Keep claude CLI credentials group-readable across token refreshes
 - **Added** `payments` — Provider-agnostic deposit payment link + QR code
 - **Fixed** `docs` — Allow public access to booking-inbox.html

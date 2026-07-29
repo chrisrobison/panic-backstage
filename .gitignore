@@ -20,6 +20,9 @@ storage/contracts/
 # Uploaded W-9s — highly sensitive (SSN/EIN) PII; never committed. See
 # PayeeSubmissionEndpoint::storeW9() and the storage/ block in .htaccess.
 storage/payees/
+# Event asset uploads (flyers/photos/PDFs) and lead attachments — see
+# Events\Assets::create() and LeadsInbox::attachments(). Never committed.
+storage/assets/
 dns.log
 database/mabevents-import.sql
 # Ticketing "Fan View" export — real customer PII; import locally, never commit.
