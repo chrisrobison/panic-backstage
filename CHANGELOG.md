@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `public` — Add standalone Mabuhay Gardens booking form replica
 - **Fixed** `uploads
 was untracked, causing perms drift` — Gitignore storage/assets/ (was untracked, causing perms drift)
 - **Fixed** `ai` — Keep claude CLI credentials group-readable across token refreshes

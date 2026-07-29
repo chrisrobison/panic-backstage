@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mabuhay Gardens: Booking Form</title>
+<meta name="robots" content="noindex, nofollow">
+<!--
+  Standalone replica of themab.org's "Book an Event Space" page
+  (https://themab.org/book-event-space/), which previously ran on an
+  embedded Jotform. Same fields, same "Mabuhay Grid" ink-stamp visual
+  style — but this version posts straight to Panic Backstage's public,
+  unauthenticated booking-inquiry endpoint instead of Jotform, so every
+  submission lands directly in the venue's own Booking Inbox (no manual
+  export/import, no second inbox to check).
+
+  HOW TO USE THIS FILE
+  ─────────────────────
+  Everything needed — markup, styles, script — lives inside the single
+  <div id="mab-booking-form">…</div> block below (plus its <style> and
+  <script>). All CSS selectors are scoped under #mab-booking-form and all
+  element ids/classes are prefixed "mbf-", so it's safe to paste that one
+  block directly into a WordPress "Custom HTML" block in place of the old
+  Jotform embed — it won't bleed into (or be affected by) the rest of the
+  theme's CSS. The surrounding <html>/<head>/hero/venue-info markup here
+  is just page chrome so this file previews correctly as a standalone page;
+  it's not required for the embed.
+
+  BACKEND
+  ─────────
+  POSTs JSON to Panic Backstage's public inquiry intake
+  (POST /api/public/inquiries, src/PublicInquiry.php — see that file for
+  the full field contract). No API key: the endpoint is intentionally
+  public, CORS-open, and unauthenticated, guarded instead by a honeypot
+  field + per-IP/per-email rate limiting. Every submission becomes a
+  `leads` row (source=website) in the same Booking Inbox staff already
+  triage from — nothing Mab-specific needed on our end since Mabuhay
+  Gardens is already a Backstage venue.
+
+  Update ENDPOINT / FALLBACK_EMAIL below if either ever changes.
+-->
+<style>
+  html, body { margin: 0; padding: 0; background: #f4f2ef; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: #1c1a1e; }
+  .mbf-page { max-width: 900px; margin: 0 auto; padding: 48px 20px 80px; }
+  .mbf-page h1 { font-size: 2rem; line-height: 1.15; margin: 0 0 14px; }
+  .mbf-page > p.mbf-intro { font-size: 1.05rem; line-height: 1.6; max-width: 62ch; color: #3a363c; margin: 0 0 36px; }
+  .mbf-venues { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 0 0 44px; }
+  .mbf-venue { border: 1px solid #ddd6cf; border-radius: 6px; padding: 16px 18px; background: #fff; }
+  .mbf-venue h3 { margin: 0 0 4px; font-size: 1.05rem; }
+  .mbf-venue span { font-size: .85rem; color: #726e73; text-transform: uppercase; letter-spacing: .04em; }
+  @media (max-width: 620px) { .mbf-venues { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="mbf-page">
+  <h1>Mabuhay Gardens: Booking Form</h1>
+  <p class="mbf-intro">So, you wanna throw a live event at Mabuhay Gardens? Excellent choice. Tell us a bit about your show, your crowd, and what kind of joy you plan to unleash.</p>
+
+  <div class="mbf-venues">
+    <div class="mbf-venue">
+      <h3>Upstairs Mabuhay Gardens</h3>
+      <span>All Ages &middot; 450 Cap</span>
+    </div>
+    <div class="mbf-venue">
+      <h3>Downstairs Mabuhay Gardens</h3>
+      <span>21+ &middot; 250 Cap</span>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       EMBEDDABLE BLOCK STARTS HERE — copy from here down (through the
+       closing </script> at the bottom) into a WordPress Custom HTML block.
+       ══════════════════════════════════════════════════════════════════ -->
+  <div id="mab-booking-form">
+    <form id="mbf-form" novalidate>
+      <div class="mbf-card">
+
+        <div class="mbf-line">
+          <label class="mbf-label" for="mbf-first">Name<span class="mbf-req" aria-hidden="true">*</span></label>
+          <div class="mbf-row2">
+            <div>
+              <input type="text" id="mbf-first" name="first" autocomplete="given-name" required maxlength="120" placeholder="First">
+            </div>
+            <div>
+              <input type="text" id="mbf-last" name="last" autocomplete="family-name" required maxlength="120" placeholder="Last">
+            </div>
+          </div>
+        </div>
+
+        <div class="mbf-line mbf-half">
+          <label class="mbf-label" for="mbf-org">Company / Organization</label>
+          <input type="text" id="mbf-org" name="contact_org" autocomplete="organization" maxlength="255" placeholder="Optional">
+        </div>
+
+        <div class="mbf-line mbf-half">
+          <label class="mbf-label" for="mbf-email">Email<span class="mbf-req" aria-hidden="true">*</span></label>
+          <input type="email" id="mbf-email" name="contact_email" autocomplete="email" required maxlength="255">
+        </div>
+
+        <div class="mbf-line mbf-half">
+          <label class="mbf-label" for="mbf-phone">Phone</label>
+          <input type="tel" id="mbf-phone" name="contact_phone" autocomplete="tel" maxlength="60" placeholder="(000) 000-0000">
+        </div>
+
+        <div class="mbf-line mbf-half">
+          <label class="mbf-label" for="mbf-event-name">Event Name<span class="mbf-req" aria-hidden="true">*</span></label>
+          <input type="text" id="mbf-event-name" name="event_name" required maxlength="255" placeholder="Holiday Party, Smith-Jones Wedding, Experimental Jazz Night…">
+        </div>
+
+        <div class="mbf-line">
+          <label class="mbf-label" for="mbf-description">Event Description<span class="mbf-req" aria-hidden="true">*</span></label>
+          <textarea id="mbf-description" name="event_description" required maxlength="3000" placeholder="What's the show? Who's the crowd? What do you need from us?"></textarea>
+        </div>
+
+        <div class="mbf-line mbf-half">
+          <label class="mbf-label" for="mbf-event-type">Event Type<span class="mbf-req" aria-hidden="true">*</span></label>
+          <select id="mbf-event-type" name="event_type_raw" required>
+            <option value="">Please Select</option>
+            <option value="Live Music">Live Music</option>
+            <option value="Comedy">Comedy</option>
+            <option value="Workshop">Workshop</option>
+            <option value="Dance">Dance</option>
+            <option value="DJ">DJ</option>
+            <option value="Rental">Rental</option>
+            <option value="Corporate / Business Event">Corporate / Business Event</option>
+            <option value="Film / Photo / Creative Project">Film / Photo / Creative Project (Screening, Video Shoot, Gallery)</option>
+            <option value="Community / Non-Profit">Community / Non-Profit (Workshop, Fundraiser, Neighborhood Meeting)</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <div class="mbf-line mbf-half" id="mbf-other-event-type-wrap" hidden>
+          <label class="mbf-label" for="mbf-other-event-type">Other Event Type<span class="mbf-req" aria-hidden="true">*</span></label>
+          <input type="text" id="mbf-other-event-type" maxlength="255" placeholder="Briefly describe the event category">
+        </div>
+
+        <div class="mbf-line mbf-third">
+          <label class="mbf-label" for="mbf-date-plan">Are your dates fixed or flexible?<span class="mbf-req" aria-hidden="true">*</span></label>
+          <select id="mbf-date-plan" required>
+            <option value="">Please Select</option>
+            <option value="Single Day (Standard Rental)">Single Day (Standard Rental)</option>
+            <option value="Multi-day / Residency">Multi-day / Residency</option>
+            <option value="Not sure yet / Flexible timeframe">Not sure yet / Flexible timeframe</option>
+          </select>
+          <p class="mbf-sub">This helps us check our calendar for the best availability.</p>
+        </div>
+
+        <div class="mbf-line mbf-third">
+          <label class="mbf-label" for="mbf-frequency">Event Frequency<span class="mbf-req" aria-hidden="true">*</span></label>
+          <select id="mbf-frequency" required>
+            <option value="">Please Select</option>
+            <option value="One Time">One Time</option>
+            <option value="Recurring">Recurring</option>
+          </select>
+        </div>
+
+        <div class="mbf-line mbf-third" id="mbf-single-day-wrap" hidden>
+          <label class="mbf-label" for="mbf-preferred-date">Preferred Event Date<span class="mbf-req" aria-hidden="true">*</span></label>
+          <input type="date" id="mbf-preferred-date">
+        </div>
+
+        <div class="mbf-line mbf-third" id="mbf-start-date-wrap" hidden>
+          <label class="mbf-label" for="mbf-start-date">Start Date<span class="mbf-req" aria-hidden="true">*</span></label>
+          <input type="date" id="mbf-start-date">
+        </div>
+
+        <div class="mbf-line mbf-third" id="mbf-end-date-wrap" hidden>
+          <label class="mbf-label" for="mbf-end-date">End Date</label>
+          <input type="date" id="mbf-end-date">
+        </div>
+
+        <div class="mbf-line mbf-half" id="mbf-target-timeframe-wrap" hidden>
+          <label class="mbf-label" for="mbf-target-timeframe">Tell us your target timeframe<span class="mbf-req" aria-hidden="true">*</span></label>
+          <input type="text" id="mbf-target-timeframe" maxlength="255" placeholder="e.g., Late October or Spring 2027">
+        </div>
+
+        <div class="mbf-line mbf-third">
+          <label class="mbf-label" for="mbf-alt-date-1">Alternate date <span class="mbf-opt">(optional)</span></label>
+          <input type="date" id="mbf-alt-date-1">
+        </div>
+
+        <div class="mbf-line mbf-third">
+          <label class="mbf-label" for="mbf-alt-date-2">2nd alternate date <span class="mbf-opt">(optional)</span></label>
+          <input type="date" id="mbf-alt-date-2">
+        </div>
+
+        <div class="mbf-line mbf-third">
+          <label class="mbf-label" for="mbf-location">Location</label>
+          <select id="mbf-location">
+            <option value="">Please Select</option>
+            <option value="Upstairs (~450 cap)">Upstairs (~450 cap)</option>
+            <option value="Downstairs (~250 cap)">Downstairs (~250 cap)</option>
+            <option value="Full Mabuhay Gardens (~700 cap)">Full Mabuhay Gardens (~700 cap)</option>
+            <option value="No preference">No preference</option>
+          </select>
+        </div>
+
+        <div class="mbf-line mbf-third">
+          <label class="mbf-label" for="mbf-showtime">Showtime</label>
+          <input type="text" id="mbf-showtime" maxlength="120" placeholder="e.g., 9:00 PM until 12:00 AM">
+        </div>
+
+        <div class="mbf-line mbf-third">
+          <label class="mbf-label" for="mbf-attendance">Estimated Attendance</label>
+          <input type="number" id="mbf-attendance" min="0" max="100000" inputmode="numeric" placeholder="e.g., 250">
+        </div>
+
+        <div class="mbf-line mbf-third">
+          <label class="mbf-label" for="mbf-load-in">Load In <span class="mbf-opt">(timeframe needed to set up)</span></label>
+          <input type="text" id="mbf-load-in" maxlength="120" placeholder="e.g., 4 hours before doors">
+        </div>
+
+        <div class="mbf-line mbf-third">
+          <label class="mbf-label" for="mbf-breakdown">Breakdown <span class="mbf-opt">(time needed after)</span></label>
+          <input type="text" id="mbf-breakdown" maxlength="120" placeholder="e.g., 1 hour">
+        </div>
+
+        <div class="mbf-line mbf-third">
+          <label class="mbf-label" for="mbf-ticket-price">Ticket Price</label>
+          <input type="number" id="mbf-ticket-price" min="0" step="0.01" inputmode="decimal" placeholder="e.g., 20">
+        </div>
+
+        <div class="mbf-line mbf-half">
+          <label class="mbf-label" for="mbf-av">Do you need sound, lighting or AV equipment?</label>
+          <select id="mbf-av">
+            <option value="">Please Select</option>
+            <option value="Sound System">Sound System</option>
+            <option value="Microphone">Microphone</option>
+            <option value="Lighting">Lighting</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <div class="mbf-line mbf-half" id="mbf-av-other-wrap" hidden>
+          <label class="mbf-label" for="mbf-av-other">Additional AV Needs</label>
+          <input type="text" id="mbf-av-other" maxlength="255">
+        </div>
+
+        <div class="mbf-line mbf-half">
+          <label class="mbf-label" for="mbf-layout">Preferred layout</label>
+          <select id="mbf-layout">
+            <option value="">Please Select</option>
+            <option value="Theater style seating">Theater style seating</option>
+            <option value="Open Floor">Open Floor</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <div class="mbf-line mbf-half" id="mbf-layout-other-wrap" hidden>
+          <label class="mbf-label" for="mbf-layout-other">Other Layout</label>
+          <input type="text" id="mbf-layout-other" maxlength="255">
+        </div>
+
+        <div class="mbf-line">
+          <label class="mbf-label" for="mbf-setup-notes">Anything else we should know about your setup?</label>
+          <textarea id="mbf-setup-notes" maxlength="2000"></textarea>
+        </div>
+
+        <div class="mbf-line">
+          <label class="mbf-label" for="mbf-more-notes">Anything else you'd like to share?</label>
+          <textarea id="mbf-more-notes" maxlength="2000"></textarea>
+        </div>
+
+        <div class="mbf-line mbf-half">
+          <label class="mbf-label" for="mbf-how-heard">Lastly, how did you hear about us?<span class="mbf-req" aria-hidden="true">*</span></label>
+          <input type="text" id="mbf-how-heard" required maxlength="255" placeholder="mab Collaborator, Friend, social, search engine, etc.">
+        </div>
+
+        <!-- Honeypot: real visitors never see or fill this in. A bot that
+             fills every field will. Kept off-canvas (not display:none —
+             some bots skip display:none) and out of the tab order. -->
+        <div class="mbf-hp" aria-hidden="true">
+          <label for="mbf-company">Company</label>
+          <input type="text" id="mbf-company" name="company" tabindex="-1" autocomplete="off">
+        </div>
+
+        <div class="mbf-banner" id="mbf-banner" role="alert"></div>
+
+        <button type="submit" id="mbf-submit">
+          <span class="mbf-spinner" aria-hidden="true"></span>
+          <span class="mbf-btn-label">REQUEST THE STAGE</span>
+        </button>
+      </div>
+    </form>
+
+    <div class="mbf-card mbf-success" id="mbf-success" hidden>
+      <h2>Thanks<span id="mbf-success-name"></span> — you're on our radar.</h2>
+      <p>Your request is in. A real person reads every one and usually replies within a business day, to the email you gave us.</p>
+      <button type="button" id="mbf-success-reset">Submit another request</button>
+    </div>
+  </div>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;600;900&display=swap');
+
+    #mab-booking-form {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    #mab-booking-form, #mab-booking-form * { box-sizing: border-box; }
+
+    #mab-booking-form .mbf-card {
+      background-color: #262626;
+      box-shadow: 20px 20px 0px #000000;
+      margin: 0 auto;
+      max-width: 900px;
+      width: 100%;
+      padding: 60px;
+    }
+    @media screen and (max-width: 700px) {
+      #mab-booking-form .mbf-card { padding: 30px; box-shadow: 10px 10px 0 #000; }
+    }
+
+    #mab-booking-form form { display: grid; grid-template-columns: 1fr 1fr; column-gap: 30px; row-gap: 35px; }
+    #mab-booking-form .mbf-card { display: grid; grid-template-columns: 1fr 1fr; column-gap: 30px; row-gap: 35px; }
+    /* The two rules above set an explicit `display`, which (thanks to the
+       #mab-booking-form id) outranks the UA stylesheet's `[hidden]{display:
+       none}` — without this, toggling .hidden on the <form>/success card
+       via JS would leave them visually shown. Restated at higher specificity
+       so [hidden] actually hides them. */
+    #mab-booking-form form[hidden], #mab-booking-form .mbf-card[hidden] { display: none !important; }
+    #mab-booking-form .mbf-line { grid-column: span 2; width: 100%; }
+    #mab-booking-form .mbf-half { grid-column: span 1; }
+    #mab-booking-form .mbf-third { grid-column: span 1; }
+    @media screen and (max-width: 700px) {
+      #mab-booking-form .mbf-card, #mab-booking-form .mbf-line, #mab-booking-form .mbf-half, #mab-booking-form .mbf-third {
+        grid-template-columns: 1fr; grid-column: span 1 !important;
+      }
+    }
+
+    #mab-booking-form .mbf-label {
+      color: #262626;
+      background-color: #D9CDBF;
+      display: block;
+      width: 100%;
+      padding: 15px 25px;
+      font-family: 'Inter', sans-serif;
+      font-size: 18px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      text-shadow: 0.5px 0.5px 0 rgba(0,0,0,.15);
+      margin-bottom: 8px;
+      box-shadow: 6px 6px 0px #000;
+      border-radius: 4px 60px 5px 80px / 60px 5px 90px 4px;
+      line-height: 1.25;
+    }
+    #mab-booking-form .mbf-line:nth-of-type(odd) .mbf-label { transform: rotate(-0.6deg); }
+    #mab-booking-form .mbf-line:nth-of-type(even) .mbf-label { transform: rotate(0.4deg); }
+    #mab-booking-form .mbf-req { color: #ff4d4d; margin-left: 3px; }
+    #mab-booking-form .mbf-opt { text-transform: none; font-weight: 400; letter-spacing: 0; opacity: .75; }
+
+    #mab-booking-form input[type="text"],
+    #mab-booking-form input[type="email"],
+    #mab-booking-form input[type="tel"],
+    #mab-booking-form input[type="number"],
+    #mab-booking-form input[type="date"],
+    #mab-booking-form textarea,
+    #mab-booking-form select {
+      background-color: #1a1a1a;
+      color: #ffffff;
+      border: 3px solid #333;
+      border-radius: 0;
+      width: 100%;
+      font-size: 17px;
+      padding: 16px;
+      font-family: 'Special Elite', cursive;
+      letter-spacing: 1px;
+      box-shadow: 8px 8px 0px #000;
+    }
+    #mab-booking-form textarea { min-height: 110px; resize: vertical; }
+    #mab-booking-form .mbf-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    #mab-booking-form ::placeholder { color: #cfcfcf; opacity: 1; }
+    #mab-booking-form input:focus, #mab-booking-form textarea:focus, #mab-booking-form select:focus {
+      border: 2px solid #D9CDBF;
+      box-shadow: 5px 5px 0px #D9CDBF;
+      background-color: #000;
+      outline: none;
+    }
+    #mab-booking-form select {
+      appearance: none; -webkit-appearance: none; -moz-appearance: none;
+      background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23D9CDBF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+      background-repeat: no-repeat; background-position: right 18px center; background-size: 16px auto;
+      padding-right: 46px;
+    }
+    #mab-booking-form select option { background-color: #fff; color: #000; }
+
+    #mab-booking-form .mbf-sub {
+      color: #D9CDBF; opacity: .8; margin: 8px 0 0 5px; font-family: 'Inter', sans-serif;
+      font-size: 11px; text-transform: uppercase; font-weight: 700; letter-spacing: 1.2px;
+    }
+
+    #mab-booking-form .mbf-hp {
+      position: absolute !important; width: 1px !important; height: 1px !important;
+      overflow: hidden !important; clip: rect(0 0 0 0) !important; white-space: nowrap !important;
+      left: -9999px !important; grid-column: span 2;
+    }
+
+    #mab-booking-form .mbf-banner {
+      display: none; grid-column: span 2; padding: 14px 18px; font-family: 'Inter', sans-serif;
+      font-size: .85rem; line-height: 1.5; border: 2px solid #ff4d4d; color: #ff4d4d;
+    }
+    #mab-booking-form .mbf-banner.mbf-show { display: block; }
+    #mab-booking-form .mbf-banner a { color: inherit; }
+
+    #mab-booking-form button[type="submit"] {
+      grid-column: span 2;
+      background: #D9CDBF; color: #262626;
+      font-family: 'Inter', sans-serif; font-size: 24px; font-weight: 900; text-transform: uppercase;
+      border: none; padding: 26px; box-shadow: 12px 12px 0px #000000; cursor: pointer; width: 100%;
+      display: flex; align-items: center; justify-content: center; gap: 12px;
+      transition: transform .12s, box-shadow .12s;
+    }
+    #mab-booking-form button[type="submit"]:hover { transform: translate(6px, 6px); box-shadow: 2px 2px 0px #000; background-color: #fff; }
+    #mab-booking-form button[type="submit"]:disabled { opacity: .65; cursor: default; transform: none; }
+    #mab-booking-form .mbf-spinner {
+      width: 16px; height: 16px; border-radius: 50%; border: 3px solid rgba(38,38,38,.35);
+      border-top-color: #262626; animation: mbf-spin .7s linear infinite; display: none;
+    }
+    #mab-booking-form button[aria-busy="true"] .mbf-spinner { display: inline-block; }
+    @keyframes mbf-spin { to { transform: rotate(360deg); } }
+
+    #mab-booking-form .mbf-success { text-align: center; padding: 70px 40px; }
+    #mab-booking-form .mbf-success h2 { color: #D9CDBF; font-family: 'Inter', sans-serif; font-size: 1.6rem; margin: 0 0 14px; }
+    #mab-booking-form .mbf-success p { color: #cfc7bf; font-family: 'Inter', sans-serif; max-width: 46ch; margin: 0 auto 26px; line-height: 1.5; }
+    #mab-booking-form .mbf-success button {
+      background: transparent; color: #D9CDBF; border: 2px solid #D9CDBF; font-family: 'Inter', sans-serif;
+      font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 12px 22px; cursor: pointer;
+    }
+    #mab-booking-form .mbf-success button:hover { background: #D9CDBF; color: #262626; }
+  </style>
+
+  <script>
+  (function () {
+    'use strict';
+
+    // Panic Backstage's public, unauthenticated booking-inquiry intake.
+    // See src/PublicInquiry.php for the full request/response contract.
+    var ENDPOINT = 'https://panicbooking.com/backstage/api/public/inquiries';
+    // Shown as a mailto fallback if the request fails outright (network
+    // error / server unreachable) so a submission is never a dead end —
+    // this is the same mailbox the venue's existing email-intake pipe reads.
+    var FALLBACK_EMAIL = 'bookings@themab.org';
+
+    // Mab's own event-type categories -> Backstage's fixed enum. Unknown/
+    // unmapped values are coerced server-side to "other" anyway, but mapping
+    // explicitly here keeps routing (comedy/community/etc.) accurate.
+    var EVENT_TYPE_MAP = {
+      'Live Music': 'concert',
+      'Comedy': 'comedy',
+      'Workshop': 'other',
+      'Dance': 'concert',
+      'DJ': 'concert',
+      'Rental': 'other',
+      'Corporate / Business Event': 'corporate',
+      'Film / Photo / Creative Project': 'other',
+      'Community / Non-Profit': 'community',
+      'Other': 'other'
+    };
+
+    var form = document.getElementById('mbf-form');
+    var success = document.getElementById('mbf-success');
+    var banner = document.getElementById('mbf-banner');
+    var submitBtn = document.getElementById('mbf-submit');
+
+    function $(id) { return document.getElementById(id); }
+
+    function showError(message) {
+      banner.innerHTML = message + (FALLBACK_EMAIL
+        ? ' You can also email us directly at <a href="mailto:' + FALLBACK_EMAIL + '">' + FALLBACK_EMAIL + '</a>.'
+        : '');
+      banner.classList.add('mbf-show');
+    }
+    function clearError() {
+      banner.classList.remove('mbf-show');
+      banner.textContent = '';
+    }
+
+    // ── Conditional fields (mirrors the original Jotform show/hide logic) ──
+    function toggle(wrapId, inputId, show, requiredWhenShown) {
+      var wrap = $(wrapId);
+      var input = inputId ? $(inputId) : null;
+      wrap.hidden = !show;
+      if (input && requiredWhenShown) input.required = !!show;
+      if (input && !show) input.value = '';
+    }
+
+    var eventType = $('mbf-event-type');
+    eventType.addEventListener('change', function () {
+      toggle('mbf-other-event-type-wrap', 'mbf-other-event-type', eventType.value === 'Other', true);
+    });
+
+    var datePlan = $('mbf-date-plan');
+    datePlan.addEventListener('change', function () {
+      var v = datePlan.value;
+      toggle('mbf-single-day-wrap', 'mbf-preferred-date', v === 'Single Day (Standard Rental)', true);
+      toggle('mbf-start-date-wrap', 'mbf-start-date', v === 'Multi-day / Residency', true);
+      toggle('mbf-end-date-wrap', 'mbf-end-date', v === 'Multi-day / Residency', false);
+      toggle('mbf-target-timeframe-wrap', 'mbf-target-timeframe', v === 'Not sure yet / Flexible timeframe', true);
+    });
+
+    var avNeeds = $('mbf-av');
+    avNeeds.addEventListener('change', function () {
+      toggle('mbf-av-other-wrap', 'mbf-av-other', avNeeds.value === 'Other', false);
+    });
+
+    var layout = $('mbf-layout');
+    layout.addEventListener('change', function () {
+      toggle('mbf-layout-other-wrap', 'mbf-layout-other', layout.value === 'Other', false);
+    });
+
+    // ── Compose everything that doesn't have its own Backstage lead column
+    //    into a single readable message body, so no detail from the richer
+    //    Mab-specific form gets lost even though the lead schema is generic. ──
+    function addLine(lines, label, value) {
+      value = (value || '').toString().trim();
+      if (value) lines.push(label + ': ' + value);
+    }
+
+    function buildMessage(v) {
+      var lines = [];
+      addLine(lines, 'Event type (as selected)', v.eventTypeRaw === 'Other' ? ('Other — ' + v.otherEventType) : v.eventTypeRaw);
+      addLine(lines, 'Date flexibility', v.datePlan);
+      addLine(lines, 'Event frequency', v.frequency);
+      addLine(lines, 'Target timeframe', v.targetTimeframe);
+      addLine(lines, 'End date', v.endDate);
+      addLine(lines, '2nd alternate date', v.altDate2);
+      addLine(lines, 'Location preference', v.location);
+      addLine(lines, 'Showtime', v.showtime);
+      addLine(lines, 'Load in', v.loadIn);
+      addLine(lines, 'Breakdown', v.breakdown);
+      addLine(lines, 'Ticket price', v.ticketPrice ? ('$' + v.ticketPrice) : '');
+      addLine(lines, 'Sound / lighting / AV needs', v.avNeeds === 'Other' ? ('Other — ' + v.avOther) : v.avNeeds);
+      addLine(lines, 'Preferred layout', v.layout === 'Other' ? ('Other — ' + v.layoutOther) : v.layout);
+      addLine(lines, 'Setup notes', v.setupNotes);
+      addLine(lines, 'Additional notes', v.moreNotes);
+      addLine(lines, 'How they heard about us', v.howHeard);
+
+      var extras = lines.length ? lines.join('\n') + '\n\n' : '';
+      var full = extras + 'Event description:\n' + v.description;
+      return full.length > 3990 ? full.slice(0, 3990) : full;
+    }
+
+    function setBusy(busy) {
+      submitBtn.disabled = busy;
+      submitBtn.setAttribute('aria-busy', busy ? 'true' : 'false');
+    }
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      clearError();
+      if (!form.reportValidity()) return;
+
+      var v = {
+        first: $('mbf-first').value,
+        last: $('mbf-last').value,
+        org: $('mbf-org').value,
+        email: $('mbf-email').value,
+        phone: $('mbf-phone').value,
+        eventName: $('mbf-event-name').value,
+        description: $('mbf-description').value,
+        eventTypeRaw: eventType.value,
+        otherEventType: $('mbf-other-event-type').value,
+        datePlan: datePlan.value,
+        frequency: $('mbf-frequency').value,
+        preferredDate: $('mbf-preferred-date').value,
+        startDate: $('mbf-start-date').value,
+        endDate: $('mbf-end-date').value,
+        targetTimeframe: $('mbf-target-timeframe').value,
+        altDate1: $('mbf-alt-date-1').value,
+        altDate2: $('mbf-alt-date-2').value,
+        location: $('mbf-location').value,
+        showtime: $('mbf-showtime').value,
+        attendance: $('mbf-attendance').value,
+        loadIn: $('mbf-load-in').value,
+        breakdown: $('mbf-breakdown').value,
+        ticketPrice: $('mbf-ticket-price').value,
+        avNeeds: avNeeds.value,
+        avOther: $('mbf-av-other').value,
+        layout: layout.value,
+        layoutOther: $('mbf-layout-other').value,
+        setupNotes: $('mbf-setup-notes').value,
+        moreNotes: $('mbf-more-notes').value,
+        howHeard: $('mbf-how-heard').value,
+        company: $('mbf-company').value // honeypot — always blank for real visitors
+      };
+
+      var desiredDate = v.datePlan === 'Single Day (Standard Rental)' ? v.preferredDate
+        : v.datePlan === 'Multi-day / Residency' ? v.startDate
+        : '';
+
+      var payload = {
+        contact_name: (v.first + ' ' + v.last).trim(),
+        contact_email: v.email,
+        contact_org: v.org,
+        contact_phone: v.phone,
+        event_name: v.eventName,
+        event_type: EVENT_TYPE_MAP[v.eventTypeRaw] || 'other',
+        desired_date: desiredDate,
+        desired_date_alt: v.altDate1,
+        projected_attendance: v.attendance,
+        message: buildMessage(v),
+        company: v.company
+      };
+
+      setBusy(true);
+      fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          return { ok: res.ok, status: res.status, body: body };
+        });
+      }).then(function (result) {
+        setBusy(false);
+        if (!result.ok) {
+          var message = result.status === 429
+            ? 'You’ve sent a few requests recently — please try again shortly.'
+            : (result.body && result.body.error) || 'Something went wrong sending that — please try again.';
+          showError(message);
+          return;
+        }
+        $('mbf-success-name').textContent = v.first ? ', ' + v.first : '';
+        form.hidden = true;
+        success.hidden = false;
+      }).catch(function () {
+        setBusy(false);
+        showError('Couldn’t reach us right now — please try again in a moment.');
+      });
+    });
+
+    document.getElementById('mbf-success-reset').addEventListener('click', function () {
+      form.reset();
+      form.hidden = false;
+      success.hidden = true;
+      eventType.dispatchEvent(new Event('change'));
+      datePlan.dispatchEvent(new Event('change'));
+      avNeeds.dispatchEvent(new Event('change'));
+      layout.dispatchEvent(new Event('change'));
+    });
+  })();
+  </script>
+  <!-- ══════════════════════════════════════ EMBEDDABLE BLOCK ENDS HERE ═══════════════════════════════════════ -->
+
+</div>
+</body>
+</html>
