@@ -959,6 +959,17 @@ dependencies.
   redemption is an atomic single-row flip with a mandatory `ticket_scans` audit
   row. Scanner-link management lives under
   `/api/events/{id}/scanner-links[/{linkId}]` (JWT + `manage_ticketing`).
+- **Deposit payment links + QR:** the same provider-agnostic checkout layer also
+  backs a one-off hosted checkout link (and scannable QR) for an event's
+  deposit — from the event workspace's **Payments** tab (**Payment Link / QR**)
+  or straight out of the Booking Inbox action bar once a lead is onboarded
+  (**Deposit Link / QR**). Links are minted idempotently (a re-click reuses the
+  cached link until it expires) and auto-confirmed to `received` by the same
+  provider webhooks above — no manual "mark received" step.
+  - `POST /api/events/{id}/payments/{paymentId}/send-link` — mint/reuse a link
+    for an existing payment record
+  - `POST /api/events/{id}/payments/0/deposit-link` — find-or-create the
+    event's outstanding deposit record, then the above
 
 Required `.env` keys (see `.env.example`): `APP_URL`, `STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET`, `SQUARE_ACCESS_TOKEN`, `SQUARE_LOCATION_ID`,
@@ -966,7 +977,10 @@ Required `.env` keys (see `.env.example`): `APP_URL`, `STRIPE_SECRET_KEY`,
 schema is part of the baseline `database/schema.sql`.
 
 See [`docs/ticketing.md`](docs/ticketing.md) for the full data model, API,
-payment/fulfillment flow, door-scanner details, and an operating checklist.
+payment/fulfillment flow, door-scanner details, and an operating checklist, and
+[`docs/deposit-payments.md`](docs/deposit-payments.md) for the deposit
+link/QR flow specifically (link reuse/expiry, webhook auto-confirmation,
+deposit-status lifecycle, operator runbook).
 
 ## Panic Promote
 

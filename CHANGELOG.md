@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** `payments` — Document the deposit payment link + QR flow
 - **Added** `public` — Add standalone Mabuhay Gardens booking form replica
 - **Fixed** `uploads
 was untracked, causing perms drift` — Gitignore storage/assets/ (was untracked, causing perms drift)
