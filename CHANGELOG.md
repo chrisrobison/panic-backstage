@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Stop AI flyer generation from breaking under /tmp
 - **Fixed** `inbox` — Overflow menu clipped by action-bar overflow; add Booking Inbox screenshots
 - **Documentation** `booking-inbox` — Document Inbox workflows in help.js/ops-manual, refresh OpenAPI
 - **Added** `booking-inbox` — Venue-configurable outbound identity, restricted-booker claim policy, tiered action bar

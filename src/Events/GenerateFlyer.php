@@ -103,12 +103,23 @@ final class GenerateFlyer extends BaseEndpoint
         // Codex writes generated images to $CODEX_HOME/generated_images/<uuid>/
         // (not to the -C working dir), so we create codexHome here and search
         // it after the run rather than searching the working dir.
-        $codexHome = sys_get_temp_dir() . '/codex-home-' . bin2hex(random_bytes(4));
+        //
+        // codexHome/workdir must NOT live under the system temp dir: newer
+        // Codex CLI versions refuse to install their PATH-alias helper
+        // binaries (codex-linux-sandbox etc.) under a world-writable temp
+        // location like /tmp, which then breaks internal sandboxed exec
+        // calls (bwrap: execvp codex-linux-sandbox: No such file or
+        // directory). storage/tmp is app-owned and not world-writable.
+        $runTmpBase = $this->root . '/storage/tmp';
+        if (!is_dir($runTmpBase)) {
+            mkdir($runTmpBase, 0755, true);
+        }
+        $codexHome = $runTmpBase . '/codex-home-' . bin2hex(random_bytes(4));
         mkdir($codexHome, 0755, true);
         copy('/home/cdr/.codex/auth.json',   $codexHome . '/auth.json');
         copy('/home/cdr/.codex/config.toml', $codexHome . '/config.toml');
 
-        $tmpDir = sys_get_temp_dir() . '/pb-flyer-' . $eventId . '-' . bin2hex(random_bytes(4));
+        $tmpDir = $runTmpBase . '/pb-flyer-' . $eventId . '-' . bin2hex(random_bytes(4));
         mkdir($tmpDir, 0755, true);
 
         try {
@@ -239,8 +250,17 @@ final class GenerateFlyer extends BaseEndpoint
         exec($cmd, $lines, $exitCode);
 
         if ($exitCode !== 0) {
-            $detail = implode("\n", array_slice($lines, 0, 20));
-            throw new \RuntimeException('Codex failed: ' . mb_substr($detail, 0, 500));
+            // Codex's fixed startup banner (version/workdir/model/sandbox
+            // lines, plus any non-fatal warnings like the "could not create
+            // PATH aliases" notice) can run 15-20 lines and ~500 chars on
+            // its own, which used to swallow the actual failure reason
+            // entirely when we only kept the first 20 lines / 500 chars.
+            // Log the full output for debugging, but surface the *tail* of
+            // the output in the thrown message since that's where codex
+            // reports the actual error, after its banner.
+            error_log('GenerateFlyer::runCodex failed (exit ' . $exitCode . "):\n" . implode("\n", $lines));
+            $detail = implode("\n", array_slice($lines, -20));
+            throw new \RuntimeException('Codex failed: ' . mb_substr($detail, 0, 1000));
         }
     }
 }
