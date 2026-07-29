@@ -1607,7 +1607,7 @@ class EventPayments extends PanicElement {
     const rows = payments.length
       ? payments.map(p => {
           const sendBtn = canManage && ['pending','invoiced'].includes(p.status)
-            ? `<button class="small secondary" data-send-link="${esc(String(p.id))}" title="Create or re-send a Stripe payment link">Send Invoice Link</button>`
+            ? `<button class="small secondary" data-send-link="${esc(String(p.id))}" title="Get a payment link + QR code (Stripe or Square, whichever is active) pre-filled for this amount">Payment Link / QR</button>`
             : '';
           const editBtn = canManage
             ? `<button class="small secondary" data-edit-payment="${esc(String(p.id))}" title="Edit this payment record">Edit</button>`
@@ -1615,8 +1615,8 @@ class EventPayments extends PanicElement {
           const voidBtn = canManage
             ? `<button class="small danger" data-void-payment="${esc(String(p.id))}" title="Void this payment record">Void</button>`
             : '';
-          const linkCell = p.external_ref
-            ? `<span class="muted small" title="${esc(p.external_ref)}">Link sent</span>`
+          const linkCell = p.checkout_url
+            ? `<button type="button" class="small secondary" data-show-link="${esc(String(p.id))}" title="${esc(p.checkout_url)}">${p.checkout_provider ? `Link sent (${esc(titleCase(p.checkout_provider))})` : 'Link sent'}</button>`
             : '';
           return `<tr>
             <td>${esc(titleCase(p.payment_type))}</td>
@@ -1672,20 +1672,29 @@ class EventPayments extends PanicElement {
     $$('[data-send-link]', this).forEach(btn => {
       btn.addEventListener('click', async () => {
         const pid = parseInt(btn.dataset.sendLink, 10);
+        const originalText = btn.textContent;
         btn.disabled = true;
-        btn.textContent = 'Sending…';
+        btn.textContent = 'Generating…';
         try {
           const result = await api(`/events/${id}/payments/${pid}/send-link`, { method: 'POST' });
           if (result.payment_link) {
-            await navigator.clipboard.writeText(result.payment_link).catch(() => {});
-            publish('toast.show', { message: 'Payment link created and copied to clipboard.' });
+            const payment = payments.find(p => p.id === pid);
+            this._openPaymentLinkModal(result.payment_link, result.provider, payment);
           }
           this._load();
         } catch (err) {
           publish('toast.show', { message: 'Failed to create payment link: ' + (err.message || 'Unknown error'), tone: 'error' });
+        } finally {
           btn.disabled = false;
-          btn.textContent = 'Send Invoice Link';
+          btn.textContent = originalText;
         }
+      });
+    });
+
+    $$('[data-show-link]', this).forEach(btn => {
+      btn.addEventListener('click', () => {
+        const payment = payments.find(p => p.id === parseInt(btn.dataset.showLink, 10));
+        if (payment?.checkout_url) this._openPaymentLinkModal(payment.checkout_url, payment.checkout_provider, payment);
       });
     });
 
@@ -1704,6 +1713,41 @@ class EventPayments extends PanicElement {
     $('[data-payee-request]', this)?.addEventListener('click', () => this._openPayeeRequestModal());
     $('[data-payee-void]', this)?.addEventListener('click', () => this._voidPayeeRequest());
     $('[data-payee-download]', this)?.addEventListener('click', () => this._downloadPayeeW9());
+  }
+
+  /**
+   * Payment link + QR modal — same shape as EventWorkspace._openQrModal's
+   * "QR Code — Public Page" panel, but for a Stripe/Square hosted checkout
+   * link minted by POST .../send-link (or the Booking Inbox's .../deposit-link,
+   * see inbox-workspace.js). The QR just encodes the provider's own hosted
+   * checkout URL directly via the existing /assets/qr.svg endpoint — no new
+   * token/redirect layer needed, since that URL is already a public,
+   * single-purpose page the provider generated.
+   */
+  _openPaymentLinkModal(paymentLink, provider, payment) {
+    const encoded = encodeURIComponent(paymentLink);
+    const qrImage = appUrl(`assets/qr.svg?text=${encoded}&size=240`);
+    const label = payment ? `${titleCase(payment.payment_type)} — ${money(payment.amount)} ${payment.currency || 'USD'}` : 'Payment';
+    const providerLabel = provider ? titleCase(provider) : '';
+    const { dialog } = openModal({
+      title: 'Payment Link — ' + label,
+      bodyHtml: `<div class="padded">
+        <p class="qr-panel-blurb">Scan to pay${providerLabel ? ` via ${esc(providerLabel)}` : ''}, pre-filled for this amount. Share the QR at a table/door, or send the link by text/email.</p>
+        <div class="qr-panel-body">
+          <img class="qr-panel-image" src="${esc(qrImage)}" width="180" height="180" alt="QR code linking to the payment page">
+          <div class="qr-panel-actions">
+            <input class="qr-panel-url" type="text" readonly value="${esc(paymentLink)}" onclick="this.select()">
+            <div class="inline-actions">
+              <button type="button" class="secondary small" data-qr-copy>Copy Link</button>
+              <a class="button secondary small" href="${esc(paymentLink)}" target="_blank" rel="noopener">Open Link</a>
+            </div>
+          </div>
+        </div>
+      </div>`,
+    });
+    $('[data-qr-copy]', dialog)?.addEventListener('click', () => {
+      navigator.clipboard.writeText(paymentLink).then(() => publish('toast.show', { message: 'Link copied!' }));
+    });
   }
 
   // ── Payee info (mailing address + W-9) ───────────────────────────────────

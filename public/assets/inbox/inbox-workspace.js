@@ -4,7 +4,7 @@
 // calls (claim/status/reassign/etc.) and bubbles `inbox-lead-changed` so the
 // shell reloads the list row + detail panel without this component needing
 // to know how those are rendered.
-import { esc, api, publish, openModal, PanicElement, $, $$ } from '../core.js';
+import { esc, api, publish, openModal, appUrl, PanicElement, $, $$ } from '../core.js';
 import './inbox-conversation.js';
 import { statusLabel, ALL_STATUSES, REASON_REQUIRED_STATUSES, relativeTime, scoreTone, initials, avatarColor, computeActionBar } from './inbox-shared.js';
 
@@ -23,6 +23,7 @@ const ACTION_HANDLERS = {
   decline: (self) => self.changeStatus('declined'),
   archive: (self) => self.changeStatus('archived'),
   more: (self) => self.openMoreActions(),
+  'deposit-link': (self) => self.sendDepositLink(),
 };
 
 const TABS = [['conversation', 'Conversation'], ['details', 'Details'], ['event-info', 'Event Info'], ['files', 'Files'], ['notes', 'Notes'], ['tasks', 'Tasks'], ['history', 'History']];
@@ -473,6 +474,50 @@ class InboxWorkspace extends PanicElement {
       close();
       await this.changeStatus(values.status, values.reason || null);
     });
+  }
+
+  /**
+   * "Deposit Link / QR" overflow action — only offered once this inquiry has
+   * been onboarded (lead.converted_event_id set; see computeActionBar() in
+   * inbox-shared.js). Finds-or-creates the event's outstanding deposit
+   * payment record and mints/reuses its checkout link via the same
+   * Events\Payments endpoint the event workspace's Payments tab uses
+   * (POST .../payments/0/deposit-link — a thin wrapper around .../send-link
+   * that doesn't require a payment record to already exist), then shows it
+   * as a scannable QR + copyable link, same shape as the Payments tab's own
+   * modal (see EventPayments._openPaymentLinkModal in event-workspace.js).
+   */
+  async sendDepositLink() {
+    const eventId = this.data.lead?.converted_event_id;
+    if (!eventId) return;
+    try {
+      const result = await api(`/events/${eventId}/payments/0/deposit-link`, { method: 'POST' });
+      if (!result.payment_link) return;
+      const encoded = encodeURIComponent(result.payment_link);
+      const qrImage = appUrl(`assets/qr.svg?text=${encoded}&size=240`);
+      const providerLabel = result.provider ? result.provider[0].toUpperCase() + result.provider.slice(1) : '';
+      const { dialog } = openModal({
+        title: 'Deposit Payment Link',
+        bodyHtml: `<div class="padded">
+          <p class="qr-panel-blurb">Scan to pay${providerLabel ? ` via ${esc(providerLabel)}` : ''}, pre-filled for the deposit amount. Share the QR at a table/door, or send the link by text/email.</p>
+          <div class="qr-panel-body">
+            <img class="qr-panel-image" src="${esc(qrImage)}" width="180" height="180" alt="QR code linking to the deposit payment page">
+            <div class="qr-panel-actions">
+              <input class="qr-panel-url" type="text" readonly value="${esc(result.payment_link)}" onclick="this.select()">
+              <div class="inline-actions">
+                <button type="button" class="secondary small" data-qr-copy>Copy Link</button>
+                <a class="button secondary small" href="${esc(result.payment_link)}" target="_blank" rel="noopener">Open Link</a>
+              </div>
+            </div>
+          </div>
+        </div>`,
+      });
+      $('[data-qr-copy]', dialog)?.addEventListener('click', () => {
+        navigator.clipboard.writeText(result.payment_link).then(() => publish('toast.show', { message: 'Link copied!' }));
+      });
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Could not create a deposit link.', tone: 'error' });
+    }
   }
 
   async decideApproval(decision) {

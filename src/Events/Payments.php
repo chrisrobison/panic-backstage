@@ -4,19 +4,26 @@ declare(strict_types=1);
 namespace Panic\Events;
 
 use Panic\BaseEndpoint;
+use Panic\Database;
+use Panic\Env;
+use Panic\Payments\PaymentProviders;
 use Panic\Request;
 use Panic\Response;
+use RuntimeException;
 use function Panic\log_activity;
 use function Panic\date_or_null;
 use function Panic\boolish;
+use function Panic\event_public_path;
 
 /**
  * Event payment records — deposits, balance payments, refunds, etc.
  *
- *   GET    /api/events/{id}/payments               list payments + deposit summary
- *   POST   /api/events/{id}/payments               record a payment
- *   PATCH  /api/events/{id}/payments/{pid}         update a payment
- *   DELETE /api/events/{id}/payments/{pid}         void/delete a payment
+ *   GET    /api/events/{id}/payments                    list payments + deposit summary
+ *   POST   /api/events/{id}/payments                    record a payment
+ *   PATCH  /api/events/{id}/payments/{pid}              update a payment
+ *   DELETE /api/events/{id}/payments/{pid}              void/delete a payment
+ *   POST   /api/events/{id}/payments/0/send-link        checkout link+QR for an existing payment record
+ *   POST   /api/events/{id}/payments/0/deposit-link     find-or-create the deposit record, then the above
  *
  * The event cannot enter Booked/Confirmed status unless:
  *   1. A required contract is fully executed (status = 'signed' or 'fully_executed')
@@ -45,12 +52,25 @@ final class Payments extends BaseEndpoint
             return $this->waiveDeposit($request, $eventId);
         }
 
-        // Send a Stripe payment link for a pending/invoiced payment record.
+        // Checkout link + QR (Stripe or Square, whichever is active) for a
+        // pending/invoiced payment record.
         if ($action === 'send-link' && $request->method() === 'POST') {
             if ($denied = $this->requireEventCapability($eventId, 'manage_payments')) {
                 return $denied;
             }
             return $this->sendPaymentLink($eventId, $request, $paymentId);
+        }
+
+        // Convenience wrapper for the Booking Inbox (and anywhere else with no
+        // Payments-tab payment record already on screen): find this event's
+        // outstanding deposit payment, creating the record first if the event
+        // has a deposit configured but nobody has added it yet, then mint/reuse
+        // its checkout link exactly like send-link above.
+        if ($action === 'deposit-link' && $request->method() === 'POST') {
+            if ($denied = $this->requireEventCapability($eventId, 'manage_payments')) {
+                return $denied;
+            }
+            return $this->depositLink($eventId);
         }
 
         $cap = $request->method() === 'GET' ? 'read_event' : 'manage_payments';
@@ -160,7 +180,7 @@ final class Payments extends BaseEndpoint
 
         // Update event deposit_status if this is a deposit payment
         if ($type === 'deposit') {
-            $this->syncDepositStatus($eventId);
+            self::syncDepositStatus($this->db, $eventId);
         }
 
         log_activity($this->db, $eventId, $this->userId(), "payment recorded: $type \$$amount", [
@@ -226,7 +246,7 @@ final class Payments extends BaseEndpoint
         );
 
         if (($payment['payment_type'] ?? '') === 'deposit') {
-            $this->syncDepositStatus($eventId);
+            self::syncDepositStatus($this->db, $eventId);
         }
 
         log_activity($this->db, $eventId, $this->userId(), 'payment updated', ['payment_id' => $paymentId]);
@@ -256,7 +276,7 @@ final class Payments extends BaseEndpoint
         );
 
         if (($payment['payment_type'] ?? '') === 'deposit') {
-            $this->syncDepositStatus($eventId);
+            self::syncDepositStatus($this->db, $eventId);
         }
 
         return Response::noContent();
@@ -294,10 +314,14 @@ final class Payments extends BaseEndpoint
     /**
      * Re-derive deposit_status from the current payment records and update
      * the events table.  Called after any deposit payment change.
+     *
+     * Static (takes $db explicitly) so src/Webhooks.php can call it directly
+     * after auto-confirming a checkout payment without instantiating a full
+     * BaseEndpoint (which needs a Request/Auth this call site doesn't have).
      */
-    public function syncDepositStatus(int $eventId): void
+    public static function syncDepositStatus(Database $db, int $eventId): void
     {
-        $event = $this->db->one(
+        $event = $db->one(
             'SELECT deposit_amount, deposit_status FROM events WHERE id = ?',
             [$eventId]
         );
@@ -320,7 +344,7 @@ final class Payments extends BaseEndpoint
             return;
         }
 
-        $depositPayments = $this->db->all(
+        $depositPayments = $db->all(
             "SELECT amount FROM event_payments
              WHERE event_id = ? AND payment_type = 'deposit' AND status = 'received'",
             [$eventId]
@@ -338,17 +362,16 @@ final class Payments extends BaseEndpoint
             $status = 'received';
         }
 
-        $this->db->run(
+        $db->run(
             'UPDATE events SET deposit_status = ? WHERE id = ?',
             [$status, $eventId]
         );
     }
 
-    // ── Stripe payment link ───────────────────────────────────────────────────
+    // ── Checkout link + QR (Stripe/Square, whichever is active) ─────────────────
 
     /**
-     * Creates a Stripe Payment Link for the given payment record and marks it
-     * as 'invoiced'. The link URL is returned so the caller can email/copy it.
+     * Mints (or reuses) a checkout link + QR for an existing payment record.
      *
      * Endpoint: POST /api/events/{id}/payments/{pid}/send-link
      *
@@ -366,7 +389,6 @@ final class Payments extends BaseEndpoint
             return Response::json(['error' => 'payment_id is required'], 422);
         }
 
-        // Load the payment record.
         $payment = $this->db->one(
             'SELECT * FROM event_payments WHERE id = ? AND event_id = ?',
             [$resolvedId, $eventId]
@@ -374,101 +396,204 @@ final class Payments extends BaseEndpoint
         if (!$payment) {
             return $this->notFound('Payment record not found');
         }
-        if ((float) $payment['amount'] <= 0) {
-            return Response::json(['error' => 'Payment amount must be greater than 0'], 422);
+
+        try {
+            $result = $this->mintOrReuseCheckoutLink($eventId, $payment);
+        } catch (RuntimeException $e) {
+            // mintOrReuseCheckoutLink() codes provider-side failures 502,
+            // leaving validation throws at the default 0 (-> 422 here).
+            return Response::json(['error' => $e->getMessage()], $e->getCode() ?: 422);
         }
 
-        $stripeKey = getenv('STRIPE_SECRET_KEY') ?: '';
-        if (!$stripeKey || str_starts_with($stripeKey, 'your_')) {
-            return Response::json(['error' => 'Stripe not configured — set STRIPE_SECRET_KEY in .env'], 503);
+        return $this->ok($result);
+    }
+
+    /**
+     * Convenience wrapper for callers with no payment record already on
+     * screen — the Booking Inbox action bar in particular, reachable as soon
+     * as a lead is onboarded but before anyone has opened the event's
+     * Payments tab. Finds this event's outstanding deposit payment,
+     * creating the record first (for the outstanding balance, not
+     * necessarily the full deposit_amount if something was already received)
+     * if nobody has added one yet, then mints/reuses its checkout link.
+     *
+     * Endpoint: POST /api/events/{id}/payments/0/deposit-link
+     */
+    private function depositLink(int $eventId): Response
+    {
+        $event = $this->db->one(
+            'SELECT id, title, deposit_amount, deposit_status, booker_email, promoter_email
+             FROM events WHERE id = ?',
+            [$eventId]
+        );
+        if (!$event) {
+            return $this->notFound('Event not found');
+        }
+        if ((float) ($event['deposit_amount'] ?? 0) <= 0) {
+            return Response::json(['error' => 'This event has no deposit configured.'], 422);
+        }
+        if (($event['deposit_status'] ?? '') === 'waived') {
+            return Response::json(['error' => "This event's deposit has been waived — no payment is needed."], 422);
         }
 
-        $event       = $this->db->one('SELECT title FROM events WHERE id = ?', [$eventId]);
-        $amountCents = (int) round((float) $payment['amount'] * 100);
-        $currency    = strtolower($payment['currency'] ?? 'usd');
-        $label       = ucfirst(str_replace('_', ' ', $payment['payment_type'])) . ' — ' . ($event['title'] ?? 'Event');
-
-        // Step 1: create a one-time Price object.
-        $priceResponse = $this->stripePost($stripeKey, 'prices', [
-            'currency'              => $currency,
-            'unit_amount'           => $amountCents,
-            'product_data[name]'    => $label,
-        ]);
-
-        if (!isset($priceResponse['id'])) {
-            return Response::json([
-                'error'  => 'Failed to create Stripe price',
-                'detail' => $priceResponse['error']['message'] ?? $priceResponse,
-            ], 502);
-        }
-
-        // Step 2: create the Payment Link.
-        $linkResponse = $this->stripePost($stripeKey, 'payment_links', [
-            'line_items[0][price]'    => $priceResponse['id'],
-            'line_items[0][quantity]' => 1,
-        ]);
-
-        if (!isset($linkResponse['url'])) {
-            return Response::json([
-                'error'  => 'Failed to create Stripe payment link',
-                'detail' => $linkResponse['error']['message'] ?? $linkResponse,
-            ], 502);
-        }
-
-        $url    = $linkResponse['url'];
-        $linkId = $linkResponse['id'];
-
-        // Persist the link reference and mark the payment as invoiced.
-        $this->db->run(
-            "UPDATE event_payments
-             SET status = 'invoiced', external_ref = ?,
-                 notes = CONCAT(COALESCE(notes, ''), ' | Invoice link sent: ', ?)
-             WHERE id = ?",
-            [$linkId, date('Y-m-d'), $resolvedId]
+        $payment = $this->db->one(
+            "SELECT * FROM event_payments
+             WHERE event_id = ? AND payment_type = 'deposit' AND status IN ('pending','invoiced')
+             ORDER BY id ASC LIMIT 1",
+            [$eventId]
         );
 
-        // Audit trail.
+        if (!$payment) {
+            $receivedRow = $this->db->one(
+                "SELECT COALESCE(SUM(amount), 0) total FROM event_payments
+                 WHERE event_id = ? AND payment_type = 'deposit' AND status = 'received'",
+                [$eventId]
+            );
+            $outstanding = round((float) $event['deposit_amount'] - (float) ($receivedRow['total'] ?? 0), 2);
+            if ($outstanding <= 0) {
+                return Response::json(['error' => "This event's deposit has already been fully received."], 422);
+            }
+
+            $id = $this->db->insert(
+                'INSERT INTO event_payments
+                 (event_id, payment_type, direction, amount, currency, status, created_by_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [$eventId, 'deposit', 'received', $outstanding, 'USD', 'pending', $this->userId()]
+            );
+            $this->db->run(
+                'INSERT INTO event_payment_audit (payment_id, event_id, user_id, action, new_value_json)
+                 VALUES (?,?,?,?,?)',
+                [$id, $eventId, $this->userId(), 'created',
+                 json_encode(['amount' => $outstanding, 'type' => 'deposit', 'status' => 'pending', 'source' => 'deposit-link'])]
+            );
+            $payment = $this->db->one('SELECT * FROM event_payments WHERE id = ?', [$id]);
+        }
+
+        try {
+            $result = $this->mintOrReuseCheckoutLink($eventId, $payment);
+        } catch (RuntimeException $e) {
+            // mintOrReuseCheckoutLink() codes provider-side failures 502,
+            // leaving validation throws at the default 0 (-> 422 here).
+            return Response::json(['error' => $e->getMessage()], $e->getCode() ?: 422);
+        }
+
+        return $this->ok($result + ['payment_id' => (int) $payment['id']]);
+    }
+
+    /**
+     * Core checkout-link logic shared by sendPaymentLink() and depositLink():
+     * reuse an unexpired, not-yet-paid cached link if one exists, otherwise
+     * mint a fresh one through whichever provider is currently active
+     * (Panic\Payments\PaymentProviders — the exact same provider-agnostic
+     * checkout abstraction PublicTickets.php uses for ticket purchases, so a
+     * deposit link always routes to whichever of Stripe/Square is actually
+     * configured instead of assuming Stripe). Persists the link and marks the
+     * payment 'invoiced'; src/Webhooks.php auto-confirms it to 'received'
+     * once the provider's payment_succeeded webhook arrives.
+     *
+     * @return array{payment_link:string,provider:string}
+     * @throws RuntimeException on a validation or provider failure — callers
+     *         turn this into a 422 JSON response.
+     */
+    private function mintOrReuseCheckoutLink(int $eventId, array $payment): array
+    {
+        if ((float) $payment['amount'] <= 0) {
+            throw new RuntimeException('Payment amount must be greater than 0.');
+        }
+        if (in_array($payment['status'], ['received', 'voided'], true)) {
+            throw new RuntimeException('This payment is already ' . $payment['status'] . ' — no link needed.');
+        }
+
+        // Reuse the cached link while it's still good — this is what makes
+        // clicking "send link" again idempotent instead of minting a brand
+        // new Stripe/Square checkout (and orphaning the old one) every time.
+        $expiresAt = $payment['checkout_expires_at'] ?? null;
+        if (!empty($payment['checkout_url']) && !empty($payment['checkout_provider'])
+            && ($expiresAt === null || strtotime($expiresAt . ' UTC') > time())
+        ) {
+            return [
+                'payment_link' => (string) $payment['checkout_url'],
+                'provider'     => (string) $payment['checkout_provider'],
+            ];
+        }
+
+        $event = $this->db->one(
+            'SELECT title, booker_email, promoter_email FROM events WHERE id = ?',
+            [$eventId]
+        );
+
+        $amountCents = (int) round((float) $payment['amount'] * 100);
+        $currency    = strtoupper((string) ($payment['currency'] ?: 'USD'));
+        $label       = ucfirst(str_replace('_', ' ', (string) $payment['payment_type'])) . ' — ' . ($event['title'] ?? 'Event');
+        $email       = (string) ($event['booker_email'] ?? '') ?: (string) ($event['promoter_email'] ?? '');
+
+        // Bounce back to the event's public page — plain ?deposit=paid/canceled
+        // query flags, deliberately NOT the ?checkout=success&order=... shape
+        // tickets-public.js reads (that component polls a real ticket_orders
+        // row by that order id + a receipt token; a payment id there would 404).
+        $appUrl   = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        $eventUrl = $appUrl . '/' . event_public_path(['id' => $eventId]);
+        $success  = $eventUrl . '&deposit=paid';
+        $cancel   = $eventUrl . '&deposit=canceled';
+
+        $provider = PaymentProviders::active($this->db, new Env());
+
+        $order = [
+            'id'          => (int) $payment['id'],
+            'currency'    => $currency,
+            'buyer_email' => $email,
+        ];
+        $items = [[
+            'name'             => $label,
+            'quantity'         => 1,
+            'unit_price_cents' => $amountCents,
+        ]];
+
+        // Code 502 on any provider-side failure (misconfigured, rejected the
+        // request, bad response) — distinct from the 0/422-coded validation
+        // throws above. Callers map $e->getCode() ?: 422 to the response status.
+        try {
+            $result = $provider->createCheckout($order, $items, $success, $cancel);
+        } catch (\Throwable $e) {
+            throw new RuntimeException('Payment provider error: ' . $e->getMessage(), 502);
+        }
+        $checkoutUrl = (string) ($result['checkout_url'] ?? '');
+        $providerRef = (string) ($result['provider_ref'] ?? '');
+        if ($checkoutUrl === '' || $providerRef === '') {
+            throw new RuntimeException('Payment provider did not return a checkout link.', 502);
+        }
+
+        // Our own bookkeeping expiry for reuse decisions above — not
+        // necessarily the provider's own session TTL (Stripe Checkout
+        // Sessions default to ~24h; Square payment links don't expire on
+        // their own by default). Past this, the next click mints a fresh one.
+        $expiresAtNew = date('Y-m-d H:i:s', time() + 24 * 3600);
+
+        $this->db->run(
+            "UPDATE event_payments
+             SET status = 'invoiced', external_ref = ?, checkout_provider = ?,
+                 checkout_url = ?, checkout_expires_at = ?,
+                 notes = CONCAT(COALESCE(notes, ''), ' | Payment link sent: ', ?)
+             WHERE id = ?",
+            [$providerRef, $provider->key(), $checkoutUrl, $expiresAtNew, date('Y-m-d'), (int) $payment['id']]
+        );
+
         $this->db->run(
             'INSERT INTO event_payment_audit
              (payment_id, event_id, user_id, action, note)
              VALUES (?, ?, ?, ?, ?)',
-            [$resolvedId, $eventId, $this->userId(), 'invoice_link_sent',
-             'Stripe payment link: ' . $url]
+            [(int) $payment['id'], $eventId, $this->userId(), 'invoice_link_sent',
+             ucfirst($provider->key()) . ' payment link: ' . $checkoutUrl]
         );
 
-        log_activity($this->db, $eventId, $this->userId(), 'Stripe payment link sent', [
-            'payment_id'     => $resolvedId,
-            'stripe_link_id' => $linkId,
-            'amount'         => $payment['amount'],
+        log_activity($this->db, $eventId, $this->userId(), ucfirst($provider->key()) . ' payment link sent', [
+            'payment_id'   => (int) $payment['id'],
+            'provider'     => $provider->key(),
+            'provider_ref' => $providerRef,
+            'amount'       => $payment['amount'],
         ]);
 
-        return $this->ok(['payment_link' => $url, 'stripe_link_id' => $linkId]);
-    }
-
-    /**
-     * Minimal Stripe REST helper — no SDK required.
-     * Uses HTTP Basic auth with the secret key as the username.
-     */
-    private function stripePost(string $key, string $endpoint, array $params): array
-    {
-        $ch = curl_init('https://api.stripe.com/v1/' . $endpoint);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query($params),
-            CURLOPT_USERPWD        => $key . ':',
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-            CURLOPT_TIMEOUT        => 15,
-        ]);
-        $body   = curl_exec($ch);
-        $errno  = curl_errno($ch);
-        curl_close($ch);
-
-        if ($errno) {
-            return ['error' => ['message' => 'cURL error ' . $errno]];
-        }
-
-        return json_decode((string) $body, true) ?? [];
+        return ['payment_link' => $checkoutUrl, 'provider' => $provider->key()];
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

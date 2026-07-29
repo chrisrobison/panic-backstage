@@ -130,6 +130,15 @@ const TERMINAL_LEAD_STATUSES = ['onboarded', 'converted', 'booked', 'lost', 'dec
  */
 export function computeActionBar(lead, capabilities = {}) {
   const overflow = [];
+  // Only meaningful once this inquiry has been onboarded into a real event
+  // (lead.converted_event_id set) — before that there's no event and no
+  // deposit_amount to pre-fill a link/QR with. Lives in overflow rather than
+  // primary/secondary since it's a supporting action, not the next legal
+  // step, and stays available in both the pre-terminal and terminal-status
+  // branches below since both return this same `overflow` array.
+  if (lead?.converted_event_id) {
+    overflow.push({ id: 'deposit-link', label: 'Deposit Link / QR', icon: 'fa-solid fa-qrcode' });
+  }
   if (capabilities.assign) overflow.push({ id: 'assign', label: 'Assign', icon: 'fa-solid fa-user-check' });
   if (capabilities.reassign) overflow.push({ id: 'reassign', label: 'Reassign', icon: 'fa-solid fa-right-left' });
   overflow.push(

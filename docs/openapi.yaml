@@ -14314,13 +14314,18 @@ paths:
         description: If 0/omitted-equivalent, the handler falls back to `payment_id` in the request body.
     post:
       operationId: eventPayments_sendLink
-      summary: Create/send a Stripe payment link for a payment record
+      summary: Create/reuse a checkout link + QR for a payment record (Stripe or Square)
       description: >-
-        Requires `manage_payments`. Creates a one-time Stripe Price + Payment Link for the payment's
-        amount/currency, marks the payment as `invoiced`, stores the Stripe link id in external_ref,
-        and appends a note. Not idempotent — calling again creates a new Stripe Price/Payment Link
-        each time. Returns 503 if STRIPE_SECRET_KEY is not configured, 502 if the Stripe API call
-        fails.
+        Requires `manage_payments`. Mints a hosted checkout session/payment link for the payment's
+        amount/currency through whichever payment provider is currently active
+        (`payment_settings.active_provider` — Stripe or Square; see `PaymentProviders::active()`),
+        the same provider-agnostic abstraction the public ticket-checkout flow uses. Marks the payment
+        `invoiced`, stores the provider + its checkout reference (`checkout_provider`/`external_ref`)
+        so `POST /api/webhooks/{provider}` can auto-confirm it to `received` once paid, and caches the
+        link (`checkout_url`/`checkout_expires_at`). Idempotent while that cached link hasn't expired
+        or been paid/voided: calling again reuses it instead of minting a new one. A QR code for the
+        returned `payment_link` can be rendered client-side via the existing
+        `GET /assets/qr.svg?text=<url>` endpoint — no separate QR field is returned.
       tags:
         - Event Payments
       requestBody:
@@ -14335,7 +14340,7 @@ paths:
                   description: Fallback payment id if paymentId path segment is not a real id.
       responses:
         '200':
-          description: Payment link created
+          description: Checkout link created or reused
           content:
             application/json:
               schema:
@@ -14344,8 +14349,9 @@ paths:
                   payment_link:
                     type: string
                     format: uri
-                  stripe_link_id:
+                  provider:
                     type: string
+                    enum: [stripe, square]
         '401':
           description: Authentication required
           content:
@@ -14365,13 +14371,85 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '422':
-          description: payment_id missing, or payment amount not greater than 0
+          description: payment_id missing, payment amount not greater than 0, or payment already received/voided
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '502':
-          description: Stripe API call failed
+          description: The active payment provider is not configured or rejected the checkout request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/events/{eventId}/payments/{paymentId}/deposit-link:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: paymentId
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: Always 0 — this convenience endpoint finds-or-creates the deposit payment record itself.
+    post:
+      operationId: eventPayments_depositLink
+      summary: Find-or-create this event's deposit payment record, then create/reuse its checkout link + QR
+      description: >-
+        Requires `manage_payments`. Convenience wrapper for callers with no payment record already on
+        screen — the Booking Inbox action bar in particular, reachable as soon as a lead is onboarded
+        (`lead.converted_event_id` set) but before anyone has opened the event's Payments tab. Looks
+        for an existing non-voided `payment_type=deposit` row in status `pending`/`invoiced`; if none
+        exists, creates one for the outstanding balance (`events.deposit_amount` minus any already-
+        `received` deposit payments — not necessarily the full deposit_amount), then delegates to the
+        same logic as `POST /api/events/{eventId}/payments/{paymentId}/send-link` above.
+      tags:
+        - Event Payments
+      responses:
+        '200':
+          description: Checkout link created or reused
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payment_link:
+                    type: string
+                    format: uri
+                  provider:
+                    type: string
+                    enum: [stripe, square]
+                  payment_id:
+                    type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing manage_payments capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Event has no deposit configured, deposit already waived/fully received, or the found/created payment record fails validation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: The active payment provider is not configured or rejected the checkout request
           content:
             application/json:
               schema:

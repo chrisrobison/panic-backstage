@@ -1684,6 +1684,11 @@
       <p>If an inquiry is above your venue's high-value threshold, a restricted booker can't unilaterally decline/lose/archive it — that action instead files an approval request for a manager, so a promising booking can't be quietly turned away. The inquiry stays in its current status, unchanged, until a manager approves or denies the request from the approval banner at the top of the workspace.</p>
     </div>
 
+    <div class="callout tip">
+      <span class="callout-title">Collecting the deposit right away</span>
+      <p>Once onboarded, the inquiry's <span class="ui-label button">More</span> menu gains a <strong>Deposit Link / QR</strong> action — a payment link and scannable QR code for the event's deposit, pre-filled to whatever's still outstanding, without leaving the Inbox to open the event's Payments tab. See <a href="#event-payments">The Payments tab</a> for the full rundown of what it shows and how it confirms payment automatically.</p>
+    </div>
+
     <h3 id="inbox-identity">Outbound sender identity</h3>
     <p>Automatic acknowledgments and staff replies both send from the same venue-configured identity (display name and address), set once by a venue admin rather than hard-coded per venue — so this same Booking Inbox works correctly for any venue Backstage is set up for, not just the one it originally shipped with.</p>
     <div class="callout note">
@@ -2545,7 +2550,7 @@
     <table>
       <tr><th>Status</th><th>Meaning</th></tr>
       <tr><td><strong>Pending</strong></td><td>Expected but not yet paid.</td></tr>
-      <tr><td><strong>Invoiced</strong></td><td>A Stripe payment link has been sent for it.</td></tr>
+      <tr><td><strong>Invoiced</strong></td><td>A payment link has been sent for it.</td></tr>
       <tr><td><strong>Received</strong></td><td>Paid. For a Deposit-type record, this is what satisfies the deposit gate.</td></tr>
       <tr><td><strong>Failed</strong></td><td>A payment attempt didn't go through.</td></tr>
       <tr><td><strong>Refunded</strong></td><td>Closed out, but stays in the list.</td></tr>
@@ -2557,8 +2562,12 @@
     <h3>Deposit summary</h3>
     <p>When the event has a deposit amount set, a summary block above the table shows <strong>Deposit Required</strong>, <strong>Deposit Received</strong>, and <strong>Deposit Outstanding</strong> (highlighted when money is still owed) — a quick read on where the deposit stands without adding up rows by hand. If the deposit is still outstanding and you hold the <code>waive_deposit</code> capability, a <span class="ui-label button">Waive Deposit</span> button appears in this same bar — see <a href="#deposit-gate">The deposit gate</a> above.</p>
 
-    <h3>Send Invoice Link</h3>
-    <p>For any <em>Pending</em> or <em>Invoiced</em> row, click <span class="ui-label button">Send Invoice Link</span> to generate a one-time Stripe Payment Link for that exact amount. Backstage creates the link, copies it to your clipboard, and marks the record <em>Invoiced</em> — from there, send it to the payer however you'd normally reach them (email, text). This needs <code>STRIPE_SECRET_KEY</code> configured for the venue — see <a href="#ticketing-payments">Payment provider setup</a> — and will show an error if Stripe isn't configured.</p>
+    <h3>Payment Link / QR</h3>
+    <p>For any <em>Pending</em> or <em>Invoiced</em> row, click <span class="ui-label button">Payment Link / QR</span> to get a hosted checkout link pre-filled for that exact amount, through whichever payment provider the venue currently has active — Stripe or Square, whichever is configured under <a href="#ticketing-payments">Payment provider setup</a>. A dialog shows a scannable QR code next to the link — copy the link for an email/text, or let the payer scan the QR at a table or the door — and the record is marked <em>Invoiced</em>. Clicking again while that link is still valid reuses it rather than minting a new one every time, and once the payer actually completes payment the record flips to <em>Received</em> automatically — no manual "mark received" step — as soon as the provider's webhook confirms it.</p>
+    <div class="callout note">
+      <span class="callout-title">Same thing from the Booking Inbox</span>
+      <p>The Booking Inbox offers this as a <strong>Deposit Link / QR</strong> action in an onboarded inquiry's <span class="ui-label button">More</span> menu — useful for getting a deposit link out before anyone's opened the event's Payments tab at all. It finds or creates the deposit payment record automatically, for whatever's still outstanding.</p>
+    </div>
 
     <h3 id="payee-w9">Payee Info: collecting a W-9 &amp; mailing address</h3>
     <p>Below the payment table, the <strong>Payee Info</strong> card is where you get what you need to actually pay out and 1099 a promoter or band: their current mailing address and a completed W-9. Click <span class="ui-label button">Request W-9 &amp; Address</span> — a small form opens, pre-filled with the event's Producer/Artist contact (edit the name/email if it should go to someone else) — and send it.</p>

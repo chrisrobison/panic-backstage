@@ -1958,6 +1958,8 @@ const HELP_CONTENT = {
     <p>When an inquiry is ready to become a real booking, <strong>Onboard Lead</strong> walks through duplicate-event and date-conflict checks, lets you pick the room/template/owner, and drops in a starter task checklist — then creates the event at <strong>Proposed</strong> status, the same as <a href="#help-lead-convert">converting a lead</a> from the pipeline view. Onboarding is a handoff into the normal booking workflow, not a shortcut that marks anything as booked.</p>
 
     <div class="warn"><strong>Important:</strong> If an inquiry is above your venue's high-value threshold, a Restricted booker can't unilaterally decline/lose/archive it — that action instead files an approval request for a manager, so a promising booking can't be quietly turned away. The inquiry stays in its current status until a manager approves or denies the request from the approval banner at the top of the workspace.</div>
+
+    <div class="tip"><strong>Tip:</strong> Once onboarded, the inquiry's <strong>More</strong> menu gains a <strong>Deposit Link / QR</strong> action — a payment link and scannable QR code for the event's deposit, pre-filled to whatever's still outstanding, without leaving the Inbox. See <a href="#help-payments">The Payments tab</a> for how it confirms payment automatically.</div>
   `,
 
   // ── Vendors ─────────────────────────────────────────────────────────────────
@@ -2097,7 +2099,7 @@ const HELP_CONTENT = {
     <h3>Status meanings</h3>
     <ul>
       <li><strong>Pending</strong> — expected but not yet paid.</li>
-      <li><strong>Invoiced</strong> — a Stripe payment link has been sent for it.</li>
+      <li><strong>Invoiced</strong> — a payment link has been sent for it.</li>
       <li><strong>Received</strong> — paid. For a deposit-type record, this is what advances <code>deposit_status</code>.</li>
       <li><strong>Failed</strong> — a payment attempt didn't go through.</li>
       <li><strong>Refunded</strong> — closed out, but stays in the list.</li>
@@ -2109,8 +2111,9 @@ const HELP_CONTENT = {
     <h3>Deposit summary bar</h3>
     <p>When an event has a deposit amount set, a summary block above the table shows <strong>Deposit Required</strong>, <strong>Deposit Received</strong>, and <strong>Deposit Outstanding</strong> (highlighted when money is still owed) — a quick read on where the deposit stands without adding up rows yourself. If the deposit is still outstanding and you have the <code>waive_deposit</code> capability, a <strong>Waive Deposit</strong> button appears in this bar — see <a href="#help-deposit-gate">the deposit gate</a> for when and why you'd use it.</p>
 
-    <h3>Send Invoice Link</h3>
-    <p>For any <em>pending</em> or <em>invoiced</em> payment, click <strong>Send Invoice Link</strong> to generate a one-time Stripe Payment Link for that exact amount. Backstage creates the link, copies it to your clipboard, and marks the record <em>invoiced</em> — from there you paste it into an email, text, or however you reach the payer. This requires <code>STRIPE_SECRET_KEY</code> to be configured for the venue (see <a href="#help-admin-payments">Payment providers</a>); if it isn't, the button will show an error explaining Stripe isn't set up.</p>
+    <h3>Payment Link / QR</h3>
+    <p>For any <em>pending</em> or <em>invoiced</em> payment, click <strong>Payment Link / QR</strong> to get a hosted checkout link pre-filled for that exact amount, through whichever payment provider the venue currently has active — Stripe or Square (see <a href="#help-admin-payments">Payment providers</a>). A dialog shows a scannable QR code alongside the link — copy the link for an email/text, or point a phone camera at the QR at a table or the door — and marks the record <em>invoiced</em>. Clicking again while that link is still valid reuses the same one instead of creating a new one every time; once the payer actually pays, the record flips to <em>received</em> on its own (no need to mark it received by hand) as soon as the provider's webhook confirms it.</p>
+    <div class="note"><strong>Note:</strong> The <a href="#help-booking-inbox-onboard">Booking Inbox</a> offers the same thing as a <strong>Deposit Link / QR</strong> action (tucked in the inquiry's <strong>More</strong> menu once it's been onboarded) — handy for sending a deposit link before anyone's even opened the event's Payments tab. It finds or creates the deposit payment record for you automatically.</div>
 
     <h3>Payee Info (W-9 &amp; mailing address)</h3>
     <p>Below the payment table, the <strong>Payee Info</strong> card is where you collect what you need to actually pay out and 1099 a promoter or band: their current mailing address and a completed W-9. Click <strong>Request W-9 &amp; Address</strong> to open a small form pre-filled with the event's producer/artist contact — edit the name/email if you want it to go somewhere else — and send it.</p>

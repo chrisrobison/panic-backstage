@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use Panic\Events\Payments as EventPayments;
 use Panic\Payments\PaymentProvider;
 use Panic\Payments\PaymentProviders;
 
@@ -17,13 +18,22 @@ use Panic\Payments\PaymentProviders;
  *   2. provider->verifyWebhook() validates the signature against the raw body
  *      and normalizes the event. A null return means an invalid/unverifiable
  *      signature -> 400 (so the provider retries / flags it), and we never act.
- *   3. On 'payment_succeeded', match the order by (provider, provider_ref),
- *      capture provider_payment_ref (for later refunds), then call
- *      TicketingService::fulfillOrder() — which is idempotent, so provider
- *      retries never double-issue. Newly-issued tickets (with their one-time
- *      plaintext tokens) are emailed to the buyer with QR links.
- *   4. On 'payment_failed', cancel the still-pending order so its inventory
- *      hold is released.
+ *   3. On 'payment_succeeded', try to match a ticket_orders row first (by
+ *      provider + provider_ref) — if found, capture provider_payment_ref (for
+ *      later refunds) and call TicketingService::fulfillOrder(), which is
+ *      idempotent, so provider retries never double-issue. Newly-issued
+ *      tickets (with their one-time plaintext tokens) are emailed to the
+ *      buyer with QR links.
+ *      Otherwise, try an event_payments row (deposit/balance-payment checkout
+ *      links minted by Events\Payments::mintOrReuseCheckoutLink()) matched
+ *      the same way by (checkout_provider, external_ref) — if found, mark it
+ *      'received' (idempotent — a retry on an already-received row is a
+ *      no-op) and re-sync the event's deposit_status.
+ *   4. On 'payment_failed', cancel a still-pending ticket order so its
+ *      inventory hold is released. Deposit/payment links have no inventory
+ *      hold to release, so a failed/expired checkout is a no-op there — the
+ *      next "send link" click simply mints a fresh one once the cached one's
+ *      bookkeeping expiry (see mintOrReuseCheckoutLink()) has passed.
  *
  * Always returns 200 once the signature is valid (even for events we ignore)
  * so providers stop retrying a delivered, understood webhook.
@@ -68,7 +78,12 @@ final class Webhooks extends BaseEndpoint
     {
         $order = $this->matchOrder($provider, $providerRef);
         if ($order === null) {
-            error_log("Webhook {$provider->key()}: no order for provider_ref '{$providerRef}'.");
+            $payment = $this->matchEventPayment($provider, $providerRef);
+            if ($payment === null) {
+                error_log("Webhook {$provider->key()}: no order or payment for provider_ref '{$providerRef}'.");
+                return;
+            }
+            $this->fulfillEventPayment($provider, $payment, $paymentRef);
             return;
         }
         $orderId = (int) $order['id'];
@@ -167,5 +182,63 @@ final class Webhooks extends BaseEndpoint
         );
         $order['provider_ref'] = $providerRef;
         return $order;
+    }
+
+    /**
+     * Match a deposit/payment checkout link by (checkout_provider, external_ref)
+     * — set by Events\Payments::mintOrReuseCheckoutLink() at link-creation time,
+     * exactly the same convention as ticket_orders.(provider, provider_ref)
+     * above. No fallback path is needed here (unlike Square ticket orders):
+     * this column pair only ever existed after both were written together, so
+     * there's no legacy data whose provider_ref was recorded differently.
+     */
+    private function matchEventPayment(PaymentProvider $provider, string $providerRef): ?array
+    {
+        if ($providerRef === '') {
+            return null;
+        }
+        return $this->db->one(
+            "SELECT * FROM event_payments WHERE checkout_provider = ? AND external_ref = ? AND status != 'voided' LIMIT 1",
+            [$provider->key(), $providerRef]
+        );
+    }
+
+    /**
+     * Mark a matched deposit/payment checkout as received (idempotent — a
+     * retry on an already-'received' row is a no-op) and re-sync the parent
+     * event's deposit_status. Records provider_payment_ref for any future
+     * refund flow, and an audit trail row exactly like a manual "mark
+     * received" edit would.
+     */
+    private function fulfillEventPayment(PaymentProvider $provider, array $payment, string $paymentRef): void
+    {
+        $paymentId = (int) $payment['id'];
+        $eventId   = (int) $payment['event_id'];
+
+        if ($payment['status'] === 'received') {
+            return; // Already processed by an earlier delivery of this webhook.
+        }
+
+        $this->db->run(
+            "UPDATE event_payments
+             SET status = 'received', received_at = NOW(), checkout_payment_ref = ?
+             WHERE id = ?",
+            [$paymentRef !== '' ? $paymentRef : null, $paymentId]
+        );
+        $this->db->run(
+            'INSERT INTO event_payment_audit (payment_id, event_id, user_id, action, note)
+             VALUES (?, ?, NULL, ?, ?)',
+            [$paymentId, $eventId, 'checkout_paid', ucfirst($provider->key()) . ' checkout completed (webhook)']
+        );
+
+        if (($payment['payment_type'] ?? '') === 'deposit') {
+            EventPayments::syncDepositStatus($this->db, $eventId);
+        }
+
+        log_activity($this->db, $eventId, null, ucfirst($provider->key()) . ' payment received (webhook)', [
+            'payment_id' => $paymentId,
+            'provider'   => $provider->key(),
+            'amount'     => $payment['amount'],
+        ]);
     }
 }
