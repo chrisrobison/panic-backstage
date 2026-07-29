@@ -499,6 +499,22 @@ final class Assistant extends BaseEndpoint
             // (-> /var/www), silently authenticating as nobody — confirmed
             // live: the endpoint returned `is_error: true` with zero token
             // usage rather than a loud failure until this was added.
+            //
+            // HOME alone isn't sufficient, though: www-data also needs read
+            // access to ~/.claude/.credentials.json itself (owned by cdr,
+            // mode 600 by default). www-data IS a member of the cdr group,
+            // so `chmod g+r` on that file is enough — but the `claude` CLI
+            // rewrites this file on every OAuth token refresh and resets it
+            // back to 600 each time, silently re-breaking this endpoint days
+            // later with the exact same `is_error:true`, zero-usage,
+            // `stop_reason:"stop_sequence"` envelope (that's the CLI's own
+            // "Not logged in" shape, not a real model turn). A cron sweep —
+            // scripts/cron-fix-claude-cli-perms.sh, run every minute as cdr
+            // — re-applies the group-read bit whenever it gets reset, since
+            // this www-data-owned process can never chmod a file it doesn't
+            // own. If /api/ai/ask starts failing like this again, check that
+            // cron job is actually installed and running before anything
+            // else.
             $home = getenv('CLAUDE_CLI_HOME') ?: '/home/cdr';
             $cmd = 'env -u ANTHROPIC_API_KEY -u ANTHROPIC_API_KEY_FILE'
                  . ' HOME=' . escapeshellarg($home)

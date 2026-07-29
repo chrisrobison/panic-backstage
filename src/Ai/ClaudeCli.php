@@ -35,6 +35,15 @@ namespace Panic\Ai;
  * false/null exactly as if the CLI weren't installed at all. Confirm the
  * process actually invoking this runs as the same user that ran `claude
  * login` before relying on it.
+ *
+ * In production this class runs as www-data (PHP-FPM), which is a member of
+ * the cdr group, so `chmod g+r ~/.claude/.credentials.json` is enough to let
+ * it read cdr's session — but the CLI resets that file back to mode 600 on
+ * every OAuth token refresh, so the fix has to be re-applied continuously,
+ * not once. scripts/cron-fix-claude-cli-perms.sh does that (runs every
+ * minute as cdr, since a www-data-owned process can't chmod a file it
+ * doesn't own). See Ai\Assistant::runClaude()'s docblock for the full
+ * writeup — this class hit the identical failure mode.
  */
 final class ClaudeCli
 {

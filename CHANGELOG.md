@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `ai` — Keep claude CLI credentials group-readable across token refreshes
 - **Added** `payments` — Provider-agnostic deposit payment link + QR code
 - **Fixed** `docs` — Allow public access to booking-inbox.html
 - **Fixed** `events` — Stop AI flyer generation from breaking under /tmp
