@@ -723,9 +723,18 @@ class EventCalendar extends PanicElement {
           const dayEvents = block.events.filter((e) => eventSpansDay(e, iso));
           const isToday = iso === today ? ' cal-today' : '';
           const hasConflict = conflictDates.has(iso) ? ' has-conflict' : '';
+          // Each month block pads out to full weeks (see _fetchMonthWindow), so
+          // the first/last row can carry a few days from the adjacent month.
+          // Dim them and, on the 1st, spell out the month ("Oct 1") so a week
+          // straddling a month boundary never reads as ambiguous plain numbers.
+          const otherMonth = date.getMonth() !== block.monthDate.getMonth() || date.getFullYear() !== block.monthDate.getFullYear();
+          const isFirst = date.getDate() === 1;
+          const dayLabel = isFirst ? `${date.toLocaleDateString(undefined, { month: 'short' })} 1` : String(date.getDate());
           const clickAttr = this.canCreate ? ` data-create-date="${esc(iso)}" role="button" tabindex="0"` : '';
           const conflictAttr = hasConflict ? ' title="Room conflict: two events booked in the same room at overlapping times"' : '';
-          return `<div class="calendar-day${createable}${isToday}${hasConflict}"${clickAttr}${conflictAttr}><span class="day-num">${date.getDate()}</span>${dayCellBody(dayEvents, iso)}</div>`;
+          // .day-num-month widens the "today" circle badge into a pill for the
+          // rare case where the 1st of a month is also today — see app.css.
+          return `<div class="calendar-day${createable}${isToday}${hasConflict}${otherMonth ? ' other-month' : ''}"${clickAttr}${conflictAttr}><span class="day-num${isFirst ? ' day-num-month' : ''}">${esc(dayLabel)}</span>${dayCellBody(dayEvents, iso)}</div>`;
         }).join('')}
       </div>
     </section>`;

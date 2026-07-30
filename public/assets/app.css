@@ -1616,6 +1616,16 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   justify-content: center;
   margin-bottom: 5px;
 }
+/* The 1st of a month reads "Oct 1" (see event-views.js), too wide for the
+   fixed 22px circle above when that day also happens to be today — widen
+   into a pill instead of clipping/overflowing the circle. */
+.calendar-day.cal-today > .day-num.day-num-month {
+  width: auto;
+  min-width: 22px;
+  border-radius: 11px;
+  padding: 0 7px;
+  white-space: nowrap;
+}
 
 /* ── Mini calendar strip (agenda view) ──────────────────────────────────── */
 .cal-mini {
