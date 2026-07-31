@@ -553,7 +553,9 @@ class EventCalendar extends PanicElement {
 
   render() {
     publish('page.context', { title: 'Calendar', blurb: `Booking calendar.${this.canCreate ? ' Click any day to create an event.' : ''}` });
-    const monthLabel = this.month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    // No month/year label here — each month block already spells out its own
+    // month/year inline (see .calendar-month-heading in _renderMonthBlockHtml),
+    // so a toolbar label was just repeating it.
     this.innerHTML = `<section class="calendar-page">
       <article class="panel calendar-shell">
         <div class="calendar-sticky-head">
@@ -563,7 +565,6 @@ class EventCalendar extends PanicElement {
               <button class="secondary small" data-next>&gt;</button>
               <button class="secondary small" data-today>Today</button>
             </div>
-            <h2 data-month-label>${esc(monthLabel)}</h2>
             <div class="calendar-actions">
               <div class="cal-view-toggle" role="group" aria-label="Calendar view">
                 <button class="secondary small${this.viewMode === 'grid' ? ' active' : ''}" data-view="grid" title="Month grid">
@@ -719,22 +720,22 @@ class EventCalendar extends PanicElement {
       <h3 class="calendar-month-heading" data-month-heading>${esc(monthLabel)}</h3>
       <div class="calendar-grid calendar-split">
         ${days.map((date) => {
+          // Each month block pads out to full weeks (see _fetchMonthWindow), so
+          // the first/last row can carry a few days from the adjacent month.
+          // Those used to render dimmed-but-live (own date number, own events),
+          // which kept reading as confusing — render them fully blank instead:
+          // no number, no events, not clickable. Only this month's own days
+          // carry content.
+          const otherMonth = date.getMonth() !== block.monthDate.getMonth() || date.getFullYear() !== block.monthDate.getFullYear();
+          if (otherMonth) return `<div class="calendar-day calendar-day-pad" aria-hidden="true"></div>`;
+
           const iso = isoDate(date);
           const dayEvents = block.events.filter((e) => eventSpansDay(e, iso));
           const isToday = iso === today ? ' cal-today' : '';
           const hasConflict = conflictDates.has(iso) ? ' has-conflict' : '';
-          // Each month block pads out to full weeks (see _fetchMonthWindow), so
-          // the first/last row can carry a few days from the adjacent month.
-          // Dim them and, on the 1st, spell out the month ("Oct 1") so a week
-          // straddling a month boundary never reads as ambiguous plain numbers.
-          const otherMonth = date.getMonth() !== block.monthDate.getMonth() || date.getFullYear() !== block.monthDate.getFullYear();
-          const isFirst = date.getDate() === 1;
-          const dayLabel = isFirst ? `${date.toLocaleDateString(undefined, { month: 'short' })} 1` : String(date.getDate());
           const clickAttr = this.canCreate ? ` data-create-date="${esc(iso)}" role="button" tabindex="0"` : '';
           const conflictAttr = hasConflict ? ' title="Room conflict: two events booked in the same room at overlapping times"' : '';
-          // .day-num-month widens the "today" circle badge into a pill for the
-          // rare case where the 1st of a month is also today — see app.css.
-          return `<div class="calendar-day${createable}${isToday}${hasConflict}${otherMonth ? ' other-month' : ''}"${clickAttr}${conflictAttr}><span class="day-num${isFirst ? ' day-num-month' : ''}">${esc(dayLabel)}</span>${dayCellBody(dayEvents, iso)}</div>`;
+          return `<div class="calendar-day${createable}${isToday}${hasConflict}"${clickAttr}${conflictAttr}><span class="day-num">${esc(String(date.getDate()))}</span>${dayCellBody(dayEvents, iso)}</div>`;
         }).join('')}
       </div>
     </section>`;
@@ -956,10 +957,11 @@ class EventCalendar extends PanicElement {
     if (spinner) spinner.hidden = !isLoading;
   }
 
-  // Scrollspy: keeps the toolbar's month label honest as the user scrolls
-  // through the stack, via a direct text update rather than a full re-render
-  // (which would blow away scroll position). Picks the last month heading
-  // that's scrolled up past a thin band near the top of the scroll host.
+  // Scrollspy: keeps `this.month`/`_visibleMonthKey` (used by Prev/Next/Today)
+  // honest as the user scrolls through the stack. Picks the last month
+  // heading that's scrolled up past a thin band near the top of the scroll
+  // host. No DOM label to update here — the toolbar doesn't show one; each
+  // month block spells out its own month/year inline instead.
   _updateVisibleMonthLabel() {
     const headings = $$('[data-month-heading]', this);
     if (!headings.length) return;
@@ -975,8 +977,6 @@ class EventCalendar extends PanicElement {
     this._visibleMonthKey = key;
     const [y, m] = key.split('-').map(Number);
     this.month = new Date(y, m - 1, 1);
-    const labelEl = $('[data-month-label]', this);
-    if (labelEl) labelEl.textContent = this.month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   }
 
   // Prev/Next/Today in grid mode: scroll to the target month, loading it

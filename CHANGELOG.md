@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `calendar` — Blank-pad adjacent-month days, drop redundant toolbar month label
 - **Fixed** `calendar` — Label 1st-of-month cells and dim adjacent-month padding
 - **Documentation** `payments` — Document the deposit payment link + QR flow
 - **Added** `public` — Add standalone Mabuhay Gardens booking form replica

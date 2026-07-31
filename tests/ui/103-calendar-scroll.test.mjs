@@ -71,10 +71,14 @@ test('Scrolling to the bottom appends the next month; scrolling to the top prepe
   }
 });
 
-test('The toolbar month label tracks whichever month is scrolled to (scrollspy)', async (page) => {
+test('The toolbar has no month/year label (each month block already shows its own), and internal scroll state (scrollspy) still tracks the visible month for Prev/Next/Today', async (page) => {
   await page.goto('#calendar');
   await page.until(`document.querySelector('.calendar-month-block')`);
-  const initialLabel = await page.text('[data-month-label]');
+  assert.ok(!(await page.exists('[data-month-label]')), 'toolbar no longer renders a month/year label');
+  assert.ok(await page.exists('[data-month-heading]'), 'each month block still spells out its own month/year inline');
+
+  const monthKeyOf = `document.querySelector('pb-event-calendar').month.getFullYear() + '-' + String(document.querySelector('pb-event-calendar').month.getMonth() + 1).padStart(2, '0')`;
+  const initialKey = await page.eval(monthKeyOf);
 
   // Force a couple of months to load below, then scroll down to the last one.
   for (let i = 0; i < 2; i++) {
@@ -86,10 +90,10 @@ test('The toolbar month label tracks whichever month is scrolled to (scrollspy)'
   // scrollIntoView moving the real scroll position fires a genuine 'scroll'
   // event on the host — no need to synthesize one.
   await page.eval(`document.querySelector('${lastBlockSelector}').scrollIntoView({ block: 'start' })`);
-  await page.until(`document.querySelector('[data-month-label]').textContent !== ${JSON.stringify(initialLabel)}`, 8000);
+  await page.until(`(${monthKeyOf}) !== ${JSON.stringify(initialKey)}`, 8000);
 
-  const newLabel = await page.text('[data-month-label]');
-  assert.ok(newLabel && newLabel !== initialLabel, 'month label updates away from the initial month once scrolled elsewhere');
+  const newKey = await page.eval(monthKeyOf);
+  assert.ok(newKey && newKey !== initialKey, 'internal current-month state updates away from the initial month once scrolled elsewhere');
 });
 
 test('Today button returns to the current month from anywhere in the stack', async (page) => {
