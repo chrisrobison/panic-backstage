@@ -15,9 +15,14 @@ use Panic\Response;
  * Combines Ledger::calculateSummary() (the same server-computed P&L used by
  * the Closeout tab — never recomputed differently here) with the cost detail
  * that usually explains *why* the ledger total looks the way it does: the
- * vendor bill, the staffing labor cost, the lineup payout terms, and a
- * ticket-type sales breakdown. Nothing here is editable — it's a reporting
- * view over data owned by Ledger, Vendors, Staffing, Lineup and Ticketing.
+ * vendor bill, the staffing labor cost, the lineup payout terms, a
+ * ticket-type sales breakdown, the raw ledger line items (so a printed
+ * statement can reproduce Closeout's Revenue/Costs/Payments grouping
+ * exactly), a payments-received/disbursed/balance-due split, and a fallback
+ * to the manually-entered Settlement tab figures for shows where tickets
+ * sold outside this app's own ticketing module. Nothing here is editable —
+ * it's a reporting view over data owned by Ledger, Vendors, Staffing,
+ * Lineup, Ticketing and Settlement.
  *
  * Capability: view_settlement (same gate as the Settlement + Closeout tabs).
  */
@@ -43,6 +48,69 @@ final class Report extends BaseEndpoint
 
         $summary  = (new Ledger($this->db, $this->auth, [], $this->root))->calculateSummary($eventId);
         $closeout = $this->db->one('SELECT * FROM event_closeout_state WHERE event_id = ?', [$eventId]);
+
+        // The old "Settlement" tab (event_settlements) is a hand-typed door
+        // sheet — gross ticket sales, ticket count, bar sales, expenses,
+        // payouts — kept for shows where tickets sold through an outside
+        // service or at the door rather than this app's own ticketing
+        // module. Surfaced here so the printed statement can fall back to it
+        // (see tickets-sold below) and so staff can see it was recorded at all.
+        $manualSettlement = $this->db->one('SELECT * FROM event_settlements WHERE event_id = ?', [$eventId]);
+
+        // Raw ledger line items (not just Ledger::calculateSummary()'s
+        // per-category sums) so the printed report can reproduce the exact
+        // same Revenue / Costs / Payments line-item breakdown the Closeout
+        // tab shows, instead of a collapsed one-line-per-category total.
+        $ledgerEntries = $this->db->all(
+            "SELECT category, line_type, description, amount, created_at
+             FROM event_ledger_entries
+             WHERE event_id = ? AND is_void = 0
+             ORDER BY created_at ASC, id ASC",
+            [$eventId]
+        );
+
+        // ── Effective ticket count ────────────────────────────────────────
+        // Ledger::calculateSummary()'s tickets_sold/gross_ticket_sales only
+        // count in-house ticket_order_items rows, so a show sold entirely
+        // through an outside ticketing service or at the door reads as 0
+        // tickets sold here even though people clearly paid to get in. Fall
+        // back to the manually-entered Settlement figure whenever the
+        // in-house count is zero, and record which source won so the report
+        // can label it rather than silently presenting a guess as fact.
+        $ticketsSoldInHouse       = (int) ($summary['tickets_sold'] ?? 0);
+        $grossTicketSalesInHouse  = (float) ($summary['gross_ticket_sales'] ?? 0);
+        $ticketsSoldManual        = (int) ($manualSettlement['tickets_sold'] ?? 0);
+        $grossTicketSalesManual   = (float) ($manualSettlement['gross_ticket_sales'] ?? 0);
+        $ticketsSoldEffective      = $ticketsSoldInHouse > 0 ? $ticketsSoldInHouse : $ticketsSoldManual;
+        $grossTicketSalesEffective = $grossTicketSalesInHouse > 0 ? $grossTicketSalesInHouse : $grossTicketSalesManual;
+        $ticketSalesSource = $ticketsSoldInHouse > 0 ? 'box_office' : ($ticketsSoldManual > 0 ? 'door_or_manual' : null);
+
+        // ── Payments & balance ─────────────────────────────────────────────
+        // The ledger's "payment" line items are cash-movement entries,
+        // distinct from the accrual revenue/cost lines above — they mix
+        // money actually collected from the client (deposit_received,
+        // invoice_payment, credit) with money already disbursed out the door
+        // (artist_payout, promoter_payout, vendor_payout, staff_payout).
+        // Splitting them lets the report show a real "balance due" instead
+        // of one ambiguous "Payments Received" total.
+        $incomingPaymentCategories = ['deposit_received', 'invoice_payment', 'credit'];
+        $paymentsReceived = 0.0;
+        $disbursed        = 0.0;
+        $outstandingNoted = 0.0;
+        foreach ($ledgerEntries as $entry) {
+            if ($entry['line_type'] !== 'payment') {
+                continue;
+            }
+            $amt = (float) $entry['amount'];
+            if (in_array($entry['category'], $incomingPaymentCategories, true)) {
+                $paymentsReceived += $amt;
+            } elseif ($entry['category'] === 'outstanding_balance') {
+                $outstandingNoted += $amt;
+            } else {
+                $disbursed += $amt;
+            }
+        }
+        $balanceDue = (float) $summary['gross_revenue'] - $paymentsReceived;
 
         $vendors = $this->db->all(
             "SELECT service_category, company_name,
@@ -113,6 +181,15 @@ final class Report extends BaseEndpoint
             'staffing_total' => $staffingTotal,
             'lineup'       => $lineup,
             'ticket_types' => $ticketTypes,
+            'manual_settlement' => $manualSettlement,
+            'ledger_entries' => $ledgerEntries,
+            'tickets_sold_effective'      => $ticketsSoldEffective,
+            'gross_ticket_sales_effective' => $grossTicketSalesEffective,
+            'ticket_sales_source'         => $ticketSalesSource,
+            'payments_received' => $paymentsReceived,
+            'disbursed'         => $disbursed,
+            'outstanding_noted' => $outstandingNoted,
+            'balance_due'       => $balanceDue,
         ]);
     }
 }

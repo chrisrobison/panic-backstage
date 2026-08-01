@@ -6,6 +6,7 @@
 // Source: GET /api/events/{id}/report (src/Events/Report.php).
 
 import { esc, titleCase, api, money, shortDate, eventDate, emptyState, PanicElement, $ } from './core.js';
+import { openPrintWindow } from './print.js';
 
 class EventReport extends PanicElement {
   get eventId()  { return this._eventId; }
@@ -34,10 +35,31 @@ class EventReport extends PanicElement {
     const s = d.summary || {};
     const netColor = Number(s.venue_net || 0) >= 0 ? 'var(--green, #0f8f46)' : 'var(--red, #ef4338)';
 
-    const byCategoryRows = Object.entries(s.by_category || {})
-      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
-      .map(([cat, amt]) => `<tr><td>${esc(titleCase(cat))}</td><td class="amount">${esc(money(amt))}</td></tr>`)
-      .join('');
+    // Line-item breakdown, grouped exactly like the Closeout tab (one row per
+    // ledger entry, not a collapsed per-category sum) — see src/Events/Report.php.
+    const entries = d.ledger_entries || [];
+    const entryRows = (arr) => arr.map((e) => `<tr>
+        <td>${esc(titleCase(e.category))}</td>
+        <td>${esc(e.description || '')}</td>
+        <td class="amount">${esc(money(e.amount))}</td>
+      </tr>`).join('');
+    const groupSum = (arr) => arr.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+    const groupTable = (label, arr) => {
+      if (!arr.length) return `<tr><td colspan="3">${emptyState(`No ${label.toLowerCase()} entries yet.`)}</td></tr>`;
+      return entryRows(arr) + `<tr class="er-subtotal-row"><td colspan="2"><strong>${esc(label)} subtotal</strong></td><td class="amount"><strong>${esc(money(groupSum(arr)))}</strong></td></tr>`;
+    };
+    const revenueEntries = entries.filter((e) => e.line_type === 'revenue');
+    const costEntries    = entries.filter((e) => e.line_type === 'cost');
+    const paymentEntries = entries.filter((e) => e.line_type === 'payment');
+
+    // Effective ticket count: falls back to the hand-entered Settlement tab
+    // figure when in-house ticketing shows 0 sold (door / outside-service sales
+    // never create ticket_order_items rows) — see Report.php for the logic.
+    const ticketsSold = d.tickets_sold_effective ?? s.tickets_sold ?? 0;
+    const grossTicketSales = d.gross_ticket_sales_effective ?? s.gross_ticket_sales ?? 0;
+    const ticketSourceNote = d.ticket_sales_source === 'door_or_manual'
+      ? 'Reported at settlement (door / outside ticketing)'
+      : d.ticket_sales_source === 'box_office' ? 'In-house ticketing' : '';
 
     const ticketRows = (d.ticket_types || []).map((t) => `<tr>
         <td>${esc(t.name)}</td>
@@ -91,15 +113,34 @@ class EventReport extends PanicElement {
             <div class="summary-row"><span class="label">Total Costs</span><span class="value">${esc(money(s.total_costs || 0))}</span></div>
             <div class="summary-row"><span class="label">Venue Net</span><span class="value" style="color:${netColor}">${esc(money(s.venue_net || 0))}</span></div>
             <div class="summary-row"><span class="label">Margin</span><span class="value">${esc(s.margin_pct != null ? Number(s.margin_pct).toFixed(1) : '0.0')}%</span></div>
-            <div class="summary-row"><span class="label">Tickets Sold</span><span class="value">${esc(String(s.tickets_sold || 0))}</span></div>
-            <div class="summary-row"><span class="label">Payments Received</span><span class="value">${esc(money(s.total_payments || 0))}</span></div>
+            <div class="summary-row"><span class="label">Tickets Sold</span><span class="value">${esc(String(ticketsSold))}${ticketSourceNote ? ` <span class="er-note">(${esc(ticketSourceNote)})</span>` : ''}</span></div>
+            <div class="summary-row"><span class="label">Gross Ticket Sales</span><span class="value">${esc(money(grossTicketSales))}</span></div>
+            <div class="summary-row"><span class="label">Payments Received</span><span class="value">${esc(money(d.payments_received ?? s.total_payments ?? 0))}</span></div>
           </section>
 
-          <h3 class="panel-subtitle">Ledger by Category</h3>
+          <h3 class="panel-subtitle">Revenue</h3>
           <table class="data-table er-table">
-            <thead><tr><th>Category</th><th>Amount</th></tr></thead>
-            <tbody>${byCategoryRows || `<tr><td colspan="2">${emptyState('No ledger entries yet.')}</td></tr>`}</tbody>
+            <thead><tr><th>Category</th><th>Description</th><th>Amount</th></tr></thead>
+            <tbody>${groupTable('Revenue', revenueEntries)}</tbody>
           </table>
+
+          <h3 class="panel-subtitle">Costs</h3>
+          <table class="data-table er-table">
+            <thead><tr><th>Category</th><th>Description</th><th>Amount</th></tr></thead>
+            <tbody>${groupTable('Costs', costEntries)}</tbody>
+          </table>
+
+          <h3 class="panel-subtitle">Payments &amp; Balance</h3>
+          <table class="data-table er-table">
+            <thead><tr><th>Category</th><th>Description</th><th>Amount</th></tr></thead>
+            <tbody>${groupTable('Payments', paymentEntries)}</tbody>
+          </table>
+          <div class="summary-card er-balance">
+            <div class="summary-row"><span class="label">Payments Received</span><span class="value">${esc(money(d.payments_received || 0))}</span></div>
+            <div class="summary-row"><span class="label">Disbursed</span><span class="value">${esc(money(d.disbursed || 0))}</span></div>
+            <div class="summary-row"><span class="label">Balance Due</span><span class="value" style="color:${Number(d.balance_due || 0) > 0 ? 'var(--red, #ef4338)' : 'var(--green, #0f8f46)'}">${esc(money(d.balance_due || 0))}</span></div>
+          </div>
+          <p class="er-note">Balance Due = Gross Revenue − Payments Received (deposits, invoice payments, credits). Payouts already disbursed to artists, promoters, vendors, or staff are shown separately and don't reduce this figure.</p>
 
           ${(d.ticket_types || []).length ? `
           <h3 class="panel-subtitle">Ticket Sales</h3>
@@ -129,6 +170,18 @@ class EventReport extends PanicElement {
             <tbody>${lineupRows}</tbody>
           </table>` : ''}
 
+          ${d.manual_settlement ? `
+          <h3 class="panel-subtitle">Door / Manual Settlement Record</h3>
+          <p class="er-note">Hand-entered on the Settlement tab the night of the show — kept as a supplementary record; the Revenue/Costs/Payments figures above (from the Closeout ledger) are authoritative.</p>
+          <div class="summary-card">
+            <div class="summary-row"><span class="label">Tickets Sold</span><span class="value">${esc(String(d.manual_settlement.tickets_sold || 0))}</span></div>
+            <div class="summary-row"><span class="label">Gross Ticket Sales</span><span class="value">${esc(money(d.manual_settlement.gross_ticket_sales || 0))}</span></div>
+            <div class="summary-row"><span class="label">Bar Sales</span><span class="value">${esc(money(d.manual_settlement.bar_sales || 0))}</span></div>
+            <div class="summary-row"><span class="label">Expenses</span><span class="value">${esc(money(d.manual_settlement.expenses || 0))}</span></div>
+            <div class="summary-row"><span class="label">Band Payouts</span><span class="value">${esc(money(d.manual_settlement.band_payouts || 0))}</span></div>
+            <div class="summary-row"><span class="label">Promoter Payout</span><span class="value">${esc(money(d.manual_settlement.promoter_payout || 0))}</span></div>
+          </div>` : ''}
+
         </div>
       </section>
 
@@ -143,12 +196,22 @@ class EventReport extends PanicElement {
         .er-table th { text-align: left; font-size: 0.78rem; color: var(--muted, #6f7582); border-bottom: 1px solid var(--line, #dfe3e8); padding: 4px 6px; }
         .er-table td { padding: 5px 6px; border-bottom: 1px solid var(--line, #dfe3e8); }
         .er-table .amount { text-align: right; font-variant-numeric: tabular-nums; }
+        .er-table tr.er-subtotal-row td { background: var(--soft, #eef0f3); }
+        .er-note { font-size: 0.8rem; color: var(--muted, #6f7582); margin: 0.3rem 0 1rem; }
+        .er-balance { max-width: 420px; margin-bottom: 0.5rem; }
         @media print {
           [data-print-report] { display: none !important; }
         }
       </style>`;
 
-    $('[data-print-report]', this)?.addEventListener('click', () => window.print());
+    // Opens the same formal, signable Settlement Report print window used by
+    // the workspace header's Print ▸ Settlement Report button (print.js) —
+    // this._data is already the exact GET /api/events/{id}/report payload
+    // that builder expects. Previously this called window.print() directly
+    // on the in-page tab, which (with no app-wide print stylesheet to hide
+    // the sidebar/tab bar) printed the whole workspace chrome along with the
+    // report instead of a clean statement.
+    $('[data-print-report]', this)?.addEventListener('click', () => openPrintWindow('settlement', this._data));
   }
 }
 customElements.define('pb-event-report', EventReport);

@@ -697,6 +697,7 @@ class EventWorkspace extends PanicElement {
             ${isPrivate ? '' : '<button type="button" data-print="qr-flyer">QR Flyer</button>'}
             <button type="button" data-print="contract">Contract</button>
             <button type="button" data-print="master">Master Event Packet</button>
+            ${(!isPrivate && can(data, 'view_settlement')) ? '<button type="button" data-print="settlement">Settlement Report</button>' : ''}
           </div>
         </details>` : ''}
         ${(!isPrivate && can(data, 'publish_event')) ? `<button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>` : ''}
@@ -787,9 +788,23 @@ class EventWorkspace extends PanicElement {
     if (historyUndoEl) historyUndoEl.eventId = event.id;
     $('[data-qr-toggle]', this)?.addEventListener('click', () => this._openQrModal(data));
     $('[data-pos-set]', this)?.addEventListener('click', () => this.setPosEvent(event.id));
-    $$('[data-print]', this).forEach((button) => button.addEventListener('click', () => {
+    $$('[data-print]', this).forEach((button) => button.addEventListener('click', async () => {
       button.closest('details.print-menu')?.removeAttribute('open');
-      openPrintWindow(button.dataset.print, this.data);
+      const type = button.dataset.print;
+      // Every other printout reads off the workspace's already-loaded event
+      // bundle (this.data), but the Settlement Report needs the ledger/
+      // closeout/vendor/staffing detail from GET /api/events/{id}/report —
+      // fetch that first and pass it straight through as the print data.
+      if (type === 'settlement') {
+        try {
+          const report = await api(`/events/${event.id}/report`);
+          openPrintWindow(type, report);
+        } catch (err) {
+          publish('toast.show', { message: err.message, tone: 'error' });
+        }
+        return;
+      }
+      openPrintWindow(type, this.data);
     }));
     this._renderTabNav();
     this._applySectionVisibility();

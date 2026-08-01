@@ -16,6 +16,7 @@ const PRINT_TITLES = {
   'one-sheet': 'One Sheet',
   contract: 'Contract',
   'qr-flyer': 'QR Flyer',
+  settlement: 'Settlement Report',
 };
 
 
@@ -81,6 +82,23 @@ const PRINT_CSS = `
   .contract .k-sign-line { margin: 14px 0 4px; }
   .contract .k-fill { display: inline-block; min-width: 260px; border-bottom: 1px solid #111; }
   .contract .k-fill.short { min-width: 200px; }
+
+  /* Settlement Report — a signable, printable statement reproducing the
+     Closeout tab's Revenue / Costs / Payments line-item breakdown exactly,
+     plus vendor/staffing/lineup detail and a payments-received vs.
+     balance-due summary. */
+  .settlement { font-size: 11pt; line-height: 1.5; color: #111; }
+  .settlement h1.stl-brand { font-size: 20pt; font-weight: 700; text-transform: uppercase; line-height: 1.15; margin: 0 0 4px; }
+  .settlement h1.stl-title { font-size: 15pt; font-weight: 700; margin: 0 0 14px; color: #444; }
+  .settlement p.stl-meta { margin: 0 0 3px; }
+  .settlement p.stl-meta strong { font-weight: 700; }
+  .settlement tfoot td { font-weight: 700; background: #f0f0f0; border-top: 2px solid #333; }
+  .settlement .stl-balance-due strong { font-size: 13pt; }
+  .settlement .stl-note { color: #666; font-size: 9pt; margin: 4px 0 16px; }
+  .settlement .stl-party { font-weight: 700; margin: 18px 0 8px; }
+  .settlement .stl-sign-line { margin: 14px 0 4px; }
+  .settlement .stl-fill { display: inline-block; min-width: 260px; border-bottom: 1px solid #111; }
+  .settlement .stl-fill.short { min-width: 200px; }
 
   /* QR Flyer — bold door-poster sheet: huge title, huge scannable QR, price/doors,
      then a stacked all-caps lineup. Pure black-on-white, no boxes/rules, meant to
@@ -622,11 +640,170 @@ function renderQrFlyer(data) {
 }
 
 
+// Settlement Report — a formal, signable statement built from
+// GET /api/events/{id}/report (src/Events/Report.php). Unlike the other
+// printouts here (which read off the workspace's already-loaded event
+// bundle), the caller fetches the report payload first and passes it
+// straight through as `data` — see the "settlement" case in
+// event-workspace.js's data-print handler.
+function settlementSubtotal(entries) {
+  return entries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+}
+
+function settlementTable(label, entries) {
+  if (!entries.length) return `<p class="empty">No ${label.toLowerCase()} entries recorded.</p>`;
+  const rows = entries.map((e) => `<tr>
+      <td>${esc(titleCase(e.category))}</td>
+      <td>${esc(e.description || '')}</td>
+      <td class="num">${esc(money(e.amount))}</td>
+    </tr>`).join('');
+  return `<table>
+    <thead><tr><th>Category</th><th>Description</th><th class="num">Amount</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td colspan="2">${esc(label)} subtotal</td><td class="num">${esc(money(settlementSubtotal(entries)))}</td></tr></tfoot>
+  </table>`;
+}
+
+function renderSettlementSection(data) {
+  const event    = data.event    || {};
+  const s        = data.summary  || {};
+  const entries  = data.ledger_entries || [];
+  const closeout = data.closeout || {};
+  const manual   = data.manual_settlement;
+
+  const revenueEntries = entries.filter((e) => e.line_type === 'revenue');
+  const costEntries    = entries.filter((e) => e.line_type === 'cost');
+  const paymentEntries = entries.filter((e) => e.line_type === 'payment');
+
+  const closeoutLabel = closeout.finalized_at
+    ? `Finalized ${eventDate({ date: String(closeout.finalized_at).slice(0, 10) })?.toLocaleDateString(undefined, { dateStyle: 'medium' }) || closeout.finalized_at}`
+    : titleCase(closeout.status || 'open');
+
+  const ticketsSold      = data.tickets_sold_effective ?? s.tickets_sold ?? 0;
+  const grossTicketSales = data.gross_ticket_sales_effective ?? s.gross_ticket_sales ?? 0;
+  const ticketSourceNote = data.ticket_sales_source === 'door_or_manual'
+    ? 'Reported at settlement — sold at the door or through an outside ticketing service, not this app’s in-house ticketing.'
+    : data.ticket_sales_source === 'box_office' ? 'Sold through in-house ticketing.' : '';
+
+  const ticketRows = (data.ticket_types || []).map((t) => `<tr>
+      <td>${esc(t.name)}</td>
+      <td class="num">${esc(money(t.price))}</td>
+      <td class="num">${esc(String(t.sold))} / ${esc(String(t.quantity_total))}</td>
+      <td class="num">${esc(money(t.gross_sales))}</td>
+    </tr>`).join('');
+
+  const vendorRows = (data.vendors || []).map((v) => `<tr>
+      <td>${esc(v.company_name || titleCase(v.service_category))}</td>
+      <td>${esc(titleCase(v.service_category))}</td>
+      <td>${esc(titleCase(v.payment_status))}</td>
+      <td class="num">${esc(money(v.amount))}</td>
+    </tr>`).join('');
+
+  const staffingRows = (data.staffing || []).map((row) => `<tr>
+      <td>${esc(row.staff_name || '—')}</td>
+      <td>${esc(titleCase(row.role))}</td>
+      <td class="num">${esc(Number(row.hours || 0).toFixed(1))}</td>
+      <td class="num">${esc(money(row.hourly_rate || 0))}</td>
+      <td class="num">${esc(money(row.cost))}</td>
+    </tr>`).join('');
+
+  const lineupRows = (data.lineup || []).map((l) => `<tr>
+      <td>${esc(l.display_name)}</td>
+      <td>${esc(titleCase(l.status))}</td>
+      <td>${esc(l.payout_terms || '—')}</td>
+    </tr>`).join('');
+
+  const balanceDue = Number(data.balance_due || 0);
+
+  const manualBlock = manual ? `
+    <h2 class="section">Door / Manual Settlement Record</h2>
+    <p class="stl-note">Hand-entered on the Settlement tab the night of the show — kept as a supplementary record; the Revenue/Costs/Payments figures above (from the Closeout ledger) are authoritative.</p>
+    <div class="facts">
+      <div class="fact"><label>Tickets Sold</label><strong>${esc(String(manual.tickets_sold || 0))}</strong></div>
+      <div class="fact"><label>Gross Ticket Sales</label><strong>${esc(money(manual.gross_ticket_sales || 0))}</strong></div>
+      <div class="fact"><label>Bar Sales</label><strong>${esc(money(manual.bar_sales || 0))}</strong></div>
+      <div class="fact"><label>Expenses</label><strong>${esc(money(manual.expenses || 0))}</strong></div>
+      <div class="fact"><label>Band Payouts</label><strong>${esc(money(manual.band_payouts || 0))}</strong></div>
+      <div class="fact"><label>Promoter Payout</label><strong>${esc(money(manual.promoter_payout || 0))}</strong></div>
+    </div>
+    ${manual.notes ? `<div class="notes-block">${esc(manual.notes)}</div>` : ''}` : '';
+
+  return `<div class="settlement">
+    <h1 class="stl-brand">${esc(event.venue_name || 'Venue')}</h1>
+    <h1 class="stl-title">Settlement Statement</h1>
+    <p class="stl-meta"><strong>Event:</strong> ${esc(event.title || '')}</p>
+    <p class="stl-meta"><strong>Date:</strong> ${esc(printDateRange(event))}</p>
+    <p class="stl-meta"><strong>Status:</strong> ${esc(statusLabel(event.status))} &middot; Closeout: ${esc(closeoutLabel)}</p>
+
+    <div class="facts">
+      <div class="fact"><label>Gross Revenue</label><strong>${esc(money(s.gross_revenue || 0))}</strong></div>
+      <div class="fact"><label>Total Costs</label><strong>${esc(money(s.total_costs || 0))}</strong></div>
+      <div class="fact"><label>Venue Net</label><strong>${esc(money(s.venue_net || 0))}</strong></div>
+      <div class="fact"><label>Margin</label><strong>${esc(s.margin_pct != null ? Number(s.margin_pct).toFixed(1) : '0.0')}%</strong></div>
+      <div class="fact"><label>Tickets Sold</label><strong>${esc(String(ticketsSold))}</strong></div>
+      <div class="fact"><label>Gross Ticket Sales</label><strong>${esc(money(grossTicketSales))}</strong></div>
+    </div>
+    ${ticketSourceNote ? `<p class="stl-note">${esc(ticketSourceNote)}</p>` : ''}
+
+    <h2 class="section">Revenue</h2>
+    ${settlementTable('Revenue', revenueEntries)}
+    ${ticketRows ? `<h3 class="subsection">Ticket Sales</h3>
+    <table>
+      <thead><tr><th>Type</th><th class="num">Price</th><th class="num">Sold / Total</th><th class="num">Gross</th></tr></thead>
+      <tbody>${ticketRows}</tbody>
+    </table>` : ''}
+
+    <h2 class="section">Costs</h2>
+    ${settlementTable('Costs', costEntries)}
+    ${vendorRows ? `<h3 class="subsection">Vendor Costs</h3>
+    <table>
+      <thead><tr><th>Vendor</th><th>Category</th><th>Payment Status</th><th class="num">Amount</th></tr></thead>
+      <tbody>${vendorRows}</tbody>
+      <tfoot><tr><td colspan="3">Vendor total</td><td class="num">${esc(money(data.vendor_total || 0))}</td></tr></tfoot>
+    </table>` : ''}
+    ${staffingRows ? `<h3 class="subsection">Staffing / Labor</h3>
+    <table>
+      <thead><tr><th>Staff</th><th>Role</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Cost</th></tr></thead>
+      <tbody>${staffingRows}</tbody>
+      <tfoot><tr><td colspan="4">Staffing total</td><td class="num">${esc(money(data.staffing_total || 0))}</td></tr></tfoot>
+    </table>` : ''}
+
+    <h2 class="section">Payments &amp; Balance</h2>
+    ${settlementTable('Payments', paymentEntries)}
+    <div class="facts">
+      <div class="fact"><label>Payments Received</label><strong>${esc(money(data.payments_received || 0))}</strong></div>
+      <div class="fact"><label>Disbursed</label><strong>${esc(money(data.disbursed || 0))}</strong></div>
+      <div class="fact stl-balance-due"><label>Balance Due</label><strong>${esc(money(balanceDue))}</strong></div>
+    </div>
+    <p class="stl-note">Balance Due = Gross Revenue &minus; Payments Received (deposits, invoice payments, credits). Payouts already disbursed to artists, promoters, vendors, or staff are shown separately above and do not reduce this figure.</p>
+
+    ${lineupRows ? `<h2 class="section">Artist / Lineup Payouts</h2>
+    <table>
+      <thead><tr><th>Artist</th><th>Status</th><th>Payout Terms</th></tr></thead>
+      <tbody>${lineupRows}</tbody>
+    </table>` : ''}
+
+    ${manualBlock}
+
+    <h2 class="section">Signatures</h2>
+    <div class="stl-party">Venue Representative</div>
+    <p class="stl-sign-line">Name: <span class="stl-fill"></span></p>
+    <p class="stl-sign-line">Signature: <span class="stl-fill"></span></p>
+    <p class="stl-sign-line">Date: <span class="stl-fill short"></span></p>
+    <div class="stl-party">Artist / Promoter Representative</div>
+    <p class="stl-sign-line">Name: <span class="stl-fill"></span></p>
+    <p class="stl-sign-line">Signature: <span class="stl-fill"></span></p>
+    <p class="stl-sign-line">Date: <span class="stl-fill short"></span></p>
+  </div>`;
+}
+
+
 function renderPrintBody(type, data) {
   switch (type) {
     case 'one-sheet':    return renderOneSheet(data);
     case 'contract':     return renderContract(data);
     case 'qr-flyer':     return renderQrFlyer(data);
+    case 'settlement':   return renderSettlementSection(data);
     case 'lineup':       return renderLineupSection(data);
     case 'staffing':     return renderStaffingSection(data);
     case 'run-of-show':  return renderRunOfShowSection(data);
@@ -666,7 +843,7 @@ function openPrintWindow(type, data) {
     <button type="button" onclick="window.close()">Close</button>
   </div>
   <article class="sheet">
-    ${type === 'one-sheet' || type === 'contract' || type === 'qr-flyer' ? '' : printHeader(data, title)}
+    ${type === 'one-sheet' || type === 'contract' || type === 'qr-flyer' || type === 'settlement' ? '' : printHeader(data, title)}
     ${body}
     ${printFooter(data)}
   </article>
