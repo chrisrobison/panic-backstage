@@ -99,6 +99,7 @@ const PRINT_CSS = `
   .settlement .stl-sign-line { margin: 14px 0 4px; }
   .settlement .stl-fill { display: inline-block; min-width: 260px; border-bottom: 1px solid #111; }
   .settlement .stl-fill.short { min-width: 200px; }
+  .settlement .stl-owed { font-weight: 700; font-size: 12pt; }
 
   /* QR Flyer — bold door-poster sheet: huge title, huge scannable QR, price/doors,
      then a stacked all-caps lineup. Pure black-on-white, no boxes/rules, meant to
@@ -724,6 +725,15 @@ function renderSettlementSection(data) {
 
   const balanceDue = Number(data.balance_due || 0);
 
+  const payoutObligations = data.payout_obligations || [];
+  const payoutRows = payoutObligations.map((p) => `<tr>
+      <td>${esc(p.label)}</td>
+      <td class="num">${esc(money(p.committed))}</td>
+      <td class="num">${esc(money(p.disbursed))}</td>
+      <td class="num stl-owed">${esc(money(p.still_owed))}</td>
+    </tr>`).join('');
+  const payoutStillOwedTotal = payoutObligations.reduce((sum, p) => sum + Number(p.still_owed || 0), 0);
+
   const manualBlock = manual ? `
     <h2 class="section">Door / Manual Settlement Record</h2>
     <p class="stl-note">Hand-entered on the Settlement tab the night of the show — kept as a supplementary record; the Revenue/Costs/Payments figures above (from the Closeout ledger) are authoritative.</p>
@@ -782,9 +792,9 @@ function renderSettlementSection(data) {
     <div class="facts">
       <div class="fact"><label>Payments Received</label><strong>${esc(money(data.payments_received || 0))}</strong></div>
       <div class="fact"><label>Disbursed</label><strong>${esc(money(data.disbursed || 0))}</strong></div>
-      <div class="fact stl-balance-due"><label>Balance Due</label><strong>${esc(money(balanceDue))}</strong></div>
+      <div class="fact stl-balance-due"><label>Balance Due From Client</label><strong>${esc(money(balanceDue))}</strong></div>
     </div>
-    <p class="stl-note">Balance Due = Gross Revenue &minus; Payments Received (deposits, invoice payments, credits). Payouts already disbursed to artists, promoters, vendors, or staff are shown separately above and do not reduce this figure.</p>
+    <p class="stl-note">Balance Due From Client = Gross Revenue &minus; Payments Received (deposits, invoice payments, credits) &mdash; what the client/promoter still owes the venue for the room, not a payout the venue owes anyone. Payouts already disbursed to artists, promoters, vendors, or staff are shown separately above and do not reduce this figure.</p>
 
     ${lineupRows ? `<h2 class="section">Artist / Lineup Payouts</h2>
     <table>
@@ -793,6 +803,14 @@ function renderSettlementSection(data) {
     </table>` : ''}
 
     ${manualBlock}
+
+    ${payoutRows ? `<h2 class="section">Payout Obligations &mdash; Sign-Off Required</h2>
+    <p class="stl-note">Revenue-split / guarantee amounts committed on the Closeout ledger (promoter_settlement / artist_guarantee cost entries), net of whatever's already been disbursed (promoter_payout / artist_payout payment entries). "Still Owed" is the amount awaiting approval before disbursement.</p>
+    <table>
+      <thead><tr><th>Party</th><th class="num">Committed</th><th class="num">Disbursed</th><th class="num">Still Owed</th></tr></thead>
+      <tbody>${payoutRows}</tbody>
+      <tfoot><tr><td colspan="3">Total Still Owed</td><td class="num stl-owed">${esc(money(payoutStillOwedTotal))}</td></tr></tfoot>
+    </table>` : ''}
 
     <h2 class="section">Signatures</h2>
     <div class="stl-party">Venue Representative</div>

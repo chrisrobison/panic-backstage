@@ -89,6 +89,17 @@ class EventReport extends PanicElement {
         <td>${esc(l.payout_terms || '—')}</td>
       </tr>`).join('');
 
+    // Revenue-split / guarantee sign-off: promoter_settlement / artist_guarantee
+    // cost entries (what's been committed) net of promoter_payout / artist_payout
+    // payment entries (what's already been disbursed) — see src/Events/Report.php.
+    const payoutObligations = d.payout_obligations || [];
+    const payoutRows = payoutObligations.map((p) => `<tr>
+        <td>${esc(p.label)}</td>
+        <td class="amount">${esc(money(p.committed))}</td>
+        <td class="amount">${esc(money(p.disbursed))}</td>
+        <td class="amount"><strong>${esc(money(p.still_owed))}</strong></td>
+      </tr>`).join('');
+
     const closeout = d.closeout || {};
     const closeoutLabel = closeout.finalized_at
       ? `Finalized ${shortDate(eventDate({ date: closeout.finalized_at.slice(0, 10) }))}`
@@ -138,9 +149,9 @@ class EventReport extends PanicElement {
           <div class="summary-card er-balance">
             <div class="summary-row"><span class="label">Payments Received</span><span class="value">${esc(money(d.payments_received || 0))}</span></div>
             <div class="summary-row"><span class="label">Disbursed</span><span class="value">${esc(money(d.disbursed || 0))}</span></div>
-            <div class="summary-row"><span class="label">Balance Due</span><span class="value" style="color:${Number(d.balance_due || 0) > 0 ? 'var(--red, #ef4338)' : 'var(--green, #0f8f46)'}">${esc(money(d.balance_due || 0))}</span></div>
+            <div class="summary-row"><span class="label">Balance Due From Client</span><span class="value" style="color:${Number(d.balance_due || 0) > 0 ? 'var(--red, #ef4338)' : 'var(--green, #0f8f46)'}">${esc(money(d.balance_due || 0))}</span></div>
           </div>
-          <p class="er-note">Balance Due = Gross Revenue − Payments Received (deposits, invoice payments, credits). Payouts already disbursed to artists, promoters, vendors, or staff are shown separately and don't reduce this figure.</p>
+          <p class="er-note">Balance Due From Client = Gross Revenue − Payments Received (deposits, invoice payments, credits) — what the client/promoter still owes the venue for the room, not a payout the venue owes anyone. Payouts already disbursed to artists, promoters, vendors, or staff are shown separately and don't reduce this figure.</p>
 
           ${(d.ticket_types || []).length ? `
           <h3 class="panel-subtitle">Ticket Sales</h3>
@@ -181,6 +192,14 @@ class EventReport extends PanicElement {
             <div class="summary-row"><span class="label">Band Payouts</span><span class="value">${esc(money(d.manual_settlement.band_payouts || 0))}</span></div>
             <div class="summary-row"><span class="label">Promoter Payout</span><span class="value">${esc(money(d.manual_settlement.promoter_payout || 0))}</span></div>
           </div>` : ''}
+
+          ${payoutObligations.length ? `
+          <h3 class="panel-subtitle">Payout Obligations — Sign-Off Required</h3>
+          <p class="er-note">Revenue-split / guarantee amounts committed on the Closeout ledger (promoter_settlement / artist_guarantee cost entries), net of whatever's already been disbursed (promoter_payout / artist_payout payment entries). "Still Owed" is the amount awaiting approval before disbursement.</p>
+          <table class="data-table er-table">
+            <thead><tr><th>Party</th><th>Committed</th><th>Disbursed</th><th>Still Owed</th></tr></thead>
+            <tbody>${payoutRows}</tbody>
+          </table>` : ''}
 
         </div>
       </section>

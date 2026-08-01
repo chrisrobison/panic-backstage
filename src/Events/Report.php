@@ -18,11 +18,14 @@ use Panic\Response;
  * vendor bill, the staffing labor cost, the lineup payout terms, a
  * ticket-type sales breakdown, the raw ledger line items (so a printed
  * statement can reproduce Closeout's Revenue/Costs/Payments grouping
- * exactly), a payments-received/disbursed/balance-due split, and a fallback
- * to the manually-entered Settlement tab figures for shows where tickets
- * sold outside this app's own ticketing module. Nothing here is editable —
- * it's a reporting view over data owned by Ledger, Vendors, Staffing,
- * Lineup, Ticketing and Settlement.
+ * exactly), a payments-received/disbursed/balance-due split, a
+ * payout-obligations net (committed promoter_settlement/artist_guarantee
+ * cost entries minus whatever's already been disbursed — the sign-off
+ * number for a revenue-split payout, distinct from the client-billing
+ * balance due), and a fallback to the manually-entered Settlement tab
+ * figures for shows where tickets sold outside this app's own ticketing
+ * module. Nothing here is editable — it's a reporting view over data owned
+ * by Ledger, Vendors, Staffing, Lineup, Ticketing and Settlement.
  *
  * Capability: view_settlement (same gate as the Settlement + Closeout tabs).
  */
@@ -112,6 +115,40 @@ final class Report extends BaseEndpoint
         }
         $balanceDue = (float) $summary['gross_revenue'] - $paymentsReceived;
 
+        // ── Payout obligations (revenue-split / guarantee sign-off) ───────────
+        // Separate from the client-billing balance above: a venue running a
+        // door-split deal records the computed split as a Cost-type entry
+        // (promoter_settlement / artist_guarantee — "what we've committed to
+        // pay out"), then later records the actual disbursement as a
+        // Payment-type entry (promoter_payout / artist_payout) once it's been
+        // approved and paid. "Still owed" nets the two, so a report generated
+        // *before* the payout entry exists shows the full committed amount —
+        // the number that needs sign-off before the money goes out the door.
+        $payoutPairs = [
+            'promoter_settlement' => ['label' => 'Promoter', 'payout_category' => 'promoter_payout'],
+            'artist_guarantee'    => ['label' => 'Artist',    'payout_category' => 'artist_payout'],
+        ];
+        $payoutObligations = [];
+        foreach ($payoutPairs as $costCategory => $meta) {
+            $committed = 0.0;
+            $paidOut   = 0.0;
+            foreach ($ledgerEntries as $entry) {
+                if ($entry['line_type'] === 'cost' && $entry['category'] === $costCategory) {
+                    $committed += (float) $entry['amount'];
+                } elseif ($entry['line_type'] === 'payment' && $entry['category'] === $meta['payout_category']) {
+                    $paidOut += (float) $entry['amount'];
+                }
+            }
+            if ($committed > 0 || $paidOut > 0) {
+                $payoutObligations[] = [
+                    'label'      => $meta['label'],
+                    'committed'  => $committed,
+                    'disbursed'  => $paidOut,
+                    'still_owed' => $committed - $paidOut,
+                ];
+            }
+        }
+
         $vendors = $this->db->all(
             "SELECT service_category, company_name,
                     COALESCE(actual_amount, approved_amount, quote_amount, 0) amount,
@@ -190,6 +227,7 @@ final class Report extends BaseEndpoint
             'disbursed'         => $disbursed,
             'outstanding_noted' => $outstandingNoted,
             'balance_due'       => $balanceDue,
+            'payout_obligations' => $payoutObligations,
         ]);
     }
 }
