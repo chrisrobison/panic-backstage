@@ -685,6 +685,15 @@ function renderSettlementSection(data) {
     ? 'Reported at settlement — sold at the door or through an outside ticketing service, not this app’s in-house ticketing.'
     : data.ticket_sales_source === 'box_office' ? 'Sold through in-house ticketing.' : '';
 
+  // Ticket types that exist (created for advance sales, comps, etc.) but sold
+  // zero seats in-house usually means the show sold through an outside
+  // ticketing service or at the door instead — showing a per-type table of
+  // all-zero rows would misleadingly read as "nothing sold" even though
+  // ticketsSold/grossTicketSales above (the effective, fallen-back-to-manual
+  // figures) say otherwise. Only render the breakdown when at least one
+  // in-house sale actually happened; the effective totals in the facts strip
+  // already cover the door/outside-ticketing case.
+  const inHouseTicketsSold = (data.ticket_types || []).reduce((sum, t) => sum + Number(t.sold || 0), 0);
   const ticketRows = (data.ticket_types || []).map((t) => `<tr>
       <td>${esc(t.name)}</td>
       <td class="num">${esc(money(t.price))}</td>
@@ -747,7 +756,7 @@ function renderSettlementSection(data) {
 
     <h2 class="section">Revenue</h2>
     ${settlementTable('Revenue', revenueEntries)}
-    ${ticketRows ? `<h3 class="subsection">Ticket Sales</h3>
+    ${inHouseTicketsSold > 0 ? `<h3 class="subsection">Ticket Sales</h3>
     <table>
       <thead><tr><th>Type</th><th class="num">Price</th><th class="num">Sold / Total</th><th class="num">Gross</th></tr></thead>
       <tbody>${ticketRows}</tbody>
