@@ -5,7 +5,7 @@
 // staffing labor cost, lineup payout terms, and a ticket-type breakdown.
 // Source: GET /api/events/{id}/report (src/Events/Report.php).
 
-import { esc, titleCase, api, money, shortDate, eventDate, emptyState, PanicElement, $ } from './core.js';
+import { esc, titleCase, api, money, shortDate, eventDate, emptyState, PanicElement, $, appUrl, publish } from './core.js';
 import { openPrintWindow } from './print.js';
 
 class EventReport extends PanicElement {
@@ -138,7 +138,10 @@ class EventReport extends PanicElement {
       <section class="panel rpt-print-area">
         <div class="section-head padded">
           <h2>P&amp;L / Settlement Report</h2>
-          <button type="button" class="secondary small" data-print-report><i class="fa-solid fa-print" aria-hidden="true"></i> Print</button>
+          <div class="section-head-actions">
+            <button type="button" class="secondary small" data-copy-report-link title="Copy a link straight to this event's Report tab (staff/owner login required — for an external, no-login link use the header's Share button instead)"><i class="fa-solid fa-link" aria-hidden="true"></i> Copy Link</button>
+            <button type="button" class="secondary small" data-print-report><i class="fa-solid fa-print" aria-hidden="true"></i> Print</button>
+          </div>
         </div>
         <div class="panel-body">
 
@@ -269,6 +272,9 @@ class EventReport extends PanicElement {
     // the sidebar/tab bar) printed the whole workspace chrome along with the
     // report instead of a clean statement.
     $('[data-print-report]', this)?.addEventListener('click', () => openPrintWindow('settlement', this._data));
+    $('[data-copy-report-link]', this)?.addEventListener('click', () => {
+      navigator.clipboard.writeText(appUrl(`#event-${event.id}-report`)).then(() => publish('toast.show', { message: 'Report link copied!' }));
+    });
   }
 }
 customElements.define('pb-event-report', EventReport);

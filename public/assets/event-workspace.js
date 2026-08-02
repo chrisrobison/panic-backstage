@@ -663,7 +663,11 @@ class EventWorkspace extends PanicElement {
     const prefs = this._loadPrefs(userId, event.id, toggleableTabs);
     this._tabs = tabs;
     this._prefs = prefs;
-    if (!this._activeTab) this._activeTab = 'overview';
+    // `initialTab` comes from a `#event-<id>-<tab>` deep link (app.js's
+    // router) — e.g. a "Copy Link" button on the Report tab. Only honored
+    // on first render and only if it's actually a visible tab; falls back
+    // to Overview exactly like before otherwise.
+    if (!this._activeTab) this._activeTab = (this.initialTab && tabs.includes(this.initialTab)) ? this.initialTab : 'overview';
     const sectionsDropdown = `<details class="print-menu sections-menu">
       <summary class="button secondary">Sections &#9662;</summary>
       <div class="print-menu-items">
@@ -701,7 +705,7 @@ class EventWorkspace extends PanicElement {
           </div>
         </details>` : ''}
         ${(!isPrivate && can(data, 'publish_event')) ? `<button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>` : ''}
-        ${can(data, 'manage_contracts') ? `<button class="secondary" data-portal-toggle title="Generate a read-only portal link for a promoter or client"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i> Share</button>` : ''}
+        ${(can(data, 'manage_contracts') || (can(data, 'view_settlement') && !isPrivate)) ? `<button class="secondary" data-portal-toggle title="Generate a read-only link for a promoter or client — client portal and/or settlement report, no login required"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i> Share</button>` : ''}
         <!-- "Set as POS Event" hidden for now: Square is used for online ticketing only,
              not an in-venue POS terminal, so there is no pos_location_map to route to.
              Restore the button below (handler + setPosEvent are still wired) once a POS
@@ -782,6 +786,11 @@ class EventWorkspace extends PanicElement {
     const portalPanel = $('pb-portal-panel', this);
     if (portalPanel) {
       portalPanel.eventId = event.id;
+      const allowedKinds = [
+        ...(can(data, 'manage_contracts') ? ['client_portal'] : []),
+        ...(can(data, 'view_settlement') && !isPrivate ? ['settlement_report'] : []),
+      ];
+      portalPanel.kinds = allowedKinds;
       $('[data-portal-toggle]', this)?.addEventListener('click', () => portalPanel.toggle());
     }
     const historyUndoEl = $('pb-event-history-undo', this);
@@ -1244,16 +1253,37 @@ class EventRecurrencePanel extends PanicElement {
 // EventPayments._openPaymentForm below and the *.js openModal() helpers
 // elsewhere in the app), not inline in the workspace flow — this element
 // itself stays empty and just holds state/the dialog reference.
+// Kinds of shareable, token-gated, no-login link this panel can generate —
+// see src/Portal.php's class doc block. Keyed by the value stored/sent as
+// portal_tokens.kind; label/blurb drive the create-form's dropdown (when
+// more than one kind is available) and the badge on each existing link row.
+const PORTAL_LINK_KINDS = {
+  client_portal: {
+    label: 'Client Portal',
+    blurb: 'Event details, contract status, payments, and invoice.',
+  },
+  settlement_report: {
+    label: 'Settlement Report',
+    blurb: 'The full P&L / Settlement Report — same numbers as the printed statement, including staffing and vendor detail.',
+  },
+};
+
 class PortalPanel extends PanicElement {
   connect() {
     this._eventId = null;
     this._links   = [];
     this._dialog  = null;
+    this._kinds   = ['client_portal'];
     this.innerHTML = '';
   }
 
   set eventId(id) {
     this._eventId = id;
+  }
+
+  /** Which link kinds this user is allowed to create for this event — set by event-workspace.js based on capabilities (client_portal needs manage_contracts, settlement_report needs view_settlement). */
+  set kinds(list) {
+    this._kinds = list && list.length ? list : ['client_portal'];
   }
 
   /** Open the Share modal (loading links on first open), or close it if already open. */
@@ -1291,11 +1321,11 @@ class PortalPanel extends PanicElement {
     if (this._dialog) this.renderDialog();
   }
 
-  async createLink(label, ttlDays) {
+  async createLink(label, ttlDays, kind) {
     try {
       const res = await api(`/portal/${this._eventId}/create-link`, {
         method: 'POST',
-        body: JSON.stringify({ event_id: this._eventId, label, ttl_days: ttlDays }),
+        body: JSON.stringify({ event_id: this._eventId, label, ttl_days: ttlDays, kind }),
       });
       if (res.url) {
         await this.loadLinks();
@@ -1324,10 +1354,12 @@ class PortalPanel extends PanicElement {
     const active = (this._links || []).filter(l => !Number(l.is_revoked) && new Date(l.expires_at) > new Date());
     const revoked = (this._links || []).filter(l => Number(l.is_revoked) || new Date(l.expires_at) <= new Date());
 
+    const kindBadge = (kind) => `<span class="portal-link-kind">${esc((PORTAL_LINK_KINDS[kind] || PORTAL_LINK_KINDS.client_portal).label)}</span>`;
+
     const linkRows = active.map(l => `
       <div class="portal-link-row">
         <div class="portal-link-meta">
-          <span class="portal-link-label">${esc(l.label || 'Portal link')}</span>
+          <span class="portal-link-label">${esc(l.label || 'Portal link')}</span> ${kindBadge(l.kind)}
           <span class="portal-link-info">Used ${l.use_count}x &nbsp;·&nbsp; Expires ${shortDate(new Date(l.expires_at))}</span>
         </div>
         <input class="portal-link-url" type="text" readonly value="${esc(l.url)}" data-portal-url="${esc(l.token)}" onclick="this.select()">
@@ -1341,14 +1373,24 @@ class PortalPanel extends PanicElement {
       ? `<p class="portal-revoked-note">${revoked.length} revoked / expired link${revoked.length === 1 ? '' : 's'} not shown.</p>`
       : '';
 
+    // Only show a "what kind of link" dropdown when this user can create
+    // more than one kind (e.g. view_settlement but not manage_contracts
+    // means settlement_report is the only option) — see `kinds` setter.
+    const kindOptions = this._kinds.map(k => `<option value="${esc(k)}">${esc((PORTAL_LINK_KINDS[k] || {}).label || k)}</option>`).join('');
+    const singleKind = this._kinds.length === 1 ? this._kinds[0] : null;
+    const blurb = singleKind
+      ? (PORTAL_LINK_KINDS[singleKind] || {}).blurb || ''
+      : 'Generate a read-only link — no login required. Pick what it shows below.';
+
     this._dialog.innerHTML = `<div class="modal-card">
       <div class="section-head padded">
-        <h2>Share Portal Link</h2>
+        <h2>Share Link</h2>
         <button type="button" class="small secondary" data-close>Close</button>
       </div>
       <div class="padded">
-        <p class="portal-panel-blurb">Generate a read-only link for a promoter or client. The link shows event details, contract status, payments, and invoice — no login required.</p>
+        <p class="portal-panel-blurb">${esc(blurb)}</p>
         <form class="portal-create-form" data-create-form>
+          ${singleKind ? `<input type="hidden" name="kind" value="${esc(singleKind)}">` : `<select name="kind" class="portal-kind-select">${kindOptions}</select>`}
           <input type="text" name="label" placeholder="Label, e.g. &quot;Sent to Jane Smith&quot;" class="portal-label-input">
           <select name="ttl_days" class="portal-ttl-select">
             <option value="7">Expires in 7 days</option>
@@ -1370,8 +1412,9 @@ class PortalPanel extends PanicElement {
       const form    = e.target;
       const label   = form.label.value.trim();
       const ttlDays = parseInt(form.ttl_days.value, 10) || 30;
+      const kind    = form.kind.value;
       form.querySelector('[type="submit"]').disabled = true;
-      await this.createLink(label, ttlDays);
+      await this.createLink(label, ttlDays, kind);
       form.querySelector('[type="submit"]').disabled = false;
       form.label.value = '';
     });

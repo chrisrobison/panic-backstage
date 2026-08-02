@@ -5889,13 +5889,24 @@ pb-admin-wizard-defaults { display: block; }
   background: var(--bg);
   color: var(--ink);
 }
-.portal-ttl-select {
+.portal-ttl-select,
+.portal-kind-select {
   font: inherit;
   padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--bg);
   color: var(--ink);
+}
+.portal-link-kind {
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--accent, #1a56c4);
+  background: var(--accent-soft, #dbeafe);
+  border-radius: 99px;
+  padding: 2px 8px;
 }
 .portal-links-list {
   display: flex;

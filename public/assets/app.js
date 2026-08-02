@@ -398,6 +398,13 @@ class AppShell extends PanicElement {
       if (searchInput && searchInput.value !== query) searchInput.value = query;
       return this.mount(outlet, 'pb-search-results', { query });
     }
+    // `#event-<id>-<tab>` deep-links straight to one tab (e.g. a "Copy Link"
+    // button on the Settlement Report tab building `#event-285443-report`)
+    // instead of always landing on Overview — pb-event-workspace validates
+    // the tab id itself (falls back to Overview if unknown/hidden), this
+    // just has to not misparse a plain `#event-<id>` as a match.
+    const eventTabMatch = route.match(/^event-(\d+)-([a-z-]+)$/);
+    if (eventTabMatch) return this.mount(outlet, 'pb-event-workspace', { eventId: Number(eventTabMatch[1]), initialTab: eventTabMatch[2] });
     if (route.startsWith('event-')) return this.mount(outlet, 'pb-event-workspace', { eventId: Number(route.slice(6)) });
     if (route.startsWith('contract-')) return this.mount(outlet, 'pb-contract-editor', { contractId: Number(route.slice(9)) });
     if (route === 'reports')    return this.mount(outlet, 'pb-reports-page');

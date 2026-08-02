@@ -7589,7 +7589,17 @@ components:
           nullable: true
     PortalViewResponse:
       type: object
+      description: >-
+        Shape depends on the token's `kind` (see PortalCreateLinkRequest). For the default
+        `client_portal` kind this is the narrow event/contract/payments/invoice subset below.
+        For `settlement_report`, `kind` is `settlement_report` and the rest of the body is
+        instead the exact same payload as `GET /api/events/{id}/report` (Events\Report::buildData()) —
+        summary, ledger_entries, vendors, staffing, lineup, ticket_types, payout_obligations,
+        bottom_line_amount/bottom_line_type, etc. — not modeled as a separate schema here.
       properties:
+        kind:
+          type: string
+          enum: [client_portal, settlement_report]
         event:
           $ref: '#/components/schemas/PortalEventSummary'
         contract:
@@ -7605,6 +7615,15 @@ components:
     PortalCreateLinkRequest:
       type: object
       properties:
+        kind:
+          type: string
+          enum: [client_portal, settlement_report]
+          default: client_portal
+          description: >-
+            client_portal (default) needs only an authenticated session. settlement_report
+            additionally requires the view_settlement capability on this event — it hands out
+            the full P&L/Settlement Report (staffing names, vendor costs, payout detail) with
+            no login required via the link.
         ttl_days:
           type: integer
           minimum: 1
@@ -7620,8 +7639,12 @@ components:
           type: integer
         token:
           type: string
+        kind:
+          type: string
+          enum: [client_portal, settlement_report]
         url:
           type: string
+          description: portal.html?token=... for client_portal, report-share.html?token=... for settlement_report.
         expires_days:
           type: integer
         label:
@@ -7634,6 +7657,9 @@ components:
           type: integer
         token:
           type: string
+        kind:
+          type: string
+          enum: [client_portal, settlement_report]
         label:
           type: string
           nullable: true
@@ -22093,15 +22119,16 @@ paths:
   /api/portal/view:
     get:
       operationId: portal_view
-      summary: View the token-gated client portal for an event
+      summary: View a token-gated shareable link (client portal or settlement report)
       description: >-
         PUBLIC — no JWT; gated entirely by the opaque `token` query parameter
         (`portal_tokens.token`, 256-bit random hex, must be unrevoked and unexpired). Bumps
-        `last_used_at`/`use_count` on every successful view. Returns a deliberately narrow,
-        client-safe subset: event summary (no internal notes/capabilities), the most-advanced
-        contract's id/status/created_at only, inbound payments (`event_payments` rows with
-        `direction='received'`), and an invoice-style view of ledger revenue/payment lines
-        (`event_ledger_entries` where `line_type IN ('revenue','payment')` and not voided).
+        `last_used_at`/`use_count` on every successful view. Response shape depends on the
+        token's `kind`: the default `client_portal` returns a deliberately narrow, client-safe
+        subset (event summary with no internal notes/capabilities, the most-advanced contract's
+        id/status/created_at only, inbound payments, and an invoice-style ledger view);
+        `settlement_report` instead returns the full `GET /api/events/{id}/report` payload
+        (Events\Report::buildData()) — the same numbers as the printed Settlement Statement.
       tags:
         - Client Portal
       security: []
@@ -22133,13 +22160,16 @@ paths:
   /api/portal/{eventId}/create-link:
     post:
       operationId: portal_createLink
-      summary: Generate a new client portal link for an event
+      summary: Generate a new shareable, no-login link for an event (client portal or settlement report)
       description: >-
         Creates a `portal_tokens` row with a 256-bit random hex token (`bin2hex(random_bytes(32))`)
-        and a TTL clamped to 1–90 days (default 30). Returns the shareable `portal.html?token=...`
-        URL. Requires only an authenticated session (`requireAuth()`) — unlike other Contracts group
-        write operations, this endpoint does not additionally gate on a specific event capability
-        such as `manage_contracts`; any logged-in user may generate a link for any existing event.
+        and a TTL clamped to 1–90 days (default 30). Returns the shareable URL — `portal.html?token=...`
+        for the default `client_portal` kind, `report-share.html?token=...` for `settlement_report`.
+        `client_portal` requires only an authenticated session (`requireAuth()`) — unlike other
+        Contracts group write operations, it does not additionally gate on a specific event
+        capability such as `manage_contracts`; any logged-in user may generate one for any existing
+        event. `settlement_report` additionally requires `view_settlement` on the event, since that
+        link exposes the full P&L detail (staffing, vendor costs, payout obligations) with no login.
       tags:
         - Client Portal
       parameters:
@@ -22181,10 +22211,11 @@ paths:
   /api/portal/{eventId}/list-links:
     get:
       operationId: portal_listLinks
-      summary: List all portal links for an event
+      summary: List all shareable links for an event
       description: >-
-        Returns every `portal_tokens` row for the event (including revoked and expired ones) with a
-        computed shareable `url`. Requires only an authenticated session (`requireAuth()`) — not
+        Returns every `portal_tokens` row for the event (including revoked and expired ones, of
+        either `kind`) with a computed shareable `url` (`portal.html` or `report-share.html`
+        depending on `kind`). Requires only an authenticated session (`requireAuth()`) — not
         gated by a specific event capability.
       tags:
         - Client Portal

@@ -12,6 +12,12 @@ use Panic\Response;
  *
  *   GET /api/events/{id}/report
  *
+ * buildData() (the reusable core, split out from handle()) also backs the
+ * token-gated public share link at GET /api/portal/view?token=... when the
+ * token's kind is 'settlement_report' — see src/Portal.php. Same data,
+ * same numbers, two entry points: one needs a staff login + view_settlement,
+ * the other just needs the link.
+ *
  * Combines Ledger::calculateSummary() (the same server-computed P&L used by
  * the Closeout tab — never recomputed differently here) with the cost detail
  * that usually explains *why* the ledger total looks the way it does: the
@@ -88,12 +94,31 @@ final class Report extends BaseEndpoint
             return Response::methodNotAllowed();
         }
 
+        $data = $this->buildData($eventId);
+        if ($data === null) {
+            return $this->notFound('Event not found');
+        }
+
+        return $this->ok($data);
+    }
+
+    /**
+     * Builds the full report payload for one event — everything this
+     * endpoint's handle() returns, minus the HTTP/capability plumbing.
+     * Pulled out so Portal::view() can hand the exact same data to a
+     * token-gated public "share this report" link (see src/Portal.php)
+     * without duplicating any of this SQL/derivation logic. Returns null
+     * if the event doesn't exist; callers own their own auth/capability
+     * check before calling this (this method does not check any).
+     */
+    public function buildData(int $eventId): ?array
+    {
         $event = $this->db->one(
             'SELECT e.*, v.name venue_name FROM events e LEFT JOIN venues v ON v.id = e.venue_id WHERE e.id = ?',
             [$eventId]
         );
         if (!$event) {
-            return $this->notFound('Event not found');
+            return null;
         }
 
         $summary  = (new Ledger($this->db, $this->auth, [], $this->root))->calculateSummary($eventId);
@@ -275,7 +300,7 @@ final class Report extends BaseEndpoint
             return $t;
         }, $ticketTypes);
 
-        return $this->ok([
+        return [
             'event' => [
                 'id'         => (int) $event['id'],
                 'title'      => $event['title'],
@@ -308,6 +333,6 @@ final class Report extends BaseEndpoint
             'payout_still_owed'  => $payoutStillOwed,
             'bottom_line_amount' => abs($bottomLineAmount),
             'bottom_line_type'   => $bottomLineType,
-        ]);
+        ];
     }
 }

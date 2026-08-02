@@ -17,7 +17,7 @@ test('Share button opens the portal panel as a modal dialog, not inline', async 
   await page.click('[data-portal-toggle]');
   await page.until(`document.querySelector('.modal-backdrop .modal-card')`);
   assert.ok(await page.exists('.modal-backdrop .modal-card'), 'Share click opens a modal-card dialog');
-  assert.includes(await page.text('.modal-backdrop h2'), 'Share Portal Link', 'modal header is the portal panel content');
+  assert.includes(await page.text('.modal-backdrop h2'), 'Share Link', 'modal header is the portal panel content');
   // It should no longer render inline in the workspace toolbar/flow.
   assert.ok(!(await page.exists('pb-portal-panel .portal-panel')), 'portal panel no longer renders inline');
 
@@ -56,4 +56,10 @@ test('Share modal: generating a link shows it in the active list', async (page) 
     row?.querySelector('[data-revoke]')?.click();
   })()`);
   await page.until(`!document.querySelector('.modal-backdrop .portal-links-list')?.textContent.includes(${JSON.stringify(label)})`);
+  // ...and close the dialog. Leaving it open would trip up any later test
+  // whose openEvent() targets this same event id: re-navigating to an
+  // unchanged #event-<id> hash doesn't fire a hashchange, so the workspace
+  // never remounts to clear a leftover modal on its own.
+  await page.click('.modal-backdrop [data-close]');
+  await page.until(`!document.querySelector('.modal-backdrop')`);
 });

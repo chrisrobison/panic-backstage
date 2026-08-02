@@ -913,4 +913,9 @@ function openPrintWindow(type, data) {
   win.focus();
 }
 
-export { openPrintWindow };
+// renderPrintBody/PRINT_CSS/printFooter are also exported for
+// public/report-share.html — the token-gated public "share this report"
+// link (src/Portal.php, kind='settlement_report') renders the exact same
+// Settlement Statement markup/styles as this popup, just hosted at a plain
+// URL instead of window.open(), and with no staff session involved.
+export { openPrintWindow, renderPrintBody, PRINT_CSS, printFooter };

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `reports` — Add shareable links for the Settlement Report
 - **Fixed** `reports` — Hide Ticket Sales table when nothing sold in-house
 - **Fixed** `reports` — Right-align Payout Obligations table headers
 - **Fixed** `reports` — Replace misleading balance-due with a deal-aware bottom line

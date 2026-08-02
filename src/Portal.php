@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use Panic\Events\Report;
+
 /**
  * Client-facing read-only portal — token-gated, no staff login required.
  *
@@ -18,9 +20,22 @@ namespace Panic;
  * Portal::class is also listed in isPublic() so the 'view' action is
  * reachable without a JWT; the staff actions perform their own
  * requireAuth() check.
+ *
+ * Every token has a `kind` (portal_tokens.kind — see migration 089):
+ *   - client_portal:     the original use — event/contract/payments/invoice
+ *     subset for a promoter or client, rendered by public/portal.html.
+ *     Creating one only requires manage_contracts.
+ *   - settlement_report: the full P&L/Settlement Report (Events\Report's
+ *     buildData(), the same data the printed Settlement Statement uses),
+ *     rendered by public/report-share.html. Because that data includes
+ *     staffing names, vendor costs, and payout detail, creating one of
+ *     these requires view_settlement on the specific event, checked in
+ *     createLink() in addition to the generic requireAuth().
  */
 final class Portal extends BaseEndpoint
 {
+    private const KINDS = ['client_portal', 'settlement_report'];
+
     public function handle(Request $request): Response
     {
         $action = $this->params['action'] ?? '';
@@ -64,6 +79,14 @@ final class Portal extends BaseEndpoint
             [$token]
         );
 
+        if (($row['kind'] ?? 'client_portal') === 'settlement_report') {
+            $report = (new Report($this->db, $this->auth, [], $this->root))->buildData($eventId);
+            if ($report === null) {
+                return Response::json(['error' => 'Link expired or invalid'], 404);
+            }
+            return $this->ok(['kind' => 'settlement_report'] + $report);
+        }
+
         // Fetch event summary — safe public subset only (no internal notes, no capabilities)
         $event = $this->db->one(
             'SELECT id, title, status, event_type, show_time, doors_time, end_time,
@@ -101,6 +124,7 @@ final class Portal extends BaseEndpoint
         );
 
         return $this->ok([
+            'kind'     => 'client_portal',
             'event'    => $event,
             'contract' => $contract,
             'payments' => $payments,
@@ -128,21 +152,35 @@ final class Portal extends BaseEndpoint
             return $this->notFound('Event not found');
         }
 
+        $kind = (string) ($b['kind'] ?? 'client_portal');
+        if (!in_array($kind, self::KINDS, true)) {
+            return Response::json(['error' => 'Invalid kind'], 422);
+        }
+        // A settlement-report link hands out staffing names, vendor costs,
+        // and payout detail with no login required — gate creating one on
+        // the same capability the in-app Report tab and print statement
+        // require, not just "any authenticated user" like the client portal.
+        if ($kind === 'settlement_report' && ($denied = $this->requireEventCapability($eventId, 'view_settlement'))) {
+            return $denied;
+        }
+
         $ttlDays = max(1, min(90, (int) ($b['ttl_days'] ?? 30)));
         $token   = bin2hex(random_bytes(32));   // 64-char hex, 256-bit entropy
         $label   = trim((string) ($b['label'] ?? ''));
 
         $id = $this->db->insert(
-            'INSERT INTO portal_tokens (event_id, token, label, created_by_id, expires_at)
-             VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))',
-            [$eventId, $token, $label !== '' ? $label : null, $this->userId(), $ttlDays]
+            'INSERT INTO portal_tokens (event_id, kind, token, label, created_by_id, expires_at)
+             VALUES (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))',
+            [$eventId, $kind, $token, $label !== '' ? $label : null, $this->userId(), $ttlDays]
         );
 
-        $portalUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/') . '/portal.html?token=' . $token;
+        $page      = $kind === 'settlement_report' ? 'report-share.html' : 'portal.html';
+        $portalUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/') . '/' . $page . '?token=' . $token;
 
         return $this->ok([
             'id'          => $id,
             'token'       => $token,
+            'kind'        => $kind,
             'url'         => $portalUrl,
             'expires_days' => $ttlDays,
             'label'       => $label !== '' ? $label : null,
@@ -180,7 +218,7 @@ final class Portal extends BaseEndpoint
         }
 
         $links = $this->db->all(
-            'SELECT pt.id, pt.token, pt.label, pt.expires_at, pt.last_used_at,
+            'SELECT pt.id, pt.kind, pt.token, pt.label, pt.expires_at, pt.last_used_at,
                     pt.use_count, pt.is_revoked, pt.created_at
              FROM portal_tokens pt
              WHERE pt.event_id = ?
@@ -190,7 +228,8 @@ final class Portal extends BaseEndpoint
 
         $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
         foreach ($links as &$link) {
-            $link['url'] = $appUrl . '/portal.html?token=' . $link['token'];
+            $page = $link['kind'] === 'settlement_report' ? 'report-share.html' : 'portal.html';
+            $link['url'] = $appUrl . '/' . $page . '?token=' . $link['token'];
         }
         unset($link);
 
