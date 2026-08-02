@@ -337,9 +337,13 @@ final class TicketingService
         }
 
         $order = $db->one(
-            'SELECT o.buyer_name, o.buyer_email, e.title AS event_title
+            'SELECT o.buyer_name, o.buyer_email, e.title AS event_title,
+                    v.name AS venue_name, v.address AS venue_address, v.city AS venue_city, v.state AS venue_state,
+                    r.address AS room_address
                FROM ticket_orders o
                JOIN events e ON e.id = o.event_id
+               LEFT JOIN venues v ON v.id = e.venue_id
+               LEFT JOIN resources r ON r.id = e.resource_id
               WHERE o.id = ?',
             [$orderId]
         );
@@ -355,6 +359,13 @@ final class TicketingService
         $title     = (string) ($order['event_title'] ?? 'your event');
         $buyerName = (string) ($order['buyer_name']  ?? '');
         $appUrl    = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        $venueLine = Address::line(
+            $order['venue_name'] ?? null,
+            $order['room_address'] ?? null,
+            $order['venue_address'] ?? null,
+            $order['venue_city'] ?? null,
+            $order['venue_state'] ?? null
+        );
 
         $textLines = [];
         $htmlItems = [];
@@ -427,6 +438,7 @@ final class TicketingService
                 'greeting'     => $greeting,
                 'tickets_html' => implode('', $htmlItems),
                 'tickets_text' => implode("\n", $textLines),
+                'venue_line'   => htmlspecialchars($venueLine, ENT_QUOTES, 'UTF-8'),
             ],
             $inline
         );

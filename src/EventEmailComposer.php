@@ -38,19 +38,20 @@ final class EventEmailComposer
             $params[] = $venueSlug;
         }
 
-        return $db->all(
+        return self::withResolvedAddress($db->all(
             'SELECT e.*, v.name AS venue_name, v.address AS venue_address,
-                    v.city AS venue_city, v.state AS venue_state,
+                    v.city AS venue_city, v.state AS venue_state, r.address AS room_address,
                     (SELECT a.file_path FROM event_assets a
                        WHERE a.event_id = e.id AND a.asset_type = \'flyer\'
                          AND a.approval_status = \'approved\'
                        ORDER BY a.created_at DESC LIMIT 1) AS flyer_path
              FROM events e
              JOIN venues v ON v.id = e.venue_id
+             LEFT JOIN resources r ON r.id = e.resource_id
              WHERE ' . implode(' AND ', $where) . '
              ORDER BY e.date ASC, e.show_time ASC',
             $params
-        );
+        ));
     }
 
     /**
@@ -71,21 +72,39 @@ final class EventEmailComposer
         $ids = array_map('intval', $eventIds);
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
 
-        return $db->all(
+        return self::withResolvedAddress($db->all(
             'SELECT e.*, v.name AS venue_name, v.address AS venue_address,
-                    v.city AS venue_city, v.state AS venue_state,
+                    v.city AS venue_city, v.state AS venue_state, r.address AS room_address,
                     (SELECT a.file_path FROM event_assets a
                        WHERE a.event_id = e.id AND a.asset_type = \'flyer\'
                          AND a.approval_status = \'approved\'
                        ORDER BY a.created_at DESC LIMIT 1) AS flyer_path
              FROM events e
              JOIN venues v ON v.id = e.venue_id
+             LEFT JOIN resources r ON r.id = e.resource_id
              WHERE e.public_visibility = 1
                AND e.status IN (\'published\', \'advanced\')
                AND e.id IN (' . $placeholders . ')
              ORDER BY e.date ASC, e.show_time ASC',
             $ids
-        );
+        ));
+    }
+
+    /**
+     * Overwrite each row's venue_address with the room's address when the
+     * room has one, so every downstream consumer (weekly digest, campaign
+     * address line) gets the right value without knowing rooms exist.
+     *
+     * @param list<array<string,mixed>> $rows
+     * @return list<array<string,mixed>>
+     */
+    private static function withResolvedAddress(array $rows): array
+    {
+        foreach ($rows as &$row) {
+            $row['venue_address'] = Address::pick($row['room_address'] ?? null, $row['venue_address'] ?? null);
+        }
+        unset($row);
+        return $rows;
     }
 
     /**

@@ -94,17 +94,26 @@ final class Feed extends BaseEndpoint
 
         $sql = 'SELECT e.*, v.name AS venue_name, v.address AS venue_address,
                        v.city AS venue_city, v.state AS venue_state, v.timezone AS venue_timezone,
+                       r.address AS room_address,
                        (SELECT a.file_path FROM event_assets a
                           WHERE a.event_id = e.id AND a.asset_type = \'flyer\'
                             AND a.approval_status = \'approved\'
                           ORDER BY a.created_at DESC LIMIT 1) AS flyer_path
                 FROM events e
                 JOIN venues v ON v.id = e.venue_id
+                LEFT JOIN resources r ON r.id = e.resource_id
                 WHERE ' . implode(' AND ', $where) . '
                 ORDER BY e.date ASC, e.show_time ASC
                 LIMIT ' . $limit;
 
-        return $this->db->all($sql, $params);
+        $events = $this->db->all($sql, $params);
+        // The room's own address (if set) overrides the venue's for every
+        // consumer below (ICS LOCATION, RSS body, JSON payload).
+        foreach ($events as &$event) {
+            $event['venue_address'] = Address::pick($event['room_address'] ?? null, $event['venue_address'] ?? null);
+        }
+        unset($event);
+        return $events;
     }
 
     // ── iCalendar ─────────────────────────────────────────────────────────────

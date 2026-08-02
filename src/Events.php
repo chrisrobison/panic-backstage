@@ -316,7 +316,7 @@ final class Events extends BaseEndpoint
         }
         $event = $this->db->one(
             'SELECT e.*, v.name venue_name, v.address venue_address, v.city venue_city, v.state venue_state, u.name owner_name,
-                    r.name room_name, r.capacity room_capacity
+                    r.name room_name, r.capacity room_capacity, r.address room_address
              FROM events e JOIN venues v ON v.id = e.venue_id LEFT JOIN users u ON u.id = e.owner_user_id
              LEFT JOIN resources r ON r.id = e.resource_id WHERE e.id = ?',
             [$id]
@@ -324,6 +324,10 @@ final class Events extends BaseEndpoint
         if (!$event) {
             return $this->notFound('Event not found');
         }
+        // Room address (if the room has one) overrides the venue's for display
+        // purposes; venue_address itself is left untouched since it's also
+        // used to render/edit the venue's own record.
+        $event['display_address'] = Address::pick($event['room_address'] ?? null, $event['venue_address'] ?? null);
         // Live tickets-sold count for the compact header — only meaningful (and
         // only queried) when we're the ones selling tickets in-house; external
         // ticketing has no local sales data to total up.

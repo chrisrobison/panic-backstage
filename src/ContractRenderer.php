@@ -108,7 +108,9 @@ final class ContractRenderer
         }
 
         $venueName    = $venue['name'] ?? ($event['venue_name'] ?? '');
-        $venueAddress = trim((string) ($venue['address'] ?? ''));
+        // The room's own address (if set) overrides the venue's — see
+        // ContractService::eventVenueFor(), which stashes it as room_address.
+        $venueAddress = trim((string) (Address::pick($venue['room_address'] ?? null, $venue['address'] ?? null) ?? ''));
         $venueCity    = $venue['city'] ?? '';
         $venueState   = $venue['state'] ?? '';
 

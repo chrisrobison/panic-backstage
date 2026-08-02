@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Panic\Events;
 
+use Panic\Address;
 use Panic\BaseEndpoint;
 use Panic\Env;
 use Panic\Mailer;
@@ -524,9 +525,24 @@ final class Ticketing extends BaseEndpoint
      */
     private function emailTickets(int $eventId, string $email, ?string $name, array $tickets): int
     {
-        $event  = $this->db->one('SELECT title FROM events WHERE id = ?', [$eventId]);
-        $title  = (string) ($event['title'] ?? 'the event');
-        $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        $event  = $this->db->one(
+            'SELECT e.title, v.name AS venue_name, v.address AS venue_address, v.city AS venue_city,
+                    v.state AS venue_state, r.address AS room_address
+               FROM events e
+               LEFT JOIN venues v ON v.id = e.venue_id
+               LEFT JOIN resources r ON r.id = e.resource_id
+              WHERE e.id = ?',
+            [$eventId]
+        );
+        $title     = (string) ($event['title'] ?? 'the event');
+        $appUrl    = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        $venueLine = Address::line(
+            $event['venue_name'] ?? null,
+            $event['room_address'] ?? null,
+            $event['venue_address'] ?? null,
+            $event['venue_city'] ?? null,
+            $event['venue_state'] ?? null
+        );
 
         $textLines = [];
         $htmlItems = [];
@@ -592,6 +608,7 @@ final class Ticketing extends BaseEndpoint
                 'greeting'     => $greetingHtml,
                 'tickets_html' => implode('', $htmlItems),
                 'tickets_text' => implode("\n", $textLines) . "\n",
+                'venue_line'   => htmlspecialchars($venueLine, ENT_QUOTES, 'UTF-8'),
             ],
             $inline
         );

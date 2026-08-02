@@ -164,7 +164,7 @@ function printHeader(data, subtitle) {
   return `<header class="event-head">
     <div>
       <h1>${esc(event.title)}${event.external_id ? ` <span class="event-code">${esc(event.external_id)}</span>` : ''}</h1>
-      <div class="meta">${esc(venueLine || 'Venue TBA')}${event.venue_address ? ' &middot; ' + esc(event.venue_address) : ''}</div>
+      <div class="meta">${esc(venueLine || 'Venue TBA')}${event.display_address ? ' &middot; ' + esc(event.display_address) : ''}</div>
       <div class="meta">${esc(printDateRange(event))}</div>
     </div>
     <div class="head-right">
@@ -377,7 +377,7 @@ function renderOneSheet(data) {
     ? contacts.map((c) => esc(c.name)).filter(Boolean).join(' and ')
     : esc(event.owner_name || 'TBD');
   const emails = [...new Set(contacts.map((c) => c.email).filter(Boolean))];
-  const venueLine = [event.venue_name, event.venue_address, event.venue_city, event.venue_state].filter(Boolean).join(', ');
+  const venueLine = [event.venue_name, event.display_address, event.venue_city, event.venue_state].filter(Boolean).join(', ');
 
   const meta = [];
   meta.push(['Date', esc(printDateRange(event))]);
@@ -454,7 +454,7 @@ function renderContract(data) {
   const promoter = promoterNames.length ? promoterNames.join(' and ') : esc(event.owner_name || event.promoter_name || '');
   const venueReps = byRole('venue_admin');
   const venueRep = venueReps.length ? venueReps.join(', ') : '';
-  const location = [event.venue_address, event.venue_city, event.venue_state].filter(Boolean).join(', ');
+  const location = [event.display_address, event.venue_city, event.venue_state].filter(Boolean).join(', ');
 
   const blocks = [];
 

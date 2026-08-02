@@ -10,4 +10,4 @@ Each link admits one person and can be scanned once.
 See you there!
 
 ---
-Mabuhay Gardens · 443 Broadway, San Francisco, CA
+{{venue_line}}

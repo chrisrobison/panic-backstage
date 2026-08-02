@@ -40,11 +40,13 @@ final class TicketView extends BaseEndpoint
                     tt.name  AS ticket_type_name,
                     e.title  AS event_title, e.slug AS event_slug,
                     e.date AS event_date, e.doors_time, e.show_time,
-                    v.name AS venue_name, v.city AS venue_city, v.state AS venue_state
+                    v.name AS venue_name, v.city AS venue_city, v.state AS venue_state,
+                    v.address AS venue_address, r.address AS room_address
                FROM tickets t
                JOIN ticket_types tt ON tt.id = t.ticket_type_id
                JOIN events e        ON e.id  = t.event_id
                LEFT JOIN venues v   ON v.id  = e.venue_id
+               LEFT JOIN resources r ON r.id = e.resource_id
               WHERE t.token_hash = ?",
             [$hash]
         );
@@ -170,7 +172,14 @@ HTML;
             (string) ($ticket['venue_state'] ?? ''),
         ], 'strlen');
         $suffix = $loc ? ', ' . implode(', ', $loc) : '';
-        return '<div>' . $this->e($venue . $suffix) . '</div>';
+        $line = '<div>' . $this->e($venue . $suffix) . '</div>';
+
+        // The room's own address (if set) wins over the venue's.
+        $address = Address::pick($ticket['room_address'] ?? null, $ticket['venue_address'] ?? null);
+        if ($address !== null) {
+            $line .= '<div>' . $this->e($address) . '</div>';
+        }
+        return $line;
     }
 
     private function errorPage(string $message): string

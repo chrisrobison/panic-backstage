@@ -10,4 +10,4 @@ Present the QR/link below at the door:
 Each link admits one person and can be scanned once.
 
 ---
-Mabuhay Gardens · 443 Broadway, San Francisco, CA
+{{venue_line}}

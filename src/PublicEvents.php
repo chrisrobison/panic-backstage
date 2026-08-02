@@ -18,16 +18,23 @@ final class PublicEvents extends BaseEndpoint
         }
         $event = ctype_digit((string) $idOrSlug)
             ? $this->db->one(
-                'SELECT e.*, v.name venue_name, v.address, v.city, v.state, v.phone venue_phone, v.website_url venue_website FROM events e JOIN venues v ON v.id = e.venue_id WHERE e.id = ? AND e.public_visibility = 1',
+                'SELECT e.*, v.name venue_name, v.address, v.city, v.state, v.phone venue_phone, v.website_url venue_website, r.address room_address
+                 FROM events e JOIN venues v ON v.id = e.venue_id LEFT JOIN resources r ON r.id = e.resource_id
+                 WHERE e.id = ? AND e.public_visibility = 1',
                 [(int) $idOrSlug]
             )
             : $this->db->one(
-                'SELECT e.*, v.name venue_name, v.address, v.city, v.state, v.phone venue_phone, v.website_url venue_website FROM events e JOIN venues v ON v.id = e.venue_id WHERE e.slug = ? AND e.public_visibility = 1',
+                'SELECT e.*, v.name venue_name, v.address, v.city, v.state, v.phone venue_phone, v.website_url venue_website, r.address room_address
+                 FROM events e JOIN venues v ON v.id = e.venue_id LEFT JOIN resources r ON r.id = e.resource_id
+                 WHERE e.slug = ? AND e.public_visibility = 1',
                 [(string) $idOrSlug]
             );
         if (!$event) {
             return $this->notFound('Event unavailable');
         }
+        // A room's own address (if set) takes priority over the venue's for
+        // the public page — e.g. an annex space at a different street number.
+        $event['address'] = Address::pick($event['room_address'] ?? null, $event['address'] ?? null);
         // Only surface tiers when we're actually selling them here (self-hosted
         // ticketing) and they're currently buyable — mirrors the filter
         // PublicTickets::listTypes() uses for the purchase widget itself, so the

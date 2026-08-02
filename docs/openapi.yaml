@@ -1521,6 +1521,20 @@ components:
         venue_state:
           type: string
           nullable: true
+        room_address:
+          type: string
+          nullable: true
+          description: >-
+            show only — the booked room's own address override, if the room
+            (resources table) has one set. Raw value; see display_address
+            for the resolved one to actually show a user.
+        display_address:
+          type: string
+          nullable: true
+          description: >-
+            show only — room_address if set, else venue_address. This is the
+            address to display for the event (matches the fallback used by
+            tickets, contracts, the public event page, and emails).
         primary_blocker:
           type: string
           nullable: true
@@ -4166,6 +4180,15 @@ components:
         description:
           type: string
           nullable: true
+        address:
+          type: string
+          nullable: true
+          description: >-
+            Street address override for this room. When set, takes priority
+            over the parent venue's address everywhere a display-facing
+            address is shown (tickets, contracts, the public event page,
+            emails, syndication feeds). Falls back to the venue's address
+            when null/empty — see Address::pick() in src/Address.php.
         capacity:
           type: integer
           nullable: true
@@ -4193,6 +4216,10 @@ components:
         description:
           type: string
           nullable: true
+        address:
+          type: string
+          nullable: true
+          description: Street address override; falls back to the venue's address when omitted.
         capacity:
           type: integer
           nullable: true
@@ -4212,6 +4239,10 @@ components:
         description:
           type: string
           nullable: true
+        address:
+          type: string
+          nullable: true
+          description: Street address override; falls back to the venue's address when null/empty.
         capacity:
           type: integer
           nullable: true

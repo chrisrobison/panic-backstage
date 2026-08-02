@@ -85,6 +85,13 @@ final class ContractService
         } elseif ($event && !empty($event['venue_id'])) {
             $venue = $db->one('SELECT * FROM venues WHERE id = ?', [(int) $event['venue_id']]);
         }
+        // If the event is booked into a specific room and that room has its
+        // own address, stash it on $venue so ContractRenderer::context() can
+        // prefer it over the venue's address — the only place this is read.
+        if ($venue !== null && $event && !empty($event['resource_id'])) {
+            $room = $db->one('SELECT address FROM resources WHERE id = ?', [(int) $event['resource_id']]);
+            $venue['room_address'] = $room['address'] ?? null;
+        }
         return [$event, $venue];
     }
 

@@ -856,7 +856,7 @@ class AdminVenue extends PanicElement {
           <thead><tr><th>Name</th><th>Capacity</th><th>Zone</th><th>Order</th><th>Status</th><th></th></tr></thead>
           <tbody>
             ${rooms.map((r) => `<tr class="${Number(r.active) ? '' : 'muted-row'}">
-              <td><strong>${esc(r.name)}</strong>${r.description ? `<br><small class="muted">${esc(r.description)}</small>` : ''}</td>
+              <td><strong>${esc(r.name)}</strong>${r.description ? `<br><small class="muted">${esc(r.description)}</small>` : ''}${r.address ? `<br><small class="muted">📍 ${esc(r.address)}</small>` : ''}</td>
               <td>${r.capacity != null && r.capacity !== '' ? esc(r.capacity) : '<span class="muted">—</span>'}</td>
               <td><span class="badge ${esc(roomTone(r.zone))}">${esc(titleCase(r.zone || 'primary'))}</span></td>
               <td>${esc(r.sort_order)}</td>
@@ -893,6 +893,7 @@ class AdminVenue extends PanicElement {
         <label>Zone <select name="zone">${zoneOpts}</select></label>
         <label>Sort order <input type="number" name="sort_order" value="${esc(r.sort_order != null ? r.sort_order : '')}" placeholder="0"></label>
         <label class="wide">Description <input name="description" value="${esc(r.description || '')}" placeholder="Notes shown alongside this room"></label>
+        <label class="wide">Address <input name="address" value="${esc(r.address || '')}" placeholder="Leave blank to use the venue's address"></label>
         <label class="check-label"><input type="checkbox" name="active" value="1" ${active ? 'checked' : ''}> Active</label>
         <button>${isEdit ? 'Save' : 'Add room'}</button>
       </form>

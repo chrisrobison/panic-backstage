@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Panic\Promote;
 
+use Panic\Address;
 use Panic\BaseEndpoint;
 use Panic\Request;
 use Panic\Response;
@@ -102,10 +103,19 @@ final class Broadcasts extends BaseEndpoint
         $scheduledAt = ($sendMode === 'scheduled' && !empty($body['scheduled_at'])) ? $body['scheduled_at'] : null;
 
         $event = $this->db->one(
-            'SELECT e.*, v.name venue_name, v.city venue_city, v.state venue_state
-             FROM events e LEFT JOIN venues v ON v.id = e.venue_id WHERE e.id = ?',
+            'SELECT e.*, v.name venue_name, v.address venue_address, v.city venue_city, v.state venue_state,
+                    r.address room_address
+             FROM events e
+             LEFT JOIN venues v ON v.id = e.venue_id
+             LEFT JOIN resources r ON r.id = e.resource_id
+             WHERE e.id = ?',
             [$eventId]
         ) ?? [];
+        // Room address (if set) overrides the venue's — see Address::pick().
+        // Adapters (e.g. LumaAdapter::buildAddress()) read venue_address only.
+        if ($event !== []) {
+            $event['venue_address'] = Address::pick($event['room_address'] ?? null, $event['venue_address'] ?? null);
+        }
 
         $placeholders = implode(',', array_fill(0, count($destinations), '?'));
         $destRecords  = $this->db->all(

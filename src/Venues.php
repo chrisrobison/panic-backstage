@@ -16,6 +16,11 @@ namespace Panic;
  * the read path is used by the calendar zone map and the sidebar venue-name
  * label and any authenticated role may call it.  The write paths are restricted
  * to venue_admins and surfaced through the Admin › Venue tab.
+ *
+ * A room's `address` is optional and, when set, overrides the parent venue's
+ * `address` for display purposes (tickets, contracts, the public event page,
+ * emails, etc. — see Address::pick()). Leaving it blank means the room
+ * simply uses the venue's address, so existing rooms are unaffected.
  */
 final class Venues extends BaseEndpoint
 {
@@ -166,13 +171,14 @@ final class Venues extends BaseEndpoint
             )['n'] ?? 1);
 
         $id = $this->db->insert(
-            'INSERT INTO resources (venue_id, name, slug, description, capacity, zone, sort_order, active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+            'INSERT INTO resources (venue_id, name, slug, description, address, capacity, zone, sort_order, active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)',
             [
                 $venueId,
                 $name,
                 $this->uniqueSlug($venueId, $this->slugify($name)),
                 $this->cleanText($body['description'] ?? null),
+                $this->cleanText($body['address'] ?? null),
                 $this->cleanInt($body['capacity'] ?? null),
                 $this->cleanZone($body['zone'] ?? null),
                 $sortOrder,
@@ -214,6 +220,10 @@ final class Venues extends BaseEndpoint
         if (array_key_exists('description', $body)) {
             $set[]    = '`description` = ?';
             $params[] = $this->cleanText($body['description']);
+        }
+        if (array_key_exists('address', $body)) {
+            $set[]    = '`address` = ?';
+            $params[] = $this->cleanText($body['address']);
         }
         if (array_key_exists('capacity', $body)) {
             $set[]    = '`capacity` = ?';
