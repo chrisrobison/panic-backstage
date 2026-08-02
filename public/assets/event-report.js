@@ -100,6 +100,27 @@ class EventReport extends PanicElement {
         <td class="amount"><strong>${esc(money(p.still_owed))}</strong></td>
       </tr>`).join('');
 
+    // Bottom line: nets a client-billed receivable (rental fee/hosted bar/
+    // etc. minus payments received), a door shortfall (non-split costs
+    // exceeding door-collected ticket/bar revenue — what the client owes for
+    // staffing when the draw was weak), and the payout-obligations total
+    // (what the venue owes out to the promoter/artist) into one sign-off
+    // figure — see src/Events/Report.php's class doc block for the reasoning
+    // (a plain "Gross Revenue − Payments Received" reads a fully-covered
+    // door split as an unpaid client receivable, which it isn't).
+    const bottomLineType = d.bottom_line_type || 'settled';
+    const bottomLineColor = bottomLineType === 'due_from_client' ? 'var(--red, #ef4338)'
+      : bottomLineType === 'due_to_promoter' ? 'var(--green, #0f8f46)'
+      : 'var(--green, #0f8f46)';
+    const bottomLineLabel = bottomLineType === 'due_from_client' ? 'Balance Due From Client'
+      : bottomLineType === 'due_to_promoter' ? 'Amount To Pay Promoter/Artist'
+      : 'Settled — No Balance Due';
+    const bottomLineNote = bottomLineType === 'due_from_client'
+      ? 'Includes any unpaid room/rental billing plus a staffing shortfall not covered by ticket sales, net of what the venue owes out to the promoter/artist.'
+      : bottomLineType === 'due_to_promoter'
+        ? 'Ticket sales covered staffing; this is the revenue-split payout still owed to the promoter/artist (see Payout Obligations below), not a client bill.'
+        : 'Ticket sales covered costs and no payout is outstanding.';
+
     const closeout = d.closeout || {};
     const closeoutLabel = closeout.finalized_at
       ? `Finalized ${shortDate(eventDate({ date: closeout.finalized_at.slice(0, 10) }))}`
@@ -129,6 +150,11 @@ class EventReport extends PanicElement {
             <div class="summary-row"><span class="label">Payments Received</span><span class="value">${esc(money(d.payments_received ?? s.total_payments ?? 0))}</span></div>
           </section>
 
+          <section class="summary-card er-bottom-line">
+            <div class="summary-row"><span class="label">${esc(bottomLineLabel)}</span><span class="value" style="color:${bottomLineColor}">${esc(money(d.bottom_line_amount || 0))}</span></div>
+          </section>
+          <p class="er-note">${esc(bottomLineNote)}</p>
+
           <h3 class="panel-subtitle">Revenue</h3>
           <table class="data-table er-table">
             <thead><tr><th>Category</th><th>Description</th><th>Amount</th></tr></thead>
@@ -149,9 +175,10 @@ class EventReport extends PanicElement {
           <div class="summary-card er-balance">
             <div class="summary-row"><span class="label">Payments Received</span><span class="value">${esc(money(d.payments_received || 0))}</span></div>
             <div class="summary-row"><span class="label">Disbursed</span><span class="value">${esc(money(d.disbursed || 0))}</span></div>
-            <div class="summary-row"><span class="label">Balance Due From Client</span><span class="value" style="color:${Number(d.balance_due || 0) > 0 ? 'var(--red, #ef4338)' : 'var(--green, #0f8f46)'}">${esc(money(d.balance_due || 0))}</span></div>
+            <div class="summary-row"><span class="label">Client-Billed Balance Due</span><span class="value" style="color:${Number(d.client_receivable || 0) > 0 ? 'var(--red, #ef4338)' : 'var(--green, #0f8f46)'}">${esc(money(d.client_receivable || 0))}</span></div>
+            <div class="summary-row"><span class="label">Staffing Shortfall (net of door revenue)</span><span class="value" style="color:${Number(d.door_shortfall || 0) > 0 ? 'var(--red, #ef4338)' : 'var(--green, #0f8f46)'}">${esc(money(d.door_shortfall || 0))}</span></div>
           </div>
-          <p class="er-note">Balance Due From Client = Gross Revenue − Payments Received (deposits, invoice payments, credits) — what the client/promoter still owes the venue for the room, not a payout the venue owes anyone. Payouts already disbursed to artists, promoters, vendors, or staff are shown separately and don't reduce this figure.</p>
+          <p class="er-note">Client-Billed Balance Due = unpaid room rental / hosted-bar / equipment billing (invoice or deposit still owed). Staffing Shortfall = staffing, security and production costs not covered by ticket/bar revenue — what the client owes when the draw was weak, already net of ticket sales. Neither reflects payouts the venue owes the promoter/artist — see Payout Obligations and the Bottom Line above.</p>
 
           ${(d.ticket_types || []).length ? `
           <h3 class="panel-subtitle">Ticket Sales</h3>
@@ -210,6 +237,9 @@ class EventReport extends PanicElement {
         .er-header p { margin: 0; color: var(--muted, #6f7582); font-size: 0.9rem; }
         .er-closeout-status { margin-top: 0.35rem !important; }
         .er-summary { max-width: 420px; margin-bottom: 1.5rem; }
+        .er-bottom-line { max-width: 420px; margin-bottom: 0.3rem; border-width: 2px; }
+        .er-bottom-line .label { font-weight: 700; }
+        .er-bottom-line .value { font-size: 1.15rem; font-weight: 700; }
         .panel-subtitle { margin: 1.25rem 0 0.5rem; font-size: 0.95rem; font-weight: 700; color: var(--muted, #6f7582); text-transform: uppercase; letter-spacing: 0.04em; }
         .er-subtotal { float: right; text-transform: none; letter-spacing: normal; font-weight: 700; color: var(--ink, #101318); }
         .er-table th { text-align: left; font-size: 0.78rem; color: var(--muted, #6f7582); border-bottom: 1px solid var(--line, #dfe3e8); padding: 4px 6px; }

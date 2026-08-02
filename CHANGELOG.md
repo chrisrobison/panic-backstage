@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `reports` — Replace misleading balance-due with a deal-aware bottom line
 - **Added** `venues` — Let rooms override the venue address, falling back everywhere
 - **Fixed** `calendar` — Keep target month pinned through _goToMonth navigation
 - **Fixed** `public` — Add missing 'How will you promote your event?' field to Mab booking form

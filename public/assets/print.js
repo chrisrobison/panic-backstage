@@ -95,6 +95,12 @@ const PRINT_CSS = `
   .settlement tfoot td { font-weight: 700; background: #f0f0f0; border-top: 2px solid #333; }
   .settlement .stl-balance-due strong { font-size: 13pt; }
   .settlement .stl-note { color: #666; font-size: 9pt; margin: 4px 0 16px; }
+  .settlement .stl-bottom-line { border: 2px solid #111; border-radius: 4px; padding: 10px 14px; margin: 10px 0 16px; display: flex; justify-content: space-between; align-items: baseline; }
+  .settlement .stl-bottom-line .stl-bl-label { font-size: 11pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+  .settlement .stl-bottom-line .stl-bl-amount { font-size: 16pt; font-weight: 700; }
+  .settlement .stl-bottom-line.stl-bl-due { color: #a3221c; }
+  .settlement .stl-bottom-line.stl-bl-payout { color: #15803d; }
+  .settlement .stl-bottom-line.stl-bl-settled { color: #15803d; }
   .settlement .stl-party { font-weight: 700; margin: 18px 0 8px; }
   .settlement .stl-sign-line { margin: 14px 0 4px; }
   .settlement .stl-fill { display: inline-block; min-width: 260px; border-bottom: 1px solid #111; }
@@ -723,7 +729,27 @@ function renderSettlementSection(data) {
       <td>${esc(l.payout_terms || '—')}</td>
     </tr>`).join('');
 
-  const balanceDue = Number(data.balance_due || 0);
+  // Bottom line: nets a client-billed receivable (rental fee/hosted bar/etc.
+  // minus payments received), a door shortfall (non-split costs exceeding
+  // door-collected ticket/bar revenue), and the payout-obligations total
+  // (owed out to the promoter/artist) into one sign-off figure — see
+  // src/Events/Report.php's class doc block. A plain "Gross Revenue minus
+  // Payments Received" reads a fully ticket-covered door split as an unpaid
+  // client bill, which it isn't; this is the number the owner actually signs.
+  const clientReceivable = Number(data.client_receivable || 0);
+  const doorShortfall    = Number(data.door_shortfall || 0);
+  const bottomLineType   = data.bottom_line_type || 'settled';
+  const bottomLineAmount = Number(data.bottom_line_amount || 0);
+  const bottomLineClass  = bottomLineType === 'due_from_client' ? 'stl-bl-due'
+    : bottomLineType === 'due_to_promoter' ? 'stl-bl-payout' : 'stl-bl-settled';
+  const bottomLineLabel  = bottomLineType === 'due_from_client' ? 'Balance Due From Client'
+    : bottomLineType === 'due_to_promoter' ? 'Amount To Pay Promoter / Artist'
+    : 'Settled — No Balance Due';
+  const bottomLineNote   = bottomLineType === 'due_from_client'
+    ? 'Includes any unpaid room/rental billing plus a staffing shortfall not covered by ticket sales, net of what the venue owes out to the promoter/artist.'
+    : bottomLineType === 'due_to_promoter'
+      ? 'Ticket sales covered staffing; this is the revenue-split payout still owed to the promoter/artist (see Payout Obligations below), not a client bill.'
+      : 'Ticket sales covered costs and no payout is outstanding.';
 
   const payoutObligations = data.payout_obligations || [];
   const payoutRows = payoutObligations.map((p) => `<tr>
@@ -764,6 +790,12 @@ function renderSettlementSection(data) {
     </div>
     ${ticketSourceNote ? `<p class="stl-note">${esc(ticketSourceNote)}</p>` : ''}
 
+    <div class="stl-bottom-line ${esc(bottomLineClass)}">
+      <span class="stl-bl-label">${esc(bottomLineLabel)}</span>
+      <span class="stl-bl-amount">${esc(money(bottomLineAmount))}</span>
+    </div>
+    <p class="stl-note">${esc(bottomLineNote)}</p>
+
     <h2 class="section">Revenue</h2>
     ${settlementTable('Revenue', revenueEntries)}
     ${inHouseTicketsSold > 0 ? `<h3 class="subsection">Ticket Sales</h3>
@@ -792,9 +824,10 @@ function renderSettlementSection(data) {
     <div class="facts">
       <div class="fact"><label>Payments Received</label><strong>${esc(money(data.payments_received || 0))}</strong></div>
       <div class="fact"><label>Disbursed</label><strong>${esc(money(data.disbursed || 0))}</strong></div>
-      <div class="fact stl-balance-due"><label>Balance Due From Client</label><strong>${esc(money(balanceDue))}</strong></div>
+      <div class="fact stl-balance-due"><label>Client-Billed Balance Due</label><strong>${esc(money(clientReceivable))}</strong></div>
+      <div class="fact stl-balance-due"><label>Staffing Shortfall</label><strong>${esc(money(doorShortfall))}</strong></div>
     </div>
-    <p class="stl-note">Balance Due From Client = Gross Revenue &minus; Payments Received (deposits, invoice payments, credits) &mdash; what the client/promoter still owes the venue for the room, not a payout the venue owes anyone. Payouts already disbursed to artists, promoters, vendors, or staff are shown separately above and do not reduce this figure.</p>
+    <p class="stl-note">Client-Billed Balance Due = unpaid room rental / hosted-bar / equipment billing still owed on invoice or deposit. Staffing Shortfall = staffing, security and production costs not covered by ticket/bar revenue, net of ticket sales &mdash; what the client owes only when the draw was weak. Neither reflects payouts the venue owes the promoter/artist &mdash; see the Bottom Line above and Payout Obligations below.</p>
 
     ${lineupRows ? `<h2 class="section">Artist / Lineup Payouts</h2>
     <table>

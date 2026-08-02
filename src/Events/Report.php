@@ -18,19 +18,66 @@ use Panic\Response;
  * vendor bill, the staffing labor cost, the lineup payout terms, a
  * ticket-type sales breakdown, the raw ledger line items (so a printed
  * statement can reproduce Closeout's Revenue/Costs/Payments grouping
- * exactly), a payments-received/disbursed/balance-due split, a
- * payout-obligations net (committed promoter_settlement/artist_guarantee
- * cost entries minus whatever's already been disbursed — the sign-off
- * number for a revenue-split payout, distinct from the client-billing
- * balance due), and a fallback to the manually-entered Settlement tab
- * figures for shows where tickets sold outside this app's own ticketing
- * module. Nothing here is editable — it's a reporting view over data owned
- * by Ledger, Vendors, Staffing, Lineup, Ticketing and Settlement.
+ * exactly), a payments-received/disbursed split, a payout-obligations net
+ * (committed promoter_settlement/artist_guarantee cost entries minus
+ * whatever's already been disbursed), and a fallback to the
+ * manually-entered Settlement tab figures for shows where tickets sold
+ * outside this app's own ticketing module. Nothing here is editable — it's
+ * a reporting view over data owned by Ledger, Vendors, Staffing, Lineup,
+ * Ticketing and Settlement.
+ *
+ * ── The "bottom line" ──────────────────────────────────────────────────────
+ * A door/revenue-split deal (no room rental billed to the client) and a
+ * flat-fee rental deal (client invoiced for the room) settle in opposite
+ * directions, and a single "Gross Revenue − Payments Received" figure
+ * conflates them: on a split deal the venue collects the door itself
+ * (tickets/bar/etc. are never "billed" to anyone), so that formula reads
+ * the whole door take as an unpaid client receivable even when ticket
+ * sales fully covered staffing and the only real money movement left is a
+ * payout *to* the promoter/artist. `bottomLineAmount`/`bottomLineType` fix
+ * that by netting three genuinely distinct things:
+ *   - clientReceivable: rental_fee/hosted_bar/equipment_rental/
+ *     overtime_charge/other_revenue billed to the client, minus payments
+ *     received — an actual invoice/deposit balance.
+ *   - doorShortfall: non-split costs (staffing, security, production, etc.)
+ *     exceeding door-collected revenue (tickets/ticket_fees/bar_sales/
+ *     merch_share/sponsorship) — what the client owes to cover staffing
+ *     when the draw was weak, net of ticket revenue. Zero whenever the door
+ *     covered costs.
+ *   - payoutStillOwed: the existing payout-obligations net (see below) —
+ *     money the venue owes out to the promoter/artist.
+ * Netting gives one sign-off number: positive means the client still owes
+ * the venue (rental balance and/or staffing shortfall), negative means the
+ * venue owes the promoter/artist their split, zero means settled.
  *
  * Capability: view_settlement (same gate as the Settlement + Closeout tabs).
  */
 final class Report extends BaseEndpoint
 {
+    // Revenue the venue collects itself at the point of sale (box office,
+    // bar) — never billed to the client/promoter, so it's not part of any
+    // client receivable. Distinct from CLIENT_BILLED_REVENUE_CATEGORIES
+    // below. See the "bottom line" doc block above.
+    private const DOOR_REVENUE_CATEGORIES = [
+        'tickets', 'ticket_fees', 'bar_sales', 'merch_share', 'sponsorship',
+    ];
+
+    // Revenue categories that represent a charge to the client/promoter
+    // (room rental, a hosted-bar buyout, equipment, overtime, etc.) — these
+    // are the only revenue lines that can leave a genuine invoice balance.
+    private const CLIENT_BILLED_REVENUE_CATEGORIES = [
+        'rental_fee', 'hosted_bar', 'equipment_rental', 'overtime_charge', 'other_revenue',
+    ];
+
+    // Cost categories that compete with door revenue for coverage — i.e.
+    // everything except the revenue-split payout categories, which are
+    // computed *from* what's left over rather than owed regardless of draw.
+    private const NON_SPLIT_COST_CATEGORIES = [
+        'labor', 'sound_production', 'security', 'cleaning', 'rentals',
+        'catering', 'vendor_cost', 'processing_fees', 'taxes', 'refunds', 'other_cost',
+    ];
+
+
     public function handle(Request $request): Response
     {
         $eventId = $this->requireEventId();
@@ -149,6 +196,34 @@ final class Report extends BaseEndpoint
             }
         }
 
+        // ── Bottom line ────────────────────────────────────────────────────
+        // See the class doc block for why "Gross Revenue − Payments Received"
+        // alone is the wrong number for a door/revenue-split deal. Netting
+        // these three below gives one sign-off figure that's correct for
+        // both deal shapes.
+        $doorRevenue         = 0.0;
+        $clientBilledRevenue = 0.0;
+        $nonSplitCosts       = 0.0;
+        foreach ($ledgerEntries as $entry) {
+            $amt = (float) $entry['amount'];
+            if ($entry['line_type'] === 'revenue' && in_array($entry['category'], self::DOOR_REVENUE_CATEGORIES, true)) {
+                $doorRevenue += $amt;
+            } elseif ($entry['line_type'] === 'revenue' && in_array($entry['category'], self::CLIENT_BILLED_REVENUE_CATEGORIES, true)) {
+                $clientBilledRevenue += $amt;
+            } elseif ($entry['line_type'] === 'cost' && in_array($entry['category'], self::NON_SPLIT_COST_CATEGORIES, true)) {
+                $nonSplitCosts += $amt;
+            }
+        }
+        $clientReceivable   = max(0.0, $clientBilledRevenue - $paymentsReceived);
+        $doorShortfall      = max(0.0, $nonSplitCosts - $doorRevenue);
+        $payoutStillOwed    = array_sum(array_column($payoutObligations, 'still_owed'));
+        $bottomLineAmount   = $clientReceivable + $doorShortfall - $payoutStillOwed;
+        $bottomLineType     = match (true) {
+            $bottomLineAmount > 0.005  => 'due_from_client',
+            $bottomLineAmount < -0.005 => 'due_to_promoter',
+            default                    => 'settled',
+        };
+
         $vendors = $this->db->all(
             "SELECT service_category, company_name,
                     COALESCE(actual_amount, approved_amount, quote_amount, 0) amount,
@@ -228,6 +303,11 @@ final class Report extends BaseEndpoint
             'outstanding_noted' => $outstandingNoted,
             'balance_due'       => $balanceDue,
             'payout_obligations' => $payoutObligations,
+            'client_receivable'  => $clientReceivable,
+            'door_shortfall'     => $doorShortfall,
+            'payout_still_owed'  => $payoutStillOwed,
+            'bottom_line_amount' => abs($bottomLineAmount),
+            'bottom_line_type'   => $bottomLineType,
         ]);
     }
 }
