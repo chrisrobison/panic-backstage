@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>booking-inbox</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="https://cdr2.com/pandoc.css" />
+</head>
+<body>
+<h1 id="booking-inbox-inquiry-workflow">Booking Inbox / Inquiry
+Workflow</h1>
+<p>The Booking Inbox is the shared, auditable workspace multiple staff
+and external bookers use to triage, claim, respond to, and onboard
+inbound event inquiries — without anyone privately controlling, hiding,
+or deleting them.</p>
+<p>It is <strong>not a parallel system</strong>. It extends the existing
+<code>leads</code> pipeline (<code>src/Leads.php</code>,
+<code>public/assets/leads.js</code>) with a claim/assign/own model, SLA
+timers, real two-way conversation threading, a formal audited status
+machine, deterministic routing rules, and an Onboard-Lead wizard.
+<strong>Leads</strong> and <strong>Inbox</strong> are two lenses over
+the same <code>leads</code> rows: Leads stays the
+deal-evaluation/pipeline view; Inbox (<code>#inbox-*</code> routes,
+<code>public/assets/inbox/*.js</code>) is the rich per-inquiry
+triage/claim/conversation workspace.</p>
+<h2 id="architecture">Architecture</h2>
+<pre><code>Ingestion (email / public form / manual)
+        │
+        ▼
+   leads row created  +  lead_messages (inbound)  +  lead_intake_emails (raw audit, email only)
+        │
+        ▼
+   src/Leads/Classifier.php  ──▶  lead_classifications
+        │   (Claude structured-output extraction: category, genre, dates,
+        │    attendance, budget, requirements, spam probability, per-field
+        │    + overall confidence — see &quot;Untrusted input&quot; below)
+        ▼
+   src/Leads/Acknowledgment.php  ──▶  auto-reply (send-once, outbound lead_messages row)
+        │
+        ▼
+   src/Leads/RoutingEngine.php  ──▶  routing_rules / routing_rule_versions
+        │   (first matching published rule wins; ties go to the
+        │    unassigned triage queue; every decision — including &quot;no
+        │    match&quot; — is written to lead_audit_log)
+        ▼
+   leads.assigned_to_user_id + sla_claim_due_at set
+        │
+        ▼
+   staff claims  ──▶  src/Leads/ClaimService.php  ──▶  lead_claims (append-only)
+        │               claim_expires_at set (business-hours-aware, src/Leads/BusinessHours.php)
+        ▼
+   conversation, status changes  ──▶  src/Leads/StatusMachine.php  (required-reason + high-value-approval gates)
+        │
+        ▼
+   POST /api/leads/{id}/onboard  ──▶  src/Leads/Onboarding.php  ──▶  event created (status: proposed)
+                                        (shared with Leads::convert() — same code path)</code></pre>
+<p>Everything writes to <code>lead_audit_log</code> via
+<code>log_lead_activity()</code> (<code>src/Support.php</code>) — the
+same one-helper-per-domain convention as <code>task_activity</code>,
+<code>process_audit_log</code>, etc. There is no generic audit table
+app-wide; this one is scoped to leads/inquiries.</p>
+<h3 id="claim-vs.-assign-vs.-own">Claim vs. Assign vs. Own</h3>
+<p>These are deliberately distinct, per spec:</p>
+<ul>
+<li><strong>Assigned</strong> — the routing engine (or a manual action)
+points an inquiry at a person/queue. Nobody has committed to working it
+yet. <code>leads.assigned_to_user_id</code> +
+<code>sla_claim_due_at</code>.</li>
+<li><strong>Claimed</strong> — a specific person has taken
+responsibility for actively working it right now. Only one active claim
+per lead (<code>src/Leads/ClaimService.php::claim()</code> checks before
+inserting). <code>leads.claimed_by_user_id</code> +
+<code>claim_expires_at</code>, backed by an append-only
+<code>lead_claims</code> history.</li>
+<li><strong>Owned</strong> — set once the inquiry is onboarded into a
+real event; survives reassignment of day-to-day claims.
+<code>leads.owner_user_id</code> + <code>owned_since</code>.</li>
+</ul>
+<p><code>assign</code> vs. <code>reassign</code> are also
+permission-distinct, not just semantically distinct:
+<code>reassign</code> (<code>manage_booking_inbox</code>) lets any
+Trusted booker hand off an inquiry currently their own to someone else.
+<code>assign</code> targets <em>any</em> inquiry regardless of current
+owner/claimant, so it’s gated to venue admins only
+(<code>BaseEndpoint::isVenueAdmin()</code>) — see
+<code>LeadsInbox::assign()</code>.</p>
+<p>A fixed list of <strong>claim-preserving actions</strong>
+(<code>ClaimService::PRESERVING_ACTIONS</code>: send reply, schedule
+tour, send availability, log call, request info, manager-approved
+follow-up task) both extends <code>claim_expires_at</code> <em>and</em>
+is itself logged — so claim extension is inherently bounded and
+auditable rather than a bare “extend” button.</p>
+<h3 id="sla-timers-business-hours-aware">SLA timers
+(business-hours-aware)</h3>
+<p><code>src/Leads/BusinessHours.php</code> walks forward through a
+venue’s local business window (<code>lead_inbox_settings</code>:
+business hours + timezone) and converts to UTC for storage — the same
+UTC-conversion discipline as the ticketing fix in <code>93153d4</code>.
+<code>src/Leads/SlaSettings.php</code> resolves the effective SLA hours
+for a given lead (venue defaults, adjusted for
+<code>high_value_threshold</code>).</p>
+<p><code>scripts/lead-sla-tick.php</code> sweeps:</p>
+<ul>
+<li><code>assigned</code> leads past <code>sla_claim_due_at</code> →
+returned to the unassigned queue.</li>
+<li><code>claimed</code> leads past <code>claim_expires_at</code> →
+released/escalated.</li>
+</ul>
+<p>This script is enabled in the production crontab every five
+minutes:</p>
+<pre><code>*/5 * * * * /home/cdr/domains/panicbooking.com/www/backstage/scripts/cron-lead-sla-tick.sh</code></pre>
+<p>(Same shape as the existing <code>cron-process-tick.sh</code>:
+<code>flock</code>-guarded, logs to
+<code>storage/logs/lead-sla-tick.log</code>, rotates at 1 MB.)</p>
+<p><code>scripts/classify-lead-backlog.php</code> retries active
+inquiries that have an inbound message but no current classification.
+Its cron wrapper processes two at a time every fifteen minutes, so a
+temporary model/CLI outage does not leave an inquiry permanently
+unclassified and the historical backlog drains without rerouting leads
+that a person has already claimed or owned.</p>
+<h3 id="untrusted-input-discipline-ai-classification">Untrusted-input
+discipline (AI classification)</h3>
+<p><code>src/Leads/Classifier.php</code> calls Claude (Anthropic
+Messages API, structured JSON output, <code>PROMPT_VERSION</code> stored
+alongside every result) to extract ~24 fields (event type, genre,
+category, dates, attendance, budget, production/stage/sound/lighting
+requirements, urgency, spam probability, recommended action) with
+per-field and overall confidence. <strong>The model never executes
+anything.</strong> It only ever writes into
+<code>lead_classifications</code>; deterministic PHP
+(<code>RoutingEngine</code>, <code>StatusMachine</code>) reads those
+stored columns. A human correction
+(<code>PATCH /api/leads/{id}/classification</code>) is stored as a new
+<code>lead_classifications</code> row with
+<code>source = human_correction</code>, never overwriting the AI’s
+original record.</p>
+<h3 id="routing-rules">Routing rules</h3>
+<p><code>routing_rules</code> + <code>routing_rule_versions</code>
+mirror the existing <code>process_versions</code> pattern: a rule is
+edited as a draft, then published as an immutable version.
+<code>RoutingEngine::route()</code> evaluates published versions in
+priority order against lead + classification fields
+(category/genre/attendance/budget/age-restriction/source/prior-customer
+lookup), using case-insensitive substring containment
+(<code>RoutingEngine::containsAny()</code>) rather than exact match,
+since the classifier can return compound values like
+<code>"punk/ska"</code>. First match wins; otherwise the lead lands in
+unassigned triage. Every decision — including “no rule matched” — is
+logged to <code>lead_audit_log</code> with the rule/version id, so the
+UI can render “Routed to Kathy because… 94% confidence.”</p>
+<p>Seed rules (migration
+<code>081_seed_booking_inbox_routing_rules.sql</code>, each guarded by
+<code>EXISTS (SELECT 1 FROM users WHERE email = ...)</code> so a fresh
+install without those specific accounts just skips them):</p>
+<table>
+<thead>
+<tr class="header">
+<th>Condition</th>
+<th>Routes to</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Comedy / clown / theatrical / experimental art</td>
+<td>Colleen</td>
+</tr>
+<tr class="even">
+<td>Punk / ska / general music</td>
+<td>Kathy</td>
+</tr>
+<tr class="odd">
+<td>Cannabis / 4:20</td>
+<td>Kathy</td>
+</tr>
+<tr class="even">
+<td>Metal / hardcore</td>
+<td>Katrina</td>
+</tr>
+<tr class="odd">
+<td>Corporate / private</td>
+<td>general queue</td>
+</tr>
+<tr class="even">
+<td>Low confidence</td>
+<td>unassigned triage</td>
+</tr>
+</tbody>
+</table>
+<p>Manager overrides go through the same
+<code>RoutingEngine::assign()</code> write path as an automated match,
+so they’re equally audited.</p>
+<h3 id="status-machine">Status machine</h3>
+<p><code>src/Leads/StatusMachine.php</code> is the single authoritative
+transition table — both <code>Leads::update()</code> and the new Inbox
+endpoints call through it, so there is exactly one place transitions are
+validated. <code>REASON_REQUIRED</code> enforces a reason for
+<code>declined</code>/<code>lost</code>/<code>spam</code>/<code>duplicate</code>/<code>archived</code>/reassignment.
+<code>isHighValue()</code> (reads
+<code>lead_inbox_settings.high_value_threshold</code>) gates declining a
+high-value lead behind <code>decline_high_value_leads</code> — a
+restricted booker without that capability gets a
+<code>lead_approval_requests</code> row created instead of the
+transition applying, for a manager to approve/deny.</p>
+<h3 id="onboarding">Onboarding</h3>
+<p><code>POST /api/leads/{id}/onboard</code>
+(<code>src/Leads/Onboarding.php</code>) — duplicate-event detection
+(same contact/org + overlapping date at the venue),
+availability/conflict check (reuses the existing
+<code>venue.check_availability</code> handler logic), an initial task
+checklist via the existing Tasks app (<code>tasks.related_lead_id</code>
+— no parallel checklist table), and event creation at
+<code>proposed</code> status (<strong>not</strong> “booked” — onboarding
+is a handoff, not a close). <code>Leads::convert()</code> and the
+wizard’s <code>onboard()</code> share
+<code>Onboarding::createEventFromLead()</code> so there’s one code path
+for “a lead became an event.”</p>
+<h3 id="social-queue">Social Queue</h3>
+<p>The spec’s Draft → … → Archived social-media workflow extends the
+existing <strong>Panic Promote</strong> module
+(<code>src/Promote/Posts.php</code>,
+<code>promote_posts</code>/<code>promote_post_variants</code>) rather
+than adding a parallel <code>social_*</code> schema — Promote already
+covered per-event posts, per-channel variants, a destinations registry,
+and a draft/approved/scheduled/sent/ archived lifecycle. Migration
+<code>082_add_social_queue.sql</code> widens that lifecycle to the full
+spec workflow (<code>needs_assets</code>, <code>ready_for_review</code>,
+<code>changes_requested</code>, <code>awaiting_manual_publish</code>,
+<code>published</code>, <code>verified</code>) and adds:</p>
+<ul>
+<li><strong>Revision-based approval invalidation.</strong>
+<code>approved_content_hash</code> records the content hash at the
+moment of approval. <code>Posts::update()</code> recomputes the hash on
+every save; if the content actually changed and the post’s
+approval-locked status
+(<code>approved</code>/<code>scheduled</code>/<code>awaiting_manual_publish</code>)
+would otherwise be left standing — whether because the caller omitted
+<code>status</code> entirely, or (as the real editor form does)
+resubmitted the same status the post already had — it’s dropped back to
+<code>changes_requested</code> instead. A caller that explicitly
+requests a <em>different</em> status (or calls the dedicated
+<code>approve()</code> action, which sets
+<code>approved_content_hash</code> directly and doesn’t go through
+<code>update()</code> at all) is respected as-is.</li>
+<li><strong>Manual-publish tasks.</strong> Entering
+<code>awaiting_manual_publish</code> auto-creates a Tasks-app task
+(<code>Posts::ensureManualPublishTask()</code>) carrying the approved
+caption for every channel, filed into a shared “Social Publishing” task
+document — reusing the Tasks app rather than a parallel checklist, the
+same convention as <code>Leads\Onboarding</code>.
+<code>mark-published</code> closes that task.</li>
+</ul>
+<p>New sub-routes on the existing post resource:</p>
+<pre><code>POST /api/promote/events/{id}/posts/{postId}/approve          approves the CURRENT revision
+POST /api/promote/events/{id}/posts/{postId}/mark-published    records the public URL, status -&gt; published/verified</code></pre>
+<p>The “Social Queue” nav item points at the existing
+<code>#promote</code> route rather than a new page
+(<code>nav_items</code> seed, migration <code>082</code>) — a venue’s
+own Promote nav item is currently hidden by an admin’s deliberate
+choice, so a separate visible entry was added instead of silently
+un-hiding it.</p>
+<h2 id="api-surface">API surface</h2>
+<p>All new endpoints enforce their capability <strong>server
+side</strong> (<code>BaseEndpoint::GLOBAL_CAPABILITIES</code>), never
+UI-only. A restricted booker’s row visibility
+(<code>assigned_to_user_id = me OR owner_user_id = me OR EXISTS lead_watchers</code>)
+is applied in the SQL <code>WHERE</code> of every list/read for that
+role via <code>BaseEndpoint::leadScopeSql()</code>, not bolted on after
+the query.</p>
+<pre><code>POST   /api/leads/{id}/claim
+POST   /api/leads/{id}/release-claim
+POST   /api/leads/{id}/assign
+POST   /api/leads/{id}/reassign            (reason required)
+POST   /api/leads/{id}/status              (goes through StatusMachine)
+GET    /api/leads/{id}/messages
+POST   /api/leads/{id}/messages            (based_on_message_id required — optimistic concurrency)
+GET    /api/leads/{id}/drafts
+POST   /api/leads/{id}/drafts
+GET    /api/leads/{id}/presence
+POST   /api/leads/{id}/presence            (heartbeat)
+POST   /api/leads/{id}/attachments
+GET    /api/leads/{id}/classification
+PATCH  /api/leads/{id}/classification      (human correction)
+POST   /api/leads/{id}/onboard
+GET    /api/leads/{id}/audit
+GET    /api/leads/changes?since=...        (polling feed)
+GET    /api/inbox/list?view=...
+GET    /api/inbox/counts
+GET/POST/PATCH  /api/routing-rules[/{id}/versions...]
+GET    /api/reports/booking-inbox</code></pre>
+<p>Capabilities added to <code>BaseEndpoint::GLOBAL_CAPABILITIES</code>:
+<code>view_booking_inbox</code>, <code>manage_booking_inbox</code>,
+<code>manage_assigned_leads</code>, <code>claim_leads</code>,
+<code>override_lead_claims</code>, <code>manage_lead_routing</code>,
+<code>decline_high_value_leads</code>, <code>export_leads</code>,
+<code>view_lead_audit</code>, <code>manage_social_queue</code>,
+<code>view_social_queue</code>, <code>publish_social</code> — mapped
+onto <code>venue_admin</code> (all),
+<code>staff</code>/<code>event_owner</code> (Trusted booker set), and
+<code>promoter</code> (Restricted external booker: view + claim, scoped
+to assigned/watched rows only).</p>
+<blockquote>
+<p><strong>Note on <code>docs/openapi.yaml</code>:</strong> the Leads,
+Booking Inbox, Tasks, Promote, and Processes modules are now documented
+in the OpenAPI spec (all the routes listed above, plus
+<code>/api/leads/{id}/*</code>, <code>/api/inbox/*</code>, and
+<code>/api/routing-rules/*</code>) — the gap this note used to flag has
+been closed. <code>scripts/check-openapi-routes.php</code>
+(<code>tests/openapi_route_drift_test.php</code>) enforces that every
+Kernel-routed path, every Booking Inbox lead child, and every Inbox
+cross-lead action stays documented going forward, so route drift here is
+caught by the hermetic test suite rather than discovered later.</p>
+</blockquote>
+<h2 id="realtime">Realtime</h2>
+<p>No SSE/WebSocket infrastructure exists in this app. The Inbox polls
+<code>GET /api/leads/changes?since=&lt;ts&gt;</code> every few seconds
+while open and publishes results onto the existing <code>core.js</code>
+pub/sub bus, so the list/workspace/detail components each react to just
+their slice — the same “child reacts to a bubbling event” pattern Tasks
+already uses.</p>
+<h2 id="setup">Setup</h2>
+<ol type="1">
+<li><strong>Migrations</strong> (<code>071</code>–<code>083</code>) are
+additive/idempotent — <code>php    scripts/migrate.php</code> applies
+them in order. Already applied on this box.</li>
+<li><strong>The local <code>claude</code> CLI</strong>
+(<code>CLAUDE_CLI_BIN</code>/<code>CLAUDE_CLI_HOME</code> in
+<code>.env</code>, see <code>src/Ai/ClaudeCli.php</code>) enables AI
+classification, riding that CLI’s own logged-in OAuth/subscription
+session rather than a billed API key — the same mechanism the AI
+Assistant drawer uses. <code>claude login</code> ran as
+<code>cdr</code>, but this is also reachable via PHP-FPM’s
+<code>www-data</code> pool user (the public inquiry widget,
+<code>PublicInquiry.php</code>) — that only works because (a)
+<code>CLAUDE_CLI_HOME</code> is pinned to <code>/home/cdr</code>
+explicitly rather than trusting the calling process’s own (wrong) HOME,
+and (b) <code>www-data</code> is a member of the <code>cdr</code> group
+and <code>~/.claude/.credentials.json</code> (and friends) are
+<code>640 cdr:cdr</code>, group-readable. Both were confirmed live:
+before this fix, requests through <code>www-data</code> produced
+<code>is_error: true</code> with zero token usage — a silent
+“authenticated as nobody,” not a loud failure. Without a working CLI,
+<code>Classifier::isEnabled()</code> is false and
+<code>classify()</code> short-circuits to <code>null</code> — the lead
+is left unclassified and routes to unassigned triage (the deterministic
+parts of the pipeline — dedup, acknowledgment, claim, status machine,
+onboarding — are unaffected).</li>
+<li><strong>SLA cron</strong> — enabled every five minutes through
+<code>scripts/cron-lead-sla-tick.sh</code>.</li>
+<li><strong>Ingestion</strong> — reuses the existing
+<code>bookings@themab.org</code> Exim pipe (see
+<code>docs/booking-email-import.md</code>); no additional mail setup
+needed.</li>
+</ol>
+<h2 id="tests">Tests</h2>
+<p>Hermetic PHP unit tests (no DB writes):</p>
+<pre><code>php tests/leads_status_machine_test.php
+php tests/leads_classifier_test.php
+php tests/leads_acknowledgment_test.php
+php tests/leads_business_hours_test.php
+php tests/leads_routing_engine_test.php
+php tests/leads_claim_service_test.php</code></pre>
+<p>UI tests (headless Chromium over CDP,
+<code>tests/ui/run.mjs</code>):</p>
+<pre><code>tests/ui/110-booking-inbox.test.mjs     — queue render, workspace open, saved views, mobile collapse
+tests/ui/111-social-queue.test.mjs      — Social Queue status workflow surfaces in the Promote post editor</code></pre>
+<p>Both suites are non-destructive by convention — they assert
+render/navigation behavior and, where a write path must be exercised
+(e.g. the approval revision-invalidation logic), that’s done via a live
+curl round-trip against a throwaway post/lead that is created and
+deleted in the same pass, not left in the UI test files.</p>
+<p>DB-backed tests
+(<code>RUN_DB_TESTS=1 ./tests/run-php-tests.sh</code>) that exercise the
+claim eligibility policy and outbound identity end-to-end, each creating
+and cleaning up its own throwaway rows:</p>
+<pre><code>tests/booking_inbox_role_scope_db_test.php   — restricted-booker visibility + claim policy (table below)
+tests/leads_acknowledgment_test.php          — auto-ack, settings-derived From</code></pre>
+<h2 id="operator-runbook">Operator runbook</h2>
+<p>Practical guidance for staff actually working the Inbox day to day —
+not a restatement of the architecture above.</p>
+<h3 id="claim-vs.-wait-for-assignment">Claim vs. wait for
+assignment</h3>
+<ul>
+<li>If an inquiry already shows an <strong>Owner</strong> or is in
+someone’s <strong>Assigned</strong> queue, don’t claim it out from under
+them — use <strong>Assign</strong>/<strong>Reassign</strong> (venue
+admin / trusted booker only) if it genuinely needs to move.</li>
+<li>If an inquiry is sitting <strong>unassigned</strong> (the
+“Unassigned” saved view) and you’re the person who’d naturally handle
+it, claim it before replying — claiming is what starts the SLA response
+clock and stops a second person from also replying to the same
+customer.</li>
+<li>Don’t claim something you don’t intend to work in the next few
+minutes just to “reserve” it — the claim expires on its own (see SLA
+tick below) and gets returned to the queue, which is the intended
+behavior, not a bug.</li>
+</ul>
+<h3 id="what-a-restricted-external-booker-can-see-and-claim">What a
+restricted (external) booker can see and claim</h3>
+<p>A Restricted external booker (<code>promoter</code> role —
+<code>claim_leads</code> without <code>manage_booking_inbox</code>) is
+scoped to:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>They can…</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>See</strong> an inquiry</td>
+<td>it’s assigned to them, they own it, they’re a watcher,
+<strong>or</strong> it’s still unassigned/unclaimed and in the open
+triage set (<code>new</code>/<code>classified</code>)</td>
+</tr>
+<tr class="even">
+<td><strong>Claim</strong> an inquiry</td>
+<td>assigned to them, owner, watcher, <strong>or</strong>
+unassigned+unclaimed and in the open triage set</td>
+</tr>
+<tr class="odd">
+<td><strong>Claim</strong> an inquiry assigned to someone else</td>
+<td>never — always rejected, both in the UI and at the API</td>
+</tr>
+</tbody>
+</table>
+<p>In practice: a restricted booker can self-serve fresh,
+not-yet-triaged inquiries out of the unassigned queue, but can’t reach
+into another person’s assigned or claimed work. See
+<code>LeadsInbox::canClaim()</code> for the exact rule and
+<code>tests/booking_inbox_role_scope_db_test.php</code> for the test
+matrix.</p>
+<h3 id="quarantine-promote-vs.-leave-skipped">Quarantine: promote
+vs. leave skipped</h3>
+<p>Quarantined mail (the intake filter’s low-confidence/junk bucket,
+reviewed via the “Quarantined Mail” dialog off the Inbox) should be
+<strong>promoted</strong> to a real inquiry when it’s a genuine, if
+messy, booking request that the filter misjudged — a legitimate inquiry
+stuck in quarantine helps no one. Leave it
+<strong>skipped</strong>/quarantined when it’s actually spam, an
+automated bounce/vendor notice, or unrelated correspondence that
+happened to hit the intake mailbox — promoting those just pollutes the
+triage queue with noise every booker then has to re-triage.</p>
+<h3 id="sla-tick">SLA tick</h3>
+<p><code>scripts/lead-sla-tick.php</code> (cron every 5 minutes, see
+Setup above) does two things automatically — nothing to do manually
+here:</p>
+<ul>
+<li><strong>Assigned but never claimed</strong> past
+<code>sla_claim_due_at</code> → returned to the unassigned queue so
+someone else can pick it up.</li>
+<li><strong>Claimed but gone stale</strong> past
+<code>claim_expires_at</code> → claim released
+(<code>claim_expired</code>), lead returned to assigned/unassigned.</li>
+</ul>
+<p>If an inquiry keeps bouncing back to unassigned, that’s the tick
+doing its job — the fix is claiming it and then actually taking a
+claim-preserving action (reply, log a call, schedule a tour, etc.)
+before the deadline, not disabling the sweep.</p>
+<h3 id="high-value-decline-approval-not-a-direct-decline">High-value
+decline → approval, not a direct decline</h3>
+<p>Declining/losing/archiving a lead above
+<code>lead_inbox_settings.high_value_threshold</code> requires
+<code>decline_high_value_leads</code>. A booker without that capability
+who tries anyway doesn’t get blocked outright — a
+<code>lead_approval_requests</code> row is created instead, and the
+inquiry stays in its current status until a manager approves or denies
+it from the Inbox header’s approval banner. This is intentional friction
+on high-value inquiries, not a bug — don’t route around it by marking
+the lead <code>archived</code>/<code>on_hold</code> as a workaround; put
+in the approval request and follow up with a manager.</p>
+<h3 id="outbound-identity">Outbound identity</h3>
+<p>Auto-acknowledgments and manual replies both send from the same
+venue-configured identity
+(<code>lead_inbox_settings.from_name</code>/<code>from_email</code>, see
+<code>Panic\Leads\OutboundIdentity</code>) rather than a hard-coded
+address. If that ever needs to change: <code>from_email</code>
+<strong>must</strong> stay the mailbox the Exim ingestion pipe reads
+(<code>docs/booking-email-import.md</code>) — Mailer always sets
+Reply-To to the same address as From, so pointing
+<code>from_email</code> anywhere else means customer replies stop
+threading back into the Inbox.</p>
+</body>
+</html>

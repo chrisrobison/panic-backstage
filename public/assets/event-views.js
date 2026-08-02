@@ -495,24 +495,31 @@ class EventCalendar extends PanicElement {
   // Fetches one calendar month's grid window, for an arbitrary month, returned
   // as a plain block object rather than stored on `this`.
   //
-  // The window is *not* a fixed 42 days (6 weeks) — it runs from the Sunday
-  // on/before the 1st of this month through the day *before* the Sunday
-  // on/before the 1st of the *next* month. That second boundary is the same
-  // Sunday the next month's own block would start its grid on, so two
-  // adjacent blocks always meet exactly there: this block keeps its natural
-  // leading days from the previous month (the usual dimmed lead-in), but
-  // never renders into the next month, which is that month's own block's job.
-  // A fixed 42-day window rendered both blocks over the shared boundary
-  // week(s) independently, showing every day in it twice — see issue "big
-  // calendar duplicates 2 rows when scrolling down". Length still always
-  // comes out a whole number of weeks (both boundaries are Sundays), so the
-  // grid never ends on a partial row.
+  // The window is *not* a fixed 42 days (6 weeks), but it *is* always this
+  // month's own complete padded grid: the Sunday on/before the 1st through
+  // the Saturday on/after the last day. Two adjacent blocks therefore
+  // overlap by up to a week at the boundary — e.g. December's block still
+  // renders Dec 28-31 in its own trailing row, and January's block renders
+  // those same dates again in its own leading row. That's fine because
+  // _renderMonthBlockHtml() renders any date outside a block's own month as
+  // a blank pad cell (no number, no events): each real day's content still
+  // shows exactly once, in its own month's block, while the other block
+  // just shows blank space over the same calendar squares. (An earlier
+  // version truncated this block at the Saturday *before* the next month's
+  // grid start so the two blocks never covered the same days at all — that
+  // was needed back when the overlap cells rendered dimmed-but-live content
+  // from the other month, which would've shown every boundary day twice.
+  // But it meant the tail of a month whose last week bled into the next
+  // month wasn't rendered by *either* block once that content went blank,
+  // silently dropping those days' events from the grid — see "calendar
+  // padding change hides the last days of some months".) Length still
+  // always comes out a whole number of weeks (both boundaries land on
+  // Sunday/Saturday), so the grid never ends on a partial row.
   async _fetchMonthWindow(monthDate) {
     const first = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
     const start = addDays(first, -first.getDay());
-    const nextFirst = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
-    const nextStart = addDays(nextFirst, -nextFirst.getDay());
-    const end = addDays(nextStart, -1);
+    const last = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+    const end = addDays(last, 6 - last.getDay());
     const days = Math.round((end - start) / 86400000) + 1;
     const data = await api(`/events?start_date=${isoDate(start)}&end_date=${isoDate(end)}`);
     this.canCreate = Boolean(data?.capabilities?.create_events);
@@ -985,9 +992,29 @@ class EventCalendar extends PanicElement {
   // in, same as a scroll-triggered load), or a non-contiguous jump — e.g.
   // "Today" after scrolling far away — which resets the stack to just that
   // month.
+  //
+  // `this.month`/`_visibleMonthKey` are normally kept in sync by the
+  // scrollspy (_updateVisibleMonthLabel) as the user scrolls, but that only
+  // fires on an actual scroll event — smooth-scrolling to an already-loaded
+  // month can lag it, and the non-contiguous reset case below doesn't
+  // scroll at all (the fresh single block is already at the top). Set both
+  // explicitly here — as the *last* synchronous step of whichever branch
+  // runs, once every await in that branch has settled — so callers (e.g.
+  // switching into agenda mode right after a grid navigation) see the
+  // target month immediately rather than whatever was visible before this
+  // call. Setting it first instead would look right, but isNextAdjacent/
+  // isPrevAdjacent's own _loadAdjacentMonth() ends with an unconditional
+  // _handleScroll() call that reads the *current* (pre-scroll) DOM and
+  // stomps both right back to the source month before this function even
+  // gets to _scrollMonthIntoView() — see "_goToMonth loses the target month
+  // to its own scrollspy mid-call".
   async _goToMonth(targetMonth) {
     const key = monthKey(targetMonth);
-    if (this._monthBlocks.some((b) => b.key === key)) { this._scrollMonthIntoView(key); return; }
+    const landOnTarget = () => {
+      this._visibleMonthKey = key;
+      this.month = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1);
+    };
+    if (this._monthBlocks.some((b) => b.key === key)) { this._scrollMonthIntoView(key); landOnTarget(); return; }
 
     const first = this._monthBlocks[0];
     const last = this._monthBlocks[this._monthBlocks.length - 1];
@@ -997,6 +1024,7 @@ class EventCalendar extends PanicElement {
     if (isNextAdjacent || isPrevAdjacent) {
       await this._loadAdjacentMonth(isNextAdjacent ? 'next' : 'prev');
       this._scrollMonthIntoView(key);
+      landOnTarget();
       return;
     }
 
@@ -1008,6 +1036,7 @@ class EventCalendar extends PanicElement {
       // see scrollTop back at 0 and immediately prepend the prior month
       // again (see the comment in _handleScroll()).
       this._hasScrolled = false;
+      landOnTarget();
       this.render();
     } catch (error) {
       this.showError(error);
@@ -1015,7 +1044,25 @@ class EventCalendar extends PanicElement {
   }
 
   _scrollMonthIntoView(key) {
-    $(`[data-month-key="${key}"]`, this)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    const el = $(`[data-month-key="${key}"]`, this);
+    if (!el) return;
+    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    // The animation this kicks off fires real scroll events for as long as
+    // it's in flight, and every one of them runs _updateVisibleMonthLabel()
+    // — which, for the first several frames, still finds the *source*
+    // month's heading within its BAND threshold and writes this.month back
+    // to it, undoing whatever _goToMonth() just set once the animation
+    // settles. Reuse the same _suppressScroll flag _adjustScroll() uses to
+    // mute the scroll listener during its own programmatic scrolls, just
+    // held for longer — long enough to cover a typical smooth-scroll
+    // animation rather than a couple of frames — so nothing reads a
+    // mid-flight scroll position as "where the user is" until this one is
+    // done. A stray real scroll landing inside this window is a fair
+    // trade: it only suppresses edge-loading/spy updates for well under a
+    // second right after a programmatic jump.
+    this._suppressScroll = true;
+    clearTimeout(this._scrollSuppressTimer);
+    this._scrollSuppressTimer = setTimeout(() => { this._suppressScroll = false; }, 700);
   }
 
   // ── Agenda view ──────────────────────────────────────────────────────────

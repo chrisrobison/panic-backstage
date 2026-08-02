@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `calendar` — Keep target month pinned through _goToMonth navigation
 - **Fixed** `public` — Add missing 'How will you promote your event?' field to Mab booking form
 - **Added** `events` — Expose Public Subtitle/Tags fields in the event editor
 - **Added** `reports` — Add payout-obligations sign-off section, clarify Balance Due direction
