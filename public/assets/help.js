@@ -2223,7 +2223,8 @@ const HELP_CONTENT = {
       <tbody>
         <tr><td><strong>Print</strong></td><td>Report tab toolbar</td><td>Opens a formal, signable Settlement Statement (with signature lines) in a new window to print or save as PDF.</td></tr>
         <tr><td><strong>Copy Link</strong></td><td>Report tab toolbar</td><td>Copies a direct link to this event's Report tab. The recipient still needs their own Backstage login and <code>view_settlement</code>.</td></tr>
-        <tr><td><strong>Share</strong> → Settlement Report</td><td>Event workspace header</td><td>Generates a token-gated public link — no login required. Anyone with the link can view the full report, including staffing and vendor detail, until it expires or is revoked.</td></tr>
+        <tr><td><strong>Download CSV</strong></td><td>Report tab toolbar, and the Share link page itself</td><td>Downloads the same report — Revenue/Costs/Payments, Bottom Line, Payout Obligations, vendor/staffing/ticket detail — as one spreadsheet file, with plain numeric amount columns (no "$" or thousands separator) so totals work immediately in Excel or Google Sheets.</td></tr>
+        <tr><td><strong>Share</strong> → Settlement Report</td><td>Event workspace header</td><td>Generates a token-gated public link — no login required. Anyone with the link can view the full report, including staffing and vendor detail, until it expires or is revoked. That page has its own Download CSV button too.</td></tr>
       </tbody>
     </table>
     <div class="warn"><strong>Important:</strong> A Settlement Report share link exposes staffing names, vendor costs, and payout detail to whoever has the URL, with no password. Only generate one when actually sending it to the owner, promoter, or artist, set a reasonable expiration, and revoke it from the Share dialog once it's served its purpose. Creating one requires <code>view_settlement</code> on the event.</div>

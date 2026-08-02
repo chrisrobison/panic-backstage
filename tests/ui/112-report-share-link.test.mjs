@@ -1,5 +1,4 @@
-// Two ways to send someone the Settlement Report without them digging
-// through the workspace:
+// Three ways to get the Settlement Report out of the workspace:
 //   1. An internal deep link — the Report tab's "Copy Link" button builds
 //      `#event-<id>-report`, which app.js's router now understands well
 //      enough to open the workspace straight to that tab (still requires a
@@ -8,8 +7,12 @@
 //      generate a settlement_report-kind portal_tokens link in addition to
 //      the pre-existing client_portal one; report-share.html renders it
 //      publicly via GET /api/portal/view?token=....
-// Both are read-only; the external-link test creates and then revokes its
-// own throwaway token so it doesn't leave links behind on the fixture event.
+//   3. A spreadsheet export — "Download CSV" builds the file entirely
+//      client-side from the report data already loaded (print.js's
+//      buildSettlementCsv), no extra request, so it works the same way on
+//      both the authenticated Report tab and the public share page.
+// All three are read-only; the external-link test creates and then revokes
+// its own throwaway token so it doesn't leave links behind on the fixture event.
 import { test, assert } from './harness.mjs';
 
 test('Report tab: Copy Link button copies a working #event-<id>-report deep link', async (page) => {
@@ -87,4 +90,33 @@ test('Share dialog: can generate and revoke a settlement_report link', async (pa
   await page.until(`!document.querySelector('.modal-backdrop .portal-links-list')?.textContent.includes(${JSON.stringify(label)})`);
   await page.click('.modal-backdrop [data-close]');
   await page.until(`!document.querySelector('.modal-backdrop')`);
+});
+
+test('Report tab: Download CSV builds a spreadsheet with the report sections', async (page) => {
+  if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
+  await page.openEvent();
+  if (!(await page.exists('a[data-tab="report"]'))) {
+    return page.skip('signed-in user lacks view_settlement (or event is private) — no Report tab to test');
+  }
+  await page.click('a[data-tab="report"]');
+  await page.until(`document.querySelector('#report')?.style.display !== 'none'`);
+  if (!(await page.exists('[data-download-csv]'))) {
+    return page.skip('Report tab did not mount pb-event-report with a Download CSV button');
+  }
+
+  // Capture the Blob's text via URL.createObjectURL instead of relying on a
+  // real browser download (headless Chrome has no download surface to
+  // inspect) — same stubbing approach as the Copy Link clipboard test above.
+  await page.eval(`(() => {
+    window.__csv = null;
+    const orig = URL.createObjectURL;
+    URL.createObjectURL = (blob) => { blob.text().then(t => { window.__csv = t; }); return orig.call(URL, blob); };
+  })()`);
+  await page.click('[data-download-csv]');
+  await page.until('window.__csv');
+  const csv = await page.eval('window.__csv');
+  assert.includes(csv, 'REVENUE', 'CSV includes the Revenue section');
+  assert.includes(csv, 'COSTS', 'CSV includes the Costs section');
+  assert.includes(csv, 'PAYMENTS & BALANCE', 'CSV includes the Payments & Balance section');
+  assert.ok(/Amount To Pay Promoter|Balance Due From Client|Settled/.test(csv), 'CSV includes the Bottom Line row');
 });

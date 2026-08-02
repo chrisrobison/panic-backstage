@@ -6,7 +6,7 @@
 // Source: GET /api/events/{id}/report (src/Events/Report.php).
 
 import { esc, titleCase, api, money, shortDate, eventDate, emptyState, PanicElement, $, appUrl, publish } from './core.js';
-import { openPrintWindow } from './print.js';
+import { openPrintWindow, buildSettlementCsv, downloadTextFile } from './print.js';
 
 class EventReport extends PanicElement {
   get eventId()  { return this._eventId; }
@@ -140,6 +140,7 @@ class EventReport extends PanicElement {
           <h2>P&amp;L / Settlement Report</h2>
           <div class="section-head-actions">
             <button type="button" class="secondary small" data-copy-report-link title="Copy a link straight to this event's Report tab (staff/owner login required — for an external, no-login link use the header's Share button instead)"><i class="fa-solid fa-link" aria-hidden="true"></i> Copy Link</button>
+            <button type="button" class="secondary small" data-download-csv title="Download this report as a spreadsheet (CSV)"><i class="fa-solid fa-file-csv" aria-hidden="true"></i> Download CSV</button>
             <button type="button" class="secondary small" data-print-report><i class="fa-solid fa-print" aria-hidden="true"></i> Print</button>
           </div>
         </div>
@@ -274,6 +275,10 @@ class EventReport extends PanicElement {
     $('[data-print-report]', this)?.addEventListener('click', () => openPrintWindow('settlement', this._data));
     $('[data-copy-report-link]', this)?.addEventListener('click', () => {
       navigator.clipboard.writeText(appUrl(`#event-${event.id}-report`)).then(() => publish('toast.show', { message: 'Report link copied!' }));
+    });
+    $('[data-download-csv]', this)?.addEventListener('click', () => {
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadTextFile(buildSettlementCsv(d), `settlement-report_${event.id}_${stamp}.csv`, 'text/csv;charset=utf-8;');
     });
   }
 }

@@ -70,7 +70,7 @@
 <div id="reportRoot" style="display:none"></div>
 
 <script type="module">
-  import { renderPrintBody, PRINT_CSS, printFooter } from './assets/print.js';
+  import { renderPrintBody, PRINT_CSS, printFooter, buildSettlementCsv, downloadTextFile } from './assets/print.js';
 
   function show(id) { document.getElementById(id).style.display = ''; }
   function hide(id) { document.getElementById(id).style.display = 'none'; }
@@ -114,6 +114,7 @@
         const root = document.getElementById('reportRoot');
         root.innerHTML = `
           <div class="page-toolbar">
+            <button type="button" id="csvBtn">Download CSV</button>
             <button type="button" class="primary" id="printBtn">Print</button>
           </div>
           <article class="sheet">
@@ -121,6 +122,10 @@
             ${printFooter(data)}
           </article>`;
         document.getElementById('printBtn').addEventListener('click', () => window.print());
+        document.getElementById('csvBtn').addEventListener('click', () => {
+          const stamp = new Date().toISOString().slice(0, 10);
+          downloadTextFile(buildSettlementCsv(data), `settlement-report_${data.event.id}_${stamp}.csv`, 'text/csv;charset=utf-8;');
+        });
 
         hide('loadingCard');
         show('reportRoot');

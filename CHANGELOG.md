@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `reports
+CSV` — Add a spreadsheet (CSV) download for the Settlement Report
 - **Documentation** — Document the Settlement Report bottom line and share links
 - **Added** `reports` — Add shareable links for the Settlement Report
 - **Fixed** `reports` — Hide Ticket Sales table when nothing sold in-house

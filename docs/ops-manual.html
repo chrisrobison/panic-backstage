@@ -3282,13 +3282,14 @@
 
     <h3 id="report-sharing">Sharing the report</h3>
 
-    <p>There are three ways to get this report in front of someone:</p>
+    <p>There are four ways to get this report in front of someone:</p>
 
     <table>
       <tr><th>Method</th><th>Where</th><th>Who can view it</th></tr>
       <tr><td><span class="ui-label button">Print</span></td><td>Report tab toolbar</td><td>Opens a formal, signable Settlement Statement (with signature lines) in a new window/tab for whoever is at this computer to print or save as PDF.</td></tr>
       <tr><td><span class="ui-label button">Copy Link</span></td><td>Report tab toolbar</td><td>Copies a direct link to this event's Report tab (e.g. <code>#event-285443-report</code>). Opens straight to the Report tab instead of Overview — but the recipient still needs their own Backstage login and <code>view_settlement</code>.</td></tr>
-      <tr><td><span class="ui-label button">Share</span> → Settlement Report</td><td>Event workspace header</td><td>Generates a token-gated public link (<code>report-share.html?token=...</code>) — no login required. Anyone with the link can view the full report, including staffing and vendor detail, until it expires or is revoked.</td></tr>
+      <tr><td><span class="ui-label button">Download CSV</span></td><td>Report tab toolbar, and the Share link page itself</td><td>Downloads the same report — Revenue/Costs/Payments line items, the Bottom Line, Payout Obligations, vendor/staffing/ticket detail — as one spreadsheet file. Amount columns are plain numbers (no "$" or thousands separator), so totals and formulas work immediately in Excel or Google Sheets.</td></tr>
+      <tr><td><span class="ui-label button">Share</span> → Settlement Report</td><td>Event workspace header</td><td>Generates a token-gated public link (<code>report-share.html?token=...</code>) — no login required. Anyone with the link can view the full report, including staffing and vendor detail, until it expires or is revoked. That page has its own <span class="ui-label button">Download CSV</span> button too.</td></tr>
     </table>
 
     <div class="callout warn">

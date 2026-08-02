@@ -858,6 +858,160 @@ function renderSettlementSection(data) {
 }
 
 
+// ── Settlement Report — spreadsheet export ──────────────────────────────────
+// Same report data as renderSettlementSection above, as one CSV a spreadsheet
+// app can open directly — one source of truth for what's *in* a Settlement
+// Report, two representations of it. Amount columns are plain decimals (no
+// "$"/thousands separator) so they import as real numbers, not text; a
+// comma inside any free-text field (a description, a vendor name) is quoted
+// per RFC 4180 rather than escaped, so it never shifts columns.
+function csvEscape(value) {
+  const s = String(value ?? '');
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function csvRow(...fields) {
+  return fields.map(csvEscape).join(',') + '\r\n';
+}
+function csvNum(value) {
+  return Number(value || 0).toFixed(2);
+}
+
+function buildSettlementCsv(data) {
+  const event    = data.event    || {};
+  const s        = data.summary  || {};
+  const entries  = data.ledger_entries || [];
+  const closeout = data.closeout || {};
+  const manual   = data.manual_settlement;
+
+  const revenueEntries = entries.filter((e) => e.line_type === 'revenue');
+  const costEntries    = entries.filter((e) => e.line_type === 'cost');
+  const paymentEntries = entries.filter((e) => e.line_type === 'payment');
+  const entrySum = (arr) => arr.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+  const closeoutLabel = closeout.finalized_at
+    ? `Finalized ${String(closeout.finalized_at).slice(0, 10)}`
+    : titleCase(closeout.status || 'open');
+
+  const ticketsSold      = data.tickets_sold_effective ?? s.tickets_sold ?? 0;
+  const grossTicketSales = data.gross_ticket_sales_effective ?? s.gross_ticket_sales ?? 0;
+  const inHouseTicketsSold = (data.ticket_types || []).reduce((sum, t) => sum + Number(t.sold || 0), 0);
+
+  const bottomLineType   = data.bottom_line_type || 'settled';
+  const bottomLineLabel  = bottomLineType === 'due_from_client' ? 'Balance Due From Client'
+    : bottomLineType === 'due_to_promoter' ? 'Amount To Pay Promoter / Artist'
+    : 'Settled — No Balance Due';
+
+  let out = '';
+  out += csvRow(event.venue_name || 'Venue');
+  out += csvRow('Event', event.title || '');
+  out += csvRow('Date', printDateRange(event));
+  out += csvRow('Status', statusLabel(event.status), 'Closeout', closeoutLabel);
+  out += csvRow();
+
+  out += csvRow('Gross Revenue', csvNum(s.gross_revenue));
+  out += csvRow('Total Costs', csvNum(s.total_costs));
+  out += csvRow('Venue Net', csvNum(s.venue_net));
+  out += csvRow('Margin %', s.margin_pct != null ? Number(s.margin_pct).toFixed(1) : '0.0');
+  out += csvRow('Tickets Sold', ticketsSold);
+  out += csvRow('Gross Ticket Sales', csvNum(grossTicketSales));
+  out += csvRow();
+  out += csvRow(bottomLineLabel, csvNum(data.bottom_line_amount));
+  out += csvRow();
+
+  out += csvRow('REVENUE');
+  out += csvRow('Category', 'Description', 'Amount');
+  revenueEntries.forEach((e) => out += csvRow(titleCase(e.category), e.description || '', csvNum(e.amount)));
+  out += csvRow('Revenue subtotal', '', csvNum(entrySum(revenueEntries)));
+  out += csvRow();
+
+  if (inHouseTicketsSold > 0) {
+    out += csvRow('TICKET SALES');
+    out += csvRow('Type', 'Price', 'Sold', 'Total', 'Gross');
+    (data.ticket_types || []).forEach((t) => out += csvRow(t.name, csvNum(t.price), t.sold, t.quantity_total, csvNum(t.gross_sales)));
+    out += csvRow();
+  }
+
+  out += csvRow('COSTS');
+  out += csvRow('Category', 'Description', 'Amount');
+  costEntries.forEach((e) => out += csvRow(titleCase(e.category), e.description || '', csvNum(e.amount)));
+  out += csvRow('Costs subtotal', '', csvNum(entrySum(costEntries)));
+  out += csvRow();
+
+  if ((data.vendors || []).length) {
+    out += csvRow('VENDOR COSTS');
+    out += csvRow('Vendor', 'Category', 'Payment Status', 'Amount');
+    data.vendors.forEach((v) => out += csvRow(v.company_name || titleCase(v.service_category), titleCase(v.service_category), titleCase(v.payment_status), csvNum(v.amount)));
+    out += csvRow('Vendor total', '', '', csvNum(data.vendor_total));
+    out += csvRow();
+  }
+
+  if ((data.staffing || []).length) {
+    out += csvRow('STAFFING / LABOR');
+    out += csvRow('Staff', 'Role', 'Hours', 'Rate', 'Cost');
+    data.staffing.forEach((row) => out += csvRow(row.staff_name || '', titleCase(row.role), Number(row.hours || 0).toFixed(1), csvNum(row.hourly_rate), csvNum(row.cost)));
+    out += csvRow('Staffing total', '', '', '', csvNum(data.staffing_total));
+    out += csvRow();
+  }
+
+  out += csvRow('PAYMENTS & BALANCE');
+  out += csvRow('Category', 'Description', 'Amount');
+  paymentEntries.forEach((e) => out += csvRow(titleCase(e.category), e.description || '', csvNum(e.amount)));
+  out += csvRow('Payments subtotal', '', csvNum(entrySum(paymentEntries)));
+  out += csvRow();
+  out += csvRow('Payments Received', csvNum(data.payments_received));
+  out += csvRow('Disbursed', csvNum(data.disbursed));
+  out += csvRow('Client-Billed Balance Due', csvNum(data.client_receivable));
+  out += csvRow('Staffing Shortfall', csvNum(data.door_shortfall));
+  out += csvRow();
+
+  if ((data.lineup || []).length) {
+    out += csvRow('ARTIST / LINEUP PAYOUTS');
+    out += csvRow('Artist', 'Status', 'Payout Terms');
+    data.lineup.forEach((l) => out += csvRow(l.display_name, titleCase(l.status), l.payout_terms || ''));
+    out += csvRow();
+  }
+
+  if (manual) {
+    out += csvRow('DOOR / MANUAL SETTLEMENT RECORD');
+    out += csvRow('Tickets Sold', manual.tickets_sold || 0);
+    out += csvRow('Gross Ticket Sales', csvNum(manual.gross_ticket_sales));
+    out += csvRow('Bar Sales', csvNum(manual.bar_sales));
+    out += csvRow('Expenses', csvNum(manual.expenses));
+    out += csvRow('Band Payouts', csvNum(manual.band_payouts));
+    out += csvRow('Promoter Payout', csvNum(manual.promoter_payout));
+    if (manual.notes) out += csvRow('Notes', manual.notes);
+    out += csvRow();
+  }
+
+  const payoutObligations = data.payout_obligations || [];
+  if (payoutObligations.length) {
+    out += csvRow('PAYOUT OBLIGATIONS — SIGN-OFF REQUIRED');
+    out += csvRow('Party', 'Committed', 'Disbursed', 'Still Owed');
+    payoutObligations.forEach((p) => out += csvRow(p.label, csvNum(p.committed), csvNum(p.disbursed), csvNum(p.still_owed)));
+    out += csvRow('Total Still Owed', '', '', csvNum(payoutObligations.reduce((sum, p) => sum + Number(p.still_owed || 0), 0)));
+  }
+
+  return out;
+}
+
+// Triggers a browser download of in-memory text — no server round trip,
+// since the report data is already loaded client-side wherever this is
+// called from (the authenticated Report tab, or the token-gated public
+// share page). Same Blob-URL-then-click pattern used elsewhere in this app
+// for file downloads (e.g. reports.js's CSV export, contracts.js's PDF).
+function downloadTextFile(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+
 function renderPrintBody(type, data) {
   switch (type) {
     case 'one-sheet':    return renderOneSheet(data);
@@ -918,4 +1072,4 @@ function openPrintWindow(type, data) {
 // link (src/Portal.php, kind='settlement_report') renders the exact same
 // Settlement Statement markup/styles as this popup, just hosted at a plain
 // URL instead of window.open(), and with no staff session involved.
-export { openPrintWindow, renderPrintBody, PRINT_CSS, printFooter };
+export { openPrintWindow, renderPrintBody, PRINT_CSS, printFooter, buildSettlementCsv, downloadTextFile };
