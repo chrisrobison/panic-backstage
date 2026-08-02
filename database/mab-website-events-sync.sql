@@ -219,7 +219,7 @@ INSERT INTO events (venue_id, title, slug, event_type, status, description_publi
                      date, public_visibility, ticketing_mode, room, owner_user_id)
 VALUES (@venue_upstairs, 'Karaoke Sunday', 'karaoke-sunday-2026-08-02', 'karaoke', 'published',
         'Grab the mic! Be the star. Join us every Sunday upstairs at On Broadway for karaoke night.',
-        'ON BROADWAY (UPSTAIRS)', 'comedy', '2026-08-02', 1, 'external', 'upstairs', @owner_id)
+        'ON BROADWAY (UPSTAIRS)', 'karaoke', '2026-08-02', 1, 'external', 'upstairs', @owner_id)
 ON DUPLICATE KEY UPDATE
   description_public = VALUES(description_public), public_subtitle = VALUES(public_subtitle),
   public_tags = VALUES(public_tags), public_visibility = VALUES(public_visibility);

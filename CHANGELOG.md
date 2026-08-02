@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Expose Public Subtitle/Tags fields in the event editor
 - **Added** `reports` — Add payout-obligations sign-off section, clarify Balance Due direction
 - **Fixed** `reports` — Hide per-type Ticket Sales table on the Settlement Report when nothing sold in-house
 - **Added** `reports` — Formal signable Settlement Report + fix door/outside-ticketing sales showing as 0

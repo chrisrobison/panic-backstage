@@ -1027,6 +1027,8 @@ class EventDetailsForm extends HTMLElement {
         <label>Email <input type="email" name="booker_email" value="${esc(event.booker_email || '')}" placeholder="email@example.com"${disabled}></label>
         <label>Phone <input type="tel" name="booker_phone" value="${esc(event.booker_phone || '')}" placeholder="415-555-0100"${disabled}></label>
         <label class="wide">Public description <textarea name="description_public"${disabled}>${esc(event.description_public || '')}</textarea></label>
+        <label>Public subtitle <input name="public_subtitle" value="${esc(event.public_subtitle || '')}" placeholder="e.g. ON BROADWAY (UPSTAIRS)"${disabled}></label>
+        <label>Public tags <input name="public_tags" value="${esc(event.public_tags || '')}" placeholder="e.g. karaoke, 21+" title="Comma-separated. Shown as pills on the public event page."${disabled}></label>
         <label class="wide">Internal notes <textarea name="description_internal"${disabled}>${esc(event.description_internal || '')}</textarea></label>
         <label class="check-label"><input type="checkbox" name="public_visibility" value="1" ${Number(event.public_visibility) ? 'checked' : ''}${disabled}> Public page visible</label>
         ${editable ? '<p class="save-status wide" data-save-status data-state="saved" aria-live="polite">All changes saved</p>' : ''}
