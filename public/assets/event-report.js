@@ -224,7 +224,7 @@ class EventReport extends PanicElement {
           <h3 class="panel-subtitle">Payout Obligations — Sign-Off Required</h3>
           <p class="er-note">Revenue-split / guarantee amounts committed on the Closeout ledger (promoter_settlement / artist_guarantee cost entries), net of whatever's already been disbursed (promoter_payout / artist_payout payment entries). "Still Owed" is the amount awaiting approval before disbursement.</p>
           <table class="data-table er-table">
-            <thead><tr><th>Party</th><th>Committed</th><th>Disbursed</th><th>Still Owed</th></tr></thead>
+            <thead><tr><th>Party</th><th class="amount">Committed</th><th class="amount">Disbursed</th><th class="amount">Still Owed</th></tr></thead>
             <tbody>${payoutRows}</tbody>
           </table>` : ''}
 
