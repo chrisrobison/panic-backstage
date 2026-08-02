@@ -339,6 +339,7 @@ final class PublicTickets extends BaseEndpoint
         $tickets = [];
 
         if ($status === 'fulfilled') {
+            $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
             $rows = $this->db->all(
                 "SELECT t.code, t.token, t.holder_name, tt.name AS ticket_type_name
                    FROM tickets t
@@ -356,8 +357,8 @@ final class PublicTickets extends BaseEndpoint
                     'code'             => (string) $row['code'],
                     'ticket_type_name' => (string) $row['ticket_type_name'],
                     'holder_name'      => $row['holder_name'] !== null ? (string) $row['holder_name'] : null,
-                    'ticket_url'       => '/t/' . rawurlencode($token),
-                    'qr_url'           => '/assets/qr.svg?text=' . rawurlencode($token) . '&size=320',
+                    'ticket_url'       => $appUrl . '/t/' . rawurlencode($token),
+                    'qr_url'           => $appUrl . '/assets/qr.svg?text=' . rawurlencode($token) . '&size=320',
                 ];
             }
         }

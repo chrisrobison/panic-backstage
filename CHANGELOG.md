@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `tickets` — Prefix the post-checkout receipt's QR/ticket URLs with APP_URL
 - **Added** `reports
 CSV` — Add a spreadsheet (CSV) download for the Settlement Report
 - **Documentation** — Document the Settlement Report bottom line and share links
