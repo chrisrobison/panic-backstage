@@ -61,6 +61,14 @@ class EventReport extends PanicElement {
       ? 'Reported at settlement (door / outside ticketing)'
       : d.ticket_sales_source === 'box_office' ? 'In-house ticketing' : '';
 
+    // Ticket types that exist (created for advance sales, comps, etc.) but
+    // sold zero seats in-house usually mean the show sold through an outside
+    // ticketing service or at the door instead — showing a per-type table of
+    // all-zero rows would misleadingly read as "nothing sold" even though
+    // ticketsSold/grossTicketSales above (the effective, fallen-back-to-manual
+    // figures) say otherwise. Only render the breakdown when at least one
+    // in-house sale actually happened — mirrors print.js's renderSettlementSection.
+    const inHouseTicketsSold = (d.ticket_types || []).reduce((sum, t) => sum + Number(t.sold || 0), 0);
     const ticketRows = (d.ticket_types || []).map((t) => `<tr>
         <td>${esc(t.name)}</td>
         <td class="amount">${esc(money(t.price))}</td>
@@ -180,7 +188,7 @@ class EventReport extends PanicElement {
           </div>
           <p class="er-note">Client-Billed Balance Due = unpaid room rental / hosted-bar / equipment billing (invoice or deposit still owed). Staffing Shortfall = staffing, security and production costs not covered by ticket/bar revenue — what the client owes when the draw was weak, already net of ticket sales. Neither reflects payouts the venue owes the promoter/artist — see Payout Obligations and the Bottom Line above.</p>
 
-          ${(d.ticket_types || []).length ? `
+          ${inHouseTicketsSold > 0 ? `
           <h3 class="panel-subtitle">Ticket Sales</h3>
           <table class="data-table er-table">
             <thead><tr><th>Type</th><th>Price</th><th>Sold / Total</th><th>Gross</th></tr></thead>

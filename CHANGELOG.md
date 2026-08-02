@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `reports` — Hide Ticket Sales table when nothing sold in-house
 - **Fixed** `reports` — Right-align Payout Obligations table headers
 - **Fixed** `reports` — Replace misleading balance-due with a deal-aware bottom line
 - **Added** `venues` — Let rooms override the venue address, falling back everywhere
