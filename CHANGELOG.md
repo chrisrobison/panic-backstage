@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** — Document the Settlement Report bottom line and share links
 - **Added** `reports` — Add shareable links for the Settlement Report
 - **Fixed** `reports` — Hide Ticket Sales table when nothing sold in-house
 - **Fixed** `reports` — Right-align Payout Obligations table headers

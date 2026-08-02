@@ -1193,6 +1193,7 @@
     <a href="#closeout" class="chapter">Closeout &amp; Billing</a>
     <a href="#closeout-overview" class="section">Closeout overview</a>
     <a href="#closeout-ledger" class="section">The financial ledger</a>
+    <a href="#closeout-report" class="section">The P&amp;L / Settlement Report</a>
     <a href="#closeout-checklist" class="section">The closeout checklist</a>
     <a href="#closeout-finalize" class="section">Finalize &amp; reopen</a>
 
@@ -3232,6 +3233,70 @@
       <span class="callout-title">Execution records auto-populate the ledger</span>
       <p>Change orders, damage records, and overages entered in the Execution tab during the show automatically create corresponding ledger entries. Review these on the morning after — they may need a void-and-correct if the initial amounts were estimates.</p>
     </div>
+
+    <!-- THE REPORT TAB ───────────────────────────────────────────────────────── -->
+    <h2 id="closeout-report">The P&amp;L / Settlement Report</h2>
+
+    <p>The <span class="ui-label tab">Report</span> tab (requires the <code>view_settlement</code> capability) is a read-only, printable statement built from the exact same ledger data as the P&amp;L Summary above — the numbers never differ, it just adds the cost detail that explains <em>why</em> the total looks the way it does: the vendor bill, the staffing labor cost, a ticket-type sales breakdown, and every ledger line item grouped into Revenue / Costs / Payments, exactly like the Closeout tab. This is the document to hand the owner for sign-off before money goes out the door.</p>
+
+    <h3>The Bottom Line</h3>
+
+    <p>A show that rents out the room for a flat fee and a show that splits the door with a promoter settle in opposite directions — the report nets three different things into one "Bottom Line" figure instead of a single confusing balance:</p>
+
+    <table>
+      <tr><th>Component</th><th>What it is</th></tr>
+      <tr><td>Client-Billed Balance Due</td><td>Rental fee / hosted bar / equipment / overtime billed to the client, minus deposits and invoice payments already received — a genuine unpaid invoice.</td></tr>
+      <tr><td>Staffing Shortfall</td><td>Staffing, security, and production costs that exceed door-collected ticket/bar revenue, net of ticket sales — what the client owes to cover staffing only when the draw was weak.</td></tr>
+      <tr><td>Payout Still Owed</td><td>The <strong>Payout Obligations</strong> total below — money the <em>venue</em> owes out to the promoter or artist.</td></tr>
+    </table>
+
+    <p>Netting those three gives one sign-off number:</p>
+    <ul>
+      <li><strong style="color:#dc2626;">Balance Due From Client</strong> (red) — the client genuinely still owes the venue money (an unpaid rental balance and/or a staffing shortfall).</li>
+      <li><strong style="color:#16a34a;">Amount To Pay Promoter/Artist</strong> (green) — the venue owes a revenue-split payout; not a client bill.</li>
+      <li><strong style="color:#16a34a;">Settled — No Balance Due</strong> (green) — ticket sales covered costs and nothing is outstanding.</li>
+    </ul>
+
+    <div class="callout note">
+      <span class="callout-title">Why not just "Gross Revenue − Payments Received"?</span>
+      <p>That simpler formula assumes every dollar of revenue was billed to the client. On a straight door-split deal (say, a 70/30 promoter split with no deposit), the venue collects the ticket revenue itself — it was never "billed" to anyone. A show that sells $2,774 in tickets, pays $1,075 in staffing out of that, and owes the promoter their 70% cut of the $1,699 left over has <em>nothing</em> the client owes — but the old formula read the full $2,774 as an unpaid client receivable. The Bottom Line fixes that by only counting a client receivable where one actually exists.</p>
+    </div>
+
+    <h3>Payout Obligations — sign-off required</h3>
+
+    <p>When a door-split or guarantee deal has a <code>Promoter Settlement</code> or <code>Artist Guarantee</code> cost entry on the ledger, the report shows a Payout Obligations table:</p>
+
+    <table>
+      <tr><th>Column</th><th>Meaning</th></tr>
+      <tr><td>Committed</td><td>The Promoter Settlement / Artist Guarantee cost entries recorded so far — what's been agreed to pay out.</td></tr>
+      <tr><td>Disbursed</td><td>The matching Promoter Payout / Artist Payout <em>payment</em> entries already recorded — what's actually gone out the door.</td></tr>
+      <tr><td>Still Owed</td><td>Committed minus Disbursed — the amount awaiting approval before the money is sent.</td></tr>
+    </table>
+
+    <p>This table only appears once a Promoter Settlement or Artist Guarantee cost entry exists on the ledger — enter that line item as soon as you know the split, even before it's actually paid out, so the report reflects the obligation.</p>
+
+    <div class="callout note">
+      <span class="callout-title">Ticket Sales table hides itself when nothing sold in-house</span>
+      <p>If a show sold entirely through an outside ticketing service or at the door — so every ticket type shows 0 sold in-house — the per-type Ticket Sales breakdown is hidden rather than printing a misleading all-zero table. The effective ticket count and gross above still reflect the real numbers (falling back to the Settlement tab's hand-entered figures), just without a fake-looking per-type row.</p>
+    </div>
+
+    <h3 id="report-sharing">Sharing the report</h3>
+
+    <p>There are three ways to get this report in front of someone:</p>
+
+    <table>
+      <tr><th>Method</th><th>Where</th><th>Who can view it</th></tr>
+      <tr><td><span class="ui-label button">Print</span></td><td>Report tab toolbar</td><td>Opens a formal, signable Settlement Statement (with signature lines) in a new window/tab for whoever is at this computer to print or save as PDF.</td></tr>
+      <tr><td><span class="ui-label button">Copy Link</span></td><td>Report tab toolbar</td><td>Copies a direct link to this event's Report tab (e.g. <code>#event-285443-report</code>). Opens straight to the Report tab instead of Overview — but the recipient still needs their own Backstage login and <code>view_settlement</code>.</td></tr>
+      <tr><td><span class="ui-label button">Share</span> → Settlement Report</td><td>Event workspace header</td><td>Generates a token-gated public link (<code>report-share.html?token=...</code>) — no login required. Anyone with the link can view the full report, including staffing and vendor detail, until it expires or is revoked.</td></tr>
+    </table>
+
+    <div class="callout warn">
+      <span class="callout-title">The Share link has no login — treat it like the PDF</span>
+      <p>A Settlement Report share link exposes staffing names, vendor costs, and payout detail to whoever has the URL, with no password. Only generate one when you're actually sending it to the owner, promoter, or artist for sign-off, set a reasonable expiration (7–30 days), and revoke it from the Share dialog once it's served its purpose. Creating one requires <code>view_settlement</code> on the event.</p>
+    </div>
+
+    <p>The same <span class="ui-label button">Share</span> dialog also offers a <strong>Client Portal</strong> link — a different, narrower kind of no-login link (event details, contract status, payments, and an invoice-style ledger view) meant for a promoter or client, not the full internal P&amp;L. Which kind(s) you can create depends on your capabilities: <code>manage_contracts</code> for Client Portal, <code>view_settlement</code> for Settlement Report. If you only have one of the two, the dialog skips the picker and just makes that kind.</p>
 
     <!-- THE CHECKLIST ────────────────────────────────────────────────────────── -->
     <h2 id="closeout-checklist">The closeout checklist</h2>
