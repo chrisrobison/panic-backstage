@@ -263,6 +263,12 @@
         </div>
 
         <div class="mbf-line mbf-half">
+          <label class="mbf-label" for="mbf-promote">How will you promote your event? <span class="mbf-opt">(optional)</span></label>
+          <input type="text" id="mbf-promote" maxlength="255">
+          <p class="mbf-sub">Add us as a collaborator on instagram: @fabmabsf</p>
+        </div>
+
+        <div class="mbf-line mbf-half">
           <label class="mbf-label" for="mbf-how-heard">Lastly, how did you hear about us?<span class="mbf-req" aria-hidden="true">*</span></label>
           <input type="text" id="mbf-how-heard" required maxlength="255" placeholder="mab Collaborator, Friend, social, search engine, etc.">
         </div>
@@ -536,6 +542,7 @@
       addLine(lines, 'Preferred layout', v.layout === 'Other' ? ('Other — ' + v.layoutOther) : v.layout);
       addLine(lines, 'Setup notes', v.setupNotes);
       addLine(lines, 'Additional notes', v.moreNotes);
+      addLine(lines, 'How they plan to promote', v.promote);
       addLine(lines, 'How they heard about us', v.howHeard);
 
       var extras = lines.length ? lines.join('\n') + '\n\n' : '';
@@ -583,6 +590,7 @@
         layoutOther: $('mbf-layout-other').value,
         setupNotes: $('mbf-setup-notes').value,
         moreNotes: $('mbf-more-notes').value,
+        promote: $('mbf-promote').value,
         howHeard: $('mbf-how-heard').value,
         company: $('mbf-company').value // honeypot — always blank for real visitors
       };
