@@ -1177,6 +1177,21 @@ const HELP_CONTENT = {
     <p>Use the <em>Comp tickets</em> section to issue free tickets (guests, press, trade) without a payment. Enter the recipient's name, email, tier, and quantity, and Backstage emails them a real scannable QR just like a paid ticket. Comps still count against the tier's inventory, so they can't push you into an oversell.</p>
     <p>You can also comp straight from the <a href="#help-guest-list">guest list</a>: give a guest an email and click <em>Issue comp</em>, and Backstage issues one ticket per seat in their party, emails the QR, and links the tickets back to that guest so you can re-view or resend them later.</p>
 
+    <h3>Discount codes</h3>
+    <p>A <strong>discount code</strong> is the middle ground between dropping a tier's price for everybody and comping someone in for free: a private code that only works for the people you send it to. Codes are <strong>never listed on the public ticket page</strong> — the code box there only ever confirms a code somebody already has.</p>
+    <p>In the <em>Discount codes</em> section, click <em>+</em> and set:</p>
+    <ul>
+      <li><strong>Code</strong> — what people type, e.g. <code>EASTBAY30</code>. Codes can't be renamed later (they're already out in the world), so disable and replace instead.</li>
+      <li><strong>Type</strong> — <em>Percent off</em> (30% off) or <em>Amount off</em> (a flat $10 off the order).</li>
+      <li><strong>Max uses</strong> — the code stops working after this many orders. Leave blank for unlimited. An abandoned checkout releases its use automatically when the 15-minute hold lapses.</li>
+      <li><strong>Expires</strong> — a cutoff independent of the tier's own sales window; both must be open for the code to work.</li>
+      <li><strong>Only once per email</strong> — blocks the same buyer redeeming twice. A speed bump, not an identity check — new email addresses are free.</li>
+      <li><strong>Applies to</strong> — all ticket types, or only the tiers you pick.</li>
+    </ul>
+    <p><em>Copy link</em> gives you a share URL that pre-fills the code on the public ticket page, so an outreach email can drop someone straight into a discounted cart without them typing anything.</p>
+    <p>The table tracks each code's <strong>Used</strong> count and <strong>Given</strong> — what it has actually cost you in real money. Discounted sales are recorded at the price actually charged, so tier revenue, gross sales, and the settlement report are all already net of any discount; nothing needs subtracting twice.</p>
+    <p>Codes that have been redeemed can't be deleted — they're part of the sales record. Disable them instead, which stops all future use and keeps the history intact.</p>
+
     <h3>Issued tickets</h3>
     <p>The <em>Issued tickets</em> list shows every ticket for the event — sold and comped — with its holder, tier, and live status. From each row you can <strong>View</strong> the QR (the same page the buyer got), <strong>Resend</strong> the link to the holder's email, or <strong>Void</strong> a ticket to invalidate it. The status is the source of truth at the door: a <em>Valid</em> ticket admits once and then flips to <em>Scanned in</em>, so the same QR can never get two people in; a <em>Void</em> ticket won't scan at all.</p>
 

@@ -15,16 +15,30 @@ use function Panic\event_public_path;
  *           any sales window), each with live availability from
  *           TicketingService::availableQuantity().
  *
+ *   POST /api/public/tickets/{eventId}/discount
+ *        body: { code, items?: [...], buyer_email? }
+ *        -> price a private discount code against the current cart WITHOUT
+ *           committing to anything, so the ticket page can show "EASTBAY30
+ *           applied — you save $15.00" before the buyer commits. Codes are
+ *           never listed by the GET above; they only exist for someone who was
+ *           given one. Rate limited per IP because this is the one public
+ *           surface where guessing at codes would otherwise be free.
+ *
  *   POST /api/public/tickets/{eventId}/checkout
  *        body: { buyer_name, buyer_email, buyer_phone?,
- *                items: [ { ticket_type_id, quantity }, ... ] }
+ *                items: [ { ticket_type_id, quantity }, ... ],
+ *                discount_code? }
 
  *        -> creates a pending ticket_orders row + ticket_order_items with a
  *           15-minute hold (reserving inventory). If the order total is > 0,
  *           starts a hosted checkout with the active payment provider,
  *           persists the provider + provider_ref on the order, and returns
- *           { checkout_url, order_id }. If the order total is exactly 0 (every
- *           selected ticket type is free), skips payment entirely: fulfills
+ *           { checkout_url, order_id }. A valid discount_code is folded into
+ *           the stored line-item unit prices (see Panic\TicketDiscounts), so
+ *           the discounted amount is what the provider charges AND what every
+ *           revenue report sums — the two can't drift. If the order total is
+ *           exactly 0 (every selected ticket type is free, or a code took the
+ *           cart to zero), skips payment entirely: fulfills
  *           the order immediately (TicketingService::fulfillOrder), emails
  *           the tickets, and returns { order_id, receipt_token, free: true }
  *           instead of a checkout_url — there is no hosted checkout to bounce
@@ -68,6 +82,12 @@ final class PublicTickets extends BaseEndpoint
         if (($this->params['action'] ?? null) === 'orders') {
             return $request->method() === 'GET'
                 ? $this->orderStatus($request, $event)
+                : Response::methodNotAllowed();
+        }
+
+        if (($this->params['action'] ?? null) === 'discount') {
+            return $request->method() === 'POST'
+                ? $this->previewDiscount($request, $event)
                 : Response::methodNotAllowed();
         }
 
@@ -141,51 +161,31 @@ final class PublicTickets extends BaseEndpoint
 
         $ticketing = new TicketingService();
 
-        // Resolve each requested type against currently-buyable inventory.
-        // Lock nothing yet — availabilityQuantity already excludes active holds.
-        $lineItems = [];
-        $currency  = null;
-        $amount    = 0;
-        foreach ($requested as $typeId => $qty) {
-            $type = $this->db->one(
-                "SELECT id, name, price_cents, currency
-                   FROM ticket_types
-                  WHERE id = ? AND event_id = ? AND status = 'on_sale'
-                    AND (sales_start IS NULL OR sales_start <= NOW())
-                    AND (sales_end   IS NULL OR sales_end   >= NOW())",
-                [$typeId, $eventId]
-            );
-            if ($type === null) {
-                return Response::json(['error' => 'A selected ticket type is not on sale.'], 422);
-            }
-
-            $available = $ticketing->availableQuantity($this->db, $typeId);
-            if ($qty > $available) {
-                return Response::json([
-                    'error'          => sprintf('Only %d ticket(s) left for "%s".', $available, (string) $type['name']),
-                    'ticket_type_id' => $typeId,
-                    'available'      => $available,
-                ], 409);
-            }
-
-            $typeCurrency = (string) $type['currency'];
-            if ($currency === null) {
-                $currency = $typeCurrency;
-            } elseif ($currency !== $typeCurrency) {
-                return Response::json(['error' => 'Cannot mix ticket currencies in one order.'], 422);
-            }
-
-            $unit    = (int) $type['price_cents'];
-            $amount += $unit * $qty;
-            $lineItems[] = [
-                'ticket_type_id'  => $typeId,
-                'name'            => (string) $type['name'],
-                'quantity'        => $qty,
-                'unit_price_cents'=> $unit,
-            ];
+        $resolved = $this->resolveLineItems($eventId, $requested, $ticketing);
+        if ($resolved instanceof Response) {
+            return $resolved;
         }
+        $lineItems = $resolved['lines'];
+        $currency  = $resolved['currency'];
+        $amount    = $resolved['amount_cents'];
 
-        $currency = $currency ?: 'USD';
+        // Optional private discount code. The discount is folded into the line
+        // items' unit prices, so from here down the rest of checkout — the hold,
+        // the provider's line items, the stored order — is simply a cheaper
+        // cart, with no separate adjustment for anything downstream to forget.
+        $discountCodeId = null;
+        $discountCents  = 0;
+        $rawCode        = trim((string) $request->body('discount_code', ''));
+        if ($rawCode !== '') {
+            $applied = $this->applyDiscount($request, $eventId, $rawCode, $email, $lineItems, $currency);
+            if ($applied instanceof Response) {
+                return $applied;
+            }
+            $lineItems      = $applied['lines'];
+            $discountCents  = $applied['discount_cents'];
+            $discountCodeId = $applied['code_id'];
+            $amount         = self::linesTotal($lineItems);
+        }
 
         // Opaque credential (distinct from any ticket's secret token) that lets
         // the buyer's own browser poll this order's status after being bounced
@@ -201,9 +201,14 @@ final class PublicTickets extends BaseEndpoint
             $orderId = $this->db->insert(
                 "INSERT INTO ticket_orders
                     (event_id, buyer_name, buyer_email, buyer_phone,
-                     amount_cents, currency, status, hold_expires_at, receipt_token)
-                 VALUES (?, ?, ?, ?, ?, ?, 'pending', DATE_ADD(NOW(), INTERVAL ? MINUTE), ?)",
-                [$eventId, $name, $email, ($phone !== '' ? $phone : null), $amount, $currency, self::HOLD_MINUTES, $receiptToken]
+                     amount_cents, currency, status, hold_expires_at, receipt_token,
+                     discount_code_id, discount_cents)
+                 VALUES (?, ?, ?, ?, ?, ?, 'pending', DATE_ADD(NOW(), INTERVAL ? MINUTE), ?, ?, ?)",
+                [
+                    $eventId, $name, $email, ($phone !== '' ? $phone : null),
+                    $amount, $currency, self::HOLD_MINUTES, $receiptToken,
+                    $discountCodeId, $discountCents,
+                ]
             );
 
             foreach ($lineItems as $li) {
@@ -222,7 +227,8 @@ final class PublicTickets extends BaseEndpoint
             return Response::json(['error' => 'Could not start checkout. Please try again.'], 500);
         }
 
-        // A fully-free order (every selected ticket type priced at 0) has
+        // A fully-free order (every selected ticket type priced at 0, or a
+        // discount code that took the cart all the way to zero) has
         // nothing for a payment provider to collect — Stripe/Square checkout
         // sessions require a positive total and would just reject it. Fulfill
         // immediately instead of ever starting hosted checkout, and email the
@@ -303,6 +309,186 @@ final class PublicTickets extends BaseEndpoint
             'order_id'     => $orderId,
             'checkout_url' => $checkoutUrl,
         ]);
+    }
+
+    /**
+     * POST /discount — price a code against the current cart, committing to
+     * nothing. Lets the ticket page confirm "EASTBAY30 applied — you save
+     * $15.00" before the buyer hands over their details.
+     */
+    private function previewDiscount(Request $request, array $event): Response
+    {
+        $eventId = (int) $event['id'];
+
+        $rawCode = trim((string) $request->body('code', ''));
+        if ($rawCode === '') {
+            return Response::json(['error' => 'Enter a discount code.'], 422);
+        }
+
+        $requested = $this->normalizeItems($request->body('items'));
+        if ($requested === []) {
+            return Response::json(['error' => 'Select at least one ticket first.'], 422);
+        }
+
+        $resolved = $this->resolveLineItems($eventId, $requested, new TicketingService());
+        if ($resolved instanceof Response) {
+            return $resolved;
+        }
+
+        // The buyer's email may not be typed yet at preview time; when it is,
+        // pass it so a once-per-email code fails here rather than at checkout.
+        $email   = trim((string) $request->body('buyer_email', ''));
+        $applied = $this->applyDiscount(
+            $request,
+            $eventId,
+            $rawCode,
+            ($email !== '' ? $email : null),
+            $resolved['lines'],
+            $resolved['currency']
+        );
+        if ($applied instanceof Response) {
+            return $applied;
+        }
+
+        return $this->ok([
+            'code'           => $applied['code'],
+            'description'    => $applied['description'],
+            'discount_cents' => $applied['discount_cents'],
+            'subtotal_cents' => $resolved['amount_cents'],
+            'total_cents'    => self::linesTotal($applied['lines']),
+            'currency'       => $resolved['currency'],
+        ]);
+    }
+
+    /**
+     * Resolve requested {type => qty} against currently-buyable inventory.
+     *
+     * Shared by checkout and the discount preview so a code is always priced
+     * against exactly the cart checkout would build — a preview can never
+     * promise a discount the real purchase then declines to give.
+     *
+     * @param array<int,int> $requested
+     *
+     * @return array{lines:array<int,array>,currency:string,amount_cents:int}|Response
+     */
+    private function resolveLineItems(int $eventId, array $requested, TicketingService $ticketing): array|Response
+    {
+        // Lock nothing yet — availableQuantity already excludes active holds.
+        $lineItems = [];
+        $currency  = null;
+        $amount    = 0;
+
+        foreach ($requested as $typeId => $qty) {
+            $type = $this->db->one(
+                "SELECT id, name, price_cents, currency
+                   FROM ticket_types
+                  WHERE id = ? AND event_id = ? AND status = 'on_sale'
+                    AND (sales_start IS NULL OR sales_start <= NOW())
+                    AND (sales_end   IS NULL OR sales_end   >= NOW())",
+                [$typeId, $eventId]
+            );
+            if ($type === null) {
+                return Response::json(['error' => 'A selected ticket type is not on sale.'], 422);
+            }
+
+            $available = $ticketing->availableQuantity($this->db, $typeId);
+            if ($qty > $available) {
+                return Response::json([
+                    'error'          => sprintf('Only %d ticket(s) left for "%s".', $available, (string) $type['name']),
+                    'ticket_type_id' => $typeId,
+                    'available'      => $available,
+                ], 409);
+            }
+
+            $typeCurrency = (string) $type['currency'];
+            if ($currency === null) {
+                $currency = $typeCurrency;
+            } elseif ($currency !== $typeCurrency) {
+                return Response::json(['error' => 'Cannot mix ticket currencies in one order.'], 422);
+            }
+
+            $unit    = (int) $type['price_cents'];
+            $amount += $unit * $qty;
+            $lineItems[] = [
+                'ticket_type_id'  => $typeId,
+                'name'            => (string) $type['name'],
+                'quantity'        => $qty,
+                'unit_price_cents'=> $unit,
+            ];
+        }
+
+        return [
+            'lines'        => $lineItems,
+            'currency'     => $currency ?: 'USD',
+            'amount_cents' => $amount,
+        ];
+    }
+
+    /**
+     * Resolve, validate and apply a discount code to a cart.
+     *
+     * Returns a Response carrying a buyer-facing reason on every rejection, or
+     * the rewritten line items plus the exact discount on success.
+     *
+     * @param array<int,array> $lines
+     *
+     * @return array{lines:array<int,array>,discount_cents:int,code_id:int,code:string,description:string}|Response
+     */
+    private function applyDiscount(
+        Request $request,
+        int $eventId,
+        string $rawCode,
+        ?string $buyerEmail,
+        array $lines,
+        string $currency
+    ): array|Response {
+        // Codes are secret by design and this endpoint is public and
+        // unauthenticated, so code-guessing is the one real abuse vector here.
+        // Throttle per IP — generously enough that a buyer mistyping the code
+        // they were emailed is never the one who gets locked out.
+        $ip = Request::clientIp() ?? 'unknown';
+        if (RateLimiter::tooMany($this->db, 'ticket-discount:ip:' . $ip, 30, 900)) {
+            return Response::json(['error' => 'Too many code attempts. Please try again shortly.'], 429);
+        }
+
+        $code = TicketDiscounts::find($this->db, $eventId, $rawCode);
+        if ($code === null) {
+            return Response::json(['error' => "That code isn't valid for this event."], 422);
+        }
+
+        if ($problem = TicketDiscounts::checkUsable($this->db, $code, $buyerEmail)) {
+            return Response::json(['error' => $problem], 422);
+        }
+
+        $scoped = TicketDiscounts::scopedTypeIds($this->db, (int) $code['id']);
+        $result = TicketDiscounts::apply($code, $lines, $scoped);
+
+        // Valid code, wrong cart: tier-scoped to tickets they haven't picked,
+        // or a cart that's already free. Say so rather than silently charging
+        // full price and leaving them to wonder whether it worked.
+        if ($result['discount_cents'] <= 0) {
+            return Response::json([
+                'error' => "That code doesn't apply to the tickets you selected.",
+            ], 422);
+        }
+
+        return [
+            'lines'          => $result['lines'],
+            'discount_cents' => $result['discount_cents'],
+            'code_id'        => (int) $code['id'],
+            'code'           => (string) $code['code'],
+            'description'    => TicketDiscounts::describe($code, $currency),
+        ];
+    }
+
+    /** Charged total of a set of line items, in cents. */
+    private static function linesTotal(array $lines): int
+    {
+        $total = 0;
+        foreach ($lines as $line) {
+            $total += (int) $line['quantity'] * (int) $line['unit_price_cents'];
+        }
+        return $total;
     }
 
     /**

@@ -9,9 +9,11 @@ use Panic\Env;
 use Panic\Mailer;
 use Panic\Request;
 use Panic\Response;
+use Panic\TicketDiscounts;
 use Panic\TicketingService;
 use Panic\Payments\PaymentProviders;
 use function Panic\date_or_null;
+use function Panic\event_public_path;
 use function Panic\log_activity;
 
 /**
@@ -29,6 +31,9 @@ use function Panic\log_activity;
  *   types/{id}    PATCH-> update a tier   DELETE-> delete a tier
  *   comp          POST -> issue comp tickets (emails QR)
  *   refund        POST -> cancel-event refund: refund + void all fulfilled orders
+ *   discounts     GET  -> list private discount codes (+ live redemption stats)
+ *                 POST -> create a code
+ *   discounts/{id} PATCH-> update a code  DELETE-> delete an unredeemed code
  *
  * Inventory, fulfillment, comps, voids, and oversell guards live in the shared
  * provider-agnostic TicketingService — this endpoint orchestrates and never
@@ -57,6 +62,7 @@ final class Ticketing extends BaseEndpoint
             'tickets' => $this->tickets($request, $eventId, $childId ? (int) $childId : null),
             'comp'    => $request->method() === 'POST' ? $this->comp($request, $eventId) : Response::methodNotAllowed(),
             'refund'  => $request->method() === 'POST' ? $this->refundCancel($request, $eventId) : Response::methodNotAllowed(),
+            'discounts' => $this->discounts($request, $eventId, $childId ? (int) $childId : null),
             default   => $this->notFound(),
         };
     }
@@ -242,6 +248,10 @@ final class Ticketing extends BaseEndpoint
                 'ticket_url'     => $event['ticket_url'],
                 'ticket_system'  => $event['ticket_system'],
                 'capacity'       => $event['capacity'] !== null ? (int) $event['capacity'] : null,
+                // Relative path to the public ticket page, so the admin UI can
+                // build discount-code share links without hardcoding the URL
+                // shape (see event_public_path()).
+                'public_page'    => event_public_path($event),
             ],
             'tiers'   => $tiers,
             'summary' => [
@@ -372,6 +382,307 @@ final class Ticketing extends BaseEndpoint
         $this->db->run('DELETE FROM ticket_types WHERE id = ? AND event_id = ?', [$typeId, $eventId]);
         log_activity($this->db, $eventId, $this->userId(), 'ticket tier deleted', ['ticket_type_id' => $typeId]);
         return $this->ok(['ok' => true]);
+    }
+
+    // ─── /ticketing/discounts — private discount codes ─────────────────────────────
+
+    /**
+     *   GET    /ticketing/discounts        list codes with live redemption stats
+     *   POST   /ticketing/discounts        create a code
+     *   PATCH  /ticketing/discounts/{id}   update a code
+     *   DELETE /ticketing/discounts/{id}   delete a code (only if never redeemed)
+     *
+     * Codes are private by construction: nothing here is echoed by the public
+     * ticket surface, which only ever confirms a code someone already typed.
+     * The money math itself lives in the shared Panic\TicketDiscounts service.
+     */
+    private function discounts(Request $request, int $eventId, ?int $codeId): Response
+    {
+        if ($codeId === null) {
+            return match ($request->method()) {
+                'GET'   => $this->listDiscounts($eventId),
+                'POST'  => $this->createDiscount($request, $eventId),
+                default => Response::methodNotAllowed(),
+            };
+        }
+
+        $code = $this->db->one(
+            'SELECT * FROM ticket_discount_codes WHERE id = ? AND event_id = ?',
+            [$codeId, $eventId]
+        );
+        if (!$code) {
+            return $this->notFound('Discount code not found');
+        }
+
+        return match ($request->method()) {
+            'PATCH'  => $this->updateDiscount($request, $eventId, $code),
+            'DELETE' => $this->deleteDiscount($eventId, $code),
+            default  => Response::methodNotAllowed(),
+        };
+    }
+
+    private function listDiscounts(int $eventId): Response
+    {
+        $rows = $this->db->all(
+            'SELECT * FROM ticket_discount_codes WHERE event_id = ? ORDER BY created_at DESC, id DESC',
+            [$eventId]
+        );
+
+        $codes = [];
+        foreach ($rows as $row) {
+            $id = (int) $row['id'];
+
+            // What this code has actually cost, in real money. Only settled
+            // orders count — a pending hold hasn't given anything away yet.
+            $realized = $this->db->one(
+                "SELECT COUNT(*) AS orders,
+                        COALESCE(SUM(discount_cents), 0) AS given_cents
+                   FROM ticket_orders
+                  WHERE discount_code_id = ? AND status IN ('paid', 'fulfilled')",
+                [$id]
+            );
+
+            $codes[] = [
+                'id'               => $id,
+                'code'             => (string) $row['code'],
+                'label'            => $row['label'],
+                'kind'             => (string) $row['kind'],
+                'percent_off'      => (int) $row['percent_off'],
+                'amount_off_cents' => (int) $row['amount_off_cents'],
+                'description'      => TicketDiscounts::describe($row),
+                'max_uses'         => $row['max_uses'] !== null ? (int) $row['max_uses'] : null,
+                'once_per_email'   => (bool) (int) $row['once_per_email'],
+                'starts_at'        => $row['starts_at'],
+                'expires_at'       => $row['expires_at'],
+                'status'           => (string) $row['status'],
+                'ticket_type_ids'  => TicketDiscounts::scopedTypeIds($this->db, $id),
+                // Live count including unexpired holds — the same number the
+                // public surface enforces max_uses against, so the admin sees
+                // exactly what a buyer would hit.
+                'uses'             => TicketDiscounts::redemptionCount($this->db, $id),
+                'orders'           => (int) ($realized['orders'] ?? 0),
+                'given_cents'      => (int) ($realized['given_cents'] ?? 0),
+            ];
+        }
+
+        return $this->ok(['discount_codes' => $codes]);
+    }
+
+    private function createDiscount(Request $request, int $eventId): Response
+    {
+        $b = $request->body();
+
+        $code = TicketDiscounts::normalizeCode((string) ($b['code'] ?? ''));
+        if ($code === '') {
+            return Response::json(['error' => 'A code is required.'], 422);
+        }
+        if (!preg_match('/^[A-Z0-9._-]+$/', $code)) {
+            return Response::json([
+                'error' => 'Codes may use letters, numbers, dot, dash and underscore only.',
+            ], 422);
+        }
+
+        $exists = $this->db->one(
+            'SELECT id FROM ticket_discount_codes WHERE event_id = ? AND code = ?',
+            [$eventId, $code]
+        );
+        if ($exists) {
+            return Response::json(['error' => "The code {$code} already exists for this event."], 409);
+        }
+
+        if ($invalid = $this->validateDiscountAmount($b)) {
+            return $invalid;
+        }
+
+        $kind = ((string) ($b['kind'] ?? 'percent')) === TicketDiscounts::KIND_FIXED
+            ? TicketDiscounts::KIND_FIXED
+            : TicketDiscounts::KIND_PERCENT;
+
+        $id = $this->db->insert(
+            'INSERT INTO ticket_discount_codes
+                (event_id, code, label, kind, percent_off, amount_off_cents,
+                 max_uses, once_per_email, starts_at, expires_at, status, created_by_user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [
+                $eventId,
+                $code,
+                trim((string) ($b['label'] ?? '')) ?: null,
+                $kind,
+                max(0, min(100, (int) ($b['percent_off'] ?? 0))),
+                max(0, (int) ($b['amount_off_cents'] ?? 0)),
+                $this->nullableMaxUses($b['max_uses'] ?? null),
+                !empty($b['once_per_email']) ? 1 : 0,
+                date_or_null($b['starts_at'] ?? null),
+                date_or_null($b['expires_at'] ?? null),
+                ((string) ($b['status'] ?? 'active')) === 'disabled' ? 'disabled' : 'active',
+                $this->userId(),
+            ]
+        );
+
+        $this->syncDiscountTiers($eventId, $id, $b['ticket_type_ids'] ?? null);
+
+        log_activity($this->db, $eventId, $this->userId(), 'discount code created', [
+            'discount_code_id' => $id,
+            'code'             => $code,
+        ]);
+        return $this->ok(['id' => $id, 'code' => $code]);
+    }
+
+    private function updateDiscount(Request $request, int $eventId, array $existing): Response
+    {
+        $codeId = (int) $existing['id'];
+        $b = $request->body();
+
+        // The code string itself is deliberately immutable: it has already been
+        // emailed to people, and renaming it would silently break every link
+        // and message already out in the world. Disable it and make a new one.
+        if ($invalid = $this->validateDiscountAmount($b, $existing)) {
+            return $invalid;
+        }
+
+        $kind = array_key_exists('kind', $b)
+            ? (((string) $b['kind']) === TicketDiscounts::KIND_FIXED
+                ? TicketDiscounts::KIND_FIXED
+                : TicketDiscounts::KIND_PERCENT)
+            : (string) $existing['kind'];
+
+        $this->db->run(
+            'UPDATE ticket_discount_codes
+                SET label = ?, kind = ?, percent_off = ?, amount_off_cents = ?,
+                    max_uses = ?, once_per_email = ?, starts_at = ?, expires_at = ?, status = ?
+              WHERE id = ? AND event_id = ?',
+            [
+                array_key_exists('label', $b) ? (trim((string) $b['label']) ?: null) : $existing['label'],
+                $kind,
+                array_key_exists('percent_off', $b)
+                    ? max(0, min(100, (int) $b['percent_off']))
+                    : (int) $existing['percent_off'],
+                array_key_exists('amount_off_cents', $b)
+                    ? max(0, (int) $b['amount_off_cents'])
+                    : (int) $existing['amount_off_cents'],
+                array_key_exists('max_uses', $b)
+                    ? $this->nullableMaxUses($b['max_uses'])
+                    : ($existing['max_uses'] !== null ? (int) $existing['max_uses'] : null),
+                array_key_exists('once_per_email', $b)
+                    ? (!empty($b['once_per_email']) ? 1 : 0)
+                    : (int) $existing['once_per_email'],
+                array_key_exists('starts_at', $b) ? date_or_null($b['starts_at']) : $existing['starts_at'],
+                array_key_exists('expires_at', $b) ? date_or_null($b['expires_at']) : $existing['expires_at'],
+                array_key_exists('status', $b)
+                    ? (((string) $b['status']) === 'disabled' ? 'disabled' : 'active')
+                    : (string) $existing['status'],
+                $codeId,
+                $eventId,
+            ]
+        );
+
+        if (array_key_exists('ticket_type_ids', $b)) {
+            $this->syncDiscountTiers($eventId, $codeId, $b['ticket_type_ids']);
+        }
+
+        log_activity($this->db, $eventId, $this->userId(), 'discount code updated', [
+            'discount_code_id' => $codeId,
+            'code'             => (string) $existing['code'],
+        ]);
+        return $this->ok(['ok' => true]);
+    }
+
+    private function deleteDiscount(int $eventId, array $existing): Response
+    {
+        $codeId = (int) $existing['id'];
+
+        // Once a code has been redeemed it is part of the financial record:
+        // deleting it would null it off those orders and lose the answer to
+        // "why was this order cheaper?". Disabling stops all future use and
+        // costs nothing, so steer there instead.
+        $used = $this->db->one(
+            "SELECT COUNT(*) AS n FROM ticket_orders
+              WHERE discount_code_id = ? AND status IN ('paid', 'fulfilled', 'refunded')",
+            [$codeId]
+        );
+        if ((int) ($used['n'] ?? 0) > 0) {
+            return Response::json([
+                'error' => 'This code has been redeemed and is part of the sales record. Disable it instead.',
+            ], 409);
+        }
+
+        $this->db->run('DELETE FROM ticket_discount_codes WHERE id = ? AND event_id = ?', [$codeId, $eventId]);
+        log_activity($this->db, $eventId, $this->userId(), 'discount code deleted', [
+            'discount_code_id' => $codeId,
+            'code'             => (string) $existing['code'],
+        ]);
+        return $this->ok(['ok' => true]);
+    }
+
+    /**
+     * Reject a code that would discount nothing — a 0% or $0 code silently
+     * "works" at checkout while giving the buyer no reason to have typed it.
+     */
+    private function validateDiscountAmount(array $b, ?array $existing = null): ?Response
+    {
+        $kind = array_key_exists('kind', $b)
+            ? (string) $b['kind']
+            : (string) ($existing['kind'] ?? 'percent');
+
+        if ($kind === TicketDiscounts::KIND_FIXED) {
+            $cents = array_key_exists('amount_off_cents', $b)
+                ? (int) $b['amount_off_cents']
+                : (int) ($existing['amount_off_cents'] ?? 0);
+            if ($cents <= 0) {
+                return Response::json(['error' => 'Enter an amount greater than zero.'], 422);
+            }
+            return null;
+        }
+
+        $pct = array_key_exists('percent_off', $b)
+            ? (int) $b['percent_off']
+            : (int) ($existing['percent_off'] ?? 0);
+        if ($pct < 1 || $pct > 100) {
+            return Response::json(['error' => 'Enter a percentage between 1 and 100.'], 422);
+        }
+        return null;
+    }
+
+    /** max_uses: null/empty/0 all mean "unlimited". */
+    private function nullableMaxUses(mixed $raw): ?int
+    {
+        if ($raw === null || $raw === '' || (int) $raw <= 0) {
+            return null;
+        }
+        return (int) $raw;
+    }
+
+    /**
+     * Replace a code's tier scoping. An empty/absent list means "every tier",
+     * which is stored as zero rows rather than a row per tier so that a tier
+     * added later is automatically covered.
+     */
+    private function syncDiscountTiers(int $eventId, int $codeId, mixed $rawIds): void
+    {
+        $this->db->run('DELETE FROM ticket_discount_code_types WHERE discount_code_id = ?', [$codeId]);
+
+        if (!is_array($rawIds) || $rawIds === []) {
+            return;
+        }
+
+        foreach (array_unique(array_map('intval', $rawIds)) as $typeId) {
+            if ($typeId <= 0) {
+                continue;
+            }
+            // Confirm the tier belongs to this event before linking it, so a
+            // crafted payload can't scope a code onto somebody else's event.
+            $owns = $this->db->one(
+                'SELECT id FROM ticket_types WHERE id = ? AND event_id = ?',
+                [$typeId, $eventId]
+            );
+            if (!$owns) {
+                continue;
+            }
+            $this->db->run(
+                'INSERT IGNORE INTO ticket_discount_code_types (discount_code_id, ticket_type_id) VALUES (?, ?)',
+                [$codeId, $typeId]
+            );
+        }
     }
 
     // ─── /ticketing/comp ───────────────────────────────────────────────────────────

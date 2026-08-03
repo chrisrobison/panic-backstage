@@ -1266,6 +1266,33 @@ pb-event-overview { display: block; }
   gap: 10px;
 }
 .form-section-note { font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; color: #a8aeb8; }
+
+/* Discount codes (ticketing-admin.js). The code itself reads as a token the
+   operator will paste into an email, so it gets monospace + tracking. */
+.discount-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.06em; }
+.discount-tiers {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0;
+}
+.discount-tiers legend {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 0 4px;
+}
+.discount-tiers label { display: flex; align-items: center; gap: 8px; font-weight: 400; }
+.discount-tiers label input { width: auto; }
+.discount-tier-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
 /* Recurring events — <pb-recurrence-fields> (event-wizard.js Step 1 and the
    Event Details "Recurrence" panel in event-workspace.js). Spans the full
    width of whatever .grid-form it's dropped into; lays its own controls out
@@ -2250,6 +2277,57 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   padding: 10px 12px;
 }
 .tkp-buyer input:focus { outline: none; border-color: var(--pev-cyan); }
+/* Private discount code entry. Intentionally understated — most buyers have
+   no code, and the box shouldn't read as "you're missing a deal". */
+.tkp-discount { margin: 0 0 4px; }
+.tkp-discount-row { display: flex; gap: 8px; align-items: stretch; }
+.tkp-discount-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--pev-bg);
+  border: 1px solid var(--pev-border);
+  color: var(--pev-text);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.tkp-discount-row input::placeholder { letter-spacing: normal; text-transform: none; font-weight: 500; }
+.tkp-discount-row input:focus { outline: none; border-color: var(--pev-cyan); }
+.tkp-code-apply {
+  flex: 0 0 auto;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: transparent;
+  border: 1px solid var(--pev-border);
+  color: var(--pev-text);
+  border-radius: 8px;
+  padding: 0 16px;
+  cursor: pointer;
+}
+.tkp-code-apply:hover { border-color: var(--pev-cyan); color: var(--pev-cyan); }
+.tkp-discount-note { margin: 8px 0 0; font-size: 13px; }
+.tkp-discount-ok { color: #7fd6a2; }
+.tkp-discount-error { color: #ff8a8a; }
+.tkp-discount-pending { color: var(--pev-muted); }
+.tkp-code-clear {
+  background: none;
+  border: 0;
+  padding: 0 0 0 6px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--pev-muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.tkp-code-clear:hover { color: var(--pev-text); }
+
 .tkp-error { color: #ff8a8a; margin: 0 0 12px; font-size: 13.5px; }
 .tkp-footer { display: grid; gap: 10px; }
 .tkp-total { display: none; }
@@ -3094,6 +3172,13 @@ pb-admin-db-browser { display: block; }
   overflow: hidden;
 }
 .modal-card.wide { width: min(820px, 100%); }
+/* Same hazard as `.ticketing [hidden]` below: the global `label { display: grid }`
+   (and .grid-form's flex/grid children) are author rules, so they beat the UA
+   `[hidden] { display: none }` and a toggled-off field would stay visible.
+   Modals are appended to <body>, outside any panel scope, so they need their
+   own guard — otherwise conditionally-shown fields (e.g. the percent/amount
+   swap in the discount-code editor) silently do nothing. */
+.modal-card [hidden] { display: none !important; }
 .modal-card .section-head { background: #f7f8fb; border-bottom: 1px solid var(--line, #e3e4e8); }
 .modal-card form { padding: 18px 22px 22px; }
 .modal-card textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }

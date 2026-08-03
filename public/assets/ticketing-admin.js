@@ -88,14 +88,16 @@ class TicketingAdmin extends PanicElement {
     if (!this.eventId) return;
     this.setLoading('Loading ticketing');
     try {
-      const [dash, links, tickets] = await Promise.all([
+      const [dash, links, tickets, discounts] = await Promise.all([
         api(`/events/${this.eventId}/ticketing`),
         this.loadScannerLinks(),
         this.loadTickets(),
+        this.loadDiscounts(),
       ]);
       this.dash = dash;
       this.links = links;
       this.tickets = tickets;
+      this.discounts = discounts;
       this.render();
     } catch (error) {
       this.showError(error);
@@ -119,6 +121,17 @@ class TicketingAdmin extends PanicElement {
     try {
       const res = await api(`/events/${this.eventId}/ticketing/tickets`);
       return res?.tickets || [];
+    } catch {
+      return null;
+    }
+  }
+
+  // Private discount codes for this event. Tolerate absence so ticketing still
+  // renders against a deployment that predates the discounts migration.
+  async loadDiscounts() {
+    try {
+      const res = await api(`/events/${this.eventId}/ticketing/discounts`);
+      return res?.discount_codes || [];
     } catch {
       return null;
     }
@@ -197,6 +210,7 @@ class TicketingAdmin extends PanicElement {
       <div class="ticketing-tiers padded">${this.tiersHtml()}</div>
 
       ${editable ? this.compSectionHtml() : ''}
+      ${this.discountSectionHtml()}
       ${this.issuedTicketsHtml()}
       ${this.scannerSectionHtml()}
 
@@ -339,6 +353,183 @@ class TicketingAdmin extends PanicElement {
       ${tiers.length ? '' : '<p class="ticket-note padded">Add a ticket type first to issue comps.</p>'}`;
   }
 
+  // ── Private discount codes ─────────────────────────────────────────────────
+  // Codes never appear on the public ticket page; they only work for someone
+  // who was handed one. This table is the whole operator view: what each code
+  // does, how far it's been used, and what it has cost in real money.
+  discountSectionHtml() {
+    const codes = this.discounts;
+    const editable = this.editable;
+    if (codes === null) return ''; // endpoint unavailable — stay quiet
+
+    const tiersById = new Map((this.dash.tiers || []).map((t) => [Number(t.id), t.name]));
+
+    const rows = codes.map((c) => {
+      const scope = (c.ticket_type_ids || []).length
+        ? c.ticket_type_ids.map((id) => esc(tiersById.get(Number(id)) || `#${id}`)).join(', ')
+        : 'All tiers';
+      const used = c.max_uses ? `${c.uses} / ${c.max_uses}` : String(c.uses);
+      const expired = c.expires_at && parseStoredUtc(c.expires_at) < new Date();
+      const state = c.status === 'disabled'
+        ? 'Disabled'
+        : (expired ? 'Expired' : 'Active');
+      return `<tr data-discount="${esc(c.id)}">
+        <td data-label="Code"><strong class="discount-code">${esc(c.code)}</strong>${c.label ? `<br><span class="muted">${esc(c.label)}</span>` : ''}</td>
+        <td data-label="Discount">${esc(c.description)}</td>
+        <td data-label="Applies to">${scope}</td>
+        <td data-label="Used">${esc(used)}${c.once_per_email ? '<br><span class="muted small">1 per email</span>' : ''}</td>
+        <td data-label="Given">${moneyCents(c.given_cents)}</td>
+        <td data-label="Expires">${c.expires_at ? esc(shortDateTime(c.expires_at)) : '—'}</td>
+        <td data-label="Status"><span class="badge">${esc(state)}</span></td>
+        ${editable ? `<td class="row-actions">
+          <button type="button" class="small secondary" data-copy-discount="${esc(c.code)}">Copy link</button>
+          <button type="button" class="link" data-edit-discount="${esc(c.id)}" aria-label="Edit" title="Edit"><i class="fa-solid fa-pencil" aria-hidden="true"></i></button>
+        </td>` : ''}
+      </tr>`;
+    }).join('');
+
+    const table = codes.length
+      ? `<table class="data-table">
+          <thead><tr><th>Code</th><th>Discount</th><th>Applies to</th><th>Used</th><th>Given</th><th>Expires</th><th>Status</th>${editable ? '<th></th>' : ''}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`
+      : `<p class="ticket-note">No discount codes yet.${editable ? ' Create one to give specific people a private price — the code never shows on the public ticket page, and “Copy link” gives you a URL that applies it automatically.' : ''}</p>`;
+
+    return `<div class="section-head padded sub-head"><h3>Discount codes</h3>${editable ? `<button type="button" class="add-toggle" data-add-discount aria-label="New discount code" title="New discount code"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>` : ''}</div>
+      <div class="ticketing-discounts padded">${table}</div>`;
+  }
+
+  openDiscountModal(code = null) {
+    const c = code || {};
+    const isEdit = Boolean(c.id);
+    const tiers = this.dash.tiers || [];
+    const scoped = new Set((c.ticket_type_ids || []).map(Number));
+    const kind = c.kind || 'percent';
+    const amountDollars = c.amount_off_cents ? (Number(c.amount_off_cents) / 100).toFixed(2) : '';
+
+    const { dialog, close } = this.openModal(isEdit ? `Edit ${c.code}` : 'New discount code', `
+      <form class="grid-form padded" data-form="discount" data-discount-id="${esc(c.id || '')}">
+        <label>Code ${isEdit
+          ? `<input value="${esc(c.code)}" disabled><span class="muted small">Codes can't be renamed — they're already out in the world. Disable this one and make a new one instead.</span>`
+          : '<input name="code" required placeholder="EASTBAY30" autocapitalize="characters" spellcheck="false">'}</label>
+        <label>Internal label <input name="label" value="${esc(c.label || '')}" placeholder="East Bay outreach"></label>
+        <label>Type <select name="kind">
+          <option value="percent" ${kind === 'percent' ? 'selected' : ''}>Percent off</option>
+          <option value="fixed" ${kind === 'fixed' ? 'selected' : ''}>Amount off</option>
+        </select></label>
+        <label data-when="percent">Percent off <input name="percent_off" type="number" min="1" max="100" value="${esc(c.percent_off || '')}" placeholder="30"></label>
+        <label data-when="fixed">Amount off (USD) <input name="amount_dollars" type="number" step="0.01" min="0" value="${esc(amountDollars)}" placeholder="10.00"></label>
+        <label>Max uses <input name="max_uses" type="number" min="0" value="${esc(c.max_uses ?? '')}" placeholder="Unlimited"></label>
+        <label>Expires <input name="expires_at" type="datetime-local" value="${esc(utcToLocalDateTimeInput(c.expires_at))}"></label>
+        <label>Status <select name="status">
+          <option value="active" ${c.status !== 'disabled' ? 'selected' : ''}>Active</option>
+          <option value="disabled" ${c.status === 'disabled' ? 'selected' : ''}>Disabled</option>
+        </select></label>
+        <label class="wide check-label"><input type="checkbox" name="once_per_email" ${c.once_per_email ? 'checked' : ''}> Only once per email address</label>
+        <fieldset class="wide discount-tiers">
+          <legend>Applies to</legend>
+          <label><input type="checkbox" name="all_tiers" ${scoped.size ? '' : 'checked'}> All ticket types</label>
+          <div class="discount-tier-list" ${scoped.size ? '' : 'hidden'}>
+            ${tiers.map((t) => `<label><input type="checkbox" name="ticket_type_ids" value="${esc(t.id)}" ${scoped.has(Number(t.id)) ? 'checked' : ''}> ${esc(t.name)}</label>`).join('')}
+          </div>
+        </fieldset>
+        <div class="wide form-actions"><button type="submit">${isEdit ? 'Save code' : 'Create code'}</button><button type="button" class="secondary" data-close>Cancel</button>${isEdit ? `<button type="button" class="link danger" data-del-discount="${esc(c.id)}">Delete code</button>` : ''}</div>
+        <p class="error-text wide" data-error></p>
+      </form>`);
+
+    // Only show the field that matches the selected discount type.
+    const kindSelect = $('select[name="kind"]', dialog);
+    const syncKind = () => {
+      $$('[data-when]', dialog).forEach((el) => {
+        el.hidden = el.dataset.when !== kindSelect.value;
+      });
+    };
+    kindSelect.addEventListener('change', syncKind);
+    syncKind();
+
+    // "All ticket types" and the per-tier list are mutually exclusive.
+    const allTiers = $('input[name="all_tiers"]', dialog);
+    const tierList = $('.discount-tier-list', dialog);
+    allTiers.addEventListener('change', () => {
+      tierList.hidden = allTiers.checked;
+      if (allTiers.checked) $$('input[name="ticket_type_ids"]', dialog).forEach((cb) => { cb.checked = false; });
+    });
+
+    $(isEdit ? 'input[name="label"]' : 'input[name="code"]', dialog).focus();
+    $('[data-form="discount"]', dialog).addEventListener('submit', (e) => this.saveDiscount(e, close));
+    $('[data-del-discount]', dialog)?.addEventListener('click', () => this.deleteDiscount(Number(c.id), close));
+  }
+
+  async saveDiscount(e, close) {
+    e.preventDefault();
+    const submit = $('button[type="submit"]', e.target);
+    if (submit) submit.disabled = true;
+    const values = formData(e.target);
+
+    const allTiers = $('input[name="all_tiers"]', e.target).checked;
+    const typeIds = allTiers
+      ? []
+      : $$('input[name="ticket_type_ids"]:checked', e.target).map((cb) => Number(cb.value));
+
+    const body = {
+      label: values.label || null,
+      kind: values.kind === 'fixed' ? 'fixed' : 'percent',
+      percent_off: Number(values.percent_off || 0),
+      amount_off_cents: Math.round(Number(values.amount_dollars || 0) * 100),
+      max_uses: values.max_uses === '' ? null : Number(values.max_uses),
+      once_per_email: Boolean(values.once_per_email),
+      // Same UTC conversion as tier sale windows — see saveTier().
+      expires_at: values.expires_at ? localDateTimeToUtc(values.expires_at) : null,
+      status: values.status === 'disabled' ? 'disabled' : 'active',
+      ticket_type_ids: typeIds,
+    };
+
+    const id = e.target.dataset.discountId;
+    if (!id) body.code = (values.code || '').trim().toUpperCase();
+
+    const path = id
+      ? `/events/${this.eventId}/ticketing/discounts/${id}`
+      : `/events/${this.eventId}/ticketing/discounts`;
+    try {
+      await api(path, { method: id ? 'PATCH' : 'POST', body: JSON.stringify(body) });
+      publish('toast.show', { message: id ? 'Discount code updated.' : 'Discount code created.' });
+      close?.();
+      await this.load();
+    } catch (error) {
+      const err = $('[data-error]', e.target);
+      if (err) err.textContent = error.message || 'Save failed.';
+      if (submit) submit.disabled = false;
+    }
+  }
+
+  async deleteDiscount(id, close) {
+    if (!confirm('Delete this discount code? Codes that have already been redeemed cannot be deleted — disable them instead.')) return;
+    try {
+      await api(`/events/${this.eventId}/ticketing/discounts/${id}`, { method: 'DELETE' });
+      if (typeof close === 'function') close();
+      publish('toast.show', { message: 'Discount code deleted.' });
+      await this.load();
+    } catch (error) {
+      publish('toast.show', { tone: 'error', message: error.message });
+    }
+  }
+
+  // A share link that pre-fills the code on the public ticket page, so an
+  // outreach email can drop someone straight into a discounted cart.
+  async copyDiscountLink(code) {
+    const path = this.dash.event?.public_page || `event.html?id=${encodeURIComponent(this.eventId)}`;
+    const base = `${window.location.origin}/${path.replace(/^\//, '')}`;
+    const url = `${base}${base.includes('?') ? '&' : '?'}code=${encodeURIComponent(code)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      publish('toast.show', { message: 'Share link copied.' });
+    } catch {
+      // Clipboard is blocked in some browsers/contexts — show it so the
+      // operator can copy by hand rather than getting a silent no-op.
+      window.prompt('Copy this link:', url);
+    }
+  }
+
   scannerSectionHtml() {
     const links = this.links;
     const editable = this.editable;
@@ -372,6 +563,14 @@ class TicketingAdmin extends PanicElement {
 
     // Comp: opens the issue-comps modal.
     $('[data-add-comp]', this)?.addEventListener('click', () => this.openCompModal());
+
+    // Discount codes: add / edit / copy share link.
+    $('[data-add-discount]', this)?.addEventListener('click', () => this.openDiscountModal(null));
+    $$('[data-edit-discount]', this).forEach((btn) => btn.addEventListener('click', () => {
+      const code = (this.discounts || []).find((c) => Number(c.id) === Number(btn.dataset.editDiscount));
+      if (code) this.openDiscountModal(code);
+    }));
+    $$('[data-copy-discount]', this).forEach((btn) => btn.addEventListener('click', () => this.copyDiscountLink(btn.dataset.copyDiscount)));
 
     // Issued-ticket row actions
     $$('[data-resend-ticket]', this).forEach((btn) => btn.addEventListener('click', () => this.resendTicket(btn)));

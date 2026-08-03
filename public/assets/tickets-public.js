@@ -19,6 +19,14 @@
 // only copy was the confirmation email; this shows it immediately so a
 // walk-up/door sale doesn't leave them waiting on their inbox.
 //
+// Private discount codes are supported but never advertised: the tier list
+// above says nothing about them, and the code box is only ever a place to
+// confirm a code somebody was already given. A code can also be pre-filled
+// from the page URL (?code=EASTBAY30) so an outreach email can link straight
+// into a discounted cart. Either way the code is priced by the server
+// (POST /discount) against the exact cart, and re-priced server-side at
+// checkout — nothing here is trusted to compute money.
+//
 // Fully public: api() attaches a JWT only if one happens to exist; these
 // endpoints are unauthenticated and return 200, so no login redirect occurs.
 import { api, esc, PanicElement } from './core.js';
@@ -45,7 +53,19 @@ class TicketPurchase extends PanicElement {
     this.qty = {};
     this.receiptHtml = '';
 
+    // Discount state. `discountCode` is what's in the box, `discount` is the
+    // server's pricing of it against a specific cart (null until confirmed).
+    this.discount = null;
+    this.discountBusy = false;
+    this.discountRejected = false;
+
     const params = new URLSearchParams(window.location.search);
+
+    // Pre-filled code from an outreach link. Deliberately NOT scrubbed from
+    // the address bar the way the checkout params below are: this one is meant
+    // to be shareable and survive a reload.
+    this.discountCode = (params.get('code') || '').trim().toUpperCase();
+
     const checkout = params.get('checkout');
     const orderId = params.get('order');
     const receiptToken = params.get('receipt');
@@ -228,6 +248,15 @@ class TicketPurchase extends PanicElement {
         <p class="tkp-list-label">Ticket Type</p>
         <form class="tkp-form" novalidate>
           <ul class="tkp-list">${rows}</ul>
+          <div class="tkp-discount">
+            <div class="tkp-discount-row">
+              <input type="text" data-code placeholder="Discount code" aria-label="Discount code"
+                     value="${esc(this.discountCode || '')}" autocomplete="off" spellcheck="false"
+                     autocapitalize="characters">
+              <button type="button" class="tkp-code-apply" data-apply-code>Apply</button>
+            </div>
+            <p class="tkp-discount-note" data-code-note hidden></p>
+          </div>
           <div class="tkp-buyer">
             <label>Name <input name="buyer_name" required autocomplete="name" placeholder="Full name"></label>
             <label>Email <input name="buyer_email" type="email" required autocomplete="email" placeholder="you@example.com"></label>
@@ -246,10 +275,39 @@ class TicketPurchase extends PanicElement {
     this.errorEl = this.querySelector('.tkp-error');
     this.totalEl = this.querySelector('[data-total]');
     this.buyBtn = this.querySelector('[data-buy]');
+    this.codeEl = this.querySelector('[data-code]');
+    this.codeNoteEl = this.querySelector('[data-code-note]');
 
     this.form.addEventListener('change', () => this.recalc());
     this.form.addEventListener('input', () => this.recalc());
     this.form.addEventListener('submit', (event) => this.checkout(event));
+
+    this.codeEl.addEventListener('input', () => {
+      const next = this.codeEl.value.trim().toUpperCase();
+      if (next === this.discountCode) return;
+      // Editing the code invalidates whatever was applied, and clears the
+      // "already rejected" latch so the new value gets a fresh attempt.
+      this.discountCode = next;
+      this.discount = null;
+      this.discountRejected = false;
+      this.showCodeNote('');
+    });
+    // Enter in the code box means "apply this code", not "submit the order".
+    this.codeEl.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        this.applyCode();
+      }
+    });
+    this.querySelector('[data-apply-code]').addEventListener('click', () => this.applyCode());
+    this.addEventListener('click', (event) => {
+      if (event.target.closest('[data-clear-code]')) {
+        event.preventDefault();
+        this.clearCode();
+      }
+    });
+
+    this.renderCodeState();
     this.querySelectorAll('.tkp-step').forEach((btn) => {
       btn.addEventListener('click', () => {
         const input = this.querySelector(`input.tkp-qty-input[data-type="${btn.dataset.type}"]`);
@@ -279,12 +337,122 @@ class TicketPurchase extends PanicElement {
     return { items, totalCents, currency: (this.types[0] && this.types[0].currency) || 'USD' };
   }
 
+  /**
+   * Identity of the current cart. A discount is priced by the server against
+   * one specific cart, so this is what tells us the quote has gone stale.
+   */
+  cartSignature(items) {
+    return items
+      .map((i) => `${i.ticket_type_id}x${i.quantity}`)
+      .sort()
+      .join(',');
+  }
+
   recalc() {
     const { items, totalCents, currency } = this.selectedItems();
-    const total = items.length ? priceLabel(totalCents, currency) : '—';
+    const signature = this.cartSignature(items);
+
+    const applied = this.discount && this.discount.signature === signature ? this.discount : null;
+    const dueCents = Math.max(0, totalCents - (applied ? applied.discount_cents : 0));
+    const total = items.length ? priceLabel(dueCents, currency) : '—';
+
     this.totalEl.textContent = total;
     this.buyBtn.textContent = items.length ? `Get Tickets — ${total}` : 'Select tickets';
     this.buyBtn.disabled = items.length === 0;
+
+    // Re-price when the cart moves under an applied code, and auto-apply a
+    // code that arrived pre-filled as soon as there's a cart to price it
+    // against. `discountRejected` stops a bad code retrying on every keystroke.
+    const stale = this.discount && this.discount.signature !== signature;
+    const pending = !this.discount && this.discountCode && !this.discountRejected;
+    if (items.length > 0 && !this.discountBusy && (stale || pending)) {
+      this.refreshDiscount();
+    }
+  }
+
+  /** Explicit "Apply" — always re-asks the server, even for a rejected code. */
+  applyCode() {
+    this.discountCode = this.codeEl.value.trim().toUpperCase();
+    this.discountRejected = false;
+    this.discount = null;
+    if (!this.discountCode) {
+      this.showCodeNote('');
+      return;
+    }
+    const { items } = this.selectedItems();
+    if (items.length === 0) {
+      this.showCodeNote('Select your tickets first, then apply the code.', 'pending');
+      return;
+    }
+    this.refreshDiscount();
+  }
+
+  clearCode() {
+    this.discountCode = '';
+    this.discount = null;
+    this.discountRejected = false;
+    if (this.codeEl) this.codeEl.value = '';
+    this.showCodeNote('');
+    this.recalc();
+  }
+
+  /** Ask the server to price the current code against the current cart. */
+  async refreshDiscount() {
+    const code = this.discountCode;
+    const { items } = this.selectedItems();
+    if (!code || items.length === 0) return;
+
+    this.discountBusy = true;
+    this.showCodeNote('Checking code…', 'pending');
+    try {
+      const result = await api(`/public/tickets/${encodeURIComponent(this.eventId)}/discount`, {
+        method: 'POST',
+        body: JSON.stringify({
+          code,
+          items,
+          buyer_email: (this.form && this.form.buyer_email.value.trim()) || '',
+        }),
+      });
+      this.discount = { ...result, signature: this.cartSignature(items) };
+      this.renderCodeState();
+    } catch (error) {
+      this.discount = null;
+      // Latch the failure so recalc() doesn't re-ask on every keystroke — the
+      // Apply button and any edit to the code both clear it.
+      this.discountRejected = true;
+      this.showCodeNote(error.message || 'That code could not be applied.', 'error');
+    } finally {
+      this.discountBusy = false;
+      this.recalc();
+    }
+  }
+
+  /** Reflect the applied discount (if any) in the note under the code box. */
+  renderCodeState() {
+    if (!this.discount) {
+      this.showCodeNote('');
+      return;
+    }
+    const saved = priceLabel(this.discount.discount_cents, this.discount.currency);
+    this.showCodeNote(
+      `${this.discount.code} applied — ${this.discount.description}. You save ${saved}.`,
+      'ok'
+    );
+  }
+
+  showCodeNote(message, kind) {
+    if (!this.codeNoteEl) return;
+    if (!message) {
+      this.codeNoteEl.hidden = true;
+      this.codeNoteEl.innerHTML = '';
+      return;
+    }
+    const remove = kind === 'ok'
+      ? ' <button type="button" class="tkp-code-clear" data-clear-code>Remove</button>'
+      : '';
+    this.codeNoteEl.className = `tkp-discount-note tkp-discount-${kind || 'pending'}`;
+    this.codeNoteEl.innerHTML = esc(message) + remove;
+    this.codeNoteEl.hidden = false;
   }
 
   showError(message) {
@@ -321,7 +489,16 @@ class TicketPurchase extends PanicElement {
     try {
       const result = await api(`/public/tickets/${encodeURIComponent(this.eventId)}/checkout`, {
         method: 'POST',
-        body: JSON.stringify({ buyer_name, buyer_email, buyer_phone, items }),
+        body: JSON.stringify({
+          buyer_name,
+          buyer_email,
+          buyer_phone,
+          items,
+          // Send the raw code, not the previewed figure: the server re-prices
+          // it against this cart and this buyer, so a stale or tampered quote
+          // can never decide what someone is charged.
+          discount_code: this.discountCode || '',
+        }),
       });
       if (result && result.checkout_url) {
         window.location.href = result.checkout_url;

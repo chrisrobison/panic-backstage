@@ -8082,6 +8082,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PublicTicketCheckoutItem'
+        discount_code:
+          type: string
+          nullable: true
+          description: >-
+            Optional private discount code. Re-resolved and re-priced server-side against this
+            exact cart and buyer — a code previewed via POST /discount is never trusted to decide
+            what is charged. An invalid, expired, exhausted, or inapplicable code fails the whole
+            checkout with 422 rather than silently charging full price.
     PublicTicketCheckoutResponse:
       type: object
       properties:
@@ -8090,6 +8098,110 @@ components:
         checkout_url:
           type: string
           description: Hosted checkout URL to redirect the buyer's browser to.
+    PublicTicketDiscountRequest:
+      type: object
+      required:
+        - code
+        - items
+      properties:
+        code:
+          type: string
+          description: >-
+            The code as typed. Normalized server-side (uppercased, whitespace stripped) before
+            lookup, so "east bay 30" and "EASTBAY30" resolve identically.
+        items:
+          type: array
+          description: The current cart, so the discount can be priced against real line items.
+          items:
+            $ref: '#/components/schemas/PublicTicketCheckoutItem'
+        buyer_email:
+          type: string
+          format: email
+          nullable: true
+          description: >-
+            Optional at preview time. When supplied, a once-per-email code is rejected here rather
+            than surprising the buyer at checkout.
+    PublicTicketDiscountResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: The normalized code that was applied.
+        description:
+          type: string
+          description: Human summary of the discount, e.g. "30% off" or "USD 10.00 off".
+        discount_cents:
+          type: integer
+          description: Exact amount taken off this cart, in cents.
+        subtotal_cents:
+          type: integer
+          description: Cart total before the discount.
+        total_cents:
+          type: integer
+          description: Cart total after the discount.
+        currency:
+          type: string
+    TicketDiscountCode:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        label:
+          type: string
+          nullable: true
+          description: Internal-only note. Never exposed on the public ticket surface.
+        kind:
+          type: string
+          enum: [percent, fixed]
+        percent_off:
+          type: integer
+          description: Whole percent 1-100. Meaningful when kind=percent.
+        amount_off_cents:
+          type: integer
+          description: >-
+            Flat amount off the order. Meaningful when kind=fixed. Clamped at redemption time to
+            the eligible subtotal so a cart can never go negative.
+        description:
+          type: string
+          description: Human summary, e.g. "30% off".
+        max_uses:
+          type: integer
+          nullable: true
+          description: null means unlimited.
+        once_per_email:
+          type: boolean
+        starts_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [active, disabled]
+        ticket_type_ids:
+          type: array
+          description: Tiers this code is limited to. Empty means every tier on the event.
+          items:
+            type: integer
+        uses:
+          type: integer
+          description: >-
+            Live redemption count — paid/fulfilled orders plus unexpired holds. Derived, not a
+            stored counter, so an abandoned checkout releases its use when the hold lapses. This is
+            the same number max_uses is enforced against.
+        orders:
+          type: integer
+          description: Settled (paid/fulfilled) orders that used this code.
+        given_cents:
+          type: integer
+          description: >-
+            Real money given away across settled orders. A memo only — ticket revenue is already
+            recorded net of it, so this must never be subtracted from gross again.
     ScannerLink:
       type: object
       properties:
@@ -22426,6 +22538,78 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/public/tickets/{eventId}/discount:
+    post:
+      operationId: publicTickets_previewDiscount
+      summary: Price a private discount code against the current cart
+      description: >-
+        Confirms a discount code and reports what it takes off this specific cart, committing to
+        nothing — no order, no hold, no inventory claim. Lets the public ticket page show
+        "EASTBAY30 applied — you save $15.00" before the buyer hands over their details.
+
+
+        Discount codes are private by construction: GET /api/public/tickets/{eventId} never lists
+        them, and this endpoint only ever confirms a code the caller already supplied. A code can
+        also be pre-filled from the event page URL (?code=EASTBAY30) so an outreach email can link
+        straight into a discounted cart.
+
+
+        The quote returned here is advisory. POST /checkout re-resolves and re-prices the code
+        against the cart and buyer it actually receives, so a stale or tampered preview can never
+        decide what someone is charged.
+
+
+        Rate limited per IP (30 attempts / 15 min) because this is the one public surface where
+        guessing at codes would otherwise be free.
+      tags:
+        - Public Ticketing
+      security: []
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicTicketDiscountRequest'
+      responses:
+        '200':
+          description: The code is valid for this cart; the discount is reported.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicTicketDiscountResponse'
+        '404':
+          description: Event not found, not publicly visible, or not using in-house ticketing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: A requested ticket type no longer has enough availability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: >-
+            No code or no items supplied, or the code is unusable — unknown, not yet started,
+            expired, disabled, fully redeemed, already used by this email, or scoped to tiers the
+            cart doesn't contain. The message is buyer-facing and says which.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many code attempts from this IP.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/public/inquiries:
     post:
       operationId: publicInquiry_create
@@ -22956,6 +23140,232 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Event not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/events/{eventId}/ticketing/discounts:
+    get:
+      operationId: ticketing_listDiscountCodes
+      summary: List the event's private discount codes
+      description: >-
+        Every discount code on the event, each with its live redemption count (paid/fulfilled
+        orders plus unexpired holds — the same figure max_uses is enforced against) and what it has
+        actually cost in real money. Requires the 'manage_ticketing' event capability.
+
+
+        Discounted sales are recorded at the price actually charged, so tier revenue, gross ticket
+        sales, and the settlement report are already net of every discount. given_cents is a memo
+        for "what did this code cost us", never something to subtract from gross a second time.
+      tags:
+        - Ticketing
+      parameters:
+        - $ref: '#/components/parameters/TicketingEventId'
+      responses:
+        '200':
+          description: Discount codes.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  discount_codes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TicketDiscountCode'
+        '403':
+          description: Caller lacks the manage_ticketing capability on this event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: ticketing_createDiscountCode
+      summary: Create a private discount code
+      description: >-
+        Creates a code scoped to this event. The code string is normalized (uppercased, whitespace
+        stripped) and must be unique per event. Requires the 'manage_ticketing' event capability.
+
+
+        Codes are never listed on the public ticket page — they only do anything for someone who
+        was given one, which is what makes this distinct from simply lowering a tier's price.
+      tags:
+        - Ticketing
+      parameters:
+        - $ref: '#/components/parameters/TicketingEventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  description: Letters, numbers, dot, dash and underscore only (after normalization).
+                label:
+                  type: string
+                  nullable: true
+                kind:
+                  type: string
+                  enum: [percent, fixed]
+                percent_off:
+                  type: integer
+                  description: Required 1-100 when kind=percent.
+                amount_off_cents:
+                  type: integer
+                  description: Required > 0 when kind=fixed.
+                max_uses:
+                  type: integer
+                  nullable: true
+                once_per_email:
+                  type: boolean
+                starts_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                expires_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                status:
+                  type: string
+                  enum: [active, disabled]
+                ticket_type_ids:
+                  type: array
+                  description: >-
+                    Tiers to limit the code to. Omit or send an empty array for every tier — stored
+                    as zero rows, so a tier added later is automatically covered. Ids belonging to
+                    another event are ignored.
+                  items:
+                    type: integer
+      responses:
+        '200':
+          description: Code created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  code:
+                    type: string
+                    description: The normalized code as stored.
+        '403':
+          description: Caller lacks the manage_ticketing capability on this event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: A code with this name already exists on the event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing/invalid code, or a discount amount that would take nothing off.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/events/{eventId}/ticketing/discounts/{codeId}:
+    patch:
+      operationId: ticketing_updateDiscountCode
+      summary: Update a discount code
+      description: >-
+        Updates any field except the code string itself, which is deliberately immutable — it has
+        already been emailed to people, and renaming it would silently break every link and message
+        already in the world. Disable the code and create a new one instead. Sending
+        ticket_type_ids replaces the tier scoping wholesale. Requires 'manage_ticketing'.
+      tags:
+        - Ticketing
+      parameters:
+        - $ref: '#/components/parameters/TicketingEventId'
+        - name: codeId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Any subset of the creatable fields except `code`.
+      responses:
+        '200':
+          description: Code updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '403':
+          description: Caller lacks the manage_ticketing capability on this event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Code not found on this event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: A discount amount that would take nothing off.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: ticketing_deleteDiscountCode
+      summary: Delete an unredeemed discount code
+      description: >-
+        Deletes a code that has never been redeemed. A code carried by any paid, fulfilled, or
+        refunded order is part of the sales record — deleting it would null it off those orders and
+        lose the answer to "why was this order cheaper?" — so that returns 409 and the caller is
+        steered to disabling instead, which stops all future use and keeps the history intact.
+        Requires 'manage_ticketing'.
+      tags:
+        - Ticketing
+      parameters:
+        - $ref: '#/components/parameters/TicketingEventId'
+        - name: codeId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Code deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '403':
+          description: Caller lacks the manage_ticketing capability on this event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Code not found on this event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Code has been redeemed and cannot be deleted; disable it instead.
           content:
             application/json:
               schema:
