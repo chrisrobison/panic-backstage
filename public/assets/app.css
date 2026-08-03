@@ -1961,6 +1961,9 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   z-index: 30;
 }
 .toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   width: min(360px, calc(100vw - 36px));
   border-radius: 8px;
   padding: 12px 14px;
@@ -1970,6 +1973,23 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   font-weight: 760;
 }
 .toast.error { background: var(--danger); }
+.toast-message { flex: 1; }
+.toast-close {
+  flex: none;
+  margin: -4px -4px 0 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 700;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.toast-close:hover { opacity: 1; }
+.toast-close:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
 /* ── Public event landing page (pb-public-event-page) ─────────────────────
    Dark, gig-poster-flavored layout: hero (flyer / vitals / sticky ticket
    card) over a three-up info grid (lineup, about, venue). Fully self

@@ -588,26 +588,42 @@ class LoadingState extends HTMLElement {
 }
 
 
+// Toast notifications. Error toasts are sticky — they stay up until the
+// reader dismisses them, since an error is usually the one message you
+// actually need to finish reading. Every other tone auto-dismisses, and
+// all toasts carry a close button so any of them can be cleared early.
+const TOAST_DISMISS_MS = 6500;
+
 class ToastStack extends PanicElement {
   connect() {
     this.items = [];
     subscribe('toast.show', (toast) => this.add(toast), this.abort.signal);
     subscribe('api.error', (error) => this.add({ tone: 'error', message: error.message }), this.abort.signal);
+    this.addEventListener('click', (event) => {
+      const button = event.target.closest('.toast-close');
+      if (button) this.dismiss(button.dataset.id);
+    }, { signal: this.abort.signal });
     this.render();
   }
 
   add(toast) {
     const id = crypto.randomUUID?.() || String(Date.now());
-    this.items = [...this.items, { id, tone: toast.tone || 'info', message: toast.message || '' }];
+    const tone = toast.tone || 'info';
+    this.items = [...this.items, { id, tone, message: toast.message || '' }];
     this.render();
-    window.setTimeout(() => {
-      this.items = this.items.filter((item) => item.id !== id);
-      this.render();
-    }, 4200);
+    if (tone !== 'error') window.setTimeout(() => this.dismiss(id), TOAST_DISMISS_MS);
+  }
+
+  dismiss(id) {
+    const next = this.items.filter((item) => item.id !== id);
+    if (next.length === this.items.length) return;
+    this.items = next;
+    this.render();
   }
 
   render() {
-    this.innerHTML = `<div class="toast-stack">${this.items.map((item) => `<div class="toast ${esc(item.tone)}">${esc(item.message)}</div>`).join('')}</div>`;
+    const toasts = this.items.map((item) => `<div class="toast ${esc(item.tone)}" role="${item.tone === 'error' ? 'alert' : 'status'}"><span class="toast-message">${esc(item.message)}</span><button class="toast-close" type="button" data-id="${esc(item.id)}" aria-label="Dismiss notification">&times;</button></div>`).join('');
+    this.innerHTML = `<div class="toast-stack">${toasts}</div>`;
   }
 }
 
