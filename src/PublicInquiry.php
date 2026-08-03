@@ -32,11 +32,21 @@ use Panic\Jobs\JobQueue;
  *     (visually hidden, but present in the DOM and tab order is skipped).
  *     Tripping it returns the same success response as a real submission —
  *     telling a bot it was caught only teaches it to try harder.
+ *   - required-field + basic shape validation (email format, length caps).
  *   - a per-IP and a per-email rate limit via RateLimiter (same mechanism
  *     the auth endpoints use against brute-forcing/mailbombing).
- *   - required-field + basic shape validation (email format, length caps).
  * None of this is bulletproof against a determined attacker, but it's the
  * same bar the rest of the unauthenticated surface holds itself to.
+ *
+ * Note the order of those last two: validation runs BEFORE the rate limiter,
+ * so a malformed request costs no quota. What the limiter is defending is the
+ * two things a *successful* submission does — insert a lead and send
+ * notification mail — and a request that fails validation does neither, so it
+ * has nothing to throttle. This mirrors the honeypot above, which has always
+ * returned before the limiter for the same reason. The practical payoff is
+ * that a caller fixing a genuine mistake (bad email, missing message) isn't
+ * silently locked out by their own typos, and tests/85-public-inquiry.sh can
+ * exercise the validation branches without burning the shared per-IP budget.
  */
 final class PublicInquiry extends BaseEndpoint
 {
@@ -73,12 +83,11 @@ final class PublicInquiry extends BaseEndpoint
             return $this->respond(['ok' => true], 202);
         }
 
+        // Shape validation first — see the class docblock. A request that
+        // fails here creates no lead and sends no mail, so there is nothing
+        // for the rate limiter below to protect against, and charging it
+        // quota would only punish honest callers for their own typos.
         $email = trim((string) ($b['contact_email'] ?? ''));
-        if (RateLimiter::tooMany($this->db, 'public-inquiry:ip:' . $ip, 8, 600)
-            || ($email !== '' && RateLimiter::tooMany($this->db, 'public-inquiry:email:' . strtolower($email), 3, 3600))
-        ) {
-            return $this->respond(['error' => 'Too many inquiries. Please try again later.'], 429);
-        }
 
         $name = trim((string) ($b['contact_name'] ?? ''));
         if ($name === '') {
@@ -90,6 +99,15 @@ final class PublicInquiry extends BaseEndpoint
         $message = trim((string) ($b['message'] ?? $b['notes'] ?? ''));
         if ($message === '') {
             return $this->respond(['error' => 'message is required'], 422);
+        }
+
+        // Now that this looks like a genuine submission, throttle it. Both
+        // buckets are only ever charged for requests that would otherwise go
+        // on to insert a lead and notify staff.
+        if (RateLimiter::tooMany($this->db, 'public-inquiry:ip:' . $ip, 8, 600)
+            || RateLimiter::tooMany($this->db, 'public-inquiry:email:' . strtolower($email), 3, 3600)
+        ) {
+            return $this->respond(['error' => 'Too many inquiries. Please try again later.'], 429);
         }
 
         $eventType = (string) ($b['event_type'] ?? '');
