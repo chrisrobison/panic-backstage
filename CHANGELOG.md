@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** `ticketing` — Document discount codes in the ops manual and in-app help
 - **Added** `ticketing` — Add private discount codes for in-house ticketing
 - **Fixed** `tickets` — Prefix the post-checkout receipt's QR/ticket URLs with APP_URL
 - **Added** `reports

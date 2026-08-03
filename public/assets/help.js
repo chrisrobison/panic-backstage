@@ -1189,8 +1189,34 @@ const HELP_CONTENT = {
       <li><strong>Applies to</strong> — all ticket types, or only the tiers you pick.</li>
     </ul>
     <p><em>Copy link</em> gives you a share URL that pre-fills the code on the public ticket page, so an outreach email can drop someone straight into a discounted cart without them typing anything.</p>
-    <p>The table tracks each code's <strong>Used</strong> count and <strong>Given</strong> — what it has actually cost you in real money. Discounted sales are recorded at the price actually charged, so tier revenue, gross sales, and the settlement report are all already net of any discount; nothing needs subtracting twice.</p>
-    <p>Codes that have been redeemed can't be deleted — they're part of the sales record. Disable them instead, which stops all future use and keeps the history intact.</p>
+
+    <h4>A typical setup</h4>
+    <p>Sales are soft and you want to pull in a specific crowd without cutting the price for everyone: create <code>EASTBAY30</code> at <em>30% off</em>, set <strong>Max uses</strong> to 25 so it's a bump rather than a room that all paid less, set <strong>Expires</strong> to a few days before the show so late buyers pay full price, tick <strong>Only once per email</strong>, then <em>Copy link</em> and paste it into the emails you send. Watch the <strong>Used</strong> column — if it's barely moving, the problem is the pitch or the list, not the price.</p>
+
+    <h4>Percent or flat amount?</h4>
+    <p>Use <strong>percent</strong> when the discount should scale with the order, so someone buying four tickets gets four tickets' worth off — that's what makes a code worth forwarding. Use a <strong>flat amount</strong> when you're covering a specific thing ("$10 off, about the bridge toll"). A flat amount comes off the <em>order</em>, not each ticket.</p>
+
+    <h4>What a code costs you</h4>
+    <p>The table tracks each code's <strong>Used</strong> count (including checkouts still inside their 15-minute hold — that's the number <em>Max uses</em> is measured against) and <strong>Given</strong>, the real money handed back across completed orders.</p>
+    <p><strong>Given is a memo, not a deduction.</strong> Discounted sales are recorded at the price actually charged, so tier revenue, gross sales, and the settlement report are <em>already</em> net of every discount. Subtracting <em>Given</em> from gross at settlement would double-count it and understate the show.</p>
+
+    <h4>Good to know</h4>
+    <ul>
+      <li>Codes don't stack — one code per order.</li>
+      <li>A flat discount never takes an order below $0, and free tiers are left alone.</li>
+      <li>A 100% code works like a self-serve comp: no payment step, real QR. Cap it with <em>Max uses</em>.</li>
+      <li>Discounted tickets scan exactly like any other ticket.</li>
+      <li>Redeemed codes can't be deleted — they're part of the sales record. Disable instead, which stops future use and keeps the history.</li>
+    </ul>
+
+    <h4>If a buyer says the code isn't working</h4>
+    <ul>
+      <li><em>"Not valid"</em> — typo, or it's a code from a different event. Codes are per-event.</li>
+      <li><em>"Expired"</em> / <em>"Fully redeemed"</em> — past its <strong>Expires</strong> date, or <strong>Max uses</strong> is reached. Both are editable.</li>
+      <li><em>"Already used with this email"</em> — <strong>Only once per email</strong> is on and they've already bought.</li>
+      <li><em>"Doesn't apply to the tickets you selected"</em> — the code is scoped to tiers that aren't in their cart.</li>
+      <li><em>Nothing happens</em> — they haven't picked any tickets yet. The discount is priced against a cart, so quantities come first.</li>
+    </ul>
 
     <h3>Issued tickets</h3>
     <p>The <em>Issued tickets</em> list shows every ticket for the event — sold and comped — with its holder, tier, and live status. From each row you can <strong>View</strong> the QR (the same page the buyer got), <strong>Resend</strong> the link to the holder's email, or <strong>Void</strong> a ticket to invalidate it. The status is the source of truth at the door: a <em>Valid</em> ticket admits once and then flips to <em>Scanned in</em>, so the same QR can never get two people in; a <em>Void</em> ticket won't scan at all.</p>

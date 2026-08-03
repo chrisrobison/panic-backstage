@@ -1213,6 +1213,7 @@
     <a href="#ticketing-dashboard" class="section">Live sales dashboard</a>
     <a href="#ticketing-purchase" class="section">How a purchase works</a>
     <a href="#ticketing-comps" class="section">Comp tickets</a>
+    <a href="#ticketing-discounts" class="section">Discount codes</a>
     <a href="#ticketing-issued" class="section">Managing issued tickets</a>
     <a href="#ticketing-scanner" class="section">Scanner links</a>
     <a href="#ticketing-payments" class="section">Payment provider setup</a>
@@ -3771,6 +3772,148 @@
       <p>You can also issue comps directly from the Guest List tab. Any guest with an email address has an <span class="ui-label button">Issue comp</span> button next to their entry. This is the fastest way to handle "the band put John on the list" situations — one click issues and emails a QR ticket.</p>
     </div>
 
+    <!-- DISCOUNT CODES ───────────────────────────────────────────────────── -->
+    <h2 id="ticketing-discounts">Discount codes</h2>
+
+    <p>A <strong>discount code</strong> is a private code — <code>EASTBAY30</code>, <code>LISTPRESALE</code> — that only lowers the price for people you actually give it to. It never appears on the public ticket page. Someone browsing the event sees the normal prices and an empty "Discount code" box; the code only does anything if they already have it.</p>
+
+    <h3>Why codes exist: the three ways to lower a price</h3>
+
+    <p>Before codes, there were only two levers, and there was a real gap between them:</p>
+
+    <table>
+      <tr><th>Lever</th><th>Who gets it</th><th>How much</th><th>Best for</th></tr>
+      <tr><td><strong>Lower the tier price</strong></td><td>Everybody</td><td>Whatever you set</td><td>The show genuinely isn't selling and $15 was too high. A real price change.</td></tr>
+      <tr><td><strong>Comp ticket</strong></td><td>One named person at a time</td><td>100% — free</td><td>Guests, press, trade, the band's list. You're giving a seat away.</td></tr>
+      <tr><td><strong>Discount code</strong></td><td>Anyone you hand the code to</td><td>A percentage or a flat amount</td><td>Persuading a specific group to buy — where free is too generous and full price isn't working.</td></tr>
+    </table>
+
+    <p>The distinction that matters: a comp is <em>one recipient, all the way free</em>. A discount code is <em>a group, partly off</em>, and they still pay — which means they're still a ticket buyer, still in your sales numbers, and still counted at the door like anyone else.</p>
+
+    <div class="callout note">
+      <span class="callout-title">📌 Codes are not secret in the security sense</span>
+      <p>A code is private in the sense that it's unlisted — nothing on the public page reveals it. But once you email it to forty people, assume it can be forwarded, screenshotted, or posted. That's what <strong>Max uses</strong>, <strong>Expires</strong>, and <strong>Only once per email</strong> are for: they cap the damage rather than trying to keep a secret. Never treat a code as if only the intended recipient can use it.</p>
+    </div>
+
+    <h3>Creating a code</h3>
+
+    <p>Event workspace → <span class="ui-label tab">Ticketing</span> tab → <strong>Discount codes</strong> → click <span class="ui-label button">+</span>.</p>
+
+    <table>
+      <tr><th>Field</th><th>What it does</th></tr>
+      <tr><td><strong>Code</strong></td><td>What people type. Letters, numbers, dot, dash, underscore. It's stored uppercase with spaces removed, so <code>east bay 30</code> and <code>EASTBAY30</code> are the same code and buyers can't get it wrong by capitalising differently.</td></tr>
+      <tr><td><strong>Internal label</strong></td><td>A note to yourself ("East Bay outreach", "Nov mailing list"). Never shown to buyers — it's there so a list of eight codes still makes sense in three weeks.</td></tr>
+      <tr><td><strong>Type</strong></td><td><em>Percent off</em> (30% off) or <em>Amount off</em> (a flat $10 off the order).</td></tr>
+      <tr><td><strong>Max uses</strong></td><td>The code stops working after this many orders. Blank means unlimited.</td></tr>
+      <tr><td><strong>Expires</strong></td><td>A cutoff date/time. Separate from the tier's own sales window — <em>both</em> have to be open for the code to work.</td></tr>
+      <tr><td><strong>Status</strong></td><td><em>Active</em> or <em>Disabled</em>. Disabling stops all future use instantly without deleting anything.</td></tr>
+      <tr><td><strong>Only once per email</strong></td><td>Blocks the same email address redeeming twice.</td></tr>
+      <tr><td><strong>Applies to</strong></td><td>All ticket types, or only the tiers you tick. Leave it on "All ticket types" and any tier you add later is automatically covered.</td></tr>
+    </table>
+
+    <h3>Percent or flat amount?</h3>
+
+    <p>Use <strong>percent</strong> when the discount should scale with the order — someone buying four tickets gets four tickets' worth of discount, which is what makes a code worth forwarding to friends. Use a <strong>flat amount</strong> when you're covering a specific thing, like "$10 off, roughly the bridge toll" or "$5 off to match the other venue's price." A flat amount comes off the <em>order</em>, not each ticket, so a $10-off code on a four-ticket order is still $10.</p>
+
+    <div class="callout tip">
+      <span class="callout-title">💡 The share link</span>
+      <p>Every code row has a <span class="ui-label button">Copy link</span> button. That gives you a URL to the public event page with the code already filled in — the buyer picks their tickets and the discount applies itself, with nothing to type and nothing to misspell. For an email or DM campaign this converts noticeably better than asking people to remember a code. The code box is still there for anyone who arrives the normal way.</p>
+    </div>
+
+    <h3>Scenario: filling seats from a specific neighborhood</h3>
+
+    <p><em>You're running a Saturday clown workshop. Ticket sales are soft, and you know there's an audience across the bay who'd come if the trip felt worth it.</em></p>
+
+    <ol>
+      <li>Create a code: <code>EASTBAY30</code>, <strong>Percent off</strong> = 30, internal label "East Bay outreach".</li>
+      <li>Set <strong>Max uses</strong> to 25 — you want a bump, not a room that paid 30% less.</li>
+      <li>Set <strong>Expires</strong> to the Wednesday before the show, so late buyers pay full price and the code can't resurface at a future event.</li>
+      <li>Tick <strong>Only once per email</strong>.</li>
+      <li>Click <span class="ui-label button">Copy link</span> and paste it into the individual emails and DMs you're sending.</li>
+    </ol>
+
+    <p>Check the <strong>Used</strong> column over the next few days. If it's at 3 of 25 by Thursday, the code isn't the problem — the pitch or the list is. If it hits 25 early, that's a strong signal to raise the cap or make a second code for the next wave.</p>
+
+    <h3>Scenario: a mailing-list presale</h3>
+
+    <p><em>You want your list to feel like being on it is worth something.</em></p>
+
+    <p>Create <code>LISTPRESALE</code> at 15% off, <strong>Max uses</strong> blank (the list is the limit), <strong>Expires</strong> at the moment advance sales end, applies to <strong>all tiers</strong>. Send it in the announce email. Because it expires with the advance window rather than at a random date, you never have to remember to turn it off.</p>
+
+    <h3>Scenario: a promoter or partner allotment</h3>
+
+    <p><em>A promoter brings a co-presented show and wants a discount to offer their own audience.</em></p>
+
+    <p>Give them their own code — <code>GOATBUTT</code> — with <strong>Max uses</strong> set to exactly the allotment you agreed. Because each partner has a distinct code, the <strong>Used</strong> and <strong>Given</strong> columns tell you precisely what each one delivered and what it cost, which is a far better conversation at settlement than "we think some of those were yours."</p>
+
+    <h3>Scenario: a discount for one tier only</h3>
+
+    <p><em>Advance is moving fine; the $25 VIP tier isn't.</em></p>
+
+    <p>Create a code, set <strong>Applies to</strong> to just <strong>VIP</strong>, and leave Advance alone. If someone uses the code on a cart with no VIP tickets in it, they're told the code doesn't apply to what they selected rather than silently getting nothing. This is the right tool when one tier is mispriced but you don't want to signal a general price drop.</p>
+
+    <h3>Scenario: a code leaked</h3>
+
+    <p><em>Someone posted your 30% code to a deals subreddit.</em></p>
+
+    <ol>
+      <li>Open the code and set <strong>Status</strong> to <em>Disabled</em>. It stops working immediately — including for anyone mid-checkout who hasn't paid yet.</li>
+      <li>Orders already <em>paid</em> stay valid. Those people bought tickets in good faith; honour them.</li>
+      <li>Create a fresh code with a different name for the people who were supposed to have it, and send it again.</li>
+    </ol>
+
+    <div class="callout warn">
+      <span class="callout-title">⚠️ Codes can't be renamed</span>
+      <p>Once a code exists, its name is fixed. That's deliberate — the moment you email it out, that string is printed in other people's inboxes and share links, and quietly renaming it would break every one of them. To change a code, disable the old one and create a new one. Everything else (percentage, cap, expiry, tiers, status) stays editable.</p>
+    </div>
+
+    <h3>Reading the table</h3>
+
+    <table>
+      <tr><th>Column</th><th>What it tells you</th></tr>
+      <tr><td><strong>Used</strong></td><td>How many orders have redeemed the code, including checkouts that are still in their 15-minute hold. This is the number <em>Max uses</em> is measured against, so it's what a buyer will actually hit. An abandoned checkout gives its use back automatically when the hold lapses.</td></tr>
+      <tr><td><strong>Given</strong></td><td>Real money given away, across completed orders only. This is the honest cost of the code.</td></tr>
+      <tr><td><strong>Applies to</strong></td><td>"All tiers", or the specific tiers you scoped it to.</td></tr>
+      <tr><td><strong>Status</strong></td><td><em>Active</em>, <em>Disabled</em>, or <em>Expired</em> (past its expiry date — shown automatically, nothing to switch off).</td></tr>
+    </table>
+
+    <h3>How discounts land in the money</h3>
+
+    <p>This is the part worth understanding before you use codes on a show with a settlement.</p>
+
+    <p>A discounted sale is recorded <strong>at the price actually charged</strong>. If a $12 ticket sells for $8.40, the sale is $8.40 everywhere — tier revenue, gross ticket sales, and the Settlement Report. There is no separate "discounts" line to subtract, because the discount was never added in the first place.</p>
+
+    <div class="callout danger">
+      <span class="callout-title">⛔ Don't subtract discounts a second time</span>
+      <p>The <strong>Given</strong> column is a memo — it answers "what did this code cost us?" It is <em>not</em> a deduction waiting to be applied. Your gross is already net of every discount. Subtracting <strong>Given</strong> from gross at settlement would double-count it and understate the show. If you're reconciling against a promoter, the number to hand them is the gross as reported; <strong>Given</strong> is context for you.</p>
+    </div>
+
+    <p>Comps behave differently and it's worth keeping the two straight: a comp sells for $0 and shows in the <strong>Comp</strong> column as a body in the room with no revenue. A discounted ticket shows as a normal sale at a lower price. Both count against inventory; only one produces money.</p>
+
+    <h3>Rules worth knowing</h3>
+
+    <ul>
+      <li><strong>One code per order.</strong> Codes don't stack. A buyer with two codes uses the better one.</li>
+      <li><strong>A flat discount never takes an order below $0.</strong> A $50-off code on a $30 cart discounts $30, not $50.</li>
+      <li><strong>Free tiers are ignored.</strong> A code won't try to discount a $0 ticket, and a $0 ticket won't absorb part of a flat discount.</li>
+      <li><strong>A 100% code is possible</strong> and behaves like a self-serve comp — the buyer completes checkout with no payment step and gets a real QR. Cap it with <em>Max uses</em> if you do this.</li>
+      <li><strong>Codes that have been redeemed can't be deleted</strong>, only disabled — they're part of the sales record, and deleting one would erase the explanation for why those orders were cheaper. Unused codes delete freely.</li>
+      <li><strong>Discounted tickets scan exactly like any other ticket.</strong> Door staff see no difference, and shouldn't.</li>
+    </ul>
+
+    <h3>Troubleshooting</h3>
+
+    <table>
+      <tr><th>Buyer says…</th><th>Likely cause</th></tr>
+      <tr><td>"It says the code isn't valid"</td><td>Typo, or the code belongs to a different event. Codes are per-event — a code from last month's show won't work on this one.</td></tr>
+      <tr><td>"It says the code expired"</td><td>Past its <strong>Expires</strong> date. Check the code row; extend it if the campaign is still running.</td></tr>
+      <tr><td>"It says fully redeemed"</td><td><strong>Max uses</strong> reached. Raise the cap if you want more, or let it stand if the cap was the point.</td></tr>
+      <tr><td>"It says already used with this email"</td><td><strong>Only once per email</strong> is on and they've already bought. If it's a genuine second purchase, either turn that setting off or issue them a comp.</td></tr>
+      <tr><td>"It says it doesn't apply to my tickets"</td><td>The code is scoped to tiers that aren't in their cart. Tell them which tier it's for, or widen the scope.</td></tr>
+      <tr><td>"Nothing happens when I type it"</td><td>They haven't selected any tickets yet — the discount is priced against a cart. Pick quantities first, then apply.</td></tr>
+      <tr><td>"I got the discount but was charged full price"</td><td>Shouldn't happen — the price is recalculated on the server at checkout, not taken from the browser. If a receipt genuinely disagrees with the order, escalate it; don't refund by hand until it's understood.</td></tr>
+    </table>
+
     <!-- ISSUED TICKETS ────────────────────────────────────────────────────── -->
     <h2 id="ticketing-issued">Managing issued tickets</h2>
 
@@ -3853,6 +3996,7 @@
         <li>Test with a $0 or $1 ticket before opening sales for real</li>
         <li>Before doors: create a scanner link (copy the URL immediately)</li>
         <li>Open the scanner URL on the door device and confirm it loads</li>
+        <li>Create any discount codes and copy their share links before you announce</li>
         <li>Issue any comps before doors open</li>
       </ul>
     </div>
