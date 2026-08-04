@@ -96,33 +96,41 @@ final class GenerateFlyer extends BaseEndpoint
             $assetDir = $this->root . '/public/uploads/events/' . $eventId;
             $filePath = 'uploads/events/' . $eventId . '/' . $filename;
         }
-        if (!is_dir($assetDir)) {
-            mkdir($assetDir, 0775, true);
-        }
-
-        // Codex writes generated images to $CODEX_HOME/generated_images/<uuid>/
-        // (not to the -C working dir), so we create codexHome here and search
-        // it after the run rather than searching the working dir.
-        //
-        // codexHome/workdir must NOT live under the system temp dir: newer
-        // Codex CLI versions refuse to install their PATH-alias helper
-        // binaries (codex-linux-sandbox etc.) under a world-writable temp
-        // location like /tmp, which then breaks internal sandboxed exec
-        // calls (bwrap: execvp codex-linux-sandbox: No such file or
-        // directory). storage/tmp is app-owned and not world-writable.
-        $runTmpBase = $this->root . '/storage/tmp';
-        if (!is_dir($runTmpBase)) {
-            mkdir($runTmpBase, 0755, true);
-        }
-        $codexHome = $runTmpBase . '/codex-home-' . bin2hex(random_bytes(4));
-        mkdir($codexHome, 0755, true);
-        copy('/home/cdr/.codex/auth.json',   $codexHome . '/auth.json');
-        copy('/home/cdr/.codex/config.toml', $codexHome . '/config.toml');
-
-        $tmpDir = $runTmpBase . '/pb-flyer-' . $eventId . '-' . bin2hex(random_bytes(4));
-        mkdir($tmpDir, 0755, true);
+        // Set up inside the try so that a filesystem failure returns a JSON
+        // error naming the directory we could not create, rather than an
+        // unhandled 500.
+        $codexHome = null;
+        $tmpDir    = null;
 
         try {
+            $this->mustMkdir($assetDir, 0775);
+
+            // Codex writes generated images to $CODEX_HOME/generated_images/<uuid>/
+            // (not to the -C working dir), so we create codexHome here and search
+            // it after the run rather than searching the working dir.
+            //
+            // codexHome/workdir must NOT live under the system temp dir: newer
+            // Codex CLI versions refuse to install their PATH-alias helper
+            // binaries (codex-linux-sandbox etc.) under a world-writable temp
+            // location like /tmp, which then breaks internal sandboxed exec
+            // calls (bwrap: execvp codex-linux-sandbox: No such file or
+            // directory). storage/tmp is app-owned and not world-writable.
+            //
+            // storage/tmp must stay group-writable by the web server user
+            // (2775, group www-data): when it was not, these creates failed
+            // silently and codex reported the far more confusing
+            // "CODEX_HOME points to ..., but that path does not exist".
+            $runTmpBase = $this->root . '/storage/tmp';
+            $this->mustMkdir($runTmpBase);
+
+            $codexHome = $runTmpBase . '/codex-home-' . bin2hex(random_bytes(4));
+            $this->mustMkdir($codexHome);
+            $this->mustCopy('/home/cdr/.codex/auth.json',   $codexHome . '/auth.json');
+            $this->mustCopy('/home/cdr/.codex/config.toml', $codexHome . '/config.toml');
+
+            $tmpDir = $runTmpBase . '/pb-flyer-' . $eventId . '-' . bin2hex(random_bytes(4));
+            $this->mustMkdir($tmpDir);
+
             $this->runCodex($prompt, $tmpDir, $codexHome);
 
             // Codex always saves to $CODEX_HOME/generated_images/<uuid>/*.png.
@@ -136,10 +144,15 @@ final class GenerateFlyer extends BaseEndpoint
                 throw new \RuntimeException('Could not move generated image to asset directory');
             }
         } catch (\RuntimeException $e) {
+            error_log('GenerateFlyer failed for event ' . $eventId . ': ' . $e->getMessage());
             return Response::json(['error' => $e->getMessage()], 500);
         } finally {
-            $this->rrmdir($tmpDir);
-            $this->rrmdir($codexHome);
+            if ($tmpDir !== null) {
+                $this->rrmdir($tmpDir);
+            }
+            if ($codexHome !== null) {
+                $this->rrmdir($codexHome);
+            }
         }
 
         $assetId = $this->db->insert(
@@ -229,6 +242,32 @@ final class GenerateFlyer extends BaseEndpoint
                  . ' Generate exactly one image.';
 
         return $prompt;
+    }
+
+    /**
+     * Create a directory (recursively), throwing if it could not be created.
+     *
+     * Guards against the race where a concurrent request creates the same
+     * parent between the is_dir() check and the mkdir().
+     */
+    private function mustMkdir(string $dir, int $mode = 0755): void
+    {
+        if (is_dir($dir)) {
+            return;
+        }
+        if (!@mkdir($dir, $mode, true) && !is_dir($dir)) {
+            $err = error_get_last()['message'] ?? 'unknown error';
+            throw new \RuntimeException("Could not create directory {$dir}: {$err}");
+        }
+    }
+
+    /** Copy a file, throwing if the source is unreadable or the write fails. */
+    private function mustCopy(string $from, string $to): void
+    {
+        if (!@copy($from, $to)) {
+            $err = error_get_last()['message'] ?? 'unknown error';
+            throw new \RuntimeException("Could not copy {$from} to {$to}: {$err}");
+        }
     }
 
     /** Invoke `codex exec` and wait for it to finish. Throws on non-zero exit. */

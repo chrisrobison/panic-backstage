@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Make AI flyer generation work under the web server user
 - **Fixed** `changelog` — Repair hook-mangled entries and stop scope corruption at the source
 - **Added** `sheet-sync` — Add SHEET_SYNC_ENABLED kill switch and turn the sync off
 - **Fixed** `ui` — Keep error toasts up until they are dismissed
