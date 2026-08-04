@@ -39,6 +39,7 @@ was untracked, causing perms drift` — Gitignore storage/assets/ (was untracked
 - **Fixed** `ai` — Keep claude CLI credentials group-readable across token refreshes
 - **Added** `payments` — Provider-agnostic deposit payment link + QR code
 - **Documentation** `booking-inbox` — Add standalone user workflow guide
+- **Fixed** `inbox` — Raise More menu z-index above floating app chrome
 - **Fixed** `docs` — Allow public access to booking-inbox.html
 - **Fixed** `events` — Stop AI flyer generation from breaking under /tmp
 - **Fixed** `inbox` — Overflow menu clipped by action-bar overflow; add Booking Inbox screenshots
