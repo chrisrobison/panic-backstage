@@ -23,8 +23,13 @@ COMMIT_DATE=$(git log -1 --pretty=%ad --date=short)
 
 # ── Parse conventional commit format: type(scope): description ────────────────
 TYPE=$(echo "$COMMIT_MSG"  | grep -oP '^[a-z]+(?=[\(:])')
-SCOPE=$(echo "$COMMIT_MSG" | grep -oP '(?<=\()[^)]+(?=\))')
-CLEAN=$(echo "$COMMIT_MSG" | sed -E 's/^[a-z]+(\([^)]+\))?: //')
+# Anchor the scope to the leading "type(scope):" only. A bare `grep -oP '(?<=\()[^)]+(?=\))'`
+# is unanchored AND -o prints *every* match, so a description containing parentheses
+# ("feat(reports): add a spreadsheet (CSV) download") yielded a multi-line scope
+# ("reports\nCSV") and a corrupted two-line changelog entry. head -1 is a belt-and-braces
+# guard so SCOPE can never be multi-line even if the pattern is loosened later.
+SCOPE=$(echo "$COMMIT_MSG" | grep -oP '^[a-z]+\(\K[^)]+(?=\)!?:)' | head -1)
+CLEAN=$(echo "$COMMIT_MSG" | sed -E 's/^[a-z]+(\([^)]*\))?!?: //')
 
 # Capitalise first letter of description
 CLEAN="$(tr '[:lower:]' '[:upper:]' <<< "${CLEAN:0:1}")${CLEAN:1}"

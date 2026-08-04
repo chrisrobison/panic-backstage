@@ -10,14 +10,14 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `changelog` — Repair hook-mangled entries and stop scope corruption at the source
 - **Added** `sheet-sync` — Add SHEET_SYNC_ENABLED kill switch and turn the sync off
 - **Fixed** `ui` — Keep error toasts up until they are dismissed
 - **Fixed** `leads` — Validate public inquiries before rate-limiting them
 - **Documentation** `ticketing` — Document discount codes in the ops manual and in-app help
 - **Added** `ticketing` — Add private discount codes for in-house ticketing
 - **Fixed** `tickets` — Prefix the post-checkout receipt's QR/ticket URLs with APP_URL
-- **Added** `reports
-CSV` — Add a spreadsheet (CSV) download for the Settlement Report
+- **Added** `reports` — Add a spreadsheet (CSV) download for the Settlement Report
 - **Documentation** — Document the Settlement Report bottom line and share links
 - **Added** `reports` — Add shareable links for the Settlement Report
 - **Fixed** `reports` — Hide Ticket Sales table when nothing sold in-house
@@ -34,8 +34,7 @@ CSV` — Add a spreadsheet (CSV) download for the Settlement Report
 - **Fixed** `calendar` — Label 1st-of-month cells and dim adjacent-month padding
 - **Documentation** `payments` — Document the deposit payment link + QR flow
 - **Added** `public` — Add standalone Mabuhay Gardens booking form replica
-- **Fixed** `uploads
-was untracked, causing perms drift` — Gitignore storage/assets/ (was untracked, causing perms drift)
+- **Fixed** `uploads` — Gitignore storage/assets/ (was untracked, causing perms drift)
 - **Fixed** `ai` — Keep claude CLI credentials group-readable across token refreshes
 - **Added** `payments` — Provider-agnostic deposit payment link + QR code
 - **Documentation** `booking-inbox` — Add standalone user workflow guide
@@ -44,7 +43,6 @@ was untracked, causing perms drift` — Gitignore storage/assets/ (was untracked
 - **Fixed** `events` — Stop AI flyer generation from breaking under /tmp
 - **Fixed** `inbox` — Overflow menu clipped by action-bar overflow; add Booking Inbox screenshots
 - **Documentation** `booking-inbox` — Document Inbox workflows in help.js/ops-manual, refresh OpenAPI
-- **Added** `booking-inbox` — Venue-configurable outbound identity, restricted-booker claim policy, tiered action bar
 - **Added** `booking-inbox` — Venue-configurable outbound identity, restricted-booker claim policy, tiered action bar
 - **Documentation** `help` — Refresh screenshots and cover 9 new modules
 - **Added** `booking-inbox` — Add venue-admin-only Assign action
@@ -67,8 +65,6 @@ was untracked, causing perms drift` — Gitignore storage/assets/ (was untracked
 - **Added** `leads` — Switch AI classification/extraction from Anthropic API key to local claude CLI
 - **Documentation** `ai` — Document the AI Assistant in-app and in the ops manual; add proposal expiry sweep
 - **Added** `ai` — Give the AI Assistant drawer multi-turn conversation memory
-- **Added** `ai` — Give the AI Assistant drawer multi-turn conversation memory
-- **Added** `ai` — Add Phase 2 propose/apply write tools to the AI Assistant
 - **Added** `ai` — Add Phase 2 propose/apply write tools to the AI Assistant
 - **Documentation** — Document the Inbox/Routing/Reports API surface and add staff training material
 - **Added** `booking-inbox` — Finish Phase 10 Social Queue and add Phase 12 docs
@@ -81,7 +77,7 @@ was untracked, causing perms drift` — Gitignore storage/assets/ (was untracked
 - **Added** `booking-inbox` — Add Phase 3 ingestion, AI classification, and auto-ack
 - **Added** `booking-inbox` — Add Phase 2 permissions and audit infrastructure
 - **Added** `booking-inbox` — Add Phase 1 schema for claim/assign/own, conversation, routing, and audit
-- **Added** `ai Phase 1` — Add read-only AI Assistant drawer (Phase 1)
+- **Added** `ai` — Add read-only AI Assistant drawer (Phase 1)
 - **Added** `events` — Cap recurring-series occurrences to a 90-day booking horizon
 - **Documentation** — Plan AI assistant drawer + recurring-event 90-day horizon cap
 - **Added** `search` — Rebuild the topbar search into a live, full-text results page
@@ -109,12 +105,10 @@ was untracked, causing perms drift` — Gitignore storage/assets/ (was untracked
 - **Fixed** `calendar` — Stop the Grid view from duplicating 1-2 weeks at month boundaries
 - **Added** `tasks` — Add a visual icon picker to the New Task Document modal
 - **Added** `calendar` — Flag room double-bookings in red across calendar/agenda/dashboard
-- **Added** `tasks
-documents, subtasks, board/timeline/calendar` — Add standalone Tasks app (documents, subtasks, board/timeline/calendar)
+- **Added** `tasks` — Add standalone Tasks app (documents, subtasks, board/timeline/calendar)
 - **Added** `automation` — One shared step-form component drives visual + form views
 - **Added** `automation` — Wire Phase 3 real CenterStage handlers for Event Booking
-- **Added** `automation
-executable engine` — Add the Phase 2 process runtime (executable engine)
+- **Added** `automation` — Add the Phase 2 process runtime (executable engine)
 - **Added** `automation` — Add process-graph designer and Event Booking sample process
 - **Documentation** — Cover contract upload option and calendar infinite scroll
 - **Added** `calendar` — Continuous scroll across months in Grid view
@@ -136,14 +130,9 @@ executable engine` — Add the Phase 2 process runtime (executable engine)
 - **Fixed** `overview` — Keep readiness card items on one row
 - **Added** `calendar` — Add List button to the Grid|Agenda toggle
 - **Fixed** `public-event` — Center facts row, uppercase it, relocate share card
-- **Fixed** `public-event` — Center facts row, uppercase it, relocate share card
-- **Fixed** `event` — Open the QR code panel as a modal instead of inline
 - **Fixed** `event` — Open the QR code panel as a modal instead of inline
 - **Fixed** `public-event` — Icon-over-text facts row, share buttons instead of QR
-- **Fixed** `public-event` — Icon-over-text facts row, share buttons instead of QR
 - **Fixed** `public-event` — Full-bleed hero layout, much bigger QR code
-- **Fixed** `public-event` — Full-bleed hero layout, much bigger QR code
-- **Added** `public-event` — Redesign the public event landing page
 - **Added** `public-event` — Redesign the public event landing page
 - **Added** `upcoming` — Show the date span on multi-day event cards
 - **Added** `nav` — Make the Upcoming events page the default dashboard
@@ -154,9 +143,7 @@ executable engine` — Add the Phase 2 process runtime (executable engine)
 - **Fixed** `pos` — Repair PosWebhook's broken date-match fallback query
 - **Added** `events` — Split the Location field into Venue + Room pickers
 - **Added** `venues` — Consolidate Mabuhay's 3 venue rows into 1 venue + rooms
-- **Added** `venues` — Consolidate Mabuhay's 3 venue rows into 1 venue + rooms
 - **Fixed** `events` — Reject an end_date before the start date
-- **Added** `nav` — Add Navigation Manager and derive the app shell sidebar from it
 - **Added** `nav` — Add Navigation Manager and derive the app shell sidebar from it
 - **Documentation** `events` — Document the Upcoming card view in help and the ops manual
 - **Added** `events` — Make Upcoming cards clickable to open the event
@@ -278,8 +265,7 @@ executable engine` — Add the Phase 2 process runtime (executable engine)
 - **Added** `gdpr` — Enforce cookie consent on non-essential preference storage
 - **Added** `gdpr` — Data export/erasure endpoints, privacy policy, consent banner, self-hosted Font Awesome
 - **Added** `dashboard` — Add clickable New Leads card linking to the Leads inbox
-- **Fixed** `leads
-validator rejects enum + nullable type` — Drop enum from event_type LLM schema (validator rejects enum + nullable type)
+- **Fixed** `leads` — Drop enum from event_type LLM schema (validator rejects enum + nullable type)
 - **Added** `leads` — Import booking emails into the leads pipeline
 - **Added** `leads` — Add BandBrief tab, band/attendance fields, and status notes
 - **Added** `dashboard` — Add percent utilized metric for next 14 days
@@ -292,7 +278,7 @@ validator rejects enum + nullable type` — Drop enum from event_type LLM schema
 - **Fixed** `promote` — Generate Bandsintown variant + add per-platform submission links
 - **Fixed** — Guard eventId in closeout and execution connect() to prevent load before workspace wires the property
 - **Fixed** `pos` — Explicit active_event_id override — staff pin POS to a specific event instead of date-guessing
-- **Added** `QBO/Xero stubs` — Accounting integration framework (QBO/Xero stubs) and Stripe payment link generation
+- **Added** — Accounting integration framework (QBO/Xero stubs) and Stripe payment link generation
 - **Fixed** — Add Portal route and isPublic() registration to Kernel.php
 - **Added** — Auto-publish event to Promote destinations when status reaches 'published'
 - **Added** — Client portal — token-gated read-only event view for promoters and clients
@@ -326,13 +312,11 @@ validator rejects enum + nullable type` — Drop enum from event_type LLM schema
 - **Fixed** `messages` — Add missing CSS so inbox/archive/sent messages are visible
 - **Added** `messages` — System welcome message in every staff inbox
 - **Documentation** — Bring README up to date with multi-tenant SaaS, JWT auth, and Messages
-- **Added** `messages
-Inbox / Archive / Outbox` — In-app staff messaging (Inbox / Archive / Outbox)
+- **Added** `messages` — In-app staff messaging (Inbox / Archive / Outbox)
 - **Fixed** `routing` — Route /t/{token} ticket-view URLs to PHP kernel
 - **Added** `outbox` — Add backfill script to inline cid: images in historical rows
 - **Fixed** `outbox` — Inline cid: images as data URIs so they render in admin outbox
 - **Added** `email` — Embed QR codes as MIME inline + attachment for maximum client compatibility
-- **Added** `admin` — Show provider env vars on payments settings page
 - **Added** `admin` — Show provider env vars on payments settings page
 - **Added** `changelog` — Add CHANGELOG.md and automated post-commit hook
 
