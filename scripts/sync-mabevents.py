@@ -182,7 +182,15 @@ def main() -> None:
 
     # Honor SHEET_INSERT_NEW (and related) from backstage/.env for the generator
     # subprocess, which doesn't load .env on its own.
-    load_env_flags('SHEET_INSERT_NEW', 'SHEET_SHADOW_JSON', 'SHEET_IMPORT_LINKS_JSON')
+    load_env_flags('SHEET_INSERT_NEW', 'SHEET_SHADOW_JSON', 'SHEET_IMPORT_LINKS_JSON',
+                   'SHEET_SYNC_ENABLED')
+
+    # Master kill switch. cron-sync.sh already gates on this, but check here too
+    # so a direct/manual invocation of the importer is inert as well. Absent or
+    # blank means enabled; only an explicit falsey value turns the sync off.
+    if os.environ.get('SHEET_SYNC_ENABLED', '').strip().lower() in ('0', 'false', 'off', 'no'):
+        print("→ SHEET_SYNC_ENABLED is off — Google Sheet sync is disabled. Nothing to do.")
+        return
 
     if not args.no_download:
         url = args.url or export_url(args.sheet_id)

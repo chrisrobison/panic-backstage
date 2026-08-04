@@ -132,6 +132,13 @@ trait EventRowHelpers
      */
     private function pushToSheet(int $id): void
     {
+        // Master kill switch (SHEET_SYNC_ENABLED=0). Checked before the enqueue,
+        // not just before the push: a disabled sync must not quietly accumulate
+        // pending outbox rows that nothing will ever drain.
+        if (!\Panic\GoogleSheets::syncEnabled()) {
+            return;
+        }
+
         try {
             // Full identity + app-owned field set so an unlinked event can be
             // appended as a complete Tracker row (not just updated in place).

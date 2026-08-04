@@ -34,6 +34,10 @@ $verbose = in_array('--verbose', array_slice($argv, 1), true);
 $db      = new Database();
 $sheets  = new GoogleSheets($root);
 
+if (!GoogleSheets::syncEnabled()) {
+    fwrite(STDERR, "Google Sheet sync is disabled (SHEET_SYNC_ENABLED=0). Nothing to do.\n");
+    exit(0);
+}
 if (!$sheets->isConfigured()) {
     fwrite(STDERR, "GoogleSheets not configured (GOOGLE_SA_KEY_FILE / GOOGLE_SHEET_ID). Nothing to do.\n");
     exit(0);

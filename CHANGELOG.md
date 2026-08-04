@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `sheet-sync` — Add SHEET_SYNC_ENABLED kill switch and turn the sync off
 - **Fixed** `ui` — Keep error toasts up until they are dismissed
 - **Fixed** `leads` — Validate public inquiries before rate-limiting them
 - **Documentation** `ticketing` — Document discount codes in the ops manual and in-app help

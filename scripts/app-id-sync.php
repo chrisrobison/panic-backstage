@@ -47,6 +47,10 @@ $cmd  = $argv[1] ?? 'inspect';
 $args = array_slice($argv, 2);
 
 $sheets = new GoogleSheets($root);
+if (!GoogleSheets::syncEnabled()) {
+    fwrite(STDERR, "Google Sheet sync is disabled (SHEET_SYNC_ENABLED=0). Set it to 1 in .env to run this.\n");
+    exit(1);
+}
 if (!$sheets->isConfigured()) {
     fwrite(STDERR, "GoogleSheets not configured (GOOGLE_SA_KEY_FILE / GOOGLE_SHEET_ID).\n");
     exit(1);

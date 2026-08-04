@@ -154,10 +154,34 @@ final class GoogleSheets
         @mkdir(dirname($this->logFile), 0755, true);
     }
 
-    /** True only when a key file + sheet id are configured and the key loads. */
+    /**
+     * Master kill switch for BOTH directions of the sheet sync.
+     *
+     * Set `SHEET_SYNC_ENABLED=0` in .env to make the whole integration inert:
+     * outbound pushes stop (and stop enqueueing outbox rows — see
+     * EventRowHelpers::pushToSheet), the retry sweep and staff sync exit early,
+     * and cron-sync.sh skips the inbound import. Flip it back to 1 to resume;
+     * nothing else needs changing.
+     *
+     * Absent/blank means ENABLED, so existing installs that never set the flag
+     * keep working exactly as before. Only an explicit falsey value turns it off.
+     */
+    public static function syncEnabled(): bool
+    {
+        // getenv() returns false when unset; ?? already covers a missing $_ENV key.
+        $raw = trim((string) ($_ENV['SHEET_SYNC_ENABLED'] ?? getenv('SHEET_SYNC_ENABLED')));
+
+        return $raw === '' ? true : filter_var($raw, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * True only when the sync is enabled and a key file + sheet id are
+     * configured and the key loads. Every write path funnels through here, so
+     * a disabled flag makes the whole class no-op safely.
+     */
     public function isConfigured(): bool
     {
-        return $this->sheetId !== '' && $this->loadKey() !== null;
+        return self::syncEnabled() && $this->sheetId !== '' && $this->loadKey() !== null;
     }
 
     /**

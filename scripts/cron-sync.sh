@@ -25,6 +25,21 @@ LOCK_FILE="$LOG_DIR/.sync-mabevents.lock"
 
 mkdir -p "$LOG_DIR"
 
+# Master kill switch: SHEET_SYNC_ENABLED=0 in backstage/.env disables the whole
+# integration (inbound import, outbound sweep, staff sync). Read straight from
+# .env because cron gives us no app environment. Absent/blank means enabled, so
+# installs that never set the flag are unaffected. An exported OS env var wins.
+if [ -z "${SHEET_SYNC_ENABLED:-}" ] && [ -f "$BACKSTAGE/.env" ]; then
+  SHEET_SYNC_ENABLED="$(grep -m1 '^[[:space:]]*SHEET_SYNC_ENABLED=' "$BACKSTAGE/.env" \
+    | cut -d= -f2- | tr -d ' "'\''' )"
+fi
+case "${SHEET_SYNC_ENABLED:-1}" in
+  0|false|FALSE|off|OFF|no|NO)
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] sync skipped (SHEET_SYNC_ENABLED=${SHEET_SYNC_ENABLED})" >> "$LOG_FILE"
+    exit 0
+    ;;
+esac
+
 # Acquire a non-blocking exclusive lock on fd 9. If the previous run still
 # holds it, skip this tick — overlap protection.
 exec 9>"$LOCK_FILE"

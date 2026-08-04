@@ -13,6 +13,44 @@ how to operate and troubleshoot the sync.
 
 ---
 
+## ⚠️ Current status: the sync is OFF
+
+As of **2026-08-04** the whole integration is disabled via `SHEET_SYNC_ENABLED=0`
+in `.env`. The inbound cron had already been paused on 2026-07-06 (broken App-ID
+row alignment — corrupted event 128 / 423768), which left only the outbound
+write-back live; the flag now stops that half too.
+
+**To turn it back on:** fix the sheet's App ID column alignment first, then set
+`SHEET_SYNC_ENABLED=1` and uncomment the `*/5` line in the crontab.
+
+## The kill switch
+
+`SHEET_SYNC_ENABLED` gates **both** directions from one place. Absent or blank
+means enabled, so installs that never set it behave exactly as before; only an
+explicit falsey value (`0`, `false`, `off`, `no`) turns it off.
+
+| Set to `0` | Effect |
+|---|---|
+| `Events::pushToSheet()` | returns immediately — **no push and no outbox row enqueued**, so `sheet_sync_queue` can't silently accumulate pending rows nothing will drain |
+| `GoogleSheets::isConfigured()` | false, so every write path in the class no-ops |
+| `scripts/cron-sync.sh` | logs `sync skipped` and exits 0 before any of its three steps |
+| `scripts/sync-mabevents.py` | exits early even when run by hand |
+| `push-sheet-queue.php` / `sync-staff.php` | print "sync is disabled" and exit 0 |
+| `app-id-sync.php` | refuses to run (exit 1) — it's a maintenance tool, so a hard error beats a silent no-op |
+
+**Overriding it for one run:** an exported OS env var wins in `cron-sync.sh` and
+`sync-mabevents.py` (both check the real environment before reading `.env`), so
+`SHEET_SYNC_ENABLED=1 scripts/cron-sync.sh` forces an inbound run. It does *not*
+work for the PHP scripts — `Env::load()` overwrites the process environment from
+`.env` unconditionally, so `.env` always wins there. To run `push-sheet-queue.php`
+or `sync-staff.php` while the sync is off, edit `.env` (and put it back).
+
+Note that turning the sync off does **not** discard queued work: rows already
+`pending` in `sheet_sync_queue` stay there and will be swept up whenever the
+flag goes back to `1`. If that backlog is stale by then, clear it first.
+
+---
+
 ## At a glance
 
 | | Inbound (sheet → app) | Outbound (app → sheet) |

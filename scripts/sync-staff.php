@@ -45,6 +45,10 @@ $HIRE_COL   = 'J';
 $db     = new Database();
 $sheets = new GoogleSheets($root);
 
+if (!GoogleSheets::syncEnabled()) {
+    fwrite(STDERR, "Google Sheet sync is disabled (SHEET_SYNC_ENABLED=0). Nothing to do.\n");
+    exit(0);
+}
 if (!$sheets->isConfigured()) {
     fwrite(STDERR, "GoogleSheets not configured. Nothing to do.\n");
     exit(0);
