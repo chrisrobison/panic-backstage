@@ -128,6 +128,53 @@ function log_process_audit(
 }
 
 /**
+ * Create a directory (recursively), throwing if it could not be created.
+ *
+ * PHP's mkdir() only emits a warning on failure, so unchecked calls turn a
+ * permissions problem into a confusing failure much further downstream: a
+ * signature PNG that was never written, a contract PDF path recorded in the
+ * DB that points at nothing, or codex reporting that CODEX_HOME "does not
+ * exist". Throwing here names the offending path and the OS error instead.
+ *
+ * The usual cause of a failure is a directory under storage/ created by a
+ * CLI run (as the shell user) with a mode that excludes the web server user.
+ * Everything the app writes to under storage/ should be mode 2775 with group
+ * www-data so that both users can write and the setgid bit keeps new
+ * subdirectories in the same group.
+ */
+function ensure_dir(string $dir, int $mode = 0775): void
+{
+    if (is_dir($dir)) {
+        return;
+    }
+    // The second is_dir() covers a concurrent request that won the race
+    // between our check and our mkdir().
+    if (!@mkdir($dir, $mode, true) && !is_dir($dir)) {
+        $err = error_get_last()['message'] ?? 'unknown error';
+        throw new \RuntimeException("Could not create directory {$dir}: {$err}");
+    }
+}
+
+/**
+ * Write a file, throwing if the write fails or is silently truncated
+ * (a short write means a full disk — see the "No space left on device"
+ * entries in the Apache error log — and must not be reported as success).
+ */
+function write_file(string $path, string $bytes): void
+{
+    $written = @file_put_contents($path, $bytes);
+    if ($written === false) {
+        $err = error_get_last()['message'] ?? 'unknown error';
+        throw new \RuntimeException("Could not write {$path}: {$err}");
+    }
+    if ($written !== strlen($bytes)) {
+        throw new \RuntimeException(
+            "Short write to {$path}: wrote {$written} of " . strlen($bytes) . ' bytes'
+        );
+    }
+}
+
+/**
  * Append-only audit trail for the Booking Inbox (see database/migrations/
  * 076_add_booking_inbox_audit.sql). One row per meaningful action —
  * ingestion, viewing, assignment, claim, expiration, reassignment, response,

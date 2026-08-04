@@ -8,6 +8,7 @@ use Panic\QrCode;
 use Panic\Request;
 use Panic\Response;
 use Panic\Tenant\TenantContext;
+use function Panic\ensure_dir;
 use function Panic\event_public_path;
 use function Panic\log_activity;
 
@@ -72,8 +73,11 @@ final class GenerateQr extends BaseEndpoint
             $dir  = $this->root . '/public/uploads/events/' . $eventId;
             $path = 'uploads/events/' . $eventId . '/' . $filename;
         }
-        if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
+        try {
+            ensure_dir($dir);
+        } catch (\RuntimeException $e) {
+            error_log('GenerateQr could not prepare storage for event ' . $eventId . ': ' . $e->getMessage());
+            return Response::json(['error' => 'Could not store QR code image'], 500);
         }
         if (file_put_contents($dir . '/' . $filename, $png) === false) {
             return Response::json(['error' => 'Could not store QR code image'], 500);

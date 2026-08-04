@@ -840,8 +840,11 @@ final class LeadsInbox extends BaseEndpoint
         $dir = \Panic\Tenant\TenantContext::clientDir($this->root)
             . '/assets/leads/' . $lead['id'];
         $path = 'files/assets/leads/' . $lead['id'] . '/';
-        if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
+        try {
+            ensure_dir($dir);
+        } catch (\RuntimeException $e) {
+            error_log('LeadsInbox could not prepare attachment storage for lead ' . $lead['id'] . ': ' . $e->getMessage());
+            return Response::json(['error' => 'Could not store upload'], 500);
         }
         $filename = time() . '-' . bin2hex(random_bytes(4)) . '-' . slugify(pathinfo($file['name'], PATHINFO_FILENAME));
         $mime = mime_content_type($file['tmp_name']) ?: 'application/octet-stream';

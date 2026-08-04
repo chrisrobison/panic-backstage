@@ -7,6 +7,7 @@ use Panic\BaseEndpoint;
 use Panic\Request;
 use Panic\Response;
 use Panic\Tenant\TenantContext;
+use function Panic\ensure_dir;
 use function Panic\log_activity;
 
 /**
@@ -103,7 +104,7 @@ final class GenerateFlyer extends BaseEndpoint
         $tmpDir    = null;
 
         try {
-            $this->mustMkdir($assetDir, 0775);
+            ensure_dir($assetDir);
 
             // Codex writes generated images to $CODEX_HOME/generated_images/<uuid>/
             // (not to the -C working dir), so we create codexHome here and search
@@ -121,15 +122,15 @@ final class GenerateFlyer extends BaseEndpoint
             // silently and codex reported the far more confusing
             // "CODEX_HOME points to ..., but that path does not exist".
             $runTmpBase = $this->root . '/storage/tmp';
-            $this->mustMkdir($runTmpBase);
+            ensure_dir($runTmpBase);
 
             $codexHome = $runTmpBase . '/codex-home-' . bin2hex(random_bytes(4));
-            $this->mustMkdir($codexHome);
+            ensure_dir($codexHome);
             $this->mustCopy('/home/cdr/.codex/auth.json',   $codexHome . '/auth.json');
             $this->mustCopy('/home/cdr/.codex/config.toml', $codexHome . '/config.toml');
 
             $tmpDir = $runTmpBase . '/pb-flyer-' . $eventId . '-' . bin2hex(random_bytes(4));
-            $this->mustMkdir($tmpDir);
+            ensure_dir($tmpDir);
 
             $this->runCodex($prompt, $tmpDir, $codexHome);
 
@@ -242,23 +243,6 @@ final class GenerateFlyer extends BaseEndpoint
                  . ' Generate exactly one image.';
 
         return $prompt;
-    }
-
-    /**
-     * Create a directory (recursively), throwing if it could not be created.
-     *
-     * Guards against the race where a concurrent request creates the same
-     * parent between the is_dir() check and the mkdir().
-     */
-    private function mustMkdir(string $dir, int $mode = 0755): void
-    {
-        if (is_dir($dir)) {
-            return;
-        }
-        if (!@mkdir($dir, $mode, true) && !is_dir($dir)) {
-            $err = error_get_last()['message'] ?? 'unknown error';
-            throw new \RuntimeException("Could not create directory {$dir}: {$err}");
-        }
     }
 
     /** Copy a file, throwing if the source is unreadable or the write fails. */

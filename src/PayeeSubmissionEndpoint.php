@@ -246,8 +246,13 @@ final class PayeeSubmissionEndpoint extends BaseEndpoint
     private function storeW9(int $payeeId, array $file, string $ext): array
     {
         $dir = TenantContext::clientDir($this->root) . '/payees/' . $payeeId;
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+        try {
+            ensure_dir($dir);
+        } catch (\RuntimeException $e) {
+            // Caller turns the null path into a "please try again" 500 rather
+            // than recording a payee whose w9_file_path points at nothing.
+            error_log('PayeeSubmissionEndpoint could not prepare W-9 storage for payee ' . $payeeId . ': ' . $e->getMessage());
+            return [null, null];
         }
         $filename = 'w9-' . time() . '-' . bin2hex(random_bytes(4)) . '.' . $ext;
         $target   = $dir . '/' . $filename;

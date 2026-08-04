@@ -7,6 +7,7 @@ use Panic\BaseEndpoint;
 use Panic\Request;
 use Panic\Response;
 use Panic\Tenant\TenantContext;
+use function Panic\ensure_dir;
 use function Panic\log_activity;
 use function Panic\slugify;
 
@@ -73,8 +74,11 @@ final class Assets extends BaseEndpoint
         $dir  = TenantContext::clientDir($this->root) . '/assets/events/' . $eventId;
         $path = 'files/assets/events/' . $eventId . '/' . $filename;
 
-        if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
+        try {
+            ensure_dir($dir);
+        } catch (\RuntimeException $e) {
+            error_log('Assets::upload could not prepare storage for event ' . $eventId . ': ' . $e->getMessage());
+            return Response::json(['error' => 'Could not store upload'], 500);
         }
         $target = $dir . '/' . $filename;
         if (!move_uploaded_file($file['tmp_name'], $target)) {

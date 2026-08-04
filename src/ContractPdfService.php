@@ -150,11 +150,13 @@ HTML;
     public function storePdf(int $contractId, string $pdfBytes, string $suffix = 'final'): string
     {
         $dir = $this->root . '/storage/contracts/' . $contractId;
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
+        ensure_dir($dir);
         $filename = preg_replace('/[^a-z0-9_-]/', '_', strtolower($suffix)) . '.pdf';
-        file_put_contents($dir . '/' . $filename, $pdfBytes);
+        // Throws rather than returning a path the caller would store in
+        // contracts.final_pdf_path while the file itself was never written.
+        // Every caller already wraps this in try/catch and records a
+        // provider_error in the contract audit log.
+        write_file($dir . '/' . $filename, $pdfBytes);
         return 'storage/contracts/' . $contractId . '/' . $filename;
     }
 

@@ -195,9 +195,20 @@ final class ContractSigningEndpoint extends BaseEndpoint
         }
 
         // Save drawn signature image if provided (base64 PNG data URI).
+        // Abort the whole signing on a storage failure: recording the signer
+        // as signed while the drawn signature was silently lost would leave a
+        // fully-executed contract with no evidence behind it.
         $imagePath = null;
         if ($sigImage !== '') {
-            $imagePath = $this->saveSigImage($contractId, $signerId, $sigImage);
+            try {
+                $imagePath = $this->saveSigImage($contractId, $signerId, $sigImage);
+            } catch (\RuntimeException $e) {
+                error_log("ContractSigningEndpoint: could not store signature image for contract {$contractId}, signer {$signerId}: " . $e->getMessage());
+                return Response::json(
+                    ['error' => 'Could not save your signature image. Please try again.'],
+                    500
+                );
+            }
         }
 
         // Record the signature.
@@ -656,11 +667,14 @@ final class ContractSigningEndpoint extends BaseEndpoint
         }
 
         $dir = $this->root . '/storage/contracts/' . $contractId . '/signatures';
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
+        ensure_dir($dir);
         $filename = 'sig_' . $signerId . '_' . time() . '.png';
-        file_put_contents($dir . '/' . $filename, $bytes);
+        // A drawn signature is evidence in the e-signature audit trail, so a
+        // failed write must not be recorded as a successful signing with a
+        // signature_image_path pointing at a file that does not exist. The
+        // caller turns this into a "please try again" response, leaving the
+        // signer un-signed rather than signed-without-evidence.
+        write_file($dir . '/' . $filename, $bytes);
         return 'storage/contracts/' . $contractId . '/signatures/' . $filename;
     }
 
