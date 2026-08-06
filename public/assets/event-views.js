@@ -42,6 +42,21 @@ function eventSpansDay(event, iso) {
   return event.date <= iso && (event.end_date || event.date) >= iso;
 }
 
+// True for an event that has not yet reached "Intake Complete" (the
+// `confirmed` status) — i.e. it is still `empty` or a `proposed` Hold. Every
+// status at or past `confirmed` has, by definition, satisfied the intake
+// field requirements enforced server-side in Events::assertStatusRequirements(),
+// so ranking against the shared `statuses` order is the honest test rather
+// than `status !== 'confirmed'`.
+//
+// The calendar tints these chips so unfinished intake is visible at a glance
+// without opening each show. An unrecognised status ranks -1 and is left
+// untinted — better to miss a highlight than to flag a show that is fine.
+function needsIntake(event) {
+  const rank = statuses.indexOf(event.status);
+  return rank !== -1 && rank < statuses.indexOf('confirmed');
+}
+
 // Stable key for a calendar month, used to identify which months are already
 // loaded/rendered in the calendar's continuous-scroll month stack.
 function monthKey(date) {
@@ -553,7 +568,10 @@ class EventCalendar extends PanicElement {
     const items = [...seen.entries()]
       .map(([zone, label]) => `<span class="legend-item"><span class="status-dot ${roomTone(zone)}"></span>${esc(label)}</span>`)
       .join('');
-    return `<div class="calendar-legend" aria-label="Room colour key">${items}</div>`;
+    // Explains the amber chip tint applied by needsIntake() — without this the
+    // tint reads as decoration rather than as a to-do.
+    const intakeKey = '<span class="legend-item"><span class="legend-swatch legend-swatch-preintake"></span>Intake not complete</span>';
+    return `<div class="calendar-legend" aria-label="Room colour key">${items}${intakeKey}</div>`;
   }
 
   // ── Top-level render ──────────────────────────────────────────────────────
@@ -700,9 +718,10 @@ class EventCalendar extends PanicElement {
       const loadIn = event.load_in_time ? `Load-in ${this._fmtTime(event.load_in_time)}` : '';
       const isPrivate = event.event_type === 'private_event';
       const hasConflict = conflictIds.has(event.id);
+      const preIntake = needsIntake(event);
       const rangeLabel = isMultiDay ? `${shortDate(new Date(event.date + 'T12:00:00'))} – ${shortDate(new Date(event.end_date + 'T12:00:00'))}` : null;
-      const tip = [isPrivate ? '🔒 Private' : null, hasConflict ? '⚠ Room conflict' : null, statusLabel(event.status), meta.label, rangeLabel, time, loadIn].filter(Boolean).join(' · ');
-      return `<a class="mini-event${isPrivate ? ' mini-event-private' : ''}${isContinuation ? ' mini-event-continued' : ''}${hasConflict ? ' mini-event-conflict' : ''}" href="#event-${esc(event.id)}" title="${esc(tip)}">`
+      const tip = [isPrivate ? '🔒 Private' : null, hasConflict ? '⚠ Room conflict' : null, preIntake ? 'Intake not complete' : null, statusLabel(event.status), meta.label, rangeLabel, time, loadIn].filter(Boolean).join(' · ');
+      return `<a class="mini-event${isPrivate ? ' mini-event-private' : ''}${preIntake ? ' mini-event-preintake' : ''}${isContinuation ? ' mini-event-continued' : ''}${hasConflict ? ' mini-event-conflict' : ''}" href="#event-${esc(event.id)}" title="${esc(tip)}">`
         + `<span class="status-dot ${roomTone(meta.zone)}"></span>`
         + (isPrivate ? '<span class="mini-event-lock" aria-hidden="true">🔒</span>' : '')
         + (isContinuation ? '<span class="mini-event-continues" aria-hidden="true">&#8618;</span>' : '')
@@ -1117,13 +1136,14 @@ class EventCalendar extends PanicElement {
       const time = isContinuation ? '' : this._fmtTime(event.doors_time || event.show_time);
       const isPrivate = event.event_type === 'private_event';
       const hasConflict = conflictIds.has(event.id);
+      const preIntake = needsIntake(event);
       const dayNum = isMultiDay
         ? Math.round((new Date(selectedDate + 'T12:00:00') - new Date(event.date + 'T12:00:00')) / 86400000) + 1
         : null;
       const dayCount = isMultiDay
         ? Math.round((new Date(event.end_date + 'T12:00:00') - new Date(event.date + 'T12:00:00')) / 86400000) + 1
         : null;
-      return `<a class="cal-agenda-row${isContinuation ? ' cal-agenda-row-continued' : ''}${hasConflict ? ' cal-agenda-row-conflict' : ''}" href="#event-${esc(event.id)}"${hasConflict ? ' title="Room conflict: two events booked in the same room at overlapping times"' : ''}>
+      return `<a class="cal-agenda-row${preIntake ? ' cal-agenda-row-preintake' : ''}${isContinuation ? ' cal-agenda-row-continued' : ''}${hasConflict ? ' cal-agenda-row-conflict' : ''}" href="#event-${esc(event.id)}"${hasConflict ? ' title="Room conflict: two events booked in the same room at overlapping times"' : ''}>
         <span class="cal-agenda-time">${esc(time)}</span>
         <span class="cal-agenda-title">${isPrivate ? '<span aria-hidden="true">🔒</span> ' : ''}${hasConflict ? '<i class="fa-solid fa-triangle-exclamation cal-agenda-conflict-icon" aria-hidden="true"></i> ' : ''}${esc(event.title)}${isMultiDay ? ` <span class="cal-agenda-daynum muted">(Day ${dayNum}/${dayCount})</span>` : ''}</span>
         ${badge(event.status)}

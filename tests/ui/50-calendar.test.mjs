@@ -19,12 +19,14 @@ test('calendar shows a status legend with coloured dots', async (page) => {
   await page.until(`document.querySelector('.calendar-grid')`);
   assert.ok(await page.visible('.calendar-legend'), 'legend is shown above the grid');
   const items = await page.count('.calendar-legend .legend-item');
-  assert.atLeast(items, 1, 'legend lists the statuses present this month');
-  assert.equal(
-    await page.count('.calendar-legend .legend-item .status-dot'),
-    items,
-    'each legend item carries a status-coloured dot',
-  );
+  assert.atLeast(items, 2, 'legend lists the rooms present this month plus the intake key');
+  // Room entries carry a coloured dot; the "intake not complete" chip-tint key
+  // carries a square swatch instead. Between them they account for every item.
+  const dots = await page.count('.calendar-legend .legend-item .status-dot');
+  const swatches = await page.count('.calendar-legend .legend-item .legend-swatch');
+  assert.atLeast(dots, 1, 'each room is keyed by a colour-coded dot');
+  assert.equal(swatches, 1, 'the pre-intake chip tint is keyed in the legend');
+  assert.equal(dots + swatches, items, 'each legend item carries a dot or a swatch');
 });
 
 test('Grid|Agenda toggle has a middle List button that returns to the dashboard', async (page) => {

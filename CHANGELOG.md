@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `calendar` — Tint events that haven't reached Intake Complete
 - **Fixed** `storage` — Stop silently swallowing failed file and image writes
 - **Fixed** `events` — Make AI flyer generation work under the web server user
 - **Fixed** `changelog` — Repair hook-mangled entries and stop scope corruption at the source
