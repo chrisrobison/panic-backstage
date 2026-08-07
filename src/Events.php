@@ -754,8 +754,16 @@ final class Events extends BaseEndpoint
         if ($resourceError) {
             return $resourceError;
         }
-        $templateDoors = ($body['doors_time'] ?? '') ?: '19:00';
-        $templateShow  = ($body['show_time'] ?? '') ?: '20:00';
+        // Doors/Show used to fall back to a hardcoded 19:00/20:00 when the
+        // caller omitted them (issue #25). Every Hold created from the calendar
+        // therefore carried plausible-looking times nobody had entered, which
+        // is the most likely origin of the incoherent times in issue #26 —
+        // so they are now required rather than invented.
+        $templateDoors = trim((string) ($body['doors_time'] ?? ''));
+        $templateShow  = trim((string) ($body['show_time'] ?? ''));
+        if ($templateDoors === '' || $templateShow === '') {
+            return Response::json(['error' => 'Doors time and show time are both required.'], 422);
+        }
         if ($err = self::timeOrderError(null, $templateDoors, $templateShow)) {
             return $err;
         }
@@ -774,10 +782,23 @@ final class Events extends BaseEndpoint
         )) {
             return $conflict;
         }
+        // Contacts on a Hold (issue #25). The booker defaults to whoever is
+        // placing the hold — that is nearly always the truth, and leaving it
+        // blank is what led staff to type their own name into the artist
+        // field. Not *required* here: quick-create exists to grab a date while
+        // someone is on the phone, and validateStatusTransition() already
+        // demands the full contact set before the event can reach Intake
+        // Complete.
+        $sessionUser  = $this->auth->user() ?? [];
+        $bookerName   = self::nullableString($body['booker_name']  ?? null) ?? self::nullableString($sessionUser['name']  ?? null);
+        $bookerEmail  = self::nullableString($body['booker_email'] ?? null) ?? self::nullableString($sessionUser['email'] ?? null);
+
         $id = $this->db->insert(
-            "INSERT INTO events (venue_id, resource_id, title, slug, event_type, status, description_public, date, end_date, doors_time, show_time, age_restriction, ticket_price, owner_user_id)
-             VALUES (?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?)",
-            [(int) $template['venue_id'], $resourceId, $title, $this->uniqueSlug($title . '-' . $date), $template['event_type'], $template['default_description_public'], $date, $templateEndDate, $templateDoors, $templateShow, $template['default_age_restriction'], (float) $template['default_ticket_price'], $this->userId()]
+            "INSERT INTO events (venue_id, resource_id, title, slug, event_type, status, description_public, date, end_date, doors_time, show_time, age_restriction, ticket_price, owner_user_id, promoter_name, promoter_email, promoter_phone, booker_name, booker_email, booker_phone)
+             VALUES (?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(int) $template['venue_id'], $resourceId, $title, $this->uniqueSlug($title . '-' . $date), $template['event_type'], $template['default_description_public'], $date, $templateEndDate, $templateDoors, $templateShow, $template['default_age_restriction'], (float) $template['default_ticket_price'], $this->userId(),
+             self::nullableString($body['promoter_name'] ?? null), self::nullableString($body['promoter_email'] ?? null), self::nullableString($body['promoter_phone'] ?? null),
+             $bookerName, $bookerEmail, self::nullableString($body['booker_phone'] ?? null)]
         );
         $this->assignEventCode($id);
         foreach ($this->jsonList($template['checklist_json']) as $task) {

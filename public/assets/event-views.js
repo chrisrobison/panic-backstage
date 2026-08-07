@@ -108,6 +108,7 @@ async function openEventQuickCreate({ date = null } = {}) {
 
   // Default to "General Event" if it exists, else the first template.
   const defaultTemplate = templates.find((t) => t.name === 'General Event') || templates[0];
+  const sessionUser = getAppUser() || {};
 
   const body = dialog.querySelector('[data-qc-body]');
   body.innerHTML = `<form class="grid-form" data-form="quick-create">
@@ -121,8 +122,11 @@ async function openEventQuickCreate({ date = null } = {}) {
     <label>Date <input type="date" name="date" required value="${esc(startDate)}"></label>
     <label>End Date <span class="field-hint muted small">Optional — multi-day events</span><input type="date" name="end_date" min="${esc(startDate)}"></label>
     <label class="wide">Title <input name="title" required value="${esc(defaultTemplate?.default_title || defaultTemplate?.name || '')}" placeholder="Event title"></label>
-    <label>Doors <input type="time" name="doors_time" value="19:00"></label>
-    <label>Show <input type="time" name="show_time" value="20:00"></label>
+    <!-- Deliberately not prefilled. These used to default to 19:00/20:00, so
+         every Hold carried times nobody had entered (issue #25) — which is
+         the likely source of the incoherent times in issue #26. -->
+    <label>Doors <input type="time" name="doors_time" required></label>
+    <label>Show <input type="time" name="show_time" required></label>
 
     <fieldset class="quick-create-blank-fields" hidden>
       ${venues.length > 1
@@ -132,6 +136,19 @@ async function openEventQuickCreate({ date = null } = {}) {
     </fieldset>
 
     <label>Room <select name="resource_id"><option value="">— No specific room —</option></select></label>
+
+    <!-- Contacts on a Hold (issue #25). Optional here so grabbing a date stays
+         fast; the full set is required to reach Intake Complete. Booker is
+         prefilled with the signed-in user, which is who it almost always is. -->
+    <fieldset class="wide quick-create-contacts">
+      <legend>Contacts <span class="field-hint muted small">Optional now — required at Intake Complete</span></legend>
+      <label>Producer / Artist <input name="promoter_name" placeholder="Who is performing"></label>
+      <label>Their email <input type="email" name="promoter_email" placeholder="name@example.com"></label>
+      <label>Their phone <input name="promoter_phone" placeholder="Optional"></label>
+      <label>Booker <input name="booker_name" value="${esc(sessionUser.name || '')}"></label>
+      <label>Booker email <input type="email" name="booker_email" value="${esc(sessionUser.email || '')}"></label>
+      <label>Booker phone <input name="booker_phone" placeholder="Optional"></label>
+    </fieldset>
 
     <p class="info-note wide">Venue costs (full day): <strong>Downstairs (21+)</strong> — $2,000 · <strong>Upstairs</strong> — $3,000. Events must not lose money.</p>
     <div class="wide quick-create-actions">
@@ -1365,8 +1382,9 @@ class TemplatePicker extends PanicElement {
       <h2>${esc(template.name)}</h2><p>${esc(titleCase(template.event_type))} at ${esc(template.venue_name)}</p>
       <form data-template="${esc(template.id)}" class="grid-form compact">
         <label>Date <input type="date" name="date" value="${esc(tomorrow)}" required></label>
-        <label>Doors <input type="time" name="doors_time" value="19:00"></label>
-        <label>Show <input type="time" name="show_time" value="20:00"></label>
+        <!-- Not prefilled, same as the quick-create modal — see issue #25. -->
+        <label>Doors <input type="time" name="doors_time" required></label>
+        <label>Show <input type="time" name="show_time" required></label>
         <label>Title <input name="title" value="${esc(template.default_title || template.name)}"></label>
         <button>Create event</button>
       </form>

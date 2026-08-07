@@ -273,7 +273,22 @@ should be *required* at Hold or only at Intake Complete is a policy call for
 the reporter; requiring it at Hold adds friction to the fast-hold workflow
 that the quick-create modal exists to serve.
 
-Effort: **M**. Worth pairing with A1.
+Effort: **M**. Worth pairing with A1. **Implemented alongside A1.**
+
+Resolved as: contacts appear on the quick-create modal but stay optional
+there, and remain required to reach Intake Complete. That needed no gate
+change — `validateStatusTransition()` already lists producer/artist + booker
+contact in `$holdRequired`, and only fires when the status actually
+*changes* (the `$body['status'] !== $old['status']` guard in `update()`), so
+quick-create never tripped it while the Intake Complete transition always
+does. The booker is prefilled from the signed-in user in the modal, and
+`fromTemplate()` falls back to the authenticated user server-side.
+
+The 19:00/20:00 defaults are gone rather than relaxed: `doors_time` and
+`show_time` are now required by the modal, the templates board, and
+`fromTemplate()`. Worth recording that `event_templates` has **no time
+columns** — the OpenAPI description claiming times were "seeded from the
+template" was wrong; they were always that hardcoded pair.
 
 ### C3. #31 — contract details box, required for Intake Complete
 

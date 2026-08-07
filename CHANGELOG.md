@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Collect contacts on a Hold and stop inventing times (#25)
 - **Fixed** `events` — Stop a Hold from being placed on a confirmed booking (#26)
 - **Documentation** — Triage the 20 open GitHub issues into a sequenced plan
 - **Added** `calendar` — Tint events that haven't reached Intake Complete

@@ -12207,11 +12207,14 @@ paths:
       operationId: events_createFromTemplate
       summary: Create an event from an event template
       description: >-
-        Requires the `create_events` global capability. `date` is required. Seeds
-        title/description/times/ticket price from the template, then applies the template's
+        Requires the `create_events` global capability. `date`, `doors_time` and `show_time` are
+        required — `event_templates` carries no time columns, so an omitted time used to become a
+        hardcoded 19:00/20:00 rather than anything the template supplied (issue #25). Seeds
+        title/description/ticket price from the template, then applies the template's
         `checklist_json` (tasks), `schedule_json` (schedule items), and `staffing_json` (staffing
         shifts) to the new event. An optional `resource_id` in the body is validated against the
-        template's venue.
+        template's venue. Always creates the event as a Hold (`proposed`), and since issue #26
+        refuses with 409 if the room is already held by a confirmed-or-later booking.
       tags:
         - Events
       parameters:
@@ -12228,6 +12231,8 @@ paths:
               type: object
               required:
                 - date
+                - doors_time
+                - show_time
               properties:
                 date:
                   type: string
@@ -12240,13 +12245,31 @@ paths:
                   format: date
                 doors_time:
                   type: string
-                  description: HH:MM, defaults to 19:00.
+                  description: >-
+                    HH:MM. Required — these used to fall back to a hardcoded
+                    19:00/20:00, which stamped invented times on every Hold
+                    created from the calendar (issue #25).
                 show_time:
                   type: string
-                  description: HH:MM, defaults to 20:00.
+                  description: HH:MM. Required.
                 resource_id:
                   type: integer
                   nullable: true
+                promoter_name:
+                  type: string
+                  description: Producer/artist contact. Optional at Hold, required to reach Intake Complete.
+                promoter_email:
+                  type: string
+                promoter_phone:
+                  type: string
+                booker_name:
+                  type: string
+                  description: Defaults to the authenticated user's name when omitted.
+                booker_email:
+                  type: string
+                  description: Defaults to the authenticated user's email when omitted.
+                booker_phone:
+                  type: string
       responses:
         '200':
           description: Event created from template.
@@ -12269,8 +12292,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '409':
+          description: >-
+            The room is already occupied by a confirmed-or-later booking on that date
+            (issue #26). Body carries `conflict_event_id`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '422':
-          description: date is required
+          description: >-
+            `date`, `doors_time` or `show_time` missing, an end date before the start date,
+            or an incoherent doors-to-show ordering.
           content:
             application/json:
               schema:

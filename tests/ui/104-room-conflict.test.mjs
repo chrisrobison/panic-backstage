@@ -4,12 +4,17 @@
 // red. See roomConflictIds()/roomConflictDates() in core.js, which mirror the
 // server-side rule in EventRowHelpers::checkRoomConflict.
 //
-// The backend only enforces that rule for BOOKING_CONFIRMED_STATUSES (see
-// Events.php) — a 'proposed' hold is allowed to overlap another proposed hold
-// by design (both are still tentative). That's exactly the realistic case
-// this feature needs to surface, and conveniently lets this test create a
-// genuine double-booking through the normal create API without fighting the
-// 409 guard.
+// Two competing 'proposed' holds are allowed to overlap by design (both are
+// still tentative — see Events::conflictBlockersFor()), which is exactly the
+// realistic case this highlighting needs to surface, and conveniently lets
+// this test create a genuine double-booking through the normal create API
+// without fighting the 409 guard.
+//
+// Since issue #26 that guard also applies to holds placed over a
+// confirmed-or-later booking, so the target date can no longer be hardcoded:
+// a confirmed event sitting in the chosen room would now 409 the fixtures.
+// pickFreeDate() below scans the dashboard's window for a date where this
+// room has no committed booking.
 //
 // Destructive against two throwaway events only — created here, deleted in a
 // `finally` block, same convention as 80-event-sessions.test.mjs.
@@ -32,14 +37,40 @@ function isoDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-test('room double-booking is flagged red on the calendar, agenda, and dashboard', async (page) => {
-  const target = new Date();
-  target.setDate(target.getDate() + 10); // within the dashboard's default 30-day window
-  const targetIso = isoDate(target);
+// A date in the dashboard's 30-day window where $room holds no
+// confirmed-or-later booking, so creating the two throwaway holds can't 409.
+// Multi-day bookings are expanded across their whole span, matching
+// EventRowHelpers::checkRoomConflict()'s own date-overlap rule.
+function pickFreeDate(events, roomId) {
+  const committed = new Set(['confirmed', 'booked', 'needs_assets', 'assets_approved',
+    'ready_to_announce', 'published', 'advanced', 'completed', 'settled']);
+  const busy = new Set();
+  (events || []).forEach((event) => {
+    if (Number(event.resource_id) !== Number(roomId) || !committed.has(event.status)) return;
+    for (let d = event.date, end = event.end_date || event.date; d <= end;) {
+      busy.add(d);
+      const next = new Date(d + 'T00:00:00');
+      next.setDate(next.getDate() + 1);
+      d = isoDate(next);
+    }
+  });
+  for (let offset = 5; offset <= 28; offset++) {
+    const candidate = new Date();
+    candidate.setDate(candidate.getDate() + offset);
+    const iso = isoDate(candidate);
+    if (!busy.has(iso)) return iso;
+  }
+  return null;
+}
 
+test('room double-booking is flagged red on the calendar, agenda, and dashboard', async (page) => {
   const venueData = await apiFetch(page, '/venues');
   const room = (venueData.resources || [])[0];
   assert.ok(room, 'at least one active room is available for conflict testing');
+
+  const existing = await apiFetch(page, '/events');
+  const targetIso = pickFreeDate(existing.events || existing || [], room.id);
+  if (!targetIso) page.skip('no date in the next 28 days is free of committed bookings in this room');
 
   const base = {
     venue_id: Number(room.venue_id),
@@ -69,7 +100,8 @@ test('room double-booking is flagged red on the calendar, agenda, and dashboard'
     await page.until(`document.querySelector('pb-events-upcoming .upcoming-page')`);
     await page.goto('#calendar');
     await page.until(`document.querySelector('.calendar-month-block')`);
-    await page.eval(`document.querySelector('pb-event-calendar')._goToMonth(new Date(${target.getFullYear()}, ${target.getMonth()}, 1))`);
+    const [targetYear, targetMonth] = targetIso.split('-').map(Number);
+    await page.eval(`document.querySelector('pb-event-calendar')._goToMonth(new Date(${targetYear}, ${targetMonth - 1}, 1))`);
     await page.until(`document.querySelector('.calendar-day[data-create-date="${targetIso}"]')`);
 
     const dayCell = `.calendar-day[data-create-date="${targetIso}"]`;
