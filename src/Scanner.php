@@ -40,11 +40,17 @@ final class Scanner extends BaseEndpoint
 
     public function handle(Request $request): Response
     {
-        // The redeem surface is selected by the Kernel via a 'scan' param.
-        if (($this->params['scan'] ?? null) === 'redeem') {
-            return match ($request->method()) {
-                'POST'  => $this->redeem($request),
-                default => Response::methodNotAllowed(),
+        // The scanner-token surfaces are selected by the Kernel via a 'scan' param.
+        $scan = $this->params['scan'] ?? null;
+        if ($scan !== null) {
+            if ($request->method() !== 'POST') {
+                return Response::methodNotAllowed();
+            }
+            return match ($scan) {
+                'redeem'  => $this->redeem($request),
+                'sell'    => $this->sell($request),
+                'context' => $this->context($request),
+                default   => $this->notFound('Unknown scanner action'),
             };
         }
 
@@ -81,7 +87,7 @@ final class Scanner extends BaseEndpoint
     {
         $rows = $this->db->all(
             'SELECT id, label, token, created_by_user_id, expires_at, revoked_at,
-                    last_used_at, created_at,
+                    last_used_at, created_at, can_sell,
                     (pin_hash IS NOT NULL) AS has_pin
                FROM event_scanner_links
               WHERE event_id = ?
@@ -96,6 +102,7 @@ final class Scanner extends BaseEndpoint
                 'id'           => (int) $r['id'],
                 'label'        => $r['label'] !== null ? (string) $r['label'] : null,
                 'has_pin'      => (bool) (int) $r['has_pin'],
+                'can_sell'     => (bool) (int) $r['can_sell'],
                 'has_token'    => $token !== null,
                 // Present only when the secret is stored (so the UI can re-show
                 // the link/QR). Carries the live secret — admin-gated surface.
@@ -116,7 +123,7 @@ final class Scanner extends BaseEndpoint
      * POST — mint a new scanner link. Returns the full scanner URL containing
      * the one-time secret token; it is never recoverable afterward.
      *
-     * body: { label?, pin?, expires_at? }
+     * body: { label?, pin?, expires_at?, can_sell? }
      */
     private function createLink(Request $request, int $eventId): Response
     {
@@ -124,6 +131,10 @@ final class Scanner extends BaseEndpoint
         $pin   = trim((string) $request->body('pin', ''));
         $expRaw = $request->body('expires_at');
         $expires = date_or_null($expRaw);
+        // Opt-in only, and only at creation time — there is no endpoint to
+        // upgrade an existing scan-only link into a selling one, so a link's
+        // powers are fixed the moment it is shared.
+        $canSell = self::truthy($request->body('can_sell'));
 
         if ($pin !== '' && !ctype_digit($pin)) {
             return Response::json(['error' => 'PIN must be numeric.'], 422);
@@ -141,15 +152,16 @@ final class Scanner extends BaseEndpoint
 
         $id = $this->db->insert(
             'INSERT INTO event_scanner_links
-                (event_id, label, token_hash, token, pin_hash, created_by_user_id, expires_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [$eventId, ($label !== '' ? $label : null), $hash, $token, $pinHash, $this->userId(), $expires]
+                (event_id, label, token_hash, token, pin_hash, can_sell, created_by_user_id, expires_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [$eventId, ($label !== '' ? $label : null), $hash, $token, $pinHash, $canSell ? 1 : 0, $this->userId(), $expires]
         );
 
         log_activity($this->db, $eventId, $this->userId(), 'scanner link created', [
             'scanner_link_id' => $id,
             'label'           => $label !== '' ? $label : null,
             'has_pin'         => $pin !== '',
+            'can_sell'        => $canSell,
         ]);
 
         return $this->ok([
@@ -157,6 +169,7 @@ final class Scanner extends BaseEndpoint
                 'id'         => $id,
                 'label'      => $label !== '' ? $label : null,
                 'has_pin'    => $pin !== '',
+                'can_sell'   => $canSell,
                 'expires_at' => $expires,
             ],
             // Returned ONCE — the page URL door staff open on their device.
@@ -241,40 +254,14 @@ final class Scanner extends BaseEndpoint
      */
     private function redeem(Request $request): Response
     {
-        $scannerToken = trim((string) $request->body('scanner_token', ''));
-        $pin          = trim((string) $request->body('pin', ''));
-        $ticketToken  = trim((string) $request->body('ticket_token', ''));
-
-        if ($scannerToken === '') {
-            return Response::json(['error' => 'Scanner token required.'], 401);
+        $link = $this->authenticateLink($request);
+        if ($link instanceof Response) {
+            return $link;
         }
 
-        $link = $this->db->one(
-            'SELECT id, event_id, pin_hash, expires_at, revoked_at
-               FROM event_scanner_links WHERE token_hash = ?',
-            [hash('sha256', $scannerToken)]
-        );
-
-        // Invalid / revoked / expired scanner link -> 401, no audit row (we have
-        // no trustworthy event scope to attribute the attempt to).
-        if ($link === null || $link['revoked_at'] !== null) {
-            return Response::json(['error' => 'Invalid or revoked scanner link.'], 401);
-        }
-        if ($link['expires_at'] !== null && db_timestamp_to_epoch((string) $link['expires_at']) <= time()) {
-            return Response::json(['error' => 'This scanner link has expired.'], 401);
-        }
-        if ($link['pin_hash'] !== null && !password_verify($pin, (string) $link['pin_hash'])) {
-            return Response::json(['error' => 'Incorrect PIN.'], 401);
-        }
-
-        $eventId   = (int) $link['event_id'];
-        $scannerId = (int) $link['id'];
-
-        // Touch last_used_at on any authenticated scan attempt.
-        $this->db->run(
-            'UPDATE event_scanner_links SET last_used_at = NOW() WHERE id = ?',
-            [$scannerId]
-        );
+        $eventId     = (int) $link['event_id'];
+        $scannerId   = (int) $link['id'];
+        $ticketToken = trim((string) $request->body('ticket_token', ''));
 
         if ($ticketToken === '') {
             return Response::json(['error' => 'No ticket scanned.'], 422);
@@ -366,7 +353,288 @@ final class Scanner extends BaseEndpoint
         ]);
     }
 
+    // ─── (c) door sales (scanner-token auth) ─────────────────────────────────────
+
+    /**
+     * POST /api/scan/context — what this scanner link is allowed to do and what
+     * it can sell. The scanner page has no JWT and no event id of its own, so
+     * this is how it learns the event label, whether sales are enabled, and the
+     * live tier list to render in the picker.
+     *
+     * Door sales deliberately IGNORE sales_start/sales_end: online sales
+     * normally close before doors open, and the whole point of a door sale is
+     * that it happens after that window. Tier status is still respected, so a
+     * closed/draft/paused tier stays unsellable.
+     */
+    private function context(Request $request): Response
+    {
+        $link = $this->authenticateLink($request);
+        if ($link instanceof Response) {
+            return $link;
+        }
+
+        $eventId = (int) $link['event_id'];
+        $canSell = (bool) (int) ($link['can_sell'] ?? 0);
+
+        $event = $this->db->one(
+            'SELECT title, external_id, ticketing_mode, ticket_url FROM events WHERE id = ?',
+            [$eventId]
+        );
+
+        $tiers = [];
+        if ($canSell) {
+            $service = new TicketingService();
+            $rows = $this->db->all(
+                "SELECT id, name, price_cents, currency, status
+                   FROM ticket_types
+                  WHERE event_id = ? AND status IN ('on_sale', 'sold_out')
+                  ORDER BY sort_order ASC, id ASC",
+                [$eventId]
+            );
+            foreach ($rows as $r) {
+                $typeId = (int) $r['id'];
+                $tiers[] = [
+                    'id'          => $typeId,
+                    'name'        => (string) $r['name'],
+                    'price_cents' => (int) $r['price_cents'],
+                    'currency'    => (string) ($r['currency'] ?? 'USD'),
+                    'available'   => $service->availableQuantity($this->db, $typeId),
+                ];
+            }
+        }
+
+        return $this->ok([
+            'event_id'    => $eventId,
+            'event_code'  => (string) ($event['external_id'] ?? '') ?: null,
+            'event_title' => (string) ($event['title'] ?? '') ?: null,
+            'can_sell'    => $canSell,
+            'ticket_types' => $tiers,
+            // Self-serve card purchase: the buyer scans this from the door
+            // device's screen and checks out on their own phone.
+            'buy_url'     => $this->buyUrl($eventId, $event ?? []),
+        ]);
+    }
+
+    /**
+     * Public "buy a ticket" page for this event, for the door's self-serve QR.
+     *
+     * An event on external ticketing sends buyers to whatever provider it uses;
+     * everything else goes to our own public event page, which is where the
+     * in-house checkout (and therefore card payment) lives. Returns null when
+     * an external event has no URL configured, so the scanner can hide the
+     * option rather than show a QR that goes nowhere.
+     */
+    private function buyUrl(int $eventId, array $event): ?string
+    {
+        if ((string) ($event['ticketing_mode'] ?? '') === 'external') {
+            $url = trim((string) ($event['ticket_url'] ?? ''));
+            return $url !== '' ? $url : null;
+        }
+
+        // Same APP_URL/APP_BASE_PATH handling as scannerUrl() — APP_URL usually
+        // already carries the base path, so only append when it doesn't.
+        $base = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+        $basePath = rtrim((string) (getenv('APP_BASE_PATH') ?: ''), '/');
+        if ($basePath !== '' && !str_ends_with($base, $basePath)) {
+            $base .= $basePath;
+        }
+        return $base . '/event.html?id=' . rawurlencode((string) $eventId);
+    }
+
+    /**
+     * POST /api/scan/sell — log a walk-up sale and admit the buyer.
+     *
+     * body: { scanner_token, pin?, ticket_type_id, quantity?, payment_method,
+     *         holder_name?, holder_email? }
+     *
+     * Mirrors redeem()'s contract: HTTP 200 with a 'result' for anything the
+     * door staff can act on (sold / sold_out / unknown_type), 401 only when the
+     * scanner link itself is rejected — so scanner.js keeps one error style.
+     *
+     * result ∈ sold | sold_out | unknown_type | not_permitted
+     */
+    private function sell(Request $request): Response
+    {
+        $link = $this->authenticateLink($request);
+        if ($link instanceof Response) {
+            return $link;
+        }
+
+        $eventId   = (int) $link['event_id'];
+        $scannerId = (int) $link['id'];
+
+        // Sales are opt-in per link (migration 091). A link minted for scanning
+        // only can never ring up money, so a leaked scanner URL stays bounded at
+        // the damage it could already do.
+        if (!(bool) (int) ($link['can_sell'] ?? 0)) {
+            return $this->ok([
+                'result'  => 'not_permitted',
+                'sold'    => false,
+                'message' => 'This scanner link is not allowed to sell tickets.',
+            ]);
+        }
+
+        $typeId   = (int) $request->body('ticket_type_id', 0);
+        $quantity = (int) $request->body('quantity', 1);
+        $method   = strtolower(trim((string) $request->body('payment_method', '')));
+        $name     = trim((string) $request->body('holder_name', ''));
+        $email    = trim((string) $request->body('holder_email', ''));
+
+        if ($quantity < 1 || $quantity > 20) {
+            return Response::json(['error' => 'Quantity must be between 1 and 20.'], 422);
+        }
+        if (!in_array($method, ['cash', 'card', 'other'], true)) {
+            return Response::json(['error' => 'Payment method must be cash, card, or other.'], 422);
+        }
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return Response::json(['error' => 'That email address is not valid.'], 422);
+        }
+
+        // Scope the tier to this link's event — a scanner link must never be
+        // able to sell inventory belonging to some other event.
+        $type = $this->db->one(
+            'SELECT id, name, price_cents, currency, status
+               FROM ticket_types WHERE id = ? AND event_id = ?',
+            [$typeId, $eventId]
+        );
+        if ($type === null || !in_array((string) $type['status'], ['on_sale', 'sold_out'], true)) {
+            return $this->ok([
+                'result'  => 'unknown_type',
+                'sold'    => false,
+                'message' => 'That ticket type is not available at the door.',
+            ]);
+        }
+
+        $service = new TicketingService();
+        try {
+            $sale = $service->recordDoorSale(
+                $this->db,
+                $typeId,
+                $quantity,
+                $method,
+                $name !== '' ? $name : null,
+                $email !== '' ? $email : null,
+                $scannerId,
+                null // no JWT user at the door; the scanner link is the actor
+            );
+        } catch (\RuntimeException $e) {
+            // The oversell guard is the only expected failure here, and it is
+            // the one door staff genuinely need to see.
+            if (stripos($e->getMessage(), 'oversell') !== false) {
+                return $this->ok([
+                    'result'  => 'sold_out',
+                    'sold'    => false,
+                    'message' => 'Not enough tickets left in that tier.',
+                ]);
+            }
+            throw $e;
+        }
+
+        // A door sale is an admission too — audit it exactly like a scan so the
+        // ticket_scans headcount stays true.
+        foreach ($sale['tickets'] as $ticket) {
+            $this->db->run(
+                'INSERT INTO ticket_scans
+                    (ticket_id, event_id, result, scanner_link_id, scanned_by_user_id, ip, user_agent)
+                 VALUES (?, ?, ?, ?, NULL, ?, ?)',
+                [
+                    (int) $ticket['id'],
+                    $eventId,
+                    'admitted',
+                    $scannerId,
+                    $this->clientIp(),
+                    substr((string) ($request->header('User-Agent') ?? ''), 0, 255) ?: null,
+                ]
+            );
+        }
+
+        log_activity($this->db, $eventId, null, 'door sale recorded', [
+            'scanner_link_id' => $scannerId,
+            'order_id'        => $sale['order_id'],
+            'ticket_type'     => (string) $type['name'],
+            'quantity'        => $quantity,
+            'amount_cents'    => $sale['amount_cents'],
+            'payment_method'  => $method,
+        ]);
+
+        // Best-effort receipt when the buyer gave an address. Never let a mail
+        // failure cost us the sale that is already committed to the DB.
+        if ($email !== '') {
+            try {
+                $service->emailTickets($this->db, $this->root, $sale['order_id'], $sale['tickets']);
+            } catch (\Throwable $e) {
+                error_log('Door sale receipt email failed for order ' . $sale['order_id'] . ': ' . $e->getMessage());
+            }
+        }
+
+        $codes = array_map(static fn(array $t): string => (string) $t['code'], $sale['tickets']);
+
+        return $this->ok([
+            'result'         => 'sold',
+            'sold'           => true,
+            'admitted'       => true,
+            'order_id'       => $sale['order_id'],
+            'quantity'       => $quantity,
+            'tier'           => (string) $type['name'],
+            'amount_cents'   => $sale['amount_cents'],
+            'currency'       => $sale['currency'],
+            'payment_method' => $method,
+            'holder_name'    => $name !== '' ? $name : null,
+            'emailed'        => $email !== '',
+            'ticket_codes'   => $codes,
+            'ticket_code'    => $codes[0] ?? null,
+            'event_id'       => $eventId,
+        ]);
+    }
+
     // ─── helpers ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Validate the scanner-link secret (+ PIN) carried in the request body and
+     * return the link row, or a 401 Response describing why it was rejected.
+     *
+     * Shared by every scanner-token surface so redeem/sell/context can never
+     * drift apart on what counts as an authenticated door device. Touches
+     * last_used_at on success, matching the original redeem behaviour.
+     *
+     * @return array<string,mixed>|Response
+     */
+    private function authenticateLink(Request $request): array|Response
+    {
+        $scannerToken = trim((string) $request->body('scanner_token', ''));
+        $pin          = trim((string) $request->body('pin', ''));
+
+        if ($scannerToken === '') {
+            return Response::json(['error' => 'Scanner token required.'], 401);
+        }
+
+        $link = $this->db->one(
+            'SELECT id, event_id, pin_hash, can_sell, expires_at, revoked_at
+               FROM event_scanner_links WHERE token_hash = ?',
+            [hash('sha256', $scannerToken)]
+        );
+
+        // Invalid / revoked / expired scanner link -> 401, no audit row (we have
+        // no trustworthy event scope to attribute the attempt to).
+        if ($link === null || $link['revoked_at'] !== null) {
+            return Response::json(['error' => 'Invalid or revoked scanner link.'], 401);
+        }
+        if ($link['expires_at'] !== null && db_timestamp_to_epoch((string) $link['expires_at']) <= time()) {
+            return Response::json(['error' => 'This scanner link has expired.'], 401);
+        }
+        if ($link['pin_hash'] !== null && !password_verify($pin, (string) $link['pin_hash'])) {
+            return Response::json(['error' => 'Incorrect PIN.'], 401);
+        }
+
+        // Touch last_used_at on any authenticated use of the link.
+        $this->db->run(
+            'UPDATE event_scanner_links SET last_used_at = NOW() WHERE id = ?',
+            [(int) $link['id']]
+        );
+
+        return $link;
+    }
+
 
     /**
      * Accept either a bare token or a full scan/ticket URL and return the bare
@@ -419,6 +687,18 @@ final class Scanner extends BaseEndpoint
     {
         $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
         return $ip !== '' ? substr($ip, 0, 45) : null;
+    }
+
+    /** Accept the usual JSON/form spellings of a boolean flag. */
+    private static function truthy(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_int($value)) {
+            return $value === 1;
+        }
+        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
     }
 
     private function intParam(string $key): ?int

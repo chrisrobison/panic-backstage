@@ -352,10 +352,12 @@ final class Kernel
             ]];
         }
 
-        // Door scanner redeem (scanner-token auth, NOT JWT):
-        //   POST /api/scan/redeem
-        if ($segments[0] === 'scan' && ($segments[1] ?? '') === 'redeem') {
-            return [Scanner::class, ['scan' => 'redeem']];
+        // Door scanner surfaces (scanner-token auth, NOT JWT):
+        //   POST /api/scan/redeem   — admit a scanned ticket
+        //   POST /api/scan/sell     — log a walk-up sale (sell-enabled links only)
+        //   POST /api/scan/context  — what this link may do + sellable tiers
+        if ($segments[0] === 'scan' && in_array($segments[1] ?? '', ['redeem', 'sell', 'context'], true)) {
+            return [Scanner::class, ['scan' => $segments[1]]];
         }
 
         // Public ticket view (pretty URL, no /api prefix, no JWT):
@@ -844,7 +846,7 @@ final class Kernel
             ContractSigningEndpoint::class, // public signing flow, authenticated by token hash
             PayeeSubmissionEndpoint::class, // public W-9/address submission, authenticated by token hash
             TicketView::class,          // public ticket page, looked up by token hash
-            Scanner::class,             // /api/scan/redeem (scanner-token); JWT mgmt paths
+            Scanner::class,             // /api/scan/{redeem,sell,context} (scanner-token); JWT mgmt paths
                                         // still gated via requireEventCapability (null user => denied)
             QrCode::class,              // /assets/qr.svg — public QR image generator
             Promote\TwitterOAuth::class, // /api/promote/oauth/twitter/callback (browser redirect from X, no JWT);

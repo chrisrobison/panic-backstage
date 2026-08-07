@@ -264,6 +264,118 @@ final class TicketingService
     }
 
     /**
+     * Record a walk-up sale taken at the door and admit the buyer in one step.
+     *
+     * Same transaction shape and oversell guard as issueComp(), with three
+     * deliberate differences:
+     *   - the order is real money: provider='door', is_comp=0,
+     *     amount_cents = unit price * quantity, payment_method = cash|card|other;
+     *   - the tickets are born 'redeemed' rather than 'issued', because the
+     *     buyer is physically at the door — there is no second scan coming, and
+     *     leaving them 'issued' would let the same paper ticket walk in again;
+     *   - redeemed_via_scanner_id attributes the admission to the door device,
+     *     matching what Scanner::performRedeem() writes for a scanned ticket.
+     *
+     * Plaintext tokens come back so the caller can email a receipt/QR when the
+     * buyer supplied an address (a redeemed ticket's QR is still useful as
+     * proof of purchase and for re-entry policies).
+     *
+     * @return array{order_id:int,amount_cents:int,currency:string,
+     *               tickets:array<int,array{id:int,code:string,token:?string,ticket_type_id:int,holder_email:?string,holder_name:?string}>}
+     *
+     * @throws \RuntimeException on oversell or unknown ticket type.
+     */
+    public function recordDoorSale(
+        Database $db,
+        int $ticketTypeId,
+        int $quantity,
+        string $paymentMethod,
+        ?string $holderName = null,
+        ?string $holderEmail = null,
+        ?int $scannerLinkId = null,
+        ?int $soldByUserId = null
+    ): array {
+        $quantity = max(1, $quantity);
+        if (!in_array($paymentMethod, ['cash', 'card', 'other'], true)) {
+            $paymentMethod = 'other';
+        }
+
+        $type = $db->one(
+            'SELECT id, event_id, currency, price_cents FROM ticket_types WHERE id = ?',
+            [$ticketTypeId]
+        );
+        if ($type === null) {
+            throw new \RuntimeException("Ticket type {$ticketTypeId} not found.");
+        }
+        $eventId   = (int) $type['event_id'];
+        $currency  = (string) ($type['currency'] ?? 'USD');
+        $unitPrice = (int) $type['price_cents'];
+        $total     = $unitPrice * $quantity;
+
+        $pdo = $db->pdo();
+        $pdo->beginTransaction();
+        try {
+            // Identical guard to fulfillOrder()/issueComp(): the increment only
+            // lands while it stays within quantity_total, so a door sale racing
+            // online checkout cannot oversell the room.
+            $affected = $db->run(
+                'UPDATE ticket_types
+                    SET quantity_sold = quantity_sold + :n
+                  WHERE id = :id
+                    AND quantity_sold + :n2 <= quantity_total',
+                [':n' => $quantity, ':id' => $ticketTypeId, ':n2' => $quantity]
+            );
+            if ($affected !== 1) {
+                $pdo->rollBack();
+                throw new \RuntimeException(
+                    "Oversell: ticket type {$ticketTypeId} lacks {$quantity} unit(s) for a door sale."
+                );
+            }
+
+            $orderId = $db->insert(
+                "INSERT INTO ticket_orders
+                    (event_id, buyer_user_id, buyer_name, buyer_email, provider,
+                     payment_method, amount_cents, currency, status, is_comp, paid_at)
+                 VALUES (?, ?, ?, ?, 'door', ?, ?, ?, 'fulfilled', 0, NOW())",
+                [$eventId, $soldByUserId, $holderName, $holderEmail, $paymentMethod, $total, $currency]
+            );
+
+            $db->run(
+                'INSERT INTO ticket_order_items (order_id, ticket_type_id, quantity, unit_price_cents)
+                 VALUES (?, ?, ?, ?)',
+                [$orderId, $ticketTypeId, $quantity, $unitPrice]
+            );
+
+            $issued = [];
+            for ($k = 0; $k < $quantity; $k++) {
+                $issued[] = $this->createTicket(
+                    $db,
+                    $eventId,
+                    $ticketTypeId,
+                    $orderId,
+                    $holderName,
+                    $holderEmail,
+                    'redeemed',
+                    $scannerLinkId
+                );
+            }
+
+            $pdo->commit();
+            return [
+                'order_id'     => $orderId,
+                'amount_cents' => $total,
+                'currency'     => $currency,
+                'tickets'      => $issued,
+            ];
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /**
      * Void an issued ticket and return its unit to inventory (decrement
      * quantity_sold, floored at zero). Idempotent: voiding an already-void
      * ticket is a no-op that returns true. Returns false if the ticket does
@@ -447,8 +559,16 @@ final class TicketingService
     // ─── internals ───────────────────────────────────────────────────────────────
 
     /**
-     * Insert a single issued ticket with a fresh secret token. Retries on the
+     * Insert a single ticket with a fresh secret token. Retries on the
      * (astronomically unlikely) code/token collision.
+     *
+     * $status is 'issued' for every ticket that still has to be scanned in.
+     * Door sales pass 'redeemed' (with the selling $scannerLinkId) because the
+     * buyer is admitted at the moment of purchase; that stamps redeemed_at and
+     * redeemed_via_scanner_id up front so the row is indistinguishable from one
+     * the scanner flipped, and no second admission is possible.
+     *
+     * @param 'issued'|'redeemed' $status
      *
      * @return array{id:int,code:string,token:?string,ticket_type_id:int,holder_email:?string,holder_name:?string}
      */
@@ -458,8 +578,12 @@ final class TicketingService
         int $ticketTypeId,
         int $orderId,
         ?string $holderName,
-        ?string $holderEmail
+        ?string $holderEmail,
+        string $status = 'issued',
+        ?int $scannerLinkId = null
     ): array {
+        $redeemed = $status === 'redeemed';
+
         for ($attempt = 0; $attempt < 5; $attempt++) {
             $secret = $this->generateToken();
             $code   = $this->generateCode();
@@ -467,9 +591,14 @@ final class TicketingService
                 $id = $db->insert(
                     "INSERT INTO tickets
                         (event_id, ticket_type_id, order_id, code, token_hash, token,
-                         holder_name, holder_email, status)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'issued')",
-                    [$eventId, $ticketTypeId, $orderId, $code, $secret['hash'], $secret['token'], $holderName, $holderEmail]
+                         holder_name, holder_email, status, redeemed_at, redeemed_via_scanner_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, " . ($redeemed ? 'NOW()' : 'NULL') . ", ?)",
+                    [
+                        $eventId, $ticketTypeId, $orderId, $code, $secret['hash'], $secret['token'],
+                        $holderName, $holderEmail,
+                        $redeemed ? 'redeemed' : 'issued',
+                        $redeemed ? $scannerLinkId : null,
+                    ]
                 );
             } catch (Throwable $e) {
                 // Unique collision on code/token_hash — regenerate and retry.

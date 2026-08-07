@@ -1234,6 +1234,15 @@ const HELP_CONTENT = {
     </ol>
     <p>Redemption is one-and-done: a ticket flips from <em>issued</em> to <em>redeemed</em> on the first valid scan, so a screenshotted or forwarded QR can't get a second person in.</p>
 
+    <h3>Selling at the door</h3>
+    <p>Walk-ups are handled from the same scanner page, so the money and the headcount are recorded in one action instead of being reconstructed from a cash box afterwards. There are two ways to take a door sale:</p>
+    <ol>
+      <li><strong>Staff rings it up.</strong> Tick <em>Allow walk-up ticket sales</em> when creating the scanner link, and that link gains a <em>Sell</em> tab: pick the tier, set a quantity, tap <em>Cash</em>, <em>Card</em>, or <em>Other</em>, and complete the sale. The buyer is admitted immediately — there's no QR to scan back — and an optional email sends them their ticket as a receipt.</li>
+      <li><strong>The buyer pays themselves.</strong> Tap <em>Pay by card — show QR</em> (available on every scanner link) and turn the screen around. The QR opens this event's public ticket page on their phone, where they check out by card through your normal payment processor. Their ticket arrives by email and gets scanned in like any other. Use this when you'd rather not handle a card at the door at all.</li>
+    </ol>
+    <p>Door sales use the same inventory and the same books as online sales: a tier can never be oversold (a sale that would exceed capacity is refused outright rather than partially recorded), and door revenue shows up in tier revenue, gross ticket sales, and the settlement report automatically. Because the payment method is stored, cash and card totals reconcile separately at the end of the night.</p>
+    <p class="muted small">Sales are off by default on every scanner link, and can't be switched on afterwards — a link's powers are fixed when you create it. Give a selling link only to whoever is running the box, and put a PIN on it; if it ever leaks, revoke it and make a new one. Links created before this feature stay scan-only.</p>
+
     <p class="muted small">Who sees what: the Ticketing tab (tiers, comps, refunds, scanner links) is limited to venue admins and event owners — promoters and other collaborators don't see it. Selecting the payment processor is a venue-admin task under <a href="#help-admin-payments">Admin &rarr; Payments</a>.</p>
   `,
 

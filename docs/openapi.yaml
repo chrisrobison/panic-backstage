@@ -8334,6 +8334,146 @@ components:
           type: string
           nullable: true
           description: Human-facing EVT-N event reference, when available.
+    ScannerContextRequest:
+      type: object
+      required:
+        - scanner_token
+      properties:
+        scanner_token:
+          type: string
+          description: Per-scanner secret (not a JWT); matched by sha256 hash.
+        pin:
+          type: string
+          nullable: true
+          description: Required if the scanner link was created with a PIN.
+    ScannerSellableTicketType:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        price_cents:
+          type: integer
+        currency:
+          type: string
+        available:
+          type: integer
+          description: >-
+            Live availability — quantity_total minus quantity_sold minus inventory held by active
+            (non-expired) pending orders.
+    ScannerContextResponse:
+      type: object
+      properties:
+        event_id:
+          type: integer
+        event_code:
+          type: string
+          nullable: true
+          description: Human-facing EVT-N event reference, when available.
+        event_title:
+          type: string
+          nullable: true
+        can_sell:
+          type: boolean
+          description: >-
+            Whether this link was granted walk-up sale powers at creation time
+            (event_scanner_links.can_sell). False for every scan-only link.
+        ticket_types:
+          type: array
+          description: Tiers sellable at the door. Empty unless can_sell is true.
+          items:
+            $ref: '#/components/schemas/ScannerSellableTicketType'
+    ScannerSellRequest:
+      type: object
+      required:
+        - scanner_token
+        - ticket_type_id
+        - payment_method
+      properties:
+        scanner_token:
+          type: string
+          description: Per-scanner secret (not a JWT); matched by sha256 hash.
+        pin:
+          type: string
+          nullable: true
+          description: Required if the scanner link was created with a PIN.
+        ticket_type_id:
+          type: integer
+          description: >-
+            Tier being sold. Must belong to the scanner link's own event and be 'on_sale' or
+            'sold_out', otherwise result=unknown_type.
+        quantity:
+          type: integer
+          default: 1
+          minimum: 1
+          maximum: 20
+        payment_method:
+          type: string
+          enum:
+            - cash
+            - card
+            - other
+          description: How the venue took the money, for cash-drawer reconciliation.
+        holder_name:
+          type: string
+          nullable: true
+        holder_email:
+          type: string
+          nullable: true
+          description: If supplied, the ticket + QR is emailed best-effort as a receipt.
+    ScannerSellResult:
+      type: string
+      enum:
+        - sold
+        - sold_out
+        - unknown_type
+        - not_permitted
+    ScannerSellResponse:
+      type: object
+      properties:
+        result:
+          $ref: '#/components/schemas/ScannerSellResult'
+        sold:
+          type: boolean
+        admitted:
+          type: boolean
+          description: Always true on a completed sale — a door sale admits the buyer immediately.
+        message:
+          type: string
+          nullable: true
+          description: Present on non-sold results, explaining what door staff should do.
+        order_id:
+          type: integer
+        quantity:
+          type: integer
+        tier:
+          type: string
+        amount_cents:
+          type: integer
+        currency:
+          type: string
+        payment_method:
+          type: string
+          enum:
+            - cash
+            - card
+            - other
+        holder_name:
+          type: string
+          nullable: true
+        emailed:
+          type: boolean
+        ticket_codes:
+          type: array
+          items:
+            type: string
+        ticket_code:
+          type: string
+          nullable: true
+          description: First issued ticket code, for a single-ticket confirmation display.
+        event_id:
+          type: integer
     PaymentWebhookPayload:
       type: object
       description: >-
@@ -23597,6 +23737,97 @@ paths:
                 $ref: '#/components/schemas/Error'
         '422':
           description: No ticket_token was supplied to scan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/scan/context:
+    post:
+      operationId: scanner_context
+      summary: What this scanner link may do, and what it can sell
+      description: >-
+        Authenticated by the same per-scanner secret (+ optional PIN) as
+        /api/scan/redeem. The scanner.html page holds no JWT and knows no event id of its own, so
+        this is how it learns the event label, whether the link was granted walk-up sale powers
+        (can_sell, see /api/scan/sell), and the live tier list to render in the sale picker.
+        ticket_types is empty unless can_sell is true. Door sales deliberately IGNORE the
+        sales_start/sales_end window — online sales normally close before doors open — but tier
+        status is still respected, so only 'on_sale'/'sold_out' tiers are listed; `available` is the
+        live TicketingService::availableQuantity (total minus sold minus active pending holds).
+      tags:
+        - Scanner
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScannerContextRequest'
+      responses:
+        '200':
+          description: Scanner link context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScannerContextResponse'
+        '401':
+          description: Missing/invalid/revoked/expired scanner token, or incorrect PIN.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/scan/sell:
+    post:
+      operationId: scanner_sellTicket
+      summary: Log a walk-up ticket sale at the door
+      description: >-
+        Records a walk-up sale AND admits the buyer in one step — the tickets are created with
+        status='redeemed' (stamped redeemed_at + redeemed_via_scanner_id) because the buyer is
+        physically at the door, so there is no second scan and the same sale can never be walked in
+        twice. Writes an ordinary ticket_orders row (provider='door', is_comp=0, status='fulfilled',
+        paid_at=NOW()) whose ticket_order_items.unit_price_cents is the tier price charged, so door
+        revenue flows into every existing report that sums quantity × unit_price_cents with no
+        special-casing. payment_method (cash|card|other) is stored for cash-drawer reconciliation;
+        an unrecognized value is normalized to 'other'. Inventory moves through the same
+        oversell-guarded quantity_sold increment as online fulfillment and comps, and the whole
+        thing is one transaction — a sale that would exceed quantity_total commits nothing at all
+        (result=sold_out, no order, no partial tickets, no counter drift).
+
+
+        Authorization: sales are opt-in per scanner link (event_scanner_links.can_sell, set only at
+        link-creation time). A scan-only link — which is every link created before this feature —
+        gets result=not_permitted and can never mint orders, bounding what a leaked scanner URL can
+        do. If holder_email is supplied, the ticket/QR is emailed best-effort; a mail failure never
+        rolls back the committed sale.
+
+
+        Mirrors the /api/scan/redeem contract: HTTP 200 with a `result` for anything door staff can
+        act on (sold | sold_out | unknown_type | not_permitted), 401 only when the scanner link
+        itself is rejected, 422 for malformed input.
+      tags:
+        - Scanner
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScannerSellRequest'
+      responses:
+        '200':
+          description: Authenticated sale attempt processed (see `result`/`sold`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScannerSellResponse'
+        '401':
+          description: Missing/invalid/revoked/expired scanner token, or incorrect PIN.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid quantity (must be 1–20), payment_method, or holder_email.
           content:
             application/json:
               schema:

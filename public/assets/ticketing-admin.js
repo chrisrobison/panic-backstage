@@ -338,6 +338,8 @@ class TicketingAdmin extends PanicElement {
       <form class="grid-form padded" data-form="scanner">
         <label class="wide">Label <input name="label" placeholder="Front door"></label>
         <label>PIN (optional) <input name="pin" inputmode="numeric" placeholder="e.g. 4821"></label>
+        <label class="wide checkbox"><input type="checkbox" name="can_sell" value="1"> Allow walk-up ticket sales on this link</label>
+        <p class="subtle wide">Sales are off by default. A selling link can take money at the door, so give it only to staff running the box — and add a PIN. This cannot be changed later; make a new link instead.</p>
         <div class="wide form-actions"><button type="submit">Create link</button><button type="button" class="secondary" data-close>Cancel</button></div>
         <div class="scanner-new padded" hidden></div>
         <p class="error-text wide" data-error></p>
@@ -797,7 +799,7 @@ class TicketingAdmin extends PanicElement {
     return `<table class="data-table">
       <thead><tr><th>Label</th><th>Created</th><th>Last used</th><th>Status</th>${editable ? '<th></th>' : ''}</tr></thead>
       <tbody>${links.map((l) => `<tr data-link="${esc(l.id)}">
-        <td data-label="Label">${esc(l.label || 'Door scanner')}</td>
+        <td data-label="Label">${esc(l.label || 'Door scanner')}${l.can_sell ? ' <span class="badge status-published" title="This link can ring up walk-up sales">Sells</span>' : ''}${l.has_pin ? ' <span class="badge" title="PIN required">PIN</span>' : ''}</td>
         <td data-label="Created">${esc((l.created_at || '').slice(0, 16).replace('T', ' '))}</td>
         <td data-label="Last used">${esc(l.last_used_at ? l.last_used_at.slice(0, 16).replace('T', ' ') : '—')}</td>
         <td data-label="Status">${l.revoked_at ? '<span class="badge status-canceled">Revoked</span>' : '<span class="badge status-published">Active</span>'}</td>

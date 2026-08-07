@@ -27,6 +27,10 @@
       --accent: #6d8cff;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    /* Class rules below set display on .sell/.modes/.buy-bar, which would
+       otherwise out-specify the UA's [hidden]{display:none} and leave panels
+       showing when we hide them. Keep this ahead of them. */
+    [hidden] { display: none !important; }
     html, body { margin: 0; height: 100%; }
     body {
       background: var(--bg);
@@ -71,6 +75,66 @@
     .result.invalid .state { color: #cbd2df; }
     .result.idle .state { color: var(--muted); font-size: 18px; letter-spacing: 0; text-transform: none; }
 
+    /* Mode switch — only shown when the link is allowed to sell. */
+    .modes { max-width: 520px; margin: 0 auto; width: 100%; display: none; gap: 8px; }
+    .modes.show { display: flex; }
+    .modes button {
+      flex: 1; background: var(--panel); color: var(--muted);
+      padding: 11px 12px; font-size: 15px;
+    }
+    .modes button.on { background: var(--accent); border-color: var(--accent); color: #0b0e17; }
+
+    /* Sell panel */
+    .sell { max-width: 520px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 14px; }
+    .sell h3 { margin: 0; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+    .tiers { display: flex; flex-direction: column; gap: 8px; }
+    .tier {
+      display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+    }
+    .tier.on { border-color: var(--accent); background: #1b2133; }
+    .tier .nm { font-weight: 700; font-size: 16px; }
+    .tier .av { color: var(--muted); font-size: 13px; }
+    .tier .pr { margin-left: auto; font-weight: 800; font-size: 18px; }
+    .tier[disabled] { opacity: .45; }
+    .qty { display: flex; align-items: center; gap: 12px; }
+    .qty button { width: 52px; font-size: 22px; padding: 8px 0; }
+    .qty .n { font-size: 24px; font-weight: 800; min-width: 44px; text-align: center; }
+    .pays { display: flex; gap: 8px; }
+    .pays button { flex: 1; }
+    .pays button.on { background: var(--accent); border-color: var(--accent); color: #0b0e17; }
+    .sell .total {
+      display: flex; align-items: baseline; gap: 10px; padding-top: 4px;
+      border-top: 1px solid var(--line);
+    }
+    .sell .total .lbl { color: var(--muted); font-size: 14px; }
+    .sell .total .amt { margin-left: auto; font-size: 28px; font-weight: 800; }
+    .sell .optional { display: flex; flex-direction: column; gap: 8px; }
+    .sell button.sell-go { padding: 16px; font-size: 17px; }
+    .sell button.sell-go[disabled] { opacity: .5; }
+
+    /* Self-serve card purchase: a QR the buyer scans off the door device's
+       screen to check out on their own phone. */
+    .buy-bar { max-width: 520px; margin: 0 auto; width: 100%; display: none; }
+    .buy-bar.show { display: block; }
+    .buy-bar button { width: 100%; }
+    .buy-overlay {
+      position: fixed; inset: 0; z-index: 50; background: #fff; color: #0d0f14;
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      gap: 18px; padding: 24px; text-align: center;
+    }
+    .buy-overlay.show { display: flex; }
+    .buy-overlay h2 { margin: 0; font-size: 24px; }
+    .buy-overlay .ev-name { color: #55606f; font-size: 16px; margin: 0; }
+    .buy-overlay img {
+      width: min(78vw, 78vh, 460px); height: auto; image-rendering: pixelated;
+      border: 10px solid #fff; border-radius: 8px;
+    }
+    .buy-overlay .tip { color: #55606f; font-size: 15px; margin: 0; max-width: 30ch; }
+    .buy-overlay button {
+      background: #0d0f14; border-color: #0d0f14; color: #fff; padding: 14px 32px; font-size: 16px;
+    }
+
     .controls { max-width: 520px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 10px; }
     .row { display: flex; gap: 10px; align-items: center; }
     label { color: var(--muted); font-size: 13px; }
@@ -105,13 +169,67 @@
   </header>
 
   <main id="app">
-    <div id="reader"></div>
+    <div class="modes" id="modes" role="tablist">
+      <button type="button" id="mode-scan" class="on" role="tab" aria-selected="true">Scan</button>
+      <button type="button" id="mode-sell" role="tab" aria-selected="false">Sell</button>
+    </div>
+
+    <!-- Scan mode -->
+    <div id="scan-view">
+      <div id="reader"></div>
+    </div>
 
     <div class="result idle" id="result" role="status" aria-live="assertive">
       <div class="state">Point the camera at a ticket QR</div>
     </div>
 
-    <div class="controls">
+    <!-- Sell mode: walk-up sale, logged and admitted in one step. -->
+    <div class="sell" id="sell-view" hidden>
+      <div>
+        <h3>Ticket</h3>
+        <div class="tiers" id="tiers"></div>
+      </div>
+
+      <div>
+        <h3>Quantity</h3>
+        <div class="qty">
+          <button type="button" id="qty-down" aria-label="Fewer tickets">&minus;</button>
+          <span class="n" id="qty-n" aria-live="polite">1</span>
+          <button type="button" id="qty-up" aria-label="More tickets">+</button>
+        </div>
+      </div>
+
+      <div>
+        <h3>Payment</h3>
+        <div class="pays" id="pays">
+          <button type="button" data-pay="cash" class="on">Cash</button>
+          <button type="button" data-pay="card">Card</button>
+          <button type="button" data-pay="other">Other</button>
+        </div>
+      </div>
+
+      <div class="optional">
+        <h3>Receipt (optional)</h3>
+        <input type="text" id="sell-name" placeholder="Name" autocomplete="off">
+        <input type="email" id="sell-email" placeholder="Email — sends their ticket + QR" autocomplete="off" inputmode="email">
+      </div>
+
+      <div class="total">
+        <span class="lbl">Total</span>
+        <span class="amt" id="sell-total">$0.00</span>
+      </div>
+
+      <button class="primary sell-go" id="sell-go" type="button" disabled>Complete Sale</button>
+      <p class="hint" id="sell-hint">Selling admits the buyer immediately — no second scan needed.</p>
+    </div>
+
+    <!-- Always available (in either mode) when the event has a public buy page:
+         turn the screen around and let the buyer pay by card themselves. -->
+    <div class="buy-bar" id="buy-bar">
+      <button type="button" id="buy-btn">Pay by card — show QR</button>
+    </div>
+
+    <div class="controls" id="scan-controls">
       <div class="row pin-wrap" id="pin-wrap">
         <label for="pin">PIN</label>
         <input type="tel" inputmode="numeric" autocomplete="off" id="pin" placeholder="Door PIN" maxlength="12">
@@ -123,6 +241,15 @@
       <p class="hint" id="hint">Camera will start automatically. Allow camera access when prompted.</p>
     </div>
   </main>
+
+  <!-- Shown full-screen on a white background so a phone camera reads it fast. -->
+  <div class="buy-overlay" id="buy-overlay" role="dialog" aria-modal="true" aria-labelledby="buy-title">
+    <h2 id="buy-title">Scan to buy your ticket</h2>
+    <p class="ev-name" id="buy-event"></p>
+    <img id="buy-qr" alt="QR code — scan to buy a ticket with a card">
+    <p class="tip">Point your phone camera here, then pay by card. Your ticket arrives by email — show it at the door.</p>
+    <button type="button" id="buy-close">Done</button>
+  </div>
 
   <script src="./assets/scanner.js" defer></script>
 </body>
