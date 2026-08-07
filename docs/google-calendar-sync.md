@@ -14,6 +14,7 @@ the next sweep. Backstage stays the source of truth.
 |---|---|
 | `src/GoogleCalendar.php` | Service-account auth + create/patch/delete/list against the Calendar API. Same JWT flow as `GoogleSheets.php`; only the scope and token-cache path differ. |
 | `scripts/sync-google-calendar.php` | The reconcile sweep. `--dry-run` to preview, `--verbose` for per-event detail. |
+| `EventRowHelpers::pushToCalendar()` | Inline push on every event save, so a change lands in seconds. |
 | `scripts/cron-google-calendar.sh` | Cron wrapper: flock, explicit PATH, log trim, kill switch. |
 | `database/migrations/093_add_gcal_sync_columns.sql` | Adds `events.gcal_event_id` + `events.gcal_synced_at`. |
 
@@ -56,14 +57,21 @@ Title prefixes by status:
 | Status | Renders as |
 |---|---|
 | `proposed` | `HOLD — Title` |
-| `canceled` | `CANCELED — Title` |
+| `canceled` | *removed from the calendar* |
 | everything else | `Title` |
 
-**Canceled events are marked, never deleted** — a hole in the calendar would
-otherwise be misread as "that night was never booked". They're also set
-`transparency: transparent` so they show as Free and don't block the time.
-Note this deliberately avoids Google's own `status: 'cancelled'`, which hides
-the event entirely.
+**Canceled events are deleted from the calendar and unlinked**, freeing the
+night. Driven by `GoogleCalendar::shouldRemove()` / `REMOVE_STATUSES`, which
+both the sweep and the inline push consult.
+
+> An earlier revision kept a visible `CANCELED — ` entry instead. Deletion is
+> the deliberate current policy — please don't "fix" it back.
+
+In the sweep, the removal branch runs **before** the staleness check. It has to:
+an event already synced under the old policy has `gcal_synced_at >= updated_at`,
+so a staleness gate would skip it and the stale entry would linger forever. The
+branch is self-terminating — once deleted, `gcal_event_id` is NULL and later
+runs skip the row for free.
 
 ### Times
 
@@ -79,6 +87,23 @@ rather than becoming a 24-hour block.
 
 Times are sent as local `dateTime` + `timeZone` from the venue's `timezone`
 column, not pre-converted to UTC.
+
+## Inline push on save
+
+Every event save also pushes immediately — `EventRowHelpers::pushToCalendar()`,
+called next to the existing `pushToSheet()` at each write site (`Events.php`
+create / status-change / single-field PATCH / full update / from-template, and
+`Series.php`). A save costs roughly one extra Google round trip (~0.7s), on top
+of the Sheets push that already happens.
+
+Best-effort and never-throw, exactly like `pushToSheet()`. **There is no outbox
+table**, and that's deliberate: because the sweep is a stateless reconcile, the
+retry mechanism is simply *not* setting `gcal_synced_at` — tonight's run
+recomputes and repairs anything the inline push missed. Nothing can silently
+fall behind the way a queue can.
+
+Only *saves* route through the inline path. A hard `DELETE /api/events/{id}`
+cascades the row away and is cleaned up by the sweep's orphan reconcile.
 
 ## Design: reconcile sweep, not a write queue
 

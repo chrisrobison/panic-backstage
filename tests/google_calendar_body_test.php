@@ -72,11 +72,15 @@ ok(($priv[GoogleCalendar::ID_KEY] ?? null) === '42', 'carries the Backstage even
 $hold = GoogleCalendar::eventBody(row(['status' => 'proposed', 'show_time' => '20:00:00']), APP_URL);
 ok(($hold['summary'] ?? '') === 'HOLD — Test Show', 'proposed renders a HOLD prefix');
 
-$canc = GoogleCalendar::eventBody(row(['status' => 'canceled', 'show_time' => '20:00:00']), APP_URL);
-ok(($canc['summary'] ?? '') === 'CANCELED — Test Show', 'canceled renders a CANCELED prefix');
-ok(($canc['status'] ?? '') === 'confirmed', 'canceled stays visible (not Google status=cancelled)');
-ok(($canc['transparency'] ?? '') === 'transparent', 'canceled shows as Free, not blocking time');
-ok(($b['transparency'] ?? '') === 'opaque', 'live events do block time');
+ok(($b['transparency'] ?? '') === 'opaque', 'live events block time');
+
+// ── Cancellation policy: REMOVE from the calendar, don't relabel ────────────
+// (An earlier revision kept a "CANCELED — " entry; deletion is the current
+// deliberate policy. Both the sweep and the inline push act on shouldRemove().)
+ok(GoogleCalendar::shouldRemove('canceled'), 'canceled events are removed from the calendar');
+ok(!GoogleCalendar::shouldRemove('confirmed'), 'confirmed events are not removed');
+ok(!GoogleCalendar::shouldRemove('proposed'), 'holds are not removed');
+ok(!isset(GoogleCalendar::TITLE_PREFIX['canceled']), 'no CANCELED title prefix remains');
 
 // ── All-day holds: no invented times ────────────────────────────────────────
 $allDay = GoogleCalendar::eventBody(row(['status' => 'proposed']), APP_URL);

@@ -20,10 +20,8 @@ declare(strict_types=1);
  *     Anything needing minutes would want an inline push instead.
  *
  * Scope: every event dated within the last WINDOW_PAST_DAYS or later, excluding
- * placeholder `empty` rows. Holds and canceled events ARE included — holds as
- * all-day "HOLD — " entries, cancellations as visible "CANCELED — " entries
- * (deliberately not deleted, so a gap in the calendar can't be misread as
- * "never booked").
+ * placeholder `empty` rows. Holds are included as all-day "HOLD — " entries.
+ * Canceled events are DELETED from the calendar and unlinked, freeing the night.
  */
 
 require __DIR__ . '/../src/bootstrap.php';
@@ -94,6 +92,38 @@ foreach ($rows as $row) {
 
     if ($gcalId !== null) {
         $liveIds[$gcalId] = true;
+    }
+
+    /*
+     * Canceled events are removed from the calendar, not relabelled — the night
+     * should read as free.
+     *
+     * This MUST come before the staleness gate: an event that was already
+     * synced under the old "CANCELED — " policy has gcal_synced_at >= updated_at,
+     * so a staleness check would skip it and the entry would linger forever.
+     * Self-terminating — once deleted the id is NULL, so later runs skip it.
+     */
+    if (GoogleCalendar::shouldRemove((string) $row['status'])) {
+        if ($gcalId === null) {
+            $skipped++;
+            continue;
+        }
+        if ($dryRun) {
+            printf("  %-6s #%d %s (%s, %s)\n", 'DELETE', $id, $row['title'], $row['status'], $row['date']);
+            $deleted++;
+            continue;
+        }
+        $code = $cal->deleteEvent($gcalId);
+        if ($code === 204 || $code === 404 || $code === 410) {
+            $db->run('UPDATE events SET gcal_event_id = NULL, gcal_synced_at = NULL WHERE id = ?', [$id]);
+            unset($liveIds[$gcalId]);
+            $deleted++;
+            if ($verbose) echo "  DELETE #{$id} {$row['title']} (canceled)\n";
+        } else {
+            $failed++;
+            if ($verbose) echo "  FAIL   #{$id} delete (HTTP {$code})\n";
+        }
+        continue;
     }
 
     if (!$isStale) {

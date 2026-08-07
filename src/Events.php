@@ -511,6 +511,7 @@ final class Events extends BaseEndpoint
         // Push the freshly-created event to the sheet so it appears in the Tracker
         // immediately. pushToSheet() no-ops for a nameless event (draft).
         $this->pushToSheet($id);
+        $this->pushToCalendar($id);
         return $this->ok(['id' => $id]);
     }
 
@@ -577,6 +578,7 @@ final class Events extends BaseEndpoint
                 $this->maybeAutoPublish($id);
             }
             $this->pushToSheet($id);
+            $this->pushToCalendar($id);
             return $this->ok(['ok' => true]);
         }
         // Allowlist of single-field partial updates so the UI can PATCH a single
@@ -618,6 +620,7 @@ final class Events extends BaseEndpoint
                     'changes' => [['field' => $label, 'from' => $oldStr, 'to' => $newStr]],
                 ]);
                 $this->pushToSheet($id);
+                $this->pushToCalendar($id);
                 return $this->ok(['ok' => true]);
             }
         }
@@ -720,6 +723,7 @@ final class Events extends BaseEndpoint
         }
         log_activity($this->db, $id, $this->userId(), 'event updated', $this->diffEvent($old, $body));
         $this->pushToSheet($id);
+        $this->pushToCalendar($id);
         return $this->ok(['id' => $id]);
     }
 
@@ -820,6 +824,7 @@ final class Events extends BaseEndpoint
         }
         log_activity($this->db, $id, $this->userId(), 'event created from template', ['template_id' => $templateId]);
         $this->pushToSheet($id);
+        $this->pushToCalendar($id);
         return $this->ok(['id' => $id]);
     }
 

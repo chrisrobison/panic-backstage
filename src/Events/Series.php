@@ -321,6 +321,7 @@ final class Series extends BaseEndpoint
         $this->assignEventCode($id);
         log_activity($this->db, $id, $actingUserId, 'event created', ['title' => $anchor['title'], 'series_id' => $seriesId]);
         $this->pushToSheet($id);
+        $this->pushToCalendar($id);
         return $id;
     }
 

@@ -33,10 +33,9 @@ namespace Panic;
  * hand in Google are never touched: the reconcile step only considers events
  * tagged with our own `panicApp` extended property.
  *
- * Cancellations: a canceled event keeps a visible, CANCELED-prefixed entry
- * rather than disappearing, so a hole in the calendar can't be misread as
- * "never booked". Note this deliberately does NOT use Google's own
- * `status: 'cancelled'`, which hides the event entirely.
+ * Cancellations: a canceled event is DELETED from the calendar and unlinked,
+ * freeing the night. (An earlier revision kept a "CANCELED — " entry instead;
+ * removal is the deliberate current policy — don't "fix" it back.)
  *
  * Every public method swallows its own errors, logs to
  * storage/logs/calendar-sync.log, and returns null/false on failure so a
@@ -72,11 +71,23 @@ final class GoogleCalendar
      */
     public const SKIP_STATUSES = ['empty'];
 
+    /**
+     * Statuses that must not remain on the calendar. An event that reaches one
+     * of these is DELETED from Google and unlinked (gcal_event_id cleared), so
+     * the night reads as free.
+     */
+    public const REMOVE_STATUSES = ['canceled'];
+
     /** Status -> title prefix. Anything unlisted renders with a bare title. */
     public const TITLE_PREFIX = [
         'proposed' => 'HOLD — ',
-        'canceled' => 'CANCELED — ',
     ];
+
+    /** True when this event should not exist on the calendar at all. */
+    public static function shouldRemove(string $status): bool
+    {
+        return in_array($status, self::REMOVE_STATUSES, true);
+    }
 
     private ?array $key = null;
     private string $logFile;
@@ -196,11 +207,9 @@ final class GoogleCalendar
                 ],
             ],
             // Staff calendar: an alert on every hold would be noise.
-            'reminders' => ['useDefault' => false, 'overrides' => []],
-            // Canceled events stay visible and greyed-out-by-convention via the
-            // title prefix; Google's own 'cancelled' status would hide them.
+            'reminders'   => ['useDefault' => false, 'overrides' => []],
             'status'      => 'confirmed',
-            'transparency' => $status === 'canceled' ? 'transparent' : 'opaque',
+            'transparency' => 'opaque',
         ];
 
         if ($body['location'] === '') {

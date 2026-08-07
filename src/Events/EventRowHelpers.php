@@ -206,6 +206,99 @@ trait EventRowHelpers
         }
     }
 
+    /**
+     * Mirror this event onto the shared Google Calendar right now, so a save is
+     * visible to staff in seconds instead of waiting for the nightly sweep.
+     *
+     * Best-effort and never-throw, exactly like pushToSheet(). Note there is
+     * deliberately NO outbox table here: scripts/sync-google-calendar.php is a
+     * stateless reconcile sweep, so the retry mechanism is simply *not* setting
+     * gcal_synced_at — tonight's run recomputes and fixes anything missed. That
+     * is the whole payoff of the sweep design (see docs/google-calendar-sync.md).
+     *
+     * Only event saves route through here. A hard DELETE /api/events/{id}
+     * cascades the row away and is cleaned up by the sweep's orphan reconcile.
+     */
+    private function pushToCalendar(int $id): void
+    {
+        if (!\Panic\GoogleCalendar::syncEnabled()) {
+            return;
+        }
+
+        try {
+            $cal = new \Panic\GoogleCalendar($this->root);
+            if (!$cal->isConfigured()) {
+                return; // not set up — nothing to do, and the sweep is inert too
+            }
+
+            $ev = $this->db->one(
+                'SELECT e.id, e.title, e.status, e.event_type, e.date, e.end_date,
+                        e.doors_time, e.show_time, e.end_time, e.load_in_time,
+                        e.room, e.capacity, e.promoter_name, e.booker_name,
+                        e.gcal_event_id,
+                        v.name AS venue_name, v.address AS venue_address, v.timezone AS venue_timezone
+                 FROM   events e
+                 JOIN   venues v ON v.id = e.venue_id
+                 WHERE  e.id = ? LIMIT 1',
+                [$id]
+            );
+            if (!$ev) {
+                return;
+            }
+
+            $status = (string) ($ev['status'] ?? '');
+            $gcalId = $ev['gcal_event_id'] ?: null;
+
+            // Canceled (and other removable statuses) come off the calendar so
+            // the night reads as free. Unlink on success — and on 404/410, which
+            // means it was already gone.
+            if (\Panic\GoogleCalendar::shouldRemove($status)) {
+                if ($gcalId === null) {
+                    return;
+                }
+                $code = $cal->deleteEvent($gcalId);
+                if ($code === 204 || $code === 404 || $code === 410) {
+                    $this->db->run('UPDATE events SET gcal_event_id = NULL, gcal_synced_at = NULL WHERE id = ?', [$id]);
+                }
+                return;
+            }
+
+            // Placeholder shells and leaked test fixtures never reach the
+            // calendar — same exclusions the sweep applies.
+            if (in_array($status, \Panic\GoogleCalendar::SKIP_STATUSES, true)) {
+                return;
+            }
+            if (str_starts_with(trim((string) ($ev['title'] ?? '')), 'PB UI TEST')) {
+                return;
+            }
+
+            $appUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/');
+            $body   = \Panic\GoogleCalendar::eventBody($ev, $appUrl);
+
+            if ($gcalId !== null) {
+                $code = $cal->patchEvent($gcalId, $body);
+                if ($code >= 200 && $code < 300) {
+                    $this->db->run('UPDATE events SET gcal_synced_at = NOW() WHERE id = ?', [$id]);
+                    return;
+                }
+                if ($code !== 404 && $code !== 410) {
+                    return; // transient — leave gcal_synced_at stale for the sweep
+                }
+                $gcalId = null; // hand-deleted in Google; fall through and re-create
+            }
+
+            $newId = $cal->createEvent($body);
+            if ($newId !== null) {
+                $this->db->run(
+                    'UPDATE events SET gcal_event_id = ?, gcal_synced_at = NOW() WHERE id = ?',
+                    [$newId, $id]
+                );
+            }
+        } catch (\Throwable $e) {
+            @error_log('calendar push failed for event ' . $id . ': ' . $e->getMessage());
+        }
+    }
+
     /** True if two event time windows overlap, accounting for a 30-minute buffer. */
     private function timesOverlap(?string $startA, ?string $endA, ?string $startB, ?string $endB): bool
     {
