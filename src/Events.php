@@ -18,6 +18,30 @@ final class Events extends BaseEndpoint
     private const BOOKING_CONFIRMED_STATUSES = ['confirmed','booked','needs_assets','assets_approved','ready_to_announce','published','advanced','completed','settled'];
     private const TYPES = ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'];
 
+    /**
+     * Which existing bookings occupy a room against an event entering $status.
+     *
+     * Returns null for "every live booking blocks" (checkRoomConflict()'s
+     * default), a status list to narrow it, or [] for "run no check at all".
+     *
+     * A Hold used to skip the conflict check entirely, because the check was
+     * gated on the *new* event's own status being confirmed-or-later — which
+     * is how issue #26 put a Hold on top of a confirmed show. A Hold is now
+     * blocked by any confirmed-or-later booking, but *not* by another Hold:
+     * two speculative Holds competing for one date is normal venue practice,
+     * and blocking that would break how staff grab tentative dates.
+     */
+    private static function conflictBlockersFor(string $status): array|null
+    {
+        if (in_array($status, self::BOOKING_CONFIRMED_STATUSES, true)) {
+            return null; // a committed booking is blocked by anything live
+        }
+        if ($status === 'proposed') {
+            return self::BOOKING_CONFIRMED_STATUSES;
+        }
+        return []; // 'empty' drafts and 'canceled' occupy nothing
+    }
+
     /** Human-readable labels for event fields — used in activity-log diff entries. */
     private const EVENT_FIELD_LABELS = [
         'title'                => 'Title',
@@ -438,6 +462,13 @@ final class Events extends BaseEndpoint
         if ($err = self::endDateBeforeStartError($newEndDate, $body['date'])) {
             return $err;
         }
+        if ($err = self::timeOrderError(
+            date_or_null($body['load_in_time'] ?? null),
+            date_or_null($body['doors_time'] ?? null),
+            date_or_null($body['show_time'] ?? null)
+        )) {
+            return $err;
+        }
 
         // Private events are never publicly visible and auto-assign to Colleen.
         $publicVisibility = $isPrivate ? 0 : (boolish($body['public_visibility'] ?? false) ? 1 : 0);
@@ -447,13 +478,13 @@ final class Events extends BaseEndpoint
         if ($resourceError) {
             return $resourceError;
         }
-        if (in_array($newStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
+        if (($blockers = self::conflictBlockersFor($newStatus)) !== []) {
             // Non-music events (workshops/comedy/etc.) hide Doors from the form, so
             // fall back to Show/Start as the conflict window's start time — see
             // timesOverlap()'s doc comment for why a null start would otherwise
             // silently widen the window to midnight.
             $conflictStart = date_or_null($body['doors_time'] ?? null) ?: date_or_null($body['show_time'] ?? null);
-            if ($conflict = $this->checkRoomConflict((int) $body['venue_id'], $body['date'], $conflictStart, date_or_null($body['end_time'] ?? null), null, $newEndDate, $resourceId)) {
+            if ($conflict = $this->checkRoomConflict((int) $body['venue_id'], $body['date'], $conflictStart, date_or_null($body['end_time'] ?? null), null, $newEndDate, $resourceId, $blockers)) {
                 return $conflict;
             }
         }
@@ -524,9 +555,9 @@ final class Events extends BaseEndpoint
             if ($transitionError = $this->validateStatusTransition($newStatus, $existing)) {
                 return $transitionError;
             }
-            if (in_array($newStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
+            if (($blockers = self::conflictBlockersFor($newStatus)) !== []) {
                 $conflictStart = $existing['doors_time'] ?: $existing['show_time'];
-                if ($conflict = $this->checkRoomConflict((int) $existing['venue_id'], $existing['date'], $conflictStart, $existing['end_time'], $id, $existing['end_date'] ?? null, self::nullableInt($existing['resource_id'] ?? null))) {
+                if ($conflict = $this->checkRoomConflict((int) $existing['venue_id'], $existing['date'], $conflictStart, $existing['end_time'], $id, $existing['end_date'] ?? null, self::nullableInt($existing['resource_id'] ?? null), $blockers)) {
                     return $conflict;
                 }
             }
@@ -630,8 +661,23 @@ final class Events extends BaseEndpoint
                 return Response::json(['error' => 'Selected room does not belong to the chosen venue.'], 422);
             }
         }
-        // Room conflict check for committed bookings
-        if (in_array($updateStatus, self::BOOKING_CONFIRMED_STATUSES, true)) {
+        // Only validate ordering when this request actually sets a time field.
+        // Several events predating the check are already out of order (issue
+        // #26's own row among them); validating a merged row on every save
+        // would make those permanently unsaveable — including the edit that
+        // repairs them — so a title-only PATCH must never trip this.
+        if (self::touchesTimeFields($body)) {
+            if ($err = self::timeOrderError(
+                date_or_null($body['load_in_time'] ?? $old['load_in_time'] ?? null),
+                date_or_null($body['doors_time']   ?? $old['doors_time']   ?? null),
+                date_or_null($body['show_time']    ?? $old['show_time']    ?? null)
+            )) {
+                return $err;
+            }
+        }
+        // Room conflict check — committed bookings are blocked by anything live,
+        // Holds only by a confirmed-or-later booking (see conflictBlockersFor()).
+        if (($blockers = self::conflictBlockersFor($updateStatus)) !== []) {
             $checkEndDate  = self::nullableDate($body['end_date'] ?? $old['end_date'] ?? null, $updateDate);
             // Non-music events hide Doors from the form and leave it null forever —
             // fall back to Show/Start as the conflict window's start time (see
@@ -639,7 +685,7 @@ final class Events extends BaseEndpoint
             // silently widen the window to midnight).
             $checkDoors    = date_or_null($body['doors_time'] ?? $old['doors_time'] ?? null) ?? date_or_null($body['show_time'] ?? $old['show_time'] ?? null);
             $checkEnd      = date_or_null($body['end_time']   ?? $old['end_time']   ?? null);
-            if ($conflict = $this->checkRoomConflict($updateVenueId, $updateDate, $checkDoors, $checkEnd, $id, $checkEndDate, $updateResourceId)) {
+            if ($conflict = $this->checkRoomConflict($updateVenueId, $updateDate, $checkDoors, $checkEnd, $id, $checkEndDate, $updateResourceId, $blockers)) {
                 return $conflict;
             }
         }
@@ -708,10 +754,30 @@ final class Events extends BaseEndpoint
         if ($resourceError) {
             return $resourceError;
         }
+        $templateDoors = ($body['doors_time'] ?? '') ?: '19:00';
+        $templateShow  = ($body['show_time'] ?? '') ?: '20:00';
+        if ($err = self::timeOrderError(null, $templateDoors, $templateShow)) {
+            return $err;
+        }
+        // This path always creates a Hold ('proposed' below) and, until issue
+        // #26, ran no occupancy check at all — making it the easiest way to
+        // double-book a confirmed show straight from the calendar.
+        if ($conflict = $this->checkRoomConflict(
+            (int) $template['venue_id'],
+            $date,
+            $templateDoors,
+            null,
+            null,
+            $templateEndDate,
+            $resourceId,
+            self::conflictBlockersFor('proposed')
+        )) {
+            return $conflict;
+        }
         $id = $this->db->insert(
             "INSERT INTO events (venue_id, resource_id, title, slug, event_type, status, description_public, date, end_date, doors_time, show_time, age_restriction, ticket_price, owner_user_id)
              VALUES (?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?)",
-            [(int) $template['venue_id'], $resourceId, $title, $this->uniqueSlug($title . '-' . $date), $template['event_type'], $template['default_description_public'], $date, $templateEndDate, ($body['doors_time'] ?? '') ?: '19:00', ($body['show_time'] ?? '') ?: '20:00', $template['default_age_restriction'], (float) $template['default_ticket_price'], $this->userId()]
+            [(int) $template['venue_id'], $resourceId, $title, $this->uniqueSlug($title . '-' . $date), $template['event_type'], $template['default_description_public'], $date, $templateEndDate, $templateDoors, $templateShow, $template['default_age_restriction'], (float) $template['default_ticket_price'], $this->userId()]
         );
         $this->assignEventCode($id);
         foreach ($this->jsonList($template['checklist_json']) as $task) {
@@ -913,6 +979,70 @@ final class Events extends BaseEndpoint
             return Response::json(['error' => 'End date cannot be before the start date.'], 422);
         }
         return null;
+    }
+
+    /**
+     * Longest plausible forward gap between consecutive milestones, in minutes.
+     * These are what make the check possible at all: because a time-of-day that
+     * looks "earlier" may simply be past midnight, ordering alone can't tell a
+     * typo from a legitimate overnight show. A bounded forward gap can — a 1am
+     * downbeat is 5 hours after 8pm doors, while doors 19:00 with a show at
+     * 18:00 only parses as "23 hours later", which no real event is.
+     */
+    private const MAX_LOAD_IN_TO_DOORS_MINUTES = 12 * 60;
+    private const MAX_DOORS_TO_SHOW_MINUTES    = 8 * 60;
+
+    /**
+     * Reject an incoherent load-in → doors → show ordering (issue #26, where a
+     * Hold was saved with load-in at 22:00 and doors at 18:30).
+     *
+     * Deliberately *not* a plain `load_in <= doors <= show` comparison. This
+     * venue runs genuine past-midnight shows — doors 20:00 with a 01:00
+     * downbeat is three real events in the current data — and strict ordering
+     * would make those unsaveable. Instead each pair is read the way
+     * timesOverlap() reads a window: a value at or before its predecessor has
+     * wrapped to the next day (+1440), and the resulting forward gap must stay
+     * within the bounds above.
+     *
+     * end_time is intentionally unconstrained: `end <= start` is precisely how
+     * this codebase encodes a past-midnight finish, so any ordering rule on it
+     * would reject the overnight events it is meant to protect.
+     */
+    private static function timeOrderError(?string $loadIn, ?string $doors, ?string $show): ?Response
+    {
+        $mins = static function (?string $t): ?int {
+            if ($t === null || trim((string) $t) === '') return null;
+            [$h, $m] = array_pad(explode(':', (string) $t), 2, '0');
+            return (int) $h * 60 + (int) $m;
+        };
+        // Non-music events hide Doors and only ever set Show, so load-in is
+        // compared against whichever of the two actually starts the night.
+        $gapExceeds = static function (?int $from, ?int $to, int $limit): bool {
+            if ($from === null || $to === null) return false;
+            $forward = $to - $from;
+            if ($forward <= 0) $forward += 1440; // same wrap rule as timesOverlap()
+            return $forward > $limit;
+        };
+
+        $loadInMins = $mins($loadIn);
+        $doorsMins  = $mins($doors);
+        $showMins   = $mins($show);
+
+        if ($gapExceeds($loadInMins, $doorsMins ?? $showMins, self::MAX_LOAD_IN_TO_DOORS_MINUTES)) {
+            return Response::json(['error' => 'Load-in time must come before doors (or the start time), on the same night.'], 422);
+        }
+        if ($gapExceeds($doorsMins, $showMins, self::MAX_DOORS_TO_SHOW_MINUTES)) {
+            return Response::json(['error' => 'Show time must come after doors. A show that starts after midnight is fine; this gap is too large to be one night.'], 422);
+        }
+        return null;
+    }
+
+    /** True if $body sets any of the fields timeOrderError() validates. */
+    private static function touchesTimeFields(array $body): bool
+    {
+        return array_key_exists('load_in_time', $body)
+            || array_key_exists('doors_time', $body)
+            || array_key_exists('show_time', $body);
     }
 
     private static function nullableDate($value, string $startDate): ?string

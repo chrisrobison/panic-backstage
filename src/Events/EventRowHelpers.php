@@ -56,8 +56,15 @@ trait EventRowHelpers
      * by any 'both' booking. When $resourceId is null (a venue with no rooms
      * defined, or a legacy event that predates this), conflicts fall back to
      * the whole venue, matching the original single-space behavior.
+     *
+     * $blockingStatuses narrows *which existing events count as occupying the
+     * room*. Null (the default) means every live booking blocks — the
+     * original behavior, still what a confirmed-or-later event gets. Callers
+     * placing a Hold pass the confirmed-and-beyond list instead, so a Hold is
+     * blocked by a real booking but two speculative Holds may still compete
+     * for the same date (see Events::conflictBlockersFor()).
      */
-    private function checkRoomConflict(int $venueId, string $date, ?string $doorsTime, ?string $endTime, ?int $excludeId = null, ?string $endDate = null, ?int $resourceId = null): ?\Panic\Response
+    private function checkRoomConflict(int $venueId, string $date, ?string $doorsTime, ?string $endTime, ?int $excludeId = null, ?string $endDate = null, ?int $resourceId = null, ?array $blockingStatuses = null): ?\Panic\Response
     {
         if ($resourceId !== null) {
             $resource = $this->db->one('SELECT zone FROM resources WHERE id = ? AND venue_id = ? LIMIT 1', [$resourceId, $venueId]);
@@ -92,8 +99,18 @@ trait EventRowHelpers
         $args[] = $date;     // COALESCE(existing.end_date, existing.date) >= date
         $excl    = $excludeId ? ' AND id != ?' : '';
         if ($excludeId) $args[] = $excludeId;
+        // Status filter goes last so its placeholders never interleave with the
+        // room-id / date / exclude args built above.
+        if ($blockingStatuses === null) {
+            $statusClause = "status NOT IN ('canceled','empty')";
+        } elseif ($blockingStatuses === []) {
+            return null; // nothing can block this event
+        } else {
+            $statusClause = 'status IN (' . implode(',', array_fill(0, count($blockingStatuses), '?')) . ')';
+            foreach ($blockingStatuses as $status) { $args[] = $status; }
+        }
         $rows = $this->db->all(
-            "SELECT id, title, date, end_date, doors_time, show_time, end_time FROM events WHERE $col IN ($ph) AND date <= ? AND COALESCE(end_date, date) >= ? AND status NOT IN ('canceled','empty')$excl",
+            "SELECT id, title, date, end_date, doors_time, show_time, end_time FROM events WHERE $col IN ($ph) AND date <= ? AND COALESCE(end_date, date) >= ?$excl AND $statusClause",
             $args
         );
         $isMultiDayNew = $endDate && $endDate !== $date;

@@ -49,10 +49,17 @@ Fully reproduced:
 
 Two distinct defects in one row:
 
-1. **No server-side occupancy guard.** `roomConflictIds()` in `core.js`
-   flags this pair red on the calendar *after the fact*, but nothing
-   prevents creating it. The reporter is right that this should be
-   impossible.
+1. **The occupancy guard was gated on the wrong side.** *(Corrected during
+   implementation — the original triage said "no server-side occupancy
+   guard", which was wrong.)* `EventRowHelpers::checkRoomConflict()` has
+   existed all along and returns a 409. The bug is that all three call sites
+   gated it on **the new event's own status** being confirmed-or-later, so a
+   Hold (`proposed`) skipped the check entirely — while still *counting* as
+   an occupant against anyone else. Hence the asymmetry that produced this
+   row: a confirmed show cannot be booked over a Hold, but a Hold could be
+   dropped on a confirmed show. Worse, `Events::fromTemplate()` — the
+   calendar's quick-create path, which hardcodes `status='proposed'` — ran
+   no conflict check at all.
 2. **No time-order validation.** Load-in at 22:00 with doors at 18:30 is
    incoherent — load-in lands four hours *after* the audience arrives.
    Nothing validates the ordering.
@@ -69,7 +76,28 @@ it is a past-midnight wrap, which `timesOverlap()` already handles by adding
 and reject only genuinely impossible orderings, or someone will "fix" valid
 overnight events into failures.
 
-Effort: **M** (server-side guard + validation + tests).
+That nuance turned out to be load-bearing. Checking the ordering across all
+252 live events found 9 violations, and a plain `doors <= show` rule would
+have rejected 3 of them wrongly:
+
+| Legitimate overnight | Real data-entry error |
+|---|---|
+| `652955` doors 19:00 → show 01:30 | `647103` doors 19:00 → show 18:00 |
+| `656713` doors 20:00 → show 01:00 | `668814` doors 20:30 → show 20:00 |
+| `671390` doors 19:00 → show 00:00 | `672174` doors 18:00 → show 17:00 |
+| | `641201` doors 19:00 → show 09:00 |
+| | `671392` load-in 22:00 → doors 18:30 |
+
+Ordering alone cannot separate these columns; a **bounded forward gap** can.
+Applying the same +1440 wrap and then requiring the gap to stay plausible
+(doors→show ≤ 8h, load-in→doors ≤ 12h) accepts every row on the left and
+rejects every row on the right.
+
+Because 5 rows are already in violation, validation only runs when a request
+actually sets a time field — otherwise those events would become permanently
+unsaveable, including by the edit that repairs them.
+
+Effort: **M** (server-side guard + validation + tests). **Implemented.**
 
 ### A2. #28 / #36 — Downstairs capacity is wrong
 

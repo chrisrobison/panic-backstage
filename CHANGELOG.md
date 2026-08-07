@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Stop a Hold from being placed on a confirmed booking (#26)
 - **Documentation** — Triage the 20 open GitHub issues into a sequenced plan
 - **Added** `calendar` — Tint events that haven't reached Intake Complete
 - **Fixed** `storage` — Stop silently swallowing failed file and image writes
