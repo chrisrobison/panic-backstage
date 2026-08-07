@@ -30,6 +30,13 @@ final class Events extends BaseEndpoint
      * blocked by any confirmed-or-later booking, but *not* by another Hold:
      * two speculative Holds competing for one date is normal venue practice,
      * and blocking that would break how staff grab tentative dates.
+     *
+     * Note `Events\Series` does not use this. It calls checkRoomConflict()
+     * with no status list at all, so a recurring series is blocked by
+     * anything live — including Holds — regardless of the status it is being
+     * created in. That is stricter than the rule here and is deliberate: a
+     * series books many dates at once, so it should not quietly land on top
+     * of dates someone is already holding. Left as-is rather than unified.
      */
     private static function conflictBlockersFor(string $status): array|null
     {

@@ -90,7 +90,23 @@ ok(!$orderAccepts('22:00', null, '19:00'),
     'non-music: an impossible load-in is still caught via show');
 ok($orderAccepts('', '', ''),            'empty strings are treated as absent, not midnight');
 
-// ── 5. end_time is deliberately unconstrained ─────────────────────────────────
+// ── 5. Grandfathering: only validate when a time field is actually set ────────
+// 5 live rows are already out of order, #26's own among them. Validating a
+// merged row on every save would make those permanently unsaveable —
+// including by the edit that repairs them — so update() only checks when the
+// request touches a time field.
+$touches = fn(array $body) => callPrivate('touchesTimeFields', [$body]);
+ok($touches(['title' => 'Renamed']) === false,
+    'a title-only edit skips validation, so an already-invalid row stays editable');
+ok($touches(['status' => 'confirmed']) === false, 'a status-only change skips validation');
+ok($touches(['doors_time' => '19:00']) === true, 'setting doors triggers validation');
+ok($touches(['load_in_time' => '17:00']) === true, 'setting load-in triggers validation');
+ok($touches(['show_time' => '20:00']) === true, 'setting show triggers validation');
+// array_key_exists, not isset — clearing a time is still touching it.
+ok($touches(['doors_time' => null]) === true, 'explicitly clearing a time still triggers validation');
+ok($touches([]) === false, 'an empty body touches nothing');
+
+// ── 6. end_time is deliberately unconstrained ─────────────────────────────────
 // `end <= start` is how this codebase encodes a past-midnight finish, so
 // timeOrderError() takes no end_time at all. Guard against a future edit
 // quietly adding one.
