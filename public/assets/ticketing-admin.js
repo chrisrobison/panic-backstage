@@ -339,7 +339,8 @@ class TicketingAdmin extends PanicElement {
         <label class="wide">Label <input name="label" placeholder="Front door"></label>
         <label>PIN (optional) <input name="pin" inputmode="numeric" placeholder="e.g. 4821"></label>
         <label class="wide checkbox"><input type="checkbox" name="can_sell" value="1"> Allow walk-up ticket sales on this link</label>
-        <p class="subtle wide">Sales are off by default. A selling link can take money at the door, so give it only to staff running the box — and add a PIN. This cannot be changed later; make a new link instead.</p>
+        <label class="wide checkbox"><input type="checkbox" name="can_lookup" value="1"> Allow looking up ticket holders and admitting without a QR</label>
+        <p class="subtle wide">Both are off by default. A selling link can take money at the door; a look-up link can see who bought tickets and admit them by name — useful when someone's phone is dead, but give it only to staff you'd trust with the guest list, and add a PIN. Neither can be changed later; make a new link instead.</p>
         <div class="wide form-actions"><button type="submit">Create link</button><button type="button" class="secondary" data-close>Cancel</button></div>
         <div class="scanner-new padded" hidden></div>
         <p class="error-text wide" data-error></p>
@@ -576,6 +577,7 @@ class TicketingAdmin extends PanicElement {
 
     // Issued-ticket row actions
     $$('[data-resend-ticket]', this).forEach((btn) => btn.addEventListener('click', () => this.resendTicket(btn)));
+    $$('[data-use-ticket]', this).forEach((btn) => btn.addEventListener('click', () => this.useTicket(Number(btn.dataset.useTicket))));
     $$('[data-void-ticket]', this).forEach((btn) => btn.addEventListener('click', () => this.voidTicket(Number(btn.dataset.voidTicket))));
 
     // Refund all
@@ -609,6 +611,7 @@ class TicketingAdmin extends PanicElement {
       <td class="row-actions">
         ${t.url ? `<a class="small secondary" href="${esc(t.url)}" target="_blank" rel="noopener">View</a>` : ''}
         ${editable && t.url && t.holder_email && t.status !== 'void' ? `<button type="button" class="small secondary" data-resend-ticket="${esc(t.id)}">Resend</button>` : ''}
+        ${editable && t.status === 'issued' ? `<button type="button" class="small secondary" data-use-ticket="${esc(t.id)}" title="Admit this guest without scanning their QR">Mark used</button>` : ''}
         ${editable && t.status === 'issued' ? `<button type="button" class="small danger" data-void-ticket="${esc(t.id)}">Void</button>` : ''}
       </td>
     </tr>`).join('');
@@ -637,6 +640,26 @@ class TicketingAdmin extends PanicElement {
       publish('toast.show', { tone: 'error', message: error.message });
     } finally {
       btn.disabled = false;
+    }
+  }
+
+  // Admit a guest from the office side — the counterpart to the door scanner's
+  // look-up mode, for when someone without their QR is standing in front of
+  // whoever has the full app open. Marks the ticket used so it can't also be
+  // walked in later on the QR that eventually turns up.
+  async useTicket(id) {
+    const ticket = (this.tickets || []).find((t) => Number(t.id) === id);
+    const who = ticket?.holder_name || ticket?.code || 'this ticket';
+    if (!confirm(`Mark ${who} as used?\n\nCheck their ID first. The ticket will no longer scan at the door.`)) return;
+    try {
+      await api(`/events/${this.eventId}/ticketing/tickets/${id}`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'redeem' }),
+      });
+      publish('toast.show', { message: 'Ticket marked used — guest admitted.' });
+      await this.load();
+    } catch (error) {
+      publish('toast.show', { tone: 'error', message: error.message });
     }
   }
 
@@ -799,7 +822,7 @@ class TicketingAdmin extends PanicElement {
     return `<table class="data-table">
       <thead><tr><th>Label</th><th>Created</th><th>Last used</th><th>Status</th>${editable ? '<th></th>' : ''}</tr></thead>
       <tbody>${links.map((l) => `<tr data-link="${esc(l.id)}">
-        <td data-label="Label">${esc(l.label || 'Door scanner')}${l.can_sell ? ' <span class="badge status-published" title="This link can ring up walk-up sales">Sells</span>' : ''}${l.has_pin ? ' <span class="badge" title="PIN required">PIN</span>' : ''}</td>
+        <td data-label="Label">${esc(l.label || 'Door scanner')}${l.can_sell ? ' <span class="badge status-published" title="This link can ring up walk-up sales">Sells</span>' : ''}${l.can_lookup ? ' <span class="badge status-confirmed" title="This link can look up ticket holders and admit without a QR">Look-up</span>' : ''}${l.has_pin ? ' <span class="badge" title="PIN required">PIN</span>' : ''}</td>
         <td data-label="Created">${esc((l.created_at || '').slice(0, 16).replace('T', ' '))}</td>
         <td data-label="Last used">${esc(l.last_used_at ? l.last_used_at.slice(0, 16).replace('T', ' ') : '—')}</td>
         <td data-label="Status">${l.revoked_at ? '<span class="badge status-canceled">Revoked</span>' : '<span class="badge status-published">Active</span>'}</td>

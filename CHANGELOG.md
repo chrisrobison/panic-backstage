@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `scanner` — Admit a guest who has no QR
 - **Added** `scanner` — Sell walk-up tickets at the door
 - **Added** `events` — Collect contacts on a Hold and stop inventing times (#25)
 - **Fixed** `events` — Stop a Hold from being placed on a confirmed booking (#26)

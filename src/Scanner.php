@@ -25,6 +25,11 @@ use function Panic\log_activity;
  *       then atomically flips the matching ticket issued -> redeemed scoped to
  *       the link's event. Always writes a ticket_scans audit row.
  *
+ *       POST /api/scan/tickets  and  POST /api/scan/admit
+ *       The same door, for the buyer who has no QR to present — see lookup()
+ *       and admit(). Gated on the link's can_lookup bit, because between them
+ *       they read customer data and admit by name rather than by token.
+ *
  * This endpoint must be registered as PUBLIC in the Kernel so the redeem path
  * works without a JWT. The management methods stay safe regardless: they call
  * requireEventCapability(), which denies access whenever there is no
@@ -50,6 +55,8 @@ final class Scanner extends BaseEndpoint
                 'redeem'  => $this->redeem($request),
                 'sell'    => $this->sell($request),
                 'context' => $this->context($request),
+                'tickets' => $this->lookup($request),
+                'admit'   => $this->admit($request),
                 default   => $this->notFound('Unknown scanner action'),
             };
         }
@@ -87,7 +94,7 @@ final class Scanner extends BaseEndpoint
     {
         $rows = $this->db->all(
             'SELECT id, label, token, created_by_user_id, expires_at, revoked_at,
-                    last_used_at, created_at, can_sell,
+                    last_used_at, created_at, can_sell, can_lookup,
                     (pin_hash IS NOT NULL) AS has_pin
                FROM event_scanner_links
               WHERE event_id = ?
@@ -103,6 +110,7 @@ final class Scanner extends BaseEndpoint
                 'label'        => $r['label'] !== null ? (string) $r['label'] : null,
                 'has_pin'      => (bool) (int) $r['has_pin'],
                 'can_sell'     => (bool) (int) $r['can_sell'],
+                'can_lookup'   => (bool) (int) $r['can_lookup'],
                 'has_token'    => $token !== null,
                 // Present only when the secret is stored (so the UI can re-show
                 // the link/QR). Carries the live secret — admin-gated surface.
@@ -123,7 +131,7 @@ final class Scanner extends BaseEndpoint
      * POST — mint a new scanner link. Returns the full scanner URL containing
      * the one-time secret token; it is never recoverable afterward.
      *
-     * body: { label?, pin?, expires_at?, can_sell? }
+     * body: { label?, pin?, expires_at?, can_sell?, can_lookup? }
      */
     private function createLink(Request $request, int $eventId): Response
     {
@@ -132,9 +140,10 @@ final class Scanner extends BaseEndpoint
         $expRaw = $request->body('expires_at');
         $expires = date_or_null($expRaw);
         // Opt-in only, and only at creation time — there is no endpoint to
-        // upgrade an existing scan-only link into a selling one, so a link's
-        // powers are fixed the moment it is shared.
-        $canSell = self::truthy($request->body('can_sell'));
+        // upgrade an existing scan-only link into a selling or looking-up one,
+        // so a link's powers are fixed the moment it is shared.
+        $canSell   = self::truthy($request->body('can_sell'));
+        $canLookup = self::truthy($request->body('can_lookup'));
 
         if ($pin !== '' && !ctype_digit($pin)) {
             return Response::json(['error' => 'PIN must be numeric.'], 422);
@@ -152,9 +161,9 @@ final class Scanner extends BaseEndpoint
 
         $id = $this->db->insert(
             'INSERT INTO event_scanner_links
-                (event_id, label, token_hash, token, pin_hash, can_sell, created_by_user_id, expires_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [$eventId, ($label !== '' ? $label : null), $hash, $token, $pinHash, $canSell ? 1 : 0, $this->userId(), $expires]
+                (event_id, label, token_hash, token, pin_hash, can_sell, can_lookup, created_by_user_id, expires_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [$eventId, ($label !== '' ? $label : null), $hash, $token, $pinHash, $canSell ? 1 : 0, $canLookup ? 1 : 0, $this->userId(), $expires]
         );
 
         log_activity($this->db, $eventId, $this->userId(), 'scanner link created', [
@@ -162,6 +171,7 @@ final class Scanner extends BaseEndpoint
             'label'           => $label !== '' ? $label : null,
             'has_pin'         => $pin !== '',
             'can_sell'        => $canSell,
+            'can_lookup'      => $canLookup,
         ]);
 
         return $this->ok([
@@ -170,6 +180,7 @@ final class Scanner extends BaseEndpoint
                 'label'      => $label !== '' ? $label : null,
                 'has_pin'    => $pin !== '',
                 'can_sell'   => $canSell,
+                'can_lookup' => $canLookup,
                 'expires_at' => $expires,
             ],
             // Returned ONCE — the page URL door staff open on their device.
@@ -324,19 +335,7 @@ final class Scanner extends BaseEndpoint
         }
 
         // ALWAYS audit the attempt.
-        $this->db->run(
-            'INSERT INTO ticket_scans
-                (ticket_id, event_id, result, scanner_link_id, scanned_by_user_id, ip, user_agent)
-             VALUES (?, ?, ?, ?, NULL, ?, ?)',
-            [
-                $ticketId,
-                $eventId,
-                $result,
-                $scannerId,
-                $this->clientIp(),
-                substr((string) ($request->header('User-Agent') ?? ''), 0, 255) ?: null,
-            ]
-        );
+        $this->auditScan($request, $ticketId, $eventId, $result, $scannerId);
 
         // Human-facing event reference (EVT-N); falls back to the raw id only
         // if the event somehow has no code yet.
@@ -373,8 +372,9 @@ final class Scanner extends BaseEndpoint
             return $link;
         }
 
-        $eventId = (int) $link['event_id'];
-        $canSell = (bool) (int) ($link['can_sell'] ?? 0);
+        $eventId   = (int) $link['event_id'];
+        $canSell   = (bool) (int) ($link['can_sell'] ?? 0);
+        $canLookup = (bool) (int) ($link['can_lookup'] ?? 0);
 
         $event = $this->db->one(
             'SELECT title, external_id, ticketing_mode, ticket_url FROM events WHERE id = ?',
@@ -408,6 +408,7 @@ final class Scanner extends BaseEndpoint
             'event_code'  => (string) ($event['external_id'] ?? '') ?: null,
             'event_title' => (string) ($event['title'] ?? '') ?: null,
             'can_sell'    => $canSell,
+            'can_lookup'  => $canLookup,
             'ticket_types' => $tiers,
             // Self-serve card purchase: the buyer scans this from the door
             // device's screen and checks out on their own phone.
@@ -533,19 +534,7 @@ final class Scanner extends BaseEndpoint
         // A door sale is an admission too — audit it exactly like a scan so the
         // ticket_scans headcount stays true.
         foreach ($sale['tickets'] as $ticket) {
-            $this->db->run(
-                'INSERT INTO ticket_scans
-                    (ticket_id, event_id, result, scanner_link_id, scanned_by_user_id, ip, user_agent)
-                 VALUES (?, ?, ?, ?, NULL, ?, ?)',
-                [
-                    (int) $ticket['id'],
-                    $eventId,
-                    'admitted',
-                    $scannerId,
-                    $this->clientIp(),
-                    substr((string) ($request->header('User-Agent') ?? ''), 0, 255) ?: null,
-                ]
-            );
+            $this->auditScan($request, (int) $ticket['id'], $eventId, 'admitted', $scannerId);
         }
 
         log_activity($this->db, $eventId, null, 'door sale recorded', [
@@ -587,7 +576,221 @@ final class Scanner extends BaseEndpoint
         ]);
     }
 
+    // ─── (d) no-QR admission (scanner-token auth) ────────────────────────────────
+
+    /**
+     * POST /api/scan/tickets — the guest list, for the buyer who cannot produce
+     * their QR. Door staff find them by name, check ID, then admit via
+     * /api/scan/admit.
+     *
+     * Deliberately field-stripped: NO token and NO ticket URL, ever. The admin
+     * ticket list returns those so staff can re-send a QR, but this surface is
+     * authenticated by a bearer URL sitting on a phone at a door — if it handed
+     * back tokens, a leaked link could reprint or redeem every ticket for the
+     * show. Everything here is what someone standing at the door legitimately
+     * needs to match a person to a purchase, and nothing more; the email is
+     * masked because it disambiguates two guests with the same name without
+     * handing over a mailing list.
+     *
+     * result ∈ ok | not_permitted
+     */
+    private function lookup(Request $request): Response
+    {
+        $link = $this->authenticateLink($request);
+        if ($link instanceof Response) {
+            return $link;
+        }
+
+        if (!(bool) (int) ($link['can_lookup'] ?? 0)) {
+            return $this->ok([
+                'result'  => 'not_permitted',
+                'tickets' => [],
+                'message' => 'This scanner link is not allowed to look up tickets.',
+            ]);
+        }
+
+        $eventId = (int) $link['event_id'];
+
+        // Optional server-side filter. The list is small enough to send whole
+        // (a room's worth of tickets), and scanner.js filters as you type, but
+        // a query keeps the payload sane for a big show on a phone connection.
+        $q = trim((string) $request->body('q', ''));
+
+        $sql = "SELECT t.id, t.code, t.holder_name, t.holder_email, t.status, t.redeemed_at,
+                       tt.name AS tier_name, COALESCE(o.is_comp, 0) AS is_comp
+                  FROM tickets t
+                  JOIN ticket_types tt ON tt.id = t.ticket_type_id
+                  LEFT JOIN ticket_orders o ON o.id = t.order_id
+                 WHERE t.event_id = ?";
+        $args = [$eventId];
+        if ($q !== '') {
+            $sql .= " AND (t.holder_name LIKE ? OR t.holder_email LIKE ? OR t.code LIKE ?)";
+            $like = '%' . $q . '%';
+            array_push($args, $like, $like, $like);
+        }
+        // Unredeemed first — those are the ones the door still has to act on —
+        // then alphabetically, which is how you scan a list for a name.
+        $sql .= " ORDER BY (t.status = 'issued') DESC, t.holder_name IS NULL, t.holder_name ASC, t.id ASC
+                  LIMIT 500";
+
+        $rows = $this->db->all($sql, $args);
+
+        $tickets = array_map(fn (array $r): array => [
+            'id'           => (int) $r['id'],
+            'code'         => (string) $r['code'],
+            'tier'         => (string) $r['tier_name'],
+            'holder_name'  => $r['holder_name'] !== null ? (string) $r['holder_name'] : null,
+            'holder_email' => self::maskEmail($r['holder_email'] !== null ? (string) $r['holder_email'] : null),
+            'status'       => (string) $r['status'],
+            'is_comp'      => (bool) (int) $r['is_comp'],
+            'redeemed_at'  => $r['redeemed_at'],
+        ], $rows);
+
+        return $this->ok([
+            'result'   => 'ok',
+            'event_id' => $eventId,
+            'tickets'  => $tickets,
+        ]);
+    }
+
+    /**
+     * POST /api/scan/admit — admit a ticket found by lookup, with no QR in hand.
+     *
+     * body: { scanner_token, pin?, ticket_id }
+     *
+     * The state transition is identical to redeem()'s (issued -> redeemed, one
+     * atomic UPDATE that exactly one caller can win), so a manually admitted
+     * ticket cannot then be walked in again on its QR, and two staff tapping
+     * the same row race to 'already_redeemed' rather than admitting twice.
+     * What differs is the audit row: 'manual_admit' records that a human
+     * accepted an ID here instead of a machine verifying a token.
+     *
+     * Mirrors redeem()'s response contract so scanner.js renders it with the
+     * same code path: HTTP 200 + a 'result' for anything door staff can act on,
+     * 401 only when the link itself is rejected.
+     *
+     * result ∈ admitted | already_redeemed | void | not_found | not_permitted
+     */
+    private function admit(Request $request): Response
+    {
+        $link = $this->authenticateLink($request);
+        if ($link instanceof Response) {
+            return $link;
+        }
+
+        if (!(bool) (int) ($link['can_lookup'] ?? 0)) {
+            return $this->ok([
+                'result'   => 'not_permitted',
+                'admitted' => false,
+                'message'  => 'This scanner link is not allowed to admit without a QR.',
+            ]);
+        }
+
+        $eventId   = (int) $link['event_id'];
+        $scannerId = (int) $link['id'];
+        $ticketId  = (int) $request->body('ticket_id', 0);
+
+        if ($ticketId <= 0) {
+            return Response::json(['error' => 'No ticket selected.'], 422);
+        }
+
+        // Scoped to this link's event — a scanner link must never admit a
+        // ticket belonging to some other show, even if it learns the id.
+        $ticket = $this->db->one(
+            'SELECT t.id, t.code, t.status, t.holder_name, tt.name AS tier_name
+               FROM tickets t
+               JOIN ticket_types tt ON tt.id = t.ticket_type_id
+              WHERE t.id = ? AND t.event_id = ?',
+            [$ticketId, $eventId]
+        );
+
+        if ($ticket === null) {
+            // Audit the miss too, exactly as a failed scan is audited.
+            $this->auditScan($request, null, $eventId, 'not_found', $scannerId);
+            return $this->ok([
+                'result'   => 'not_found',
+                'admitted' => false,
+                'message'  => 'That ticket is not for this event.',
+            ]);
+        }
+
+        $affected = $this->db->run(
+            "UPDATE tickets
+                SET status = 'redeemed', redeemed_at = NOW(),
+                    redeemed_by_user_id = NULL, redeemed_via_scanner_id = :sid
+              WHERE id = :id AND event_id = :eid AND status = 'issued'",
+            [':sid' => $scannerId, ':id' => $ticketId, ':eid' => $eventId]
+        );
+
+        if ($affected === 1) {
+            $result = 'admitted';
+        } else {
+            $status = (string) ($this->db->one('SELECT status FROM tickets WHERE id = ?', [$ticketId])['status'] ?? '');
+            $result = $status === 'void' ? 'void' : 'already_redeemed';
+        }
+
+        // 'manual_admit' only for an admission that actually happened here; a
+        // rejected attempt keeps the same vocabulary a failed scan would use.
+        $this->auditScan($request, $ticketId, $eventId, $result === 'admitted' ? 'manual_admit' : $result, $scannerId);
+
+        if ($result === 'admitted') {
+            log_activity($this->db, $eventId, null, 'ticket admitted without QR', [
+                'scanner_link_id' => $scannerId,
+                'ticket_id'       => $ticketId,
+                'code'            => (string) $ticket['code'],
+            ]);
+        }
+
+        return $this->ok([
+            'result'      => $result,
+            'admitted'    => $result === 'admitted',
+            'manual'      => true,
+            'holder_name' => $ticket['holder_name'] !== null ? (string) $ticket['holder_name'] : null,
+            'tier'        => (string) $ticket['tier_name'],
+            'ticket_code' => (string) $ticket['code'],
+            'event_id'    => $eventId,
+        ]);
+    }
+
     // ─── helpers ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Write a ticket_scans audit row. Every admission decision made at a door —
+     * scanned, sold, or waved through by hand — lands here, because this table
+     * is the headcount and the dispute record.
+     */
+    private function auditScan(Request $request, ?int $ticketId, int $eventId, string $result, int $scannerId): void
+    {
+        $this->db->run(
+            'INSERT INTO ticket_scans
+                (ticket_id, event_id, result, scanner_link_id, scanned_by_user_id, ip, user_agent)
+             VALUES (?, ?, ?, ?, NULL, ?, ?)',
+            [
+                $ticketId,
+                $eventId,
+                $result,
+                $scannerId,
+                $this->clientIp(),
+                substr((string) ($request->header('User-Agent') ?? ''), 0, 255) ?: null,
+            ]
+        );
+    }
+
+    /**
+     * Mask an email for the door list: enough to tell two same-named guests
+     * apart, not enough to be worth harvesting. j***@example.com.
+     */
+    private static function maskEmail(?string $email): ?string
+    {
+        $email = $email !== null ? trim($email) : '';
+        if ($email === '' || !str_contains($email, '@')) {
+            return null;
+        }
+        [$user, $domain] = explode('@', $email, 2);
+        $head = $user !== '' ? substr($user, 0, 1) : '';
+        return $head . '***@' . $domain;
+    }
+
 
     /**
      * Validate the scanner-link secret (+ PIN) carried in the request body and
@@ -609,7 +812,7 @@ final class Scanner extends BaseEndpoint
         }
 
         $link = $this->db->one(
-            'SELECT id, event_id, pin_hash, can_sell, expires_at, revoked_at
+            'SELECT id, event_id, pin_hash, can_sell, can_lookup, expires_at, revoked_at
                FROM event_scanner_links WHERE token_hash = ?',
             [hash('sha256', $scannerToken)]
         );

@@ -356,7 +356,9 @@ final class Kernel
         //   POST /api/scan/redeem   — admit a scanned ticket
         //   POST /api/scan/sell     — log a walk-up sale (sell-enabled links only)
         //   POST /api/scan/context  — what this link may do + sellable tiers
-        if ($segments[0] === 'scan' && in_array($segments[1] ?? '', ['redeem', 'sell', 'context'], true)) {
+        //   POST /api/scan/tickets  — look up purchased tickets (lookup-enabled links)
+        //   POST /api/scan/admit    — admit a looked-up ticket with no QR in hand
+        if ($segments[0] === 'scan' && in_array($segments[1] ?? '', ['redeem', 'sell', 'context', 'tickets', 'admit'], true)) {
             return [Scanner::class, ['scan' => $segments[1]]];
         }
 

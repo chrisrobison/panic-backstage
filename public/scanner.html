@@ -113,6 +113,24 @@
     .sell button.sell-go { padding: 16px; font-size: 17px; }
     .sell button.sell-go[disabled] { opacity: .5; }
 
+    /* Look-up panel: the guest list, for someone who bought a ticket but can't
+       produce the QR. Rows are big enough to hit accurately in a dark doorway. */
+    .look { max-width: 520px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 12px; }
+    .look .find { display: flex; gap: 8px; }
+    .guests { display: flex; flex-direction: column; gap: 8px; max-height: 58vh; overflow-y: auto; }
+    .guest {
+      display: flex; align-items: center; gap: 12px; text-align: left; width: 100%;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+    }
+    .guest .who { min-width: 0; }
+    .guest .nm { font-weight: 700; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .guest .sub { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .guest .act { margin-left: auto; flex-shrink: 0; }
+    .guest .act button { padding: 9px 14px; font-size: 14px; }
+    .guest.done { opacity: .55; }
+    .guest.done .act { color: var(--muted); font-size: 13px; font-weight: 600; }
+    .guest.voided .nm { text-decoration: line-through; }
+
     /* Self-serve card purchase: a QR the buyer scans off the door device's
        screen to check out on their own phone. */
     .buy-bar { max-width: 520px; margin: 0 auto; width: 100%; display: none; }
@@ -171,7 +189,8 @@
   <main id="app">
     <div class="modes" id="modes" role="tablist">
       <button type="button" id="mode-scan" class="on" role="tab" aria-selected="true">Scan</button>
-      <button type="button" id="mode-sell" role="tab" aria-selected="false">Sell</button>
+      <button type="button" id="mode-sell" role="tab" aria-selected="false" hidden>Sell</button>
+      <button type="button" id="mode-look" role="tab" aria-selected="false" hidden>Look up</button>
     </div>
 
     <!-- Scan mode -->
@@ -221,6 +240,18 @@
 
       <button class="primary sell-go" id="sell-go" type="button" disabled>Complete Sale</button>
       <p class="hint" id="sell-hint">Selling admits the buyer immediately — no second scan needed.</p>
+    </div>
+
+    <!-- Look-up mode: find a purchased ticket by name and admit it with no QR.
+         For the guest whose phone is dead or whose email is buried — check
+         their ID against the name, then tap Admit. -->
+    <div class="look" id="look-view" hidden>
+      <div class="find">
+        <input type="text" id="look-q" placeholder="Search name, email or code" autocomplete="off">
+        <button type="button" id="look-refresh" aria-label="Refresh list">&#8635;</button>
+      </div>
+      <div class="guests" id="guests"></div>
+      <p class="hint" id="look-hint">Check their ID against the name before admitting.</p>
     </div>
 
     <!-- Always available (in either mode) when the event has a public buy page:

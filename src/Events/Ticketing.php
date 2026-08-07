@@ -71,8 +71,11 @@ final class Ticketing extends BaseEndpoint
 
     /**
      *   GET    /ticketing/tickets        list every issued ticket (paid + comp)
-     *   POST   /ticketing/tickets/{id}   resend the QR link to the holder's email
+     *   POST   /ticketing/tickets/{id}   action: resend (default) | redeem
      *   DELETE /ticketing/tickets/{id}   void (invalidate) the ticket
+     *
+     * POST dispatches on an 'action' body param that defaults to 'resend', so
+     * every existing caller keeps working unchanged.
      */
     private function tickets(Request $request, int $eventId, ?int $ticketId): Response
     {
@@ -83,11 +86,72 @@ final class Ticketing extends BaseEndpoint
         if (!$ticket) {
             return $this->notFound('Ticket not found');
         }
+        if ($request->method() === 'POST') {
+            $action = strtolower(trim((string) $request->body('action', 'resend')));
+            return match ($action) {
+                'resend' => $this->resendTicket($eventId, $ticket),
+                'redeem' => $this->manualRedeem($eventId, $ticket),
+                default  => Response::json(['error' => 'Unknown ticket action.'], 422),
+            };
+        }
         return match ($request->method()) {
-            'POST'   => $this->resendTicket($eventId, $ticket),
             'DELETE' => $this->voidIssuedTicket($eventId, $ticket),
             default  => Response::methodNotAllowed(),
         };
+    }
+
+    /**
+     * Mark a ticket used from the admin UI — the office-side counterpart to the
+     * door scanner's no-QR admission, for the guest standing in front of someone
+     * who has the full app open rather than the scanner page.
+     *
+     * Writes the same ticket_scans 'manual_admit' audit row the door writes, so
+     * the scan log stays a complete headcount no matter which surface admitted
+     * the person; unlike the door, the actor here is a known user, so
+     * redeemed_by_user_id is set and redeemed_via_scanner_id stays NULL.
+     */
+    private function manualRedeem(int $eventId, array $ticket): Response
+    {
+        $ticketId = (int) $ticket['id'];
+
+        if ((string) $ticket['status'] === 'void') {
+            return Response::json(['error' => 'This ticket is void and cannot be admitted.'], 422);
+        }
+
+        // Same atomic guard the scanner uses: only a transition out of 'issued'
+        // counts, so admitting twice (or racing the door) can't double-admit.
+        $affected = $this->db->run(
+            "UPDATE tickets
+                SET status = 'redeemed', redeemed_at = NOW(),
+                    redeemed_by_user_id = :uid, redeemed_via_scanner_id = NULL
+              WHERE id = :id AND event_id = :eid AND status = 'issued'",
+            [':uid' => $this->userId(), ':id' => $ticketId, ':eid' => $eventId]
+        );
+
+        if ($affected !== 1) {
+            return Response::json(['error' => 'This ticket was already scanned in.'], 409);
+        }
+
+        $this->db->run(
+            'INSERT INTO ticket_scans
+                (ticket_id, event_id, result, scanner_link_id, scanned_by_user_id, ip, user_agent)
+             VALUES (?, ?, ?, NULL, ?, ?, ?)',
+            [
+                $ticketId,
+                $eventId,
+                'manual_admit',
+                $this->userId(),
+                substr((string) ($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45) ?: null,
+                substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255) ?: null,
+            ]
+        );
+
+        log_activity($this->db, $eventId, $this->userId(), 'ticket marked used', [
+            'ticket_id' => $ticketId,
+            'code'      => (string) $ticket['code'],
+        ]);
+
+        return $this->ok(['ok' => true, 'status' => 'redeemed']);
     }
 
     private function listTickets(int $eventId): Response

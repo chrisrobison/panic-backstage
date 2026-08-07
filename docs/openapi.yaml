@@ -7886,12 +7886,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TicketIssued'
+    TicketActionRequest:
+      type: object
+      description: Body for POST /ticketing/tickets/{ticketId}. Omit entirely for the legacy resend.
+      properties:
+        action:
+          type: string
+          default: resend
+          enum:
+            - resend
+            - redeem
+          description: >-
+            'resend' re-emails the QR link; 'redeem' marks the ticket used without a scan.
     TicketResendResponse:
       type: object
+      description: >-
+        Shape depends on the action — `emailed` for a resend, `ok`/`status` for a redeem.
       properties:
         emailed:
           type: integer
-          description: 1 if the resend was sent, 0 if not.
+          description: 1 if the resend was sent, 0 if not (resend only).
+        ok:
+          type: boolean
+          description: True when the ticket was marked used (redeem only).
+        status:
+          type: string
+          description: The ticket's new status, 'redeemed' (redeem only).
     TicketSummary:
       type: object
       properties:
@@ -8212,6 +8232,16 @@ components:
           nullable: true
         has_pin:
           type: boolean
+        can_sell:
+          type: boolean
+          description: >-
+            Whether this link may ring up walk-up sales (POST /api/scan/sell). Opt-in at creation
+            only; there is no endpoint that upgrades an existing link.
+        can_lookup:
+          type: boolean
+          description: >-
+            Whether this link may look up purchased tickets and admit without a QR
+            (POST /api/scan/tickets, /api/scan/admit). Opt-in at creation only, same as can_sell.
         has_token:
           type: boolean
           description: False for legacy links created before plaintext-token storage.
@@ -8258,6 +8288,18 @@ components:
           type: string
           format: date-time
           nullable: true
+        can_sell:
+          type: boolean
+          description: >-
+            Grant walk-up sale powers (POST /api/scan/sell). Defaults false. Settable ONLY here — a
+            link's powers are fixed the moment it is shared, so a leaked bearer URL can never be
+            escalated.
+        can_lookup:
+          type: boolean
+          description: >-
+            Grant ticket look-up + no-QR admission (POST /api/scan/tickets, /api/scan/admit).
+            Defaults false, same create-time-only rule as can_sell. Implies read access to this
+            event's guest list (names, masked emails), so grant it only to trusted door staff.
     ScannerLinkCreateResponse:
       type: object
       properties:
@@ -8270,6 +8312,10 @@ components:
               type: string
               nullable: true
             has_pin:
+              type: boolean
+            can_sell:
+              type: boolean
+            can_lookup:
               type: boolean
             expires_at:
               type: string
@@ -8379,11 +8425,135 @@ components:
           description: >-
             Whether this link was granted walk-up sale powers at creation time
             (event_scanner_links.can_sell). False for every scan-only link.
+        can_lookup:
+          type: boolean
+          description: >-
+            Whether this link was granted ticket look-up + no-QR admission at creation time
+            (event_scanner_links.can_lookup). False for every scan-only link. Drives whether
+            scanner.html shows the Look-up tab.
         ticket_types:
           type: array
           description: Tiers sellable at the door. Empty unless can_sell is true.
           items:
             $ref: '#/components/schemas/ScannerSellableTicketType'
+    ScannerLookupRequest:
+      type: object
+      required:
+        - scanner_token
+      properties:
+        scanner_token:
+          type: string
+          description: Per-scanner secret (not a JWT); matched by sha256 hash.
+        pin:
+          type: string
+          nullable: true
+          description: Required if the scanner link was created with a PIN.
+        q:
+          type: string
+          nullable: true
+          description: >-
+            Optional server-side filter, matched as a substring against holder_name, holder_email
+            and code. Omit to get the whole list (capped at 500).
+    ScannerLookupTicket:
+      type: object
+      description: >-
+        One purchased ticket as the door may see it. Deliberately carries NO token and NO ticket
+        URL — see the endpoint description.
+      properties:
+        id:
+          type: integer
+          description: Pass to /api/scan/admit to admit this ticket.
+        code:
+          type: string
+        tier:
+          type: string
+        holder_name:
+          type: string
+          nullable: true
+          description: Returned in full — it is what staff check against the guest's ID.
+        holder_email:
+          type: string
+          nullable: true
+          description: Masked (j***@example.com), or null when the ticket has no email.
+        status:
+          type: string
+          enum:
+            - issued
+            - redeemed
+            - void
+        is_comp:
+          type: boolean
+        redeemed_at:
+          type: string
+          nullable: true
+    ScannerLookupResponse:
+      type: object
+      properties:
+        result:
+          type: string
+          enum:
+            - ok
+            - not_permitted
+        event_id:
+          type: integer
+        tickets:
+          type: array
+          description: Empty when result is not_permitted.
+          items:
+            $ref: '#/components/schemas/ScannerLookupTicket'
+        message:
+          type: string
+          nullable: true
+          description: Present when result is not_permitted.
+    ScannerAdmitRequest:
+      type: object
+      required:
+        - scanner_token
+        - ticket_id
+      properties:
+        scanner_token:
+          type: string
+          description: Per-scanner secret (not a JWT); matched by sha256 hash.
+        pin:
+          type: string
+          nullable: true
+          description: Required if the scanner link was created with a PIN.
+        ticket_id:
+          type: integer
+          description: >-
+            A ticket id from /api/scan/tickets. Must belong to the scanner link's own event —
+            anything else is result=not_found.
+    ScannerAdmitResponse:
+      type: object
+      properties:
+        result:
+          type: string
+          enum:
+            - admitted
+            - already_redeemed
+            - void
+            - not_found
+            - not_permitted
+        admitted:
+          type: boolean
+        manual:
+          type: boolean
+          description: Always true — marks this as a no-QR admission rather than a scan.
+        holder_name:
+          type: string
+          nullable: true
+        tier:
+          type: string
+          nullable: true
+        ticket_code:
+          type: string
+          nullable: true
+        event_id:
+          type: integer
+        message:
+          type: string
+          nullable: true
+          description: Present when result is not_permitted or not_found.
     ScannerSellRequest:
       type: object
       required:
@@ -23136,13 +23306,29 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/events/{eventId}/ticketing/tickets/{ticketId}:
     post:
-      operationId: ticketing_resendTicket
-      summary: Resend a ticket's QR link to the holder's email
+      operationId: ticketing_ticketAction
+      summary: Resend a ticket's QR link, or mark the ticket used
       description: >-
-        Re-emails the ticket's redemption link (with its stored one-time token) to holder_email.
-        Requires the 'manage_ticketing' event capability. 422 if the ticket has no holder_email on
-        file; 409 if the ticket predates plaintext token storage (its token cannot be recovered, so
-        it cannot be resent).
+        Dispatches on an `action` body param that defaults to 'resend', so callers that send no body
+        keep the original behaviour.
+
+
+        action=resend — re-emails the ticket's redemption link (with its stored one-time token) to
+        holder_email. 422 if the ticket has no holder_email on file; 409 if the ticket predates
+        plaintext token storage (its token cannot be recovered, so it cannot be resent).
+
+
+        action=redeem — marks the ticket used without a scan: the office-side counterpart to the
+        door scanner's no-QR admission (POST /api/scan/admit), for the guest standing in front of
+        someone who has the full app open rather than the scanner page. Uses the same atomic
+        issued -> redeemed guard, so it cannot double-admit or race the door; 409 if the ticket was
+        already scanned in, 422 if it is void. Writes a ticket_scans row with result='manual_admit'
+        so the scan log stays a complete headcount regardless of which surface admitted the guest —
+        with scanned_by_user_id set to the acting user and scanner_link_id NULL, the inverse of a
+        door admission.
+
+
+        Both actions require the 'manage_ticketing' event capability.
       tags:
         - Ticketing
       parameters:
@@ -23152,9 +23338,15 @@ paths:
           required: true
           schema:
             type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketActionRequest'
       responses:
         '200':
-          description: Resend attempted.
+          description: Action performed.
           content:
             application/json:
               schema:
@@ -23172,13 +23364,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '409':
-          description: Ticket predates token storage and cannot be resent.
+          description: >-
+            Ticket predates token storage and cannot be resent (resend), or was already scanned in
+            (redeem).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '422':
-          description: Ticket has no holder email on file.
+          description: >-
+            Ticket has no holder email on file (resend), the ticket is void (redeem), or the action
+            is unrecognized.
           content:
             application/json:
               schema:
@@ -23828,6 +24024,108 @@ paths:
                 $ref: '#/components/schemas/Error'
         '422':
           description: Invalid quantity (must be 1–20), payment_method, or holder_email.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/scan/tickets:
+    post:
+      operationId: scanner_lookupTickets
+      summary: Look up this event's purchased tickets at the door
+      description: >-
+        The guest list for the person who bought a ticket but cannot produce it — dead phone, buried
+        email, ticket left at home. Door staff search by name (or email/code), check the guest's ID
+        against the holder name, then admit via /api/scan/admit. Returns this event's tickets only,
+        unredeemed first (those are what the door still has to act on), then by holder name, capped
+        at 500. An optional `q` filters server-side on holder_name/holder_email/code; scanner.js also
+        filters the returned list client-side as staff type.
+
+
+        DELIBERATELY FIELD-STRIPPED: the response NEVER contains a ticket token or QR/ticket URL,
+        unlike the JWT-authenticated GET /api/events/{id}/ticketing/tickets. This surface is
+        authenticated by a bearer URL living on a phone at a door, so returning tokens would let a
+        leaked link reprint or redeem every ticket for the show. holder_email is masked
+        (j***@example.com) — enough to tell two same-named guests apart, not a harvestable mailing
+        list.
+
+
+        Authorization: opt-in per scanner link (event_scanner_links.can_lookup, set only at
+        link-creation time). A scan-only link — which is every link created before this feature —
+        gets result=not_permitted and an empty ticket list. 401 only when the scanner link itself is
+        rejected.
+      tags:
+        - Scanner
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScannerLookupRequest'
+      responses:
+        '200':
+          description: Authenticated lookup processed (see `result`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScannerLookupResponse'
+        '401':
+          description: Missing/invalid/revoked/expired scanner token, or incorrect PIN.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/scan/admit:
+    post:
+      operationId: scanner_admitTicket
+      summary: Admit a looked-up ticket with no QR in hand
+      description: >-
+        Admits a ticket found through /api/scan/tickets, by id rather than by scanned token — for
+        the guest who genuinely bought a ticket but cannot show it, and whose ID staff have checked
+        against the holder name.
+
+
+        The state transition is identical to /api/scan/redeem's: one atomic UPDATE from
+        status='issued' to 'redeemed', scoped to the link's own event. So a manually admitted ticket
+        can never then be walked in again on the QR that eventually turns up, two staff tapping the
+        same row race to already_redeemed rather than double-admitting, and a ticket belonging to
+        another event is result=not_found even if its id is known. Void tickets are refused.
+
+
+        What differs is the audit row: a successful no-QR admission is recorded in ticket_scans with
+        result='manual_admit' rather than 'admitted', so the scan log distinguishes "a machine
+        verified a cryptographic token" from "a human accepted an ID" while both still count toward
+        the headcount. Refused attempts are audited with the ordinary scan vocabulary.
+
+
+        Authorization: same can_lookup gate as /api/scan/tickets; a scan-only link gets
+        result=not_permitted and changes nothing. Mirrors the /api/scan/redeem response contract:
+        HTTP 200 with a `result` (admitted | already_redeemed | void | not_found | not_permitted),
+        401 only when the scanner link itself is rejected, 422 when no ticket_id is supplied.
+      tags:
+        - Scanner
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScannerAdmitRequest'
+      responses:
+        '200':
+          description: Authenticated admission attempt processed (see `result`/`admitted`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScannerAdmitResponse'
+        '401':
+          description: Missing/invalid/revoked/expired scanner token, or incorrect PIN.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: No ticket_id supplied.
           content:
             application/json:
               schema:

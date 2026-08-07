@@ -1243,6 +1243,17 @@ const HELP_CONTENT = {
     <p>Door sales use the same inventory and the same books as online sales: a tier can never be oversold (a sale that would exceed capacity is refused outright rather than partially recorded), and door revenue shows up in tier revenue, gross ticket sales, and the settlement report automatically. Because the payment method is stored, cash and card totals reconcile separately at the end of the night.</p>
     <p class="muted small">Sales are off by default on every scanner link, and can't be switched on afterwards — a link's powers are fixed when you create it. Give a selling link only to whoever is running the box, and put a PIN on it; if it ever leaks, revoke it and make a new one. Links created before this feature stay scan-only.</p>
 
+    <h3>Someone who lost their ticket</h3>
+    <p>The third person at every door bought a ticket but can't show it — dead phone, buried email, ticket printed and left at home. Rather than turning away a paying customer or waving them through untracked, look them up:</p>
+    <ol>
+      <li>Tick <em>Allow looking up ticket holders</em> when creating the scanner link. That link gains a <em>Look up</em> tab listing everyone who bought a ticket, unredeemed first.</li>
+      <li>Search by name, email, or ticket code. <strong>Check their ID against the name on the ticket.</strong></li>
+      <li>Tap <em>Admit</em> and confirm. The ticket is marked used exactly as if it had been scanned.</li>
+    </ol>
+    <p>You can do the same thing from this Ticketing tab without the scanner page at all: every row in <em>Issued tickets</em> has a <strong>Mark used</strong> button. Handy when the door calls you instead of looking it up themselves.</p>
+    <p>Either way the ticket flips to <em>redeemed</em>, so the copy that eventually surfaces in their inbox can't be used to walk a second person in. Admissions made this way are recorded as manual rather than scanned, so if a headcount is ever questioned you can see exactly which guests were let in on a staff judgement call and which device did it.</p>
+    <p class="muted small">Look-up is off by default and, like selling, can't be switched on after the link is made. It shows the guest list — names, masked emails, what they bought — and lets someone admit by name without any ticket, so give it only to staff you'd trust with that, and add a PIN. It never exposes anyone's actual QR, so a leaked look-up link still can't manufacture working tickets.</p>
+
     <p class="muted small">Who sees what: the Ticketing tab (tiers, comps, refunds, scanner links) is limited to venue admins and event owners — promoters and other collaborators don't see it. Selecting the payment processor is a venue-admin task under <a href="#help-admin-payments">Admin &rarr; Payments</a>.</p>
   `,
 

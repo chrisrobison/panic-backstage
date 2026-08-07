@@ -5,13 +5,18 @@
  * (+ optional PIN) to a /api/scan/* endpoint authenticated by that token
  * (NOT a JWT).
  *
- * Two modes:
- *   Scan — decode a ticket QR (html5-qrcode, CDN) and POST /api/scan/redeem,
- *     rendering a big ADMIT / ALREADY-USED / INVALID state, debounced so one
- *     physical ticket isn't redeemed twice by consecutive frames.
- *   Sell — walk-up sale: POST /api/scan/sell, which logs the money AND admits
- *     the buyer in one step (no QR to scan back). Only offered when the link
- *     was created with sales enabled, which /api/scan/context tells us.
+ * Three modes, each covering one of the three people who show up at a door:
+ *   Scan — they have a QR. Decode it (html5-qrcode, CDN) and POST
+ *     /api/scan/redeem, rendering a big ADMIT / ALREADY-USED / INVALID state,
+ *     debounced so one physical ticket isn't redeemed twice by consecutive
+ *     frames.
+ *   Sell — they have money and no ticket. POST /api/scan/sell, which logs the
+ *     money AND admits the buyer in one step (no QR to scan back).
+ *   Look up — they bought a ticket but can't produce it. POST
+ *     /api/scan/tickets for the guest list, check ID against the name, then
+ *     POST /api/scan/admit for that ticket id.
+ * The last two are opt-in per scanner link (can_sell / can_lookup); the tabs
+ * only exist when /api/scan/context says the link has them.
  */
 (function () {
   'use strict';
@@ -41,9 +46,16 @@
     modes: document.getElementById('modes'),
     modeScan: document.getElementById('mode-scan'),
     modeSell: document.getElementById('mode-sell'),
+    modeLook: document.getElementById('mode-look'),
     scanView: document.getElementById('scan-view'),
     scanControls: document.getElementById('scan-controls'),
     sellView: document.getElementById('sell-view'),
+    // look-up mode
+    lookView: document.getElementById('look-view'),
+    lookQ: document.getElementById('look-q'),
+    lookRefresh: document.getElementById('look-refresh'),
+    guests: document.getElementById('guests'),
+    lookHint: document.getElementById('look-hint'),
     tiers: document.getElementById('tiers'),
     qtyN: document.getElementById('qty-n'),
     qtyUp: document.getElementById('qty-up'),
@@ -193,21 +205,37 @@
   // ── mode switching ───────────────────────────────────────────────────────────
   var mode = 'scan';
   function setMode(next) {
-    mode = next === 'sell' && canSell ? 'sell' : 'scan';
-    var selling = mode === 'sell';
-    els.modeScan.classList.toggle('on', !selling);
-    els.modeSell.classList.toggle('on', selling);
-    els.modeScan.setAttribute('aria-selected', String(!selling));
-    els.modeSell.setAttribute('aria-selected', String(selling));
-    els.scanView.hidden = selling;
-    els.scanControls.hidden = selling;
-    els.sellView.hidden = !selling;
-    // The result box is shared: it shows scan verdicts and sale confirmations.
-    if (selling) setResult('idle', 'Ring up a walk-up sale', null, null);
+    // Fall back to scanning if the link was never granted the requested mode —
+    // scan is the one capability every scanner link has by definition.
+    if (next === 'sell' && !canSell) next = 'scan';
+    if (next === 'look' && !canLookup) next = 'scan';
+    mode = next;
+
+    var tabs = [[els.modeScan, 'scan'], [els.modeSell, 'sell'], [els.modeLook, 'look']];
+    tabs.forEach(function (pair) {
+      var on = pair[1] === mode;
+      pair[0].classList.toggle('on', on);
+      pair[0].setAttribute('aria-selected', String(on));
+    });
+
+    els.scanView.hidden = mode !== 'scan';
+    els.scanControls.hidden = mode !== 'scan';
+    els.sellView.hidden = mode !== 'sell';
+    els.lookView.hidden = mode !== 'look';
+
+    // The result box is shared: scan verdicts, sale confirmations, and
+    // no-QR admissions all render into it.
+    if (mode === 'sell') setResult('idle', 'Ring up a walk-up sale', null, null);
+    else if (mode === 'look') setResult('idle', 'Find a ticket by name', null, null);
     else setResult('idle', 'Point the camera at a ticket QR', null, null);
+
+    // Entering look-up pulls a fresh list — someone may have been admitted on
+    // another device since this one last looked.
+    if (mode === 'look') loadGuests();
   }
   els.modeScan.addEventListener('click', function () { setMode('scan'); });
   els.modeSell.addEventListener('click', function () { setMode('sell'); });
+  els.modeLook.addEventListener('click', function () { setMode('look'); });
 
   // ── sell state ───────────────────────────────────────────────────────────────
   var canSell = false;
@@ -294,6 +322,161 @@
     });
   });
 
+  // ── look up a purchased ticket, admit without a QR ───────────────────────────
+  // For the guest who really did buy a ticket but cannot show it: dead phone,
+  // buried email, ticket left on the kitchen table. Staff find them by name,
+  // check their ID against it, and admit — the same issued -> redeemed
+  // transition a scan performs, audited as a manual admission.
+  var canLookup = false;
+  var guests = [];
+  var guestsLoaded = false;
+
+  function loadGuests() {
+    if (!canLookup) return Promise.resolve();
+    els.lookHint.textContent = guestsLoaded ? 'Refreshing…' : 'Loading ticket list…';
+
+    return fetch(API + '/scan/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scanner_token: SCANNER_TOKEN,
+        pin: (els.pin.value || '').trim()
+      })
+    })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        var b = res.body || {};
+        if (!res.ok || b.result !== 'ok') {
+          els.lookHint.textContent = b.error || b.message || 'Could not load the ticket list.';
+          return;
+        }
+        guests = b.tickets || [];
+        guestsLoaded = true;
+        renderGuests();
+      })
+      .catch(function () {
+        els.lookHint.textContent = 'Network error — could not load the ticket list.';
+      });
+  }
+
+  // Filtering is client-side: the whole list is already here, and a door with
+  // flaky wifi should not need a round trip per keystroke.
+  function filteredGuests() {
+    var q = (els.lookQ.value || '').trim().toLowerCase();
+    if (!q) return guests;
+    return guests.filter(function (g) {
+      return (g.holder_name || '').toLowerCase().indexOf(q) >= 0 ||
+             (g.holder_email || '').toLowerCase().indexOf(q) >= 0 ||
+             (g.code || '').toLowerCase().indexOf(q) >= 0;
+    });
+  }
+
+  function renderGuests() {
+    var list = filteredGuests();
+    els.guests.innerHTML = '';
+
+    if (!list.length) {
+      els.lookHint.textContent = guests.length
+        ? 'No ticket matches that search.'
+        : 'No tickets have been sold for this event yet.';
+      return;
+    }
+    els.lookHint.textContent = 'Check their ID against the name before admitting.';
+
+    list.forEach(function (g) {
+      var row = document.createElement('div');
+      row.className = 'guest' + (g.status === 'redeemed' ? ' done' : '') + (g.status === 'void' ? ' voided' : '');
+      row.setAttribute('data-ticket', g.id);
+
+      var who = document.createElement('div');
+      who.className = 'who';
+      var nm = document.createElement('div');
+      nm.className = 'nm';
+      nm.textContent = g.holder_name || '(no name on ticket)';
+      var sub = document.createElement('div');
+      sub.className = 'sub';
+      var bits = [g.tier];
+      if (g.is_comp) bits.push('comp');
+      if (g.holder_email) bits.push(g.holder_email);
+      bits.push(g.code);
+      sub.textContent = bits.join(' · ');
+      who.appendChild(nm);
+      who.appendChild(sub);
+
+      var act = document.createElement('div');
+      act.className = 'act';
+      if (g.status === 'issued') {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'primary';
+        btn.textContent = 'Admit';
+        btn.addEventListener('click', function () { admitGuest(g, btn); });
+        act.appendChild(btn);
+      } else {
+        act.textContent = g.status === 'void' ? 'Void' : 'Used';
+      }
+
+      row.appendChild(who);
+      row.appendChild(act);
+      els.guests.appendChild(row);
+    });
+  }
+
+  els.lookQ.addEventListener('input', renderGuests);
+  els.lookRefresh.addEventListener('click', function () { loadGuests(); });
+
+  function admitGuest(g, btn) {
+    if (inFlight) return;
+    // Admitting on a name rather than a token is a judgement call, and it is
+    // not undoable from this page — make staff confirm the person in front of
+    // them is the person on the ticket.
+    var who = g.holder_name || g.code;
+    if (!window.confirm('Admit ' + who + '?\n\nCheck their ID first — this marks the ticket used.')) return;
+
+    inFlight = true;
+    btn.disabled = true;
+    setResult('idle', 'Admitting…', null, null);
+
+    fetch(API + '/scan/admit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scanner_token: SCANNER_TOKEN,
+        pin: (els.pin.value || '').trim(),
+        ticket_id: g.id
+      })
+    })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, body: j }; }); })
+      .then(function (res) {
+        var b = res.body || {};
+        if (res.status === 401) {
+          setResult('invalid', 'Locked', null, b.error || 'Scanner link rejected.');
+          return;
+        }
+        if (!res.ok) {
+          setResult('invalid', 'Failed', null, b.error || 'Could not admit that ticket.');
+          return;
+        }
+        // The admit response mirrors redeem()'s shape, so the shared renderer
+        // handles every outcome — including the "someone else already scanned
+        // them in" race — with no special-casing here.
+        render(b, true);
+        // Reflect the new state locally, then resync from the server so a
+        // second device's admissions show up too.
+        if (b.result === 'admitted' || b.result === 'already_redeemed') g.status = 'redeemed';
+        if (b.result === 'void') g.status = 'void';
+        renderGuests();
+        loadGuests();
+      })
+      .catch(function () {
+        setResult('invalid', 'Failed', null, 'Network error — check before admitting again.');
+      })
+      .finally(function () {
+        setTimeout(function () { inFlight = false; }, 600);
+        btn.disabled = false;
+      });
+  }
+
   // ── self-serve card purchase ─────────────────────────────────────────────────
   // The buyer scans this off the door device's screen and checks out on their
   // own phone through the ordinary public ticket page — so a venue with no card
@@ -350,8 +533,13 @@
           els.eventLabel.textContent = b.event_title || b.event_code;
         }
         canSell = !!b.can_sell;
+        canLookup = !!b.can_lookup;
         tiers = b.ticket_types || [];
-        els.modes.classList.toggle('show', canSell);
+        // The mode switch only earns its space once there is somewhere else to
+        // go; each extra tab appears only if this link was granted that power.
+        els.modeSell.hidden = !canSell;
+        els.modeLook.hidden = !canLookup;
+        els.modes.classList.toggle('show', canSell || canLookup);
 
         buyUrl = b.buy_url || null;
         els.buyBar.classList.toggle('show', !!buyUrl);
@@ -366,6 +554,9 @@
           renderTiers();
           updateTotal();
         }
+        // A PIN-protected link only gets here once the PIN is right, so this is
+        // the first moment we're allowed to pull the list.
+        if (canLookup && mode === 'look' && !guestsLoaded) loadGuests();
       })
       .catch(function () { /* context is best-effort; scanning still works */ });
   }

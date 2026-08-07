@@ -52,10 +52,17 @@ The baseline `database/schema.sql` creates the ticketing tables and adds
   the plaintext), `holder_*`, `status`, `redeemed_at`, `redeemed_by_user_id`,
   `redeemed_via_scanner_id`, `voided_at`.
 - `ticket_scans` — door audit: `result`
-  (`admitted | already_redeemed | void | not_found | wrong_event | expired_link`),
-  `scanner_link_id`, `scanned_by_user_id`, `ip`, `user_agent`.
+  (`admitted | already_redeemed | void | not_found | wrong_event | expired_link |
+  manual_admit`), `scanner_link_id`, `scanned_by_user_id`, `ip`, `user_agent`.
+  `manual_admit` is an admission made by staff accepting an ID instead of a
+  machine verifying a token; it counts toward the headcount alongside
+  `admitted`, and is written by both no-QR surfaces (`/api/scan/admit` and the
+  admin `action=redeem`).
 - `event_scanner_links` — door credentials: `label`, `token_hash`, `pin_hash`,
-  `expires_at`, `revoked_at`, `last_used_at`.
+  `expires_at`, `revoked_at`, `last_used_at`, plus two opt-in capability bits,
+  `can_sell` and `can_lookup`. Both default 0 and are settable **only at
+  creation** — there is no endpoint that upgrades a live link, so a leaked
+  bearer URL can never be escalated beyond the powers it was minted with.
 - `payment_settings` — `active_provider`, `currency`, `settings_json`.
 
 **Inventory accounting.** Live availability for a tier =
@@ -76,7 +83,7 @@ PHP, no framework, PSR-4 autoload (`Panic\Foo` → `src/Foo.php`).
 | `src/Events/Ticketing.php` | `/api/events/{id}/ticketing` — dashboard, tier CRUD, mode/settings, comps, refunds (admin). |
 | `src/PublicTickets.php` | `/api/public/tickets/{eventId}` — on-sale tiers + checkout (no JWT). |
 | `src/TicketView.php` | `GET /t/{token}` — public ticket page (HTML, no auth). |
-| `src/Scanner.php` | Scanner-link management (JWT) + `POST /api/scan/redeem` (scanner token). |
+| `src/Scanner.php` | Scanner-link management (JWT) + the scanner-token door surfaces: `redeem`, `context`, `sell`, `tickets`, `admit`. |
 | `src/QrCode.php` | `GET /assets/qr.svg` — from-scratch QR encoder (byte mode, ECC level M). |
 | `src/Webhooks.php` | `POST /api/webhooks/{stripe,square}` — signature-verified fulfillment. |
 | `src/PaymentSettings.php` | `/api/payment-settings` — active provider + currency (admin). |
@@ -93,7 +100,13 @@ PHP, no framework, PSR-4 autoload (`Panic\Foo` → `src/Foo.php`).
 - Public routes (`/api/public/tickets/*`, `/t/{token}`, `/assets/qr.svg`) need no
   auth. Webhook routes are authenticated by **signature**, not JWT.
 - Redemption (`/api/scan/redeem`) is authenticated by a **scanner-link token**
-  (+ PIN if set), not a JWT — door staff need no accounts.
+  (+ PIN if set), not a JWT — door staff need no accounts. The same token
+  authenticates `/api/scan/{context,sell,tickets,admit}`; `sell` additionally
+  requires the link's `can_sell` bit and the two lookup surfaces `can_lookup`.
+  Because a scanner link is a bearer URL, `/api/scan/tickets` is deliberately
+  field-stripped — it returns holder names and masked emails but **never** a
+  ticket token or ticket URL, so a leaked link cannot be turned into working
+  tickets the way the JWT-gated admin ticket list could.
 
 ### Routes
 
@@ -104,6 +117,9 @@ POST   /api/events/{id}/ticketing                 create a tier
 PATCH  /api/events/{id}/ticketing                 update ticketing_mode / payment settings
 PATCH  /api/events/{id}/ticketing/types/{typeId}  update a tier
 DELETE /api/events/{id}/ticketing/types/{typeId}  delete a tier
+GET    /api/events/{id}/ticketing/tickets         list issued tickets (paid + comp)
+POST   /api/events/{id}/ticketing/tickets/{tkId}  action: resend (default) | redeem (mark used)
+DELETE /api/events/{id}/ticketing/tickets/{tkId}  void a ticket
 POST   /api/events/{id}/ticketing/comp            issue comp tickets (emails QR)
 POST   /api/events/{id}/ticketing/refund          cancel-event refund + void fulfilled orders
 GET    /api/events/{id}/scanner-links             list scanner links
@@ -119,6 +135,10 @@ GET    /assets/qr.svg?text=<token>&size=<240-1024> scannable QR (SVG, same-origi
 
 # Door scanner (scanner-link token, no JWT)
 POST   /api/scan/redeem                           atomic redeem + ticket_scans audit row
+POST   /api/scan/context                          what this link may do + sellable tiers
+POST   /api/scan/sell                             walk-up sale; logs money AND admits (can_sell)
+POST   /api/scan/tickets                          purchased-ticket lookup, token-free (can_lookup)
+POST   /api/scan/admit                            admit a looked-up ticket, no QR (can_lookup)
 
 # Payment webhooks (HMAC signature, no JWT)
 POST   /api/webhooks/stripe
