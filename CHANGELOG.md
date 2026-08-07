@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `calendar` — Mirror events onto the shared Google Calendar nightly
 - **Added** `scanner` — Admit a guest who has no QR
 - **Added** `scanner` — Sell walk-up tickets at the door
 - **Added** `events` — Collect contacts on a Hold and stop inventing times (#25)
