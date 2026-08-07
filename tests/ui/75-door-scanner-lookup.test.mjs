@@ -161,6 +161,87 @@ test('door scanner looks up a ticket and admits without a QR', async (page) => {
   }
 });
 
+// The office-side counterpart: same admission, reached from the Ticketing tab
+// by whoever has the full app open when the door calls them.
+test('Ticketing tab marks a ticket used without a scan', async (page) => {
+  const fixture = await setup(page);
+  if (!fixture) return page.skip('could not build a throwaway event fixture');
+
+  try {
+    await page.openEvent(fixture.eventId);
+    if (!(await page.exists('.workspace-tabs a[data-tab="ticketing"]'))) {
+      return page.skip('ticketing tab not present (no manage_ticketing?)');
+    }
+    await page.click('.workspace-tabs a[data-tab="ticketing"]');
+    assert.ok(
+      await page.until(`document.querySelectorAll('#ticketing [data-use-ticket]').length===2`, 10000),
+      'both issued tickets offer a Mark used button'
+    );
+
+    await page.eval(`window.confirm = () => true;`);
+    await page.click('#ticketing [data-use-ticket]');
+
+    // The list reloads from the server after the action.
+    assert.ok(
+      await page.until(`document.querySelectorAll('#ticketing [data-use-ticket]').length===1`, 10000),
+      'the marked ticket no longer offers Mark used'
+    );
+    assert.ok(
+      await page.until(`/Scanned in/.test(document.querySelector('#ticketing').textContent)`, 5000),
+      'the row shows as scanned in'
+    );
+
+    const after = await api(page, `/events/${fixture.eventId}/ticketing/tickets`);
+    const list = after.body?.tickets || [];
+    assert.equal(list.filter((t) => t.status === 'redeemed').length, 1, 'exactly one ticket was admitted');
+    assert.equal(list.filter((t) => t.status === 'issued').length, 1, 'the other is untouched');
+  } finally {
+    await teardown(page, fixture);
+  }
+});
+
+// The endpoint contract behind that button, including the back-compat rule
+// that a POST with no body still means "resend".
+test('the ticket action endpoint redeems, refuses twice, and defaults to resend', async (page) => {
+  const fixture = await setup(page);
+  if (!fixture) return page.skip('could not build a throwaway event fixture');
+
+  try {
+    const before = await api(page, `/events/${fixture.eventId}/ticketing/tickets`);
+    const target = (before.body?.tickets || []).find((t) => t.status === 'issued');
+    assert.ok(target, 'a fixture ticket is available to admit');
+
+    const first = await api(page, `/events/${fixture.eventId}/ticketing/tickets/${target.id}`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'redeem' }),
+    });
+    assert.equal(first.status, 200, 'redeem succeeds');
+    assert.equal(first.body?.status, 'redeemed', 'the response reports the new status');
+
+    // Same atomic guard as the door: a second admission is refused, not silently
+    // repeated, so two people acting at once cannot double-admit.
+    const second = await api(page, `/events/${fixture.eventId}/ticketing/tickets/${target.id}`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'redeem' }),
+    });
+    assert.equal(second.status, 409, 'admitting an already-used ticket is refused');
+
+    // No body at all must still mean resend — the documented back-compat rule.
+    // These comps carry no holder_email, so resend answers 422; that it is 422
+    // and not a redeem is the point.
+    const legacy = await api(page, `/events/${fixture.eventId}/ticketing/tickets/${target.id}`, { method: 'POST' });
+    assert.equal(legacy.status, 422, 'a body-less POST still routes to resend');
+
+    const unknown = await api(page, `/events/${fixture.eventId}/ticketing/tickets/${target.id}`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'explode' }),
+    });
+    assert.equal(unknown.status, 422, 'an unrecognized action is rejected');
+  } finally {
+    await teardown(page, fixture);
+  }
+});
+
 test('a scanner link without look-up permission never offers the tab', async (page) => {
   const fixture = await setup(page, { lookup: false });
   if (!fixture) return page.skip('could not build a throwaway event fixture');
