@@ -682,36 +682,47 @@ class ContractEditor extends PanicElement {
       }
     });
 
-    // ── token click: missing token span → focus its deal form field ───────────
-    $$('[data-token]', this).forEach((span) => {
-      span.addEventListener('click', () => this.focusDealField(span.dataset.token));
-    });
-
     // ── review click: missing required term → focus its deal form field ───────
     $$('[data-field]', this).forEach((li) => {
       li.addEventListener('click', () => this.focusDealField(li.dataset.field));
     });
 
+    this.wirePreview($('[data-preview]', this));
+  }
+
+  /**
+   * Wire up everything that lives inside the preview div: token click-to-field and
+   * inline contenteditable section bodies. MUST be called every time the preview
+   * HTML is replaced (render() and refreshPreviewOnly()) — replacing innerHTML
+   * discards contentEditable and all listeners on the old nodes.
+   */
+  wirePreview(previewEl) {
+    if (!previewEl) return;
+
+    // ── token click: missing token span → focus its deal form field ───────────
+    $$('[data-token]', previewEl).forEach((span) => {
+      span.addEventListener('click', () => this.focusDealField(span.dataset.token));
+    });
+
     // ── contenteditable: section bodies (managers only) ───────────────────────
-    if (this.manage) {
-      $$('.contract-section-body', this).forEach((div) => {
-        div.contentEditable = 'true';
-        div.setAttribute('spellcheck', 'true');
-        div.addEventListener('input', () => { div.dataset.dirty = '1'; });
-        div.addEventListener('blur', () => {
-          if (!div.dataset.dirty) return;
-          const sid = Number(div.closest('[data-section-id]')?.dataset?.sectionId ?? 0);
-          if (sid) this.saveSectionBody(sid, div);
-        });
-        // Prevent Enter from inserting <div> wrappers; use <p> behavior instead
-        div.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            document.execCommand('insertParagraph');
-          }
-        });
+    if (!this.manage) return;
+    $$('.contract-section-body', previewEl).forEach((div) => {
+      div.contentEditable = 'true';
+      div.setAttribute('spellcheck', 'true');
+      div.addEventListener('input', () => { div.dataset.dirty = '1'; });
+      div.addEventListener('blur', () => {
+        if (!div.dataset.dirty) return;
+        const sid = Number(div.closest('[data-section-id]')?.dataset?.sectionId ?? 0);
+        if (sid) this.saveSectionBody(sid, div);
       });
-    }
+      // Prevent Enter from inserting <div> wrappers; use <p> behavior instead
+      div.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          document.execCommand('insertParagraph');
+        }
+      });
+    });
   }
 
   async action(fn, message) {
@@ -934,15 +945,18 @@ class ContractEditor extends PanicElement {
     try {
       const updated = await api(`/contracts/${this.contractId}`);
       this.data = updated;
-      // Refresh preview HTML, restoring scroll position
-      if (previewEl) {
+      // Refresh preview HTML, restoring scroll position — but never while the user
+      // is mid-edit in a section body, or we'd silently discard their unsaved text.
+      const editing = previewEl && (
+        previewEl.querySelector('.contract-section-body[data-dirty]')
+        || previewEl.contains(document.activeElement)
+      );
+      if (previewEl && !editing) {
         previewEl.innerHTML = updated.preview_html;
         requestAnimationFrame(() => { previewEl.scrollTop = scrollTop; });
+        // Re-apply contenteditable + token clicks to the freshly rendered nodes
+        this.wirePreview(previewEl);
       }
-      // Re-bind token click → deal field for newly rendered preview tokens
-      $$('[data-token]', previewEl).forEach((span) => {
-        span.addEventListener('click', () => this.focusDealField(span.dataset.token));
-      });
       // Refresh warnings panel (missing fields / risk flags may have changed)
       const oldWarnings = $('[data-panel="warnings"]', this);
       if (oldWarnings) {
