@@ -25,6 +25,13 @@ final class GenerateFlyer extends BaseEndpoint
     /** Absolute path to the codex binary. */
     private const CODEX_BIN = '/home/cdr/.nvm/versions/node/v22.22.0/bin/codex';
 
+    /**
+     * Model used for flyer generation. Codex retires models periodically (its
+     * config carries "model_migrations" notices), so this may need bumping if
+     * a run starts failing with an unknown-model error.
+     */
+    private const CODEX_MODEL = 'gpt-5.6-sol';
+
     /** Maximum seconds to wait for codex before giving up. */
     private const TIMEOUT = 180;
 
@@ -126,8 +133,19 @@ final class GenerateFlyer extends BaseEndpoint
 
             $codexHome = $runTmpBase . '/codex-home-' . bin2hex(random_bytes(4));
             ensure_dir($codexHome);
-            $this->mustCopy('/home/cdr/.codex/auth.json',   $codexHome . '/auth.json');
-            $this->mustCopy('/home/cdr/.codex/config.toml', $codexHome . '/config.toml');
+            // auth.json must come from the real codex home — it holds the OAuth
+            // tokens. It has to stay readable by the web server user (it is
+            // 0640, group cdr, and www-data is in that group); if codex ever
+            // rewrites it as 0600 this copy fails and the remedy is
+            // `chmod 640 ~/.codex/auth.json`.
+            $this->mustCopy('/home/cdr/.codex/auth.json', $codexHome . '/auth.json');
+
+            // config.toml is deliberately NOT copied from ~/.codex. That file
+            // is 0600 and codex rewrites it (resetting the mode) whenever
+            // settings change, which silently broke this endpoint with a
+            // "Permission denied" copy error. Nothing in the personal config
+            // is needed here beyond the model, so write a minimal one we own.
+            $this->writeCodexConfig($codexHome . '/config.toml');
 
             $tmpDir = $runTmpBase . '/pb-flyer-' . $eventId . '-' . bin2hex(random_bytes(4));
             ensure_dir($tmpDir);
@@ -243,6 +261,25 @@ final class GenerateFlyer extends BaseEndpoint
                  . ' Generate exactly one image.';
 
         return $prompt;
+    }
+
+    /**
+     * Write the minimal codex config this endpoint needs into $CODEX_HOME.
+     *
+     * Marking the app root trusted covers both the working dir and the
+     * generated-images dir, which are created under storage/tmp inside it.
+     */
+    private function writeCodexConfig(string $path): void
+    {
+        $toml = sprintf(
+            "model = \"%s\"\nmodel_reasoning_effort = \"high\"\n\n[projects.\"%s\"]\ntrust_level = \"trusted\"\n",
+            self::CODEX_MODEL,
+            $this->root
+        );
+        if (@file_put_contents($path, $toml) === false) {
+            $err = error_get_last()['message'] ?? 'unknown error';
+            throw new \RuntimeException("Could not write codex config to {$path}: {$err}");
+        }
     }
 
     /** Copy a file, throwing if the source is unreadable or the write fails. */

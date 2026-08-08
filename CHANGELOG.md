@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Write our own codex config instead of copying the user's
 - **Fixed** `contracts` — Keep clause bodies editable after a deal-terms autosave
 - **Added** `calendar` — Push to Google Calendar inline on save, delete cancellations
 - **Added** `calendar` — Mirror events onto the shared Google Calendar nightly
