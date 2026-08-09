@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `tests` — Stop the invoice print test asserting one machine's venue
 - **Fixed** `migrations` — Guard 091/092 column adds so a fresh database migrates
 - **Fixed** `notifications` — Request notification permission before any awaits
 - **Added** `notifications` — Optional Firebase web push for signed-in staff
