@@ -180,13 +180,17 @@ async function enablePush() {
     throw new Error('Notifications are blocked for this site. Allow them in your browser or system settings, then try again.');
   }
 
-  const registration = await registerServiceWorker();
-
+  // Ask FIRST, before any other await that could install a service worker or
+  // hit the network. WebKit ties the permission prompt to transient user
+  // activation, so an intervening await can silently auto-deny — on iOS Home
+  // Screen installs above all, which is the one platform where this feature
+  // has no fallback. Everything slow happens after the user has answered.
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
     throw new Error('Notification permission was not granted.');
   }
 
+  const registration = await registerServiceWorker();
   const { messaging, module } = await getMessagingInstance(config);
   const token = await module.getToken(messaging, {
     vapidKey: config.vapid_key,
