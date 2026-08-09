@@ -8,7 +8,9 @@ cd "$(dirname "$0")/.."
 find src public scripts database tests -type f -name '*.php' -print0 \
   | xargs -0 -r -n1 -P4 php -l >/dev/null
 
-find public/assets tests/ui -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
+# public/sw.js is listed explicitly: the push service worker has to sit at the
+# application root to own the right scope, so it falls outside public/assets.
+find public/assets public/sw.js tests/ui -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
   | xargs -0 -r -n1 -P4 node --check
 
 find scripts tests -type f -name '*.sh' -print0 \

@@ -35,6 +35,7 @@ import './processes/process-designer.js';
 import './processes/process-tasks-list.js';
 import './processes/automation-placeholder.js';
 import './tasks/tasks-shell.js';
+import { initPushBridge } from './push.js';
 
 
 class AppShell extends PanicElement {
@@ -66,6 +67,11 @@ class AppShell extends PanicElement {
       subscribe('app-settings.updated', (data) => this.applyBrand(data.settings || {}), this.abort.signal);
       subscribe('messages.changed', () => this.refreshUnread(), this.abort.signal);
       this.refreshUnread();
+      // Listen for messages from the push service worker (foreground toast,
+      // deep-link navigation). Adds listeners only: it never registers a
+      // worker, contacts Firebase, or prompts for notification permission —
+      // enabling push is an explicit action in Preferences.
+      initPushBridge();
       await this.route();
       this.maybeShowCredentialSetup();
     } catch {

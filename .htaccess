@@ -67,6 +67,11 @@ RewriteRule ^uploads/(.+)$ public/files.php?_path=uploads/$1 [L,QSA]
 
 RewriteRule ^$ public/index.html [L]
 RewriteRule ^assets/(.*)$ public/assets/$1 [L]
+# The push service worker must be served from the application root so its scope
+# covers the whole app (see public/assets/push.js). Without this rule it falls
+# through to the SPA catch-all below and is returned as index.html with a
+# text/html content type, which browsers refuse to register as a worker.
+RewriteRule ^sw\.js$ public/sw.js [L]
 RewriteRule ^api(?:/(.*))?$ public/api/index.php [L,QSA]
 # Public ticket-view pretty URLs (/t/{token}) must reach the PHP kernel, not
 # the SPA catch-all below. Mirror the rule in public/.htaccess here so the

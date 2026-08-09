@@ -5,6 +5,7 @@ namespace Panic\Jobs;
 
 use Panic\Database;
 use Panic\Leads\PublicInquiryFollowup;
+use Panic\Notifications\PushNotifier;
 
 final class JobWorker
 {
@@ -65,6 +66,11 @@ final class JobWorker
                 $this->db,
                 (int) ($payload['lead_id'] ?? 0)
             ),
+            // Firebase web push. Fans one queued message out to every enabled
+            // device belonging to the recipients; dead registrations disable
+            // themselves, transient FCM failures rethrow so the queue's
+            // existing backoff owns the retry.
+            PushNotifier::JOB_TYPE => (new PushNotifier())->deliver($this->db, $payload),
             default => throw new \RuntimeException('Unknown background job type: ' . $job['job_type']),
         };
     }

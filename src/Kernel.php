@@ -698,6 +698,19 @@ final class Kernel
             return [Promote::class, ['eventId' => null]];
         }
 
+        // Web push device registration for the signed-in user (optional
+        // Firebase integration — see src/Notifications/). Authenticated:
+        // deliberately NOT listed in isPublic(), and the endpoint itself
+        // never accepts a user_id from the browser.
+        //   GET    /api/push/config
+        //   GET/POST/DELETE /api/push/subscriptions[/{id}]
+        if ($segments[0] === 'push') {
+            return [Push::class, [
+                'action'         => $segments[1] ?? '',
+                'subscriptionId' => $this->intOrNull($segments[2] ?? null),
+            ]];
+        }
+
         // Public syndication feeds (unauthenticated):
         //   GET /api/feed                → JSON index of available feeds
         //   GET /api/feed/events.ics     → iCalendar subscription

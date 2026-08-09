@@ -1,4 +1,5 @@
 import { setTokens, esc, appUrl, apiUrl, getAppUser, setAppUser, publish, api, formData, option, select, can, PanicElement, $, $$ } from './core.js';
+import { getPushStatus, enablePush, disablePush, listDevices, forgetDevice } from './push.js';
 
 
 // ── WebAuthn / passkey helpers ────────────────────────────────────────────────
@@ -796,11 +797,40 @@ class Preferences extends PanicElement {
         notify_event_updates:   user.notify_event_updates   !== false,
         notify_contracts:       user.notify_contracts       !== false,
         notify_access_requests: user.notify_access_requests !== false,
+        // Push notification preferences — a separate set from the email ones
+        // above. Absent (older /me payloads) ⇒ opted in, but note that opting
+        // in still delivers nothing until a device is registered below.
+        push_booking_updates:   user.push_booking_updates   !== false,
+        push_contracts:         user.push_contracts         !== false,
+        push_task_assignments:  user.push_task_assignments  !== false,
+        push_day_of_show:       user.push_day_of_show       !== false,
       };
+      this.pushStatus = { state: 'loading' };
+      this.pushDevices = [];
       this.render();
+      // Deliberately after the first paint and never awaited: push status is
+      // a nice-to-have, and an install with no Firebase config should render
+      // Preferences at full speed.
+      this.refreshPush();
     } catch (err) {
       this.showError(err);
     }
+  }
+
+  /**
+   * Re-read push capability + this user's registered devices, then repaint.
+   * Contacts no third party and cannot raise a permission prompt — see
+   * getPushStatus() in push.js.
+   */
+  async refreshPush() {
+    try {
+      this.pushStatus = await getPushStatus();
+      this.pushDevices = this.pushStatus.configured ? await listDevices() : [];
+    } catch (err) {
+      this.pushStatus = { state: 'unconfigured', configured: false };
+      this.pushDevices = [];
+    }
+    this.render();
   }
 
   render() {
@@ -855,6 +885,8 @@ class Preferences extends PanicElement {
         </label>
       </div>
 
+      ${this.renderPush()}
+
       <div class="account-section">
         <h2>Sign-in nudges</h2>
         <label class="checkbox-row">
@@ -870,6 +902,102 @@ class Preferences extends PanicElement {
       const evt = el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input';
       el.addEventListener(evt, () => this.onChange(el));
     });
+
+    // The permission prompt is raised from inside enablePush(), called
+    // straight out of this click handler. Nothing else in the app may ask.
+    $('[data-push-toggle]', this)?.addEventListener('click', (e) => this.togglePush(e.currentTarget));
+    $$('[data-push-forget]', this).forEach((el) => {
+      el.addEventListener('click', () => this.forgetPushDevice(el.dataset.pushForget));
+    });
+  }
+
+  // ── Push notifications ────────────────────────────────────────────────────
+
+  /** One honest sentence per capability state — no broken Enable buttons. */
+  static PUSH_STATUS_TEXT = {
+    loading:          'Checking this device…',
+    unconfigured:     'Push notifications are unavailable — this Backstage installation is not configured for them.',
+    unsupported:      'This browser does not support push notifications. Try a current Chrome, Edge, Firefox, or Safari over HTTPS.',
+    'needs-install':  'On iPhone and iPad, notifications only work from an installed app. Tap Share → “Add to Home Screen”, open Backstage from the new icon, then come back here to enable them.',
+    denied:           'Notifications are blocked for this site. Allow them in your browser or system settings, then reload this page.',
+    enabled:          'Enabled on this device.',
+    available:        'Available but disabled on this device.',
+  };
+
+  renderPush() {
+    const status = this.pushStatus || { state: 'loading' };
+    const text = Preferences.PUSH_STATUS_TEXT[status.state] || Preferences.PUSH_STATUS_TEXT.loading;
+    // The button is only offered where clicking it can actually do something.
+    const canToggle = status.state === 'available' || status.state === 'enabled';
+    const isOn = status.state === 'enabled';
+    // Categories are pointless until at least one device exists — this one,
+    // or another (a phone registered earlier still honors these settings).
+    const showCategories = status.configured && (isOn || (this.pushDevices || []).length > 0);
+
+    return `<div class="account-section">
+      <h2>Push notifications</h2>
+      <p class="muted">Time-sensitive operational alerts on your phone or desktop — a new booking inquiry, an inquiry assigned to you, a contract signed. Separate from the email settings above.</p>
+      <p class="muted small" data-push-status>${esc(text)}</p>
+      ${canToggle ? `<button type="button" class="btn ${isOn ? '' : 'primary'}" data-push-toggle data-on="${isOn ? '1' : ''}">
+        ${isOn ? 'Turn off on this device' : 'Enable notifications'}
+      </button>` : ''}
+      ${showCategories ? `
+        <div class="checkbox-group" style="margin-top: 1rem">
+          <label class="checkbox-row">
+            <input type="checkbox" data-pref="push_booking_updates" ${this.prefs.push_booking_updates ? 'checked' : ''}>
+            <span>New booking inquiries — something reached the Booking Inbox and needs triage</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" data-pref="push_task_assignments" ${this.prefs.push_task_assignments ? 'checked' : ''}>
+            <span>Assigned to me — an inquiry or task was handed to me by somebody else</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" data-pref="push_contracts" ${this.prefs.push_contracts ? 'checked' : ''}>
+            <span>Contract activity — a contract was signed or declined</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" data-pref="push_day_of_show" ${this.prefs.push_day_of_show ? 'checked' : ''}>
+            <span>Day of show — schedule changes and blockers on the day</span>
+          </label>
+        </div>` : ''}
+      ${(this.pushDevices || []).length ? `
+        <h3 class="small" style="margin-top: 1rem">Registered devices</h3>
+        <ul class="plain-list">
+          ${this.pushDevices.map((d) => `<li>
+            <span>${esc(d.device_label || 'Unnamed device')}${d.enabled ? '' : ' — inactive'}</span>
+            <button type="button" class="btn link small" data-push-forget="${esc(String(d.id))}">Remove</button>
+          </li>`).join('')}
+        </ul>` : ''}
+    </div>`;
+  }
+
+  async togglePush(button) {
+    const turningOn = button.dataset.on !== '1';
+    button.disabled = true;
+    button.textContent = turningOn ? 'Waiting for permission…' : 'Turning off…';
+    try {
+      if (turningOn) await enablePush();
+      else await disablePush();
+      publish('toast.show', {
+        message: turningOn ? 'Push notifications enabled on this device.' : 'Push notifications turned off on this device.',
+        tone: turningOn ? 'success' : 'info',
+      });
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Could not change push notifications', tone: 'error' });
+    }
+    // Repaint from the real state rather than from what we hoped happened —
+    // the user may have dismissed the browser prompt.
+    this.refreshPush();
+  }
+
+  async forgetPushDevice(id) {
+    try {
+      await forgetDevice(id);
+      publish('toast.show', { message: 'Device removed.', tone: 'info' });
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Could not remove that device', tone: 'error' });
+    }
+    this.refreshPush();
   }
 
   async onChange(el) {
@@ -879,7 +1007,9 @@ class Preferences extends PanicElement {
       body = { hide_credential_setup_prompt: !el.checked };
     } else if (field === 'nav_collapsed') {
       body = { nav_collapsed: el.checked };
-    } else if (field.startsWith('notify_')) {
+    } else if (field.startsWith('notify_') || field.startsWith('push_')) {
+      // Email (notify_*) and push (push_*) categories are stored as separate
+      // columns and posted independently — see AuthEndpoint::updatePreferences.
       body = { [field]: el.checked };
     } else {
       body = { [field]: el.value };
@@ -891,7 +1021,7 @@ class Preferences extends PanicElement {
       const merged = { ...current, ...body };
       if ('hide_credential_setup_prompt' in body) this.prefs.hide_credential_setup_prompt = body.hide_credential_setup_prompt;
       else if (field === 'nav_collapsed') this.prefs.nav_collapsed = el.checked;
-      else if (field.startsWith('notify_')) this.prefs[field] = el.checked;
+      else if (field.startsWith('notify_') || field.startsWith('push_')) this.prefs[field] = el.checked;
       else this.prefs[field] = el.value;
       setAppUser(merged);
       if (field === 'nav_collapsed') {

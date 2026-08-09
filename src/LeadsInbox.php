@@ -8,6 +8,8 @@ use Panic\Leads\Classifier;
 use Panic\Leads\OutboundIdentity;
 use Panic\Leads\RoutingEngine;
 use Panic\Leads\StatusMachine;
+use Panic\Notifications\PushMessages;
+use Panic\Notifications\PushNotifier;
 use function Panic\log_lead_activity;
 
 /**
@@ -299,7 +301,7 @@ final class LeadsInbox extends BaseEndpoint
         $pdo->beginTransaction();
         try {
             $this->db->one('SELECT id FROM leads WHERE id = ? FOR UPDATE', [$lead['id']]);
-            $this->db->run(
+            $assignmentId = $this->db->insert(
                 'INSERT INTO lead_assignments (lead_id, assigned_to_user_id, assigned_by_user_id, reason) VALUES (?, ?, ?, ?)',
                 [$lead['id'], $toUserId, $this->userId(), $reason]
             );
@@ -315,6 +317,8 @@ final class LeadsInbox extends BaseEndpoint
             }
             throw $e;
         }
+
+        $this->pushAssignmentNotice($lead, $toUserId, $assignmentId);
 
         return $this->ok(['assigned_to_user_id' => $toUserId]);
     }
@@ -351,7 +355,7 @@ final class LeadsInbox extends BaseEndpoint
         $pdo->beginTransaction();
         try {
             $this->db->one('SELECT id FROM leads WHERE id = ? FOR UPDATE', [$lead['id']]);
-            $this->db->run(
+            $assignmentId = $this->db->insert(
                 'INSERT INTO lead_assignments (lead_id, assigned_to_user_id, assigned_by_user_id, reason) VALUES (?, ?, ?, ?)',
                 [$lead['id'], $toUserId, $this->userId(), $reason]
             );
@@ -376,7 +380,41 @@ final class LeadsInbox extends BaseEndpoint
             throw $e;
         }
 
+        $this->pushAssignmentNotice($lead, $toUserId, $assignmentId);
+
         return $this->ok(['assigned_to_user_id' => $toUserId]);
+    }
+
+    /**
+     * Tell the new assignee their phone. Shared by assign() and reassign().
+     *
+     * Deliberately fired AFTER the transaction commits and wrapped so that a
+     * notification problem can never turn a successful assignment into a 500
+     * — same precedent as ContractSigningEndpoint::notifyAdmins(). The actual
+     * send is queued, so nothing here touches the network.
+     *
+     * Two suppressions: unassignment ($toUserId null) is not an event anyone
+     * needs on a lock screen, and PushNotifier excludes the acting user, so
+     * assigning something to yourself stays silent.
+     *
+     * @param array<string,mixed> $lead
+     */
+    private function pushAssignmentNotice(array $lead, ?int $toUserId, int $assignmentId): void
+    {
+        if ($toUserId === null || $toUserId <= 0) {
+            return;
+        }
+        try {
+            (new PushNotifier())->notifyUsers(
+                $this->db,
+                [$toUserId],
+                PushMessages::leadAssigned($lead, $assignmentId),
+                $this->userId(),
+                "push-lead-assigned:{$assignmentId}"
+            );
+        } catch (\Throwable $e) {
+            error_log('LeadsInbox::pushAssignmentNotice failed: ' . $e->getMessage());
+        }
     }
 
     // ── Status ────────────────────────────────────────────────────────────────

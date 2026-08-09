@@ -12,6 +12,15 @@ user="$(json_get user < "$RESP_BODY" || true)"
 status="$(http_get /api/events)"
 assert_status 401 "$status"
 
+# Push registration is authenticated-only. Worth asserting explicitly: these
+# endpoints are gated purely by Kernel's isPublic() allow-list (Push is
+# deliberately absent from it), so an accidental addition there would silently
+# expose device registration to anonymous callers.
+status="$(http_get /api/push/config)"
+assert_status 401 "$status"
+status="$(http_get /api/push/subscriptions)"
+assert_status 401 "$status"
+
 # An unknown endpoint should be a clean 404 (Kernel::handle), not a 500.
 status="$(http_get /api/does-not-exist-xyzzy)"
 if [ "$status" = "500" ]; then

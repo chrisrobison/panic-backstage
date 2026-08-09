@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use Panic\Notifications\PushPreferences;
 use Panic\Tenant\TenantContext;
 
 /**
@@ -957,6 +958,18 @@ final class AuthEndpoint extends BaseEndpoint
 
         // Email notification preferences — boolean opt-in flags, one per category.
         foreach (NotificationPreferences::KEYS as $prefKey) {
+            if (array_key_exists($prefKey, $body)) {
+                $updates[] = "{$prefKey} = ?";
+                $params[]  = $body[$prefKey] ? 1 : 0;
+            }
+        }
+
+        // Push notification preferences — the same shape, but a deliberately
+        // SEPARATE set of columns from the email flags above: opting into
+        // email about contracts must not opt somebody into phone alerts.
+        // Extends this existing endpoint rather than adding a second
+        // preference system.
+        foreach (PushPreferences::KEYS as $prefKey) {
             if (array_key_exists($prefKey, $body)) {
                 $updates[] = "{$prefKey} = ?";
                 $params[]  = $body[$prefKey] ? 1 : 0;

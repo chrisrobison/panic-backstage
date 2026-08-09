@@ -53,6 +53,12 @@ PATCH  /api/events/{id}/assets/{id}    -> src/Events/Assets.php
 
 GET    /api/public/events/{slug}       -> src/PublicEvents.php
 
+# Opt-in Firebase web push for the signed-in user (see docs/push-notifications.md):
+GET    /api/push/config                     -> src/Push.php
+GET    /api/push/subscriptions              -> src/Push.php
+POST   /api/push/subscriptions              -> src/Push.php
+DELETE /api/push/subscriptions/{id}         -> src/Push.php
+
 # Public booking-inquiry widget intake (no JWT, CORS-open — powers panic-booking-inquiry):
 POST    /api/public/inquiries          -> src/PublicInquiry.php  (creates a lead, source=website)
 OPTIONS /api/public/inquiries          -> src/PublicInquiry.php  (CORS preflight)
@@ -108,6 +114,8 @@ public/
   assets/app.css          Venue-ops UI styling
   assets/app.js           Web Components client (shell, events, dashboard)
   assets/promote.js       Panic Promote Web Components (15-channel editor, broadcast modal, settings)
+  assets/push.js          Firebase web-push client (lazy, pinned CDN ES module; no build step)
+  sw.js                   Push service worker — must sit at the app root to own the right scope
   uploads -> ../storage/uploads
 
 src/
@@ -127,6 +135,9 @@ src/
   PublicEvents.php
   Invites.php
   Messages.php            In-app staff messaging (Inbox / Archive / Outbox)
+  Push.php                Web push device registration for the signed-in user (/api/push/*)
+  Notifications/          Optional Firebase push: config, canonical message, preferences,
+                          subscriptions, notifier (→ JobQueue), native FCM HTTP v1 client
   Outbox.php              Admin log of every transactional email sent (manage_users)
   StaffMembers.php        Venue staff roster
   NotificationPreferences.php  Per-user email/notification opt-ins
@@ -748,6 +759,73 @@ the invite link without sending, so an admin can copy and share it manually. The
 Deliverability to external inboxes depends on the host MTA plus SPF/DKIM/DMARC
 for the sending domain. Inspect `storage/mail/` (or `clients/<slug>/mail/`) and
 the host MTA log to confirm a given message was generated and accepted.
+
+## Push Notifications
+
+Optional, opt-in Firebase Cloud Messaging web push for signed-in staff, on
+desktop and mobile browsers. Full setup walkthrough — Firebase Console steps,
+HTTPS and iPhone/iPad requirements, security notes, failure handling — is in
+[`docs/push-notifications.md`](docs/push-notifications.md).
+
+**Entirely optional.** With no `FIREBASE_*` configuration, `/api/push/config`
+returns `enabled: false`, Preferences reports push as unavailable rather than
+offering a button that cannot work, nothing is queued, and the rest of the
+application is untouched. CI runs unconfigured on purpose.
+
+Architecture, deliberately built on what already exists rather than beside it:
+
+```text
+business event → PushNotifier (recipients + preferences) → JobQueue
+              → JobWorker (job_type = push_notification)
+              → FcmClient (native PHP: RS256 JWT → OAuth2 → FCM HTTP v1)
+              → public/sw.js → notification click → Backstage deep link
+```
+
+No Firebase Admin SDK, no Composer runtime package, no npm, no bundler. The
+server side is cURL plus OpenSSL (both already CI requirements); the browser
+side is a pinned Firebase ES module loaded lazily from Google's CDN, plus a
+plain standards-based service worker that handles `push` itself.
+
+- **Enabling is an explicit user action.** The browser permission prompt is
+  raised only by clicking **Enable notifications** in Preferences — never on
+  login or page load. A previously-denied permission is explained ("change it
+  in browser or system settings") rather than re-requested.
+- **Push preferences are separate from email preferences.** The `push_*`
+  columns on `users` are chosen independently of the `notify_*` ones: agreeing
+  to email about a category is not consent to be interrupted on a phone. Both
+  are edited through the existing `POST /api/auth/preferences`.
+- **Many devices per user.** Registrations are keyed on a SHA-256 of the FCM
+  token, so re-registering a browser is idempotent while a second browser is a
+  second device. Tokens are never returned by the API and never logged.
+- **A dead registration retires itself.** FCM reporting `UNREGISTERED` (or a
+  malformed token) disables that one row; transient failures rethrow so the
+  existing queue backoff owns the retry.
+- **iPhone/iPad need a Home Screen install** — iOS delivers web push only to an
+  installed web app. Preferences detects this by capability, not user-agent
+  sniffing, and says so.
+
+Wired initially to three high-signal operational events only — a new booking
+inquiry reaching the Booking Inbox, an inquiry assigned to you by somebody
+else, and a contract signed/declined. Routine saves, status transitions and
+marketing activity are deliberately not pushed, and `Mailer` is untouched:
+email and push are separate decisions.
+
+Required environment (all blank by default — see `.env.example`):
+
+```text
+FIREBASE_PUSH_ENABLED=            # explicit opt-in switch; blank keeps push off
+FIREBASE_PROJECT_ID=
+FIREBASE_WEB_API_KEY=             # these four are public by design and are
+FIREBASE_MESSAGING_SENDER_ID=     # returned to authenticated browsers
+FIREBASE_APP_ID=
+FIREBASE_VAPID_PUBLIC_KEY=        # PUBLIC half of the Web Push key pair
+FIREBASE_SERVICE_ACCOUNT_FILE=    # private key — store OUTSIDE the web root, never commit
+```
+
+Push is delivered by the existing background worker
+(`scripts/cron-background-jobs.sh`); no new process or cron entry is needed.
+Run `php scripts/migrate.php` (and `php scripts/migrate.php tenants` in SaaS
+mode) to apply migration `094_add_push_notifications.sql`.
 
 ## In-App Messaging (Messages)
 

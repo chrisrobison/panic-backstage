@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use Panic\Notifications\PushMessages;
+use Panic\Notifications\PushNotifier;
 use Panic\Processes\CenterStage\ProcessBridge;
 
 /**
@@ -557,9 +559,57 @@ final class ContractSigningEndpoint extends BaseEndpoint
                     ]
                 );
             }
+            $this->pushContractAction($contract, $event);
         } catch (\Throwable $e) {
             error_log("ContractSigningEndpoint::notifyAdmins failed: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Contract states worth interrupting somebody for.
+     *
+     * Every signing transition already sends admin email; only these become a
+     * push. `countersigned` is omitted on purpose — it is immediately followed
+     * by `fully_executed`, and two alerts for one keystroke is exactly the
+     * noise that makes people mute notifications.
+     */
+    private const PUSHABLE_STATES = ['signed', 'signed_by_client', 'fully_executed', 'declined'];
+
+    /**
+     * Queue the push counterpart of the admin contract email.
+     *
+     * Recipients are the venue admins (same as the email) plus the event's
+     * owner, who is usually the person actually waiting on this signature but
+     * is not necessarily an admin. Signing is a public, unauthenticated flow,
+     * so there is no acting Backstage user to exclude.
+     *
+     * @param array<string,mixed> $contract
+     */
+    private function pushContractAction(array $contract, string $event): void
+    {
+        if (!in_array($event, self::PUSHABLE_STATES, true)) {
+            return;
+        }
+
+        $eventRow = isset($contract['event_id']) && (int) $contract['event_id'] > 0
+            ? $this->db->one(
+                'SELECT id, title, event_date, owner_user_id FROM events WHERE id = ?',
+                [(int) $contract['event_id']]
+            )
+            : null;
+
+        $recipients = PushNotifier::venueAdminIds($this->db);
+        if ($eventRow !== null && (int) ($eventRow['owner_user_id'] ?? 0) > 0) {
+            $recipients[] = (int) $eventRow['owner_user_id'];
+        }
+
+        (new PushNotifier())->notifyUsers(
+            $this->db,
+            $recipients,
+            PushMessages::contractAction($contract, $event, PushMessages::eventLabel($eventRow)),
+            null,
+            "push-contract-{$event}:" . (int) ($contract['id'] ?? 0)
+        );
     }
 
     private function notifyAdminsOfStatus(int $contractId, string $status): void

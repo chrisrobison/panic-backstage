@@ -214,6 +214,18 @@ tags:
     description: Audit-trigger change log with undo/redo (admin).
   - name: Messages
     description: In-app staff messaging (inbox/archive/sent).
+  - name: Push Notifications
+    description: >-
+      Opt-in Firebase Cloud Messaging web push for signed-in staff
+      (`src/Push.php`, `src/Notifications/`). Entirely optional: when the
+      `FIREBASE_*` environment values are absent, `/api/push/config` returns
+      `enabled: false` and the rest of the application is unaffected. Every
+      route operates on the authenticated user only — there is no `user_id`
+      parameter anywhere in this surface, and registration tokens are
+      write-only (accepted on POST, matched by SHA-256 digest, never returned).
+      Which *categories* a registered device receives is controlled by the
+      `push_*` flags on `POST /api/auth/preferences`, which are deliberately
+      separate from the `notify_*` email flags. See `docs/push-notifications.md`.
   - name: Feeds
     description: Public calendar/RSS syndication of publicly-visible events.
   - name: Invite Accept
@@ -753,6 +765,23 @@ components:
           type: boolean
         notify_access_requests:
           type: boolean
+        push_booking_updates:
+          type: boolean
+          description: >-
+            Push category. The push_* flags are stored in their own columns, deliberately
+            separate from the notify_* email flags above: agreeing to email about a category is
+            not consent to be interrupted on a phone. They gate which categories a REGISTERED
+            device receives — nothing is delivered until the user also registers a device via
+            POST /api/push/subscriptions.
+        push_contracts:
+          type: boolean
+          description: Push category — a contract was signed or declined.
+        push_task_assignments:
+          type: boolean
+          description: Push category — an inquiry or task was assigned to me by somebody else.
+        push_day_of_show:
+          type: boolean
+          description: Push category — day-of-show schedule changes and blockers.
     AuthRefreshRequest:
       type: object
       required:
@@ -807,6 +836,14 @@ components:
         notify_contracts:
           type: boolean
         notify_access_requests:
+          type: boolean
+        push_booking_updates:
+          type: boolean
+        push_contracts:
+          type: boolean
+        push_task_assignments:
+          type: boolean
+        push_day_of_show:
           type: boolean
     MeResponse:
       type: object
@@ -9949,6 +9986,42 @@ components:
         security_paid_by:
           type: string
       additionalProperties: false
+    PushSubscription:
+      type: object
+      description: >-
+        One registered browser/device belonging to the signed-in user. Note what is NOT here:
+        the FCM registration token. Tokens are write-only across the API — accepted on POST,
+        stored alongside a SHA-256 digest used as the idempotency key, and never serialized into
+        a response or a log line.
+      properties:
+        id:
+          type: integer
+        device_label:
+          type: string
+          nullable: true
+          description: Human label captured at registration, e.g. "Chrome on macOS".
+        platform:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+          description: >-
+            False when the user switched this device off, or when FCM reported the registration
+            dead (UNREGISTERED / SENDER_ID_MISMATCH / invalid token) and the worker retired it.
+            Disabled rather than deleted so the device is still visible in Preferences and can
+            simply be re-enabled.
+        created_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last time the browser re-registered this token.
+        last_success_at:
+          type: string
+          format: date-time
+          nullable: true
     NavItem:
       type: object
       description: >-
@@ -27453,6 +27526,230 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Message not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/push/config:
+    get:
+      operationId: push_config
+      summary: Public Firebase web configuration for this installation
+      description: >-
+        Everything the browser needs to register for push, and nothing else. Returns
+        `{"enabled": false}` — with no other fields — when the installation has no Firebase
+        configuration, which is the normal state and what lets the Preferences UI degrade to
+        "Push notifications unavailable" rather than offering a button that cannot work. The
+        values returned when enabled (project id, web API key, sender id, app id, VAPID PUBLIC
+        key) are not secrets: Firebase ships them in client bundles by design. The service
+        account named by `FIREBASE_SERVICE_ACCOUNT_FILE`, its path, and its private key are
+        never exposed here or anywhere else client-side.
+      tags:
+        - Push Notifications
+      responses:
+        '200':
+          description: >-
+            Push configuration, or `enabled: false` when Firebase is not configured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  firebase:
+                    type: object
+                    description: Public web-app config passed straight to the Firebase browser SDK. Absent when disabled.
+                    properties:
+                      projectId:
+                        type: string
+                      apiKey:
+                        type: string
+                      messagingSenderId:
+                        type: string
+                      appId:
+                        type: string
+                  vapid_key:
+                    type: string
+                    description: Web Push certificate PUBLIC key. Absent when disabled.
+                  service_worker:
+                    type: string
+                    description: Absolute URL of the push service worker, honoring APP_BASE_PATH.
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/push/subscriptions:
+    get:
+      operationId: push_subscriptions_list
+      summary: List the signed-in user's registered push devices
+      description: >-
+        Scoped to the authenticated user; there is no way to read anybody else's registrations.
+        The FCM registration token is never included in the response — only the human label and
+        activity timestamps needed to show a device list in Preferences.
+      tags:
+        - Push Notifications
+      responses:
+        '200':
+          description: This user's devices, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subscriptions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PushSubscription'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: push_subscriptions_register
+      summary: Register or refresh this browser's push registration
+      description: >-
+        UPSERT keyed on the SHA-256 of the token, so re-registering the same browser (which
+        happens on every enable and whenever the SDK rotates its token) refreshes the one
+        existing row instead of accumulating duplicates — repeated calls are idempotent. Several
+        different tokens for one user is the normal multi-device case and is allowed. The row is
+        always attached to the authenticated user; a `user_id` in the body is not read. If the
+        token is already registered to a different user (a shared browser profile), ownership
+        moves to the current user so the previous one stops receiving alerts on a device that is
+        no longer theirs. Returns 503 when Firebase is not configured, rather than banking tokens
+        that could never be used.
+      tags:
+        - Push Notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  maxLength: 1024
+                  description: FCM registration token from getToken(). Treated as sensitive; never returned or logged.
+                device_label:
+                  type: string
+                  maxLength: 120
+                  example: Chrome on macOS
+                platform:
+                  type: string
+                  maxLength: 40
+      responses:
+        '200':
+          description: Registered (or refreshed).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  id:
+                    type: integer
+                  subscription:
+                    $ref: '#/components/schemas/PushSubscription'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing or over-long token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Firebase push is not configured for this installation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: push_subscriptions_unregister_by_token
+      summary: Unregister this browser by token
+      description: >-
+        How a browser turns itself off without knowing its row id. Scoped to the authenticated
+        user, so a token belonging to somebody else is simply not found.
+      tags:
+        - Push Notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No such registration for this user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/push/subscriptions/{subscriptionId}:
+    delete:
+      operationId: push_subscriptions_delete
+      summary: Remove one of the signed-in user's push devices
+      description: >-
+        Used by the device list in Preferences. The delete is filtered by the session's user id,
+        so an id belonging to another user matches nothing and returns 404 — it can neither
+        revoke nor confirm the existence of somebody else's registration.
+      tags:
+        - Push Notifications
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No such registration for this user
           content:
             application/json:
               schema:

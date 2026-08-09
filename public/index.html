@@ -9,6 +9,13 @@
   <link rel="icon" type="image/png" sizes="16x16" href="./assets/favicon/favicon-16x16.png">
   <link rel="icon" href="./assets/favicon/favicon.ico" sizes="any">
   <link rel="manifest" href="./assets/favicon/site.webmanifest">
+  <!-- Installable-app metadata. iPhone/iPad only deliver web push to a Home
+       Screen installation, so Backstage has to be genuinely installable for
+       push to work at all on iOS — see docs/push-notifications.md. -->
+  <meta name="theme-color" content="#03070b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Backstage">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="stylesheet" href="./assets/vendor/fontawesome/all.min.css">
   <link rel="stylesheet" href="./assets/app.css?v=35">
 </head>
@@ -16,7 +23,7 @@
   <pb-app-shell></pb-app-shell>
   <script>window.panAutoload = { paths: [] };</script>
   <script type="module" src="https://cdn.jsdelivr.net/npm/@larcjs/core@3.0.1/pan.mjs"></script>
-  <script type="module" src="./assets/app.js?v=54"></script>
+  <script type="module" src="./assets/app.js?v=55"></script>
   <script>
     // pb-app-shell is defined manually by app.js above, not a module pan.mjs
     // (loaded via the tag above) should ever guess a filename for. Without

@@ -29,7 +29,8 @@ final class Me extends BaseEndpoint
             $row = $this->db->one(
                 'SELECT phone, password_hash, hide_credential_setup_prompt,
                         default_landing, nav_collapsed, events_sort, dashboard_metrics,
-                        notify_event_updates, notify_contracts, notify_access_requests
+                        notify_event_updates, notify_contracts, notify_access_requests,
+                        push_booking_updates, push_contracts, push_task_assignments, push_day_of_show
                  FROM users WHERE id = ? LIMIT 1',
                 [(int) $user['id']]
             ) ?: [];
@@ -55,6 +56,14 @@ final class Me extends BaseEndpoint
             $user['notify_event_updates']         = (bool) ($row['notify_event_updates']   ?? true);
             $user['notify_contracts']             = (bool) ($row['notify_contracts']       ?? true);
             $user['notify_access_requests']       = (bool) ($row['notify_access_requests'] ?? true);
+            // Push notification preferences — a SEPARATE set from the email
+            // ones above (see src/Notifications/PushPreferences.php). Nothing
+            // is ever pushed until the user also registers a device, so these
+            // only decide which categories a registered device may receive.
+            $user['push_booking_updates']         = (bool) ($row['push_booking_updates']  ?? true);
+            $user['push_contracts']               = (bool) ($row['push_contracts']        ?? true);
+            $user['push_task_assignments']        = (bool) ($row['push_task_assignments'] ?? true);
+            $user['push_day_of_show']             = (bool) ($row['push_day_of_show']      ?? true);
         }
 
         return $this->ok([

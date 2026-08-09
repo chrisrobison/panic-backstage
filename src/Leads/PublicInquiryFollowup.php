@@ -6,6 +6,8 @@ namespace Panic\Leads;
 use Panic\Database;
 use Panic\Mailer;
 use Panic\NotificationPreferences;
+use Panic\Notifications\PushMessages;
+use Panic\Notifications\PushNotifier;
 use function Panic\log_lead_activity;
 
 /**
@@ -100,7 +102,11 @@ final class PublicInquiryFollowup
 
     public function notifyAdmins(Database $db, int $leadId): void
     {
-        $lead = $db->one('SELECT contact_name, contact_email FROM leads WHERE id = ?', [$leadId]);
+        $lead = $db->one(
+            'SELECT id, contact_name, contact_email, contact_org, event_name, event_type, desired_date
+             FROM leads WHERE id = ?',
+            [$leadId]
+        );
         if ($lead === null) {
             return;
         }
@@ -136,6 +142,18 @@ final class PublicInquiryFollowup
             }
             $sent[] = (string) $admin['email'];
         }
+
+        // Same operational event, second channel. Queued (never sent inline)
+        // and a no-op when Firebase is unconfigured, so this cannot fail a
+        // job that has already delivered its email. The unique key is safe as
+        // a bare lead id because this whole method runs once per lead — the
+        // audit-log guard above makes a retry return before reaching here.
+        (new PushNotifier())->notifyVenueAdmins(
+            $db,
+            PushMessages::newBookingInquiry($lead),
+            null,
+            "push-new-inquiry:{$leadId}"
+        );
 
         log_lead_activity($db, $leadId, null, 'public_inquiry_admins_notified', [
             'recipient_count' => count($sent),
