@@ -38,12 +38,12 @@
 --   link-creation time. Scanner::sell() refuses any link without this bit.
 
 ALTER TABLE `ticket_orders`
-  ADD COLUMN `payment_method` ENUM('cash','card','other') DEFAULT NULL
+  ADD COLUMN IF NOT EXISTS `payment_method` ENUM('cash','card','other') DEFAULT NULL
     COMMENT 'How the venue itself took the money (door sales); NULL for online/comp orders'
     AFTER `provider_payment_ref`;
 
 ALTER TABLE `event_scanner_links`
-  ADD COLUMN `can_sell` TINYINT(1) NOT NULL DEFAULT 0
+  ADD COLUMN IF NOT EXISTS `can_sell` TINYINT(1) NOT NULL DEFAULT 0
     COMMENT 'Opt-in: may this link ring up walk-up sales, not just scan?'
     AFTER `pin_hash`;
 

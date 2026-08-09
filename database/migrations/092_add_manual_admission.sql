@@ -39,7 +39,7 @@
 --   stored value.
 
 ALTER TABLE `event_scanner_links`
-  ADD COLUMN `can_lookup` TINYINT(1) NOT NULL DEFAULT 0
+  ADD COLUMN IF NOT EXISTS `can_lookup` TINYINT(1) NOT NULL DEFAULT 0
     COMMENT 'Opt-in: may this link look up purchased tickets and admit without a QR?'
     AFTER `can_sell`;
 

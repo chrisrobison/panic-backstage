@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `migrations` — Guard 091/092 column adds so a fresh database migrates
 - **Fixed** `notifications` — Request notification permission before any awaits
 - **Added** `notifications` — Optional Firebase web push for signed-in staff
 - **Added** `contracts` — Optional Cc on the send-for-signature email
