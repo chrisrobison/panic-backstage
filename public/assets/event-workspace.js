@@ -702,6 +702,7 @@ class EventWorkspace extends PanicElement {
             <button type="button" data-print="contract">Contract</button>
             <button type="button" data-print="master">Master Event Packet</button>
             ${(!isPrivate && can(data, 'view_settlement')) ? '<button type="button" data-print="settlement">Settlement Report</button>' : ''}
+            ${can(data, 'view_settlement') ? '<button type="button" data-print="invoice">Invoice</button>' : ''}
           </div>
         </details>` : ''}
         ${(!isPrivate && can(data, 'publish_event')) ? `<button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>` : ''}
@@ -808,6 +809,27 @@ class EventWorkspace extends PanicElement {
         try {
           const report = await api(`/events/${event.id}/report`);
           openPrintWindow(type, report);
+        } catch (err) {
+          publish('toast.show', { message: err.message, tone: 'error' });
+        }
+        return;
+      }
+      // The Invoice needs the billable ledger lines and the payment records
+      // (for amount paid + the checkout link behind the QR); neither ships in
+      // the workspace bundle. Fetch both and merge — unlike the Settlement
+      // Report above we keep the bundle, since the invoice still reads the
+      // event's client contact, dates and venue settings off it.
+      if (type === 'invoice') {
+        try {
+          const [ledger, payments] = await Promise.all([
+            api(`/events/${event.id}/ledger`),
+            api(`/events/${event.id}/payments`),
+          ]);
+          openPrintWindow(type, {
+            ...this.data,
+            ledgerEntries: ledger.entries || [],
+            payments: payments.payments || [],
+          });
         } catch (err) {
           publish('toast.show', { message: err.message, tone: 'error' });
         }

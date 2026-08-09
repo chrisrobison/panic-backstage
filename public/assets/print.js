@@ -17,6 +17,7 @@ const PRINT_TITLES = {
   contract: 'Contract',
   'qr-flyer': 'QR Flyer',
   settlement: 'Settlement Report',
+  invoice: 'Invoice',
 };
 
 
@@ -127,6 +128,39 @@ const PRINT_CSS = `
   .qr-flyer .qf-lineup li { font-size: 18pt; font-weight: 900; text-transform: uppercase; line-height: 1.15; margin: 0 0 4px; }
   .qr-flyer .qf-lineup li.empty { font-weight: normal; font-style: italic; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
   .qr-flyer .qf-lineup .qf-time { display: block; font-size: 10pt; font-weight: 600; letter-spacing: 0.03em; font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: -1px 0 0; }
+
+  /* Invoice — client-facing bill. Restrained and businesslike: venue letterhead
+     left, "INVOICE" + number right, a bill-to/event pair, a single-column money
+     table, then the payment QR. Balance Due is the one emphasized number. */
+  .invoice { color: #111; }
+  .invoice .inv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; border-bottom: 2px solid #111; padding-bottom: 14px; margin-bottom: 20px; }
+  .invoice .inv-venue { font-size: 19pt; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .invoice .inv-from div { font-size: 9.5pt; color: #444; line-height: 1.45; }
+  .invoice .inv-title-block { text-align: right; flex: none; }
+  .invoice .inv-word { font-size: 22pt; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1; }
+  .invoice .inv-no { font-size: 11pt; font-weight: 600; margin-top: 4px; }
+  .invoice .inv-dates { font-size: 9.5pt; color: #444; margin-top: 2px; }
+  .invoice .inv-dates.inv-due { font-weight: 700; color: #a3221c; }
+  .invoice .inv-parties { display: flex; gap: 40px; margin-bottom: 22px; }
+  .invoice .inv-parties > div { flex: 1; }
+  .invoice .inv-parties h2 { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: #666; margin: 0 0 5px; }
+  .invoice .inv-parties div { font-size: 10pt; line-height: 1.5; }
+  .invoice .inv-parties .empty { font-style: italic; color: #888; }
+  .invoice .inv-items { width: 100%; border-collapse: collapse; margin-bottom: 22px; }
+  .invoice .inv-items th { text-align: left; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: #666; border-bottom: 1px solid #111; padding: 0 0 6px; }
+  .invoice .inv-items td { padding: 8px 0; border-bottom: 1px solid #e2e2e2; font-size: 10.5pt; vertical-align: top; }
+  .invoice .inv-items .inv-amt { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .invoice .inv-items td.empty { font-style: italic; color: #888; }
+  .invoice .inv-items tfoot td { border-bottom: none; padding: 6px 0; }
+  .invoice .inv-items .inv-total td { border-top: 1px solid #111; font-weight: 600; padding-top: 10px; }
+  .invoice .inv-items .inv-paid td { color: #15803d; }
+  .invoice .inv-items .inv-balance td { font-size: 13pt; font-weight: 700; border-top: 2px solid #111; padding-top: 10px; }
+  .invoice .inv-pay { display: flex; align-items: center; gap: 18px; border: 1px solid #111; padding: 14px 16px; margin-bottom: 18px; page-break-inside: avoid; }
+  .invoice .inv-qr { flex: none; display: block; }
+  .invoice .inv-pay-copy h2 { font-size: 12pt; margin: 0 0 4px; }
+  .invoice .inv-pay-copy p { font-size: 9.5pt; margin: 0 0 3px; color: #333; }
+  .invoice .inv-pay-url { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9pt; word-break: break-all; }
+  .invoice .inv-terms { font-size: 9pt; color: #555; line-height: 1.5; margin: 0; }
 
   @media print {
     body { background: #fff; padding: 0; }
@@ -647,6 +681,132 @@ function renderQrFlyer(data) {
 }
 
 
+// Invoice — a client-facing bill for what the event owes the venue, with a
+// scannable payment QR. Deliberately distinct from the Settlement Report:
+// settlement is the internal P&L (costs, payouts, venue net), whereas this
+// shows only what the client is billed and what's still owed.
+//
+// Data comes from the workspace bundle *plus* `ledgerEntries` and `payments`
+// fetched at print time (see the 'invoice' branch of the data-print handler in
+// event-workspace.js) — neither is part of the standard event bundle.
+function renderInvoice(data) {
+  const event = data.event;
+  // The venue's billing details (phone/website) live only on the venue record
+  // itself — the event query joins name/address/city/state but not those — so
+  // read them off the bundle's `venues` list, i.e. the venue settings record.
+  const venue = (data.venues || []).find((v) => Number(v.id) === Number(event.venue_id)) || {};
+  const venueName = venue.name || event.venue_name || 'Venue';
+  const venueAddr = [
+    venue.address || event.display_address || event.venue_address,
+    [venue.city || event.venue_city, venue.state || event.venue_state].filter(Boolean).join(', '),
+  ].filter(Boolean);
+  const venueContact = [venue.phone, venue.website_url].filter(Boolean);
+
+  // Bill-to: the promoter/organizer is the paying client on a private rental.
+  const billTo = [
+    event.client_org,
+    event.promoter_name,
+    event.promoter_email,
+    event.promoter_phone,
+  ].filter(Boolean);
+
+  // Line items are the revenue side of the ledger — what the client is billed.
+  // Costs/payouts are internal and deliberately excluded. The ledger API
+  // already filters voided entries out.
+  const items = (data.ledgerEntries || []).filter((e) => e.line_type === 'revenue');
+  const total = items.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+  // Only money actually collected counts against the balance — status, not
+  // direction. (`direction: 'received'` merely means inbound; a pending or
+  // invoiced row is still unpaid.)
+  const payments = (data.payments || []).filter((p) => p.status !== 'voided');
+  const paid = payments
+    .filter((p) => p.status === 'received' && p.direction === 'received')
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const balance = total - paid;
+
+  // The open payment record drives the invoice number, due date and QR.
+  const openPayment = payments
+    .filter((p) => p.checkout_url && (p.status === 'pending' || p.status === 'invoiced'))
+    .slice(-1)[0]
+    || payments.filter((p) => p.status === 'pending' || p.status === 'invoiced').slice(-1)[0];
+
+  const invoiceNo = openPayment?.invoice_reference || `INV-${event.external_id || event.id}`;
+  // eventDate() takes an event-shaped object (it reads `.date`) and returns
+  // null on an unparseable value — hence the wrap and the guard.
+  const dueOn = openPayment?.due_date ? eventDate({ date: openPayment.due_date }) : null;
+  const dueDate = dueOn ? dueOn.toLocaleDateString() : null;
+  const issued = new Date().toLocaleDateString();
+
+  const itemRows = items.length
+    ? items.map((e) => `<tr>
+        <td>${esc(e.description || titleCase(String(e.category || '').replace(/_/g, ' ')))}</td>
+        <td class="inv-amt">${money(e.amount)}</td>
+      </tr>`).join('')
+    : `<tr><td class="empty" colspan="2">No billable line items recorded yet.</td></tr>`;
+
+  const paidRows = paid > 0
+    ? `<tr class="inv-paid"><td>Payments received</td><td class="inv-amt">&minus;${money(paid)}</td></tr>`
+    : '';
+
+  // Only show a QR when there's actually something payable — a QR pointing at
+  // a settled or non-existent checkout would just be a dead code on paper.
+  const qrBlock = (balance > 0 && openPayment?.checkout_url)
+    ? `<section class="inv-pay">
+        <img class="inv-qr" src="${esc(appUrl(`assets/qr.png?text=${encodeURIComponent(openPayment.checkout_url)}&size=420`))}" width="150" height="150" alt="Scan to pay">
+        <div class="inv-pay-copy">
+          <h2>Scan to Pay</h2>
+          <p>Scan the code${openPayment.checkout_provider ? ` to pay securely via ${esc(titleCase(openPayment.checkout_provider))}` : ''}, or visit:</p>
+          <p class="inv-pay-url">${esc(openPayment.checkout_url)}</p>
+        </div>
+      </section>`
+    : '';
+
+  return `<div class="invoice">
+    <header class="inv-head">
+      <div class="inv-from">
+        <h1 class="inv-venue">${esc(venueName)}</h1>
+        ${venueAddr.map((l) => `<div>${esc(l)}</div>`).join('')}
+        ${venueContact.map((l) => `<div>${esc(l)}</div>`).join('')}
+      </div>
+      <div class="inv-title-block">
+        <div class="inv-word">Invoice</div>
+        <div class="inv-no">${esc(invoiceNo)}</div>
+        <div class="inv-dates">Issued ${esc(issued)}</div>
+        ${dueDate ? `<div class="inv-dates inv-due">Due ${esc(dueDate)}</div>` : ''}
+      </div>
+    </header>
+
+    <section class="inv-parties">
+      <div>
+        <h2>Bill To</h2>
+        ${billTo.length ? billTo.map((l) => `<div>${esc(l)}</div>`).join('') : '<div class="empty">No client contact on file</div>'}
+      </div>
+      <div>
+        <h2>Event</h2>
+        <div><strong>${esc(event.title)}</strong></div>
+        <div>${esc(printDateRange(event))}</div>
+        ${event.room_name ? `<div>${esc(event.room_name)}</div>` : ''}
+      </div>
+    </section>
+
+    <table class="inv-items">
+      <thead><tr><th>Description</th><th class="inv-amt">Amount</th></tr></thead>
+      <tbody>${itemRows}</tbody>
+      <tfoot>
+        <tr class="inv-total"><td>Total</td><td class="inv-amt">${money(total)}</td></tr>
+        ${paidRows}
+        <tr class="inv-balance"><td>Balance Due</td><td class="inv-amt">${money(balance)}</td></tr>
+      </tfoot>
+    </table>
+
+    ${qrBlock}
+
+    <p class="inv-terms">Please include the invoice number with your payment. Questions about this invoice? Contact ${esc(event.booker_name || venueName)}${event.booker_email ? ` at ${esc(event.booker_email)}` : ''}.</p>
+  </div>`;
+}
+
+
 // Settlement Report — a formal, signable statement built from
 // GET /api/events/{id}/report (src/Events/Report.php). Unlike the other
 // printouts here (which read off the workspace's already-loaded event
@@ -1018,6 +1178,7 @@ function renderPrintBody(type, data) {
     case 'contract':     return renderContract(data);
     case 'qr-flyer':     return renderQrFlyer(data);
     case 'settlement':   return renderSettlementSection(data);
+    case 'invoice':      return renderInvoice(data);
     case 'lineup':       return renderLineupSection(data);
     case 'staffing':     return renderStaffingSection(data);
     case 'run-of-show':  return renderRunOfShowSection(data);
@@ -1057,7 +1218,7 @@ function openPrintWindow(type, data) {
     <button type="button" onclick="window.close()">Close</button>
   </div>
   <article class="sheet">
-    ${type === 'one-sheet' || type === 'contract' || type === 'qr-flyer' || type === 'settlement' ? '' : printHeader(data, title)}
+    ${['one-sheet', 'contract', 'qr-flyer', 'settlement', 'invoice'].includes(type) ? '' : printHeader(data, title)}
     ${body}
     ${printFooter(data)}
   </article>
