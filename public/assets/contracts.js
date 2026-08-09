@@ -809,7 +809,9 @@ class ContractEditor extends PanicElement {
         <label class="wide">Signer name <input name="name" value="${esc(c.counterparty_name || '')}" placeholder="Full name"></label>
         <label class="wide">Signer email <input type="email" name="email" required value="${esc(c.counterparty_email || '')}" placeholder="name@example.com"></label>
         <label class="wide">Company <span class="muted small">(optional)</span><input name="company" value="${esc(c.counterparty_org || '')}"></label>
+        <label class="wide">Cc <span class="muted small">(optional, comma-separated)</span><input name="cc" placeholder="agent@example.com, manager@example.com"></label>
         <p class="muted small">The signer receives an email with a secure link to review and sign electronically.</p>
+        <p class="muted small wide">⚠ Anyone you Cc receives that same signing link and can sign with it. The signature is still recorded under the signer's name and email, so only Cc people trusted to act for them.</p>
         <button>Send signing request</button>
       </form>`);
     $('[data-form="sign-send"]', dialog).addEventListener('submit', async (e) => {
@@ -820,7 +822,10 @@ class ContractEditor extends PanicElement {
       try {
         await api(`/contracts/${this.contractId}/send`, {
           method: 'POST',
-          body: JSON.stringify({ signers: [{ role: 'renter', name: fd.name, email: fd.email, company: fd.company }] }),
+          body: JSON.stringify({
+            signers: [{ role: 'renter', name: fd.name, email: fd.email, company: fd.company }],
+            cc: (fd.cc || '').split(',').map((a) => a.trim()).filter(Boolean),
+          }),
         });
         close();
         publish('toast.show', { message: 'Signing request sent.' });

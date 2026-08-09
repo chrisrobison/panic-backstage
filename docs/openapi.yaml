@@ -7215,6 +7215,24 @@ components:
             (role=renter).
           items:
             $ref: '#/components/schemas/ContractSignerInput'
+        cc:
+          nullable: true
+          description: >-
+            Visible Cc recipients on the signing email. Accepts an array of addresses or a single
+            comma/semicolon-separated string. Each address must be a valid email or the request
+            fails with 422. Recorded in the `contract_sent` audit metadata.
+
+
+            Security note: a Cc recipient receives the signer's `/sign.html?token=...` link
+            verbatim and can execute the contract with it — the resulting signature is still
+            attributed to the signer's name and email. Only Cc parties trusted to act for the
+            signer.
+          oneOf:
+            - type: array
+              items:
+                type: string
+                format: email
+            - type: string
     ContractVoidRequest:
       type: object
       properties:
@@ -21683,6 +21701,10 @@ paths:
         contract status to `sent`, and notifies venue admins. Requires an existing rendered version.
         Cannot be used on a `fully_executed`, `voided`, or `canceled` contract. Requires
         `manage_contracts`.
+
+
+        An optional `cc` list adds visible Cc recipients to the signing email — see the security
+        note on `ContractSendRequest.cc`, as a Cc recipient can sign with the link they receive.
       tags:
         - Contracts
       parameters:

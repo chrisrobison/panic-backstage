@@ -161,7 +161,11 @@ final class Mailer
         return is_file($globalFile) ? $globalFile : null;
     }
 
-    public function sendTemplate(string $to, string $subject, string $template, array $vars, array $inline = [], array $attachments = []): void
+    /**
+     * @param list<string> $cc Visible carbon-copy recipients. See send() — these
+     *                         receive the message verbatim, signing links included.
+     */
+    public function sendTemplate(string $to, string $subject, string $template, array $vars, array $inline = [], array $attachments = [], array $cc = []): void
     {
         $htmlPath = $this->resolveTemplate($template, 'html');
         $textPath = $this->resolveTemplate($template, 'txt');
@@ -176,7 +180,7 @@ final class Mailer
             $text = str_replace('{{' . $key . '}}', $value, $text);
         }
 
-        $this->send($to, $subject, $text, $html, $template, $inline, $attachments);
+        $this->send($to, $subject, $text, $html, $template, $inline, $attachments, null, null, [], $cc);
     }
 
     /**
@@ -213,6 +217,16 @@ final class Mailer
      * @param list<string> $references Bare Message-IDs (no angle brackets), oldest first,
      *                                for the References header — the full prior chain of
      *                                this conversation.
+     * @param list<string> $cc        Visible carbon-copy recipients. Emitted as a Cc:
+     *                                header *and* appended to the envelope recipient
+     *                                list — this path does not use sendmail -t, so a
+     *                                Cc: header on its own would be displayed to the
+     *                                primary recipient but never actually delivered.
+     *                                Unlike $this->bcc these are deliberately visible.
+     *                                Callers are responsible for validating addresses;
+     *                                note that a Cc recipient receives the message body
+     *                                verbatim, so anything single-use or secret in it
+     *                                (e.g. a contract signing token) is shared with them.
      * @return int|null The new outbox row id, or null when no DB was injected
      *                   or the outbox insert failed.
      */
@@ -227,17 +241,22 @@ final class Mailer
         ?string $messageId = null,
         ?string $inReplyTo = null,
         array $references = [],
+        array $cc = [],
     ): ?int {
         // Strip header injection attempts from anything that ends up in headers.
         $to      = $this->sanitizeHeaderValue($to);
         $subject = $this->sanitizeHeaderValue($subject);
+        $cc      = array_values(array_filter(
+            array_map(fn($a): string => trim($this->sanitizeHeaderValue((string) $a)), $cc),
+            static fn(string $a): bool => $a !== ''
+        ));
 
-        $message = $this->buildMessage($to, $subject, $textBody, $htmlBody, $inline, $attachments, $messageId, $inReplyTo, $references);
+        $message = $this->buildMessage($to, $subject, $textBody, $htmlBody, $inline, $attachments, $messageId, $inReplyTo, $references, $cc);
 
         $this->deliveryAccepted = false;
         $this->deliveryError = null;
         $this->writeToFile($to, $message);
-        $this->deliveryAccepted = $this->pipeToSendmail($to, $message);
+        $this->deliveryAccepted = $this->pipeToSendmail($to, $message, $cc);
         return $this->logToOutbox($to, $subject, $textBody, $htmlBody, $template, $inline);
     }
 
@@ -295,6 +314,7 @@ final class Mailer
         ?string $messageId = null,
         ?string $inReplyTo = null,
         array   $references = [],
+        array   $cc = [],
     ): string {
         $domain = substr(strrchr($this->fromAddress, '@') ?: '@localhost', 1);
         $msgId  = $messageId ?? sprintf('%s.%s@%s', date('YmdHis'), bin2hex(random_bytes(8)), $domain);
@@ -302,6 +322,13 @@ final class Mailer
         $baseHeaders = [
             "From: {$this->fromName} <{$this->fromAddress}>",
             "To: {$to}",
+        ];
+        // Cc is a visible header (unlike the MAIL_BCC envelope-only path in
+        // pipeToSendmail) — the primary recipient is meant to see who else got it.
+        if ($cc !== []) {
+            $baseHeaders[] = 'Cc: ' . implode(', ', $cc);
+        }
+        $baseHeaders = array_merge($baseHeaders, [
             "Reply-To: {$this->fromName} <{$this->fromAddress}>",
             "Subject: {$subject}",
             "Message-ID: <{$msgId}>",
@@ -309,7 +336,7 @@ final class Mailer
             'MIME-Version: 1.0',
             'Auto-Submitted: auto-generated',
             'X-Mailer: Backstage',
-        ];
+        ]);
 
         // Threading headers — lets the recipient's mail client group this
         // with the rest of the conversation, and (more importantly for us)
@@ -487,7 +514,8 @@ final class Mailer
 
     // ─── Delivery ──────────────────────────────────────────────────────────────
 
-    private function pipeToSendmail(string $to, string $message): bool
+    /** @param list<string> $cc Visible Cc recipients, already sanitized by send(). */
+    private function pipeToSendmail(string $to, string $message, array $cc = []): bool
     {
         if (!is_executable($this->sendmailPath)) {
             $this->deliveryError = 'sendmail binary not executable: ' . $this->sendmailPath;
@@ -503,6 +531,10 @@ final class Mailer
         // They are NOT added as a Bcc: header: this path does not use sendmail
         // -t, so a Bcc: header would be transmitted verbatim and become visible
         // to the primary recipient. As envelope args they receive a blind copy.
+        //
+        // $cc addresses must be listed here too, for the mirror-image reason:
+        // without -t sendmail never reads the Cc: header, so a Cc recipient that
+        // only appears in the header is shown to everyone but delivered to nobody.
         $cmd = array_merge(
             [
                 $this->sendmailPath,
@@ -511,6 +543,7 @@ final class Mailer
                 '--',
                 $to,
             ],
+            $cc,
             $this->bcc
         );
 

@@ -24,7 +24,7 @@ use function Panic\log_activity;
  *   DELETE /api/contracts/{id}/sections/{sid}      remove a section
  *
  * Digital-signature actions (all require manage access):
- *   POST   /api/contracts/{id}/send                send for signature (creates signers + emails)
+ *   POST   /api/contracts/{id}/send                send for signature (creates signers + emails; optional `cc`)
  *   POST   /api/contracts/{id}/resend              resend link to unsigned signers
  *   POST   /api/contracts/{id}/void                void the contract
  *   POST   /api/contracts/{id}/countersign         venue countersignature (admin only)
@@ -661,6 +661,28 @@ HTML;
         $b       = $request->body();
         $signers = $b['signers'] ?? null;
 
+        // Optional visible Cc on the signing email — accepts an array or a
+        // comma/semicolon-separated string. Note this shares the signer's
+        // single-use signing link with every Cc address: anyone holding that
+        // URL can execute the contract, and the signature is recorded against
+        // the signer's name/email. Only Cc people trusted to act for them.
+        $ccRaw = $b['cc'] ?? [];
+        if (is_string($ccRaw)) {
+            $ccRaw = preg_split('/[,;]/', $ccRaw) ?: [];
+        }
+        $cc = [];
+        foreach ((array) $ccRaw as $addr) {
+            $addr = trim((string) $addr);
+            if ($addr === '') {
+                continue;
+            }
+            if (!filter_var($addr, FILTER_VALIDATE_EMAIL)) {
+                return Response::json(['error' => "Invalid Cc email address: {$addr}"], 422);
+            }
+            $cc[] = $addr;
+        }
+        $cc = array_values(array_unique($cc));
+
         // Derive signers from counterparty if not explicitly provided.
         if (empty($signers)) {
             if (empty($contract['counterparty_email'])) {
@@ -753,7 +775,10 @@ HTML;
                         'signing_url'    => $signingUrl,
                         'expires_date'   => date('F j, Y', $expiresEpoch),
                         'venue_name'     => (string) (getenv('MAIL_FROM_NAME') ?: 'The Venue'),
-                    ]
+                    ],
+                    [],
+                    [],
+                    $cc
                 );
             } catch (\Throwable $e) {
                 error_log("Contracts::sendForSignature mail failed to {$email}: " . $e->getMessage());
@@ -761,7 +786,14 @@ HTML;
 
             ContractAuditLog::appendFromRequest(
                 $this->db, $contractId, 'contract_sent', $signerId,
-                ['email' => $email, 'role' => $signerData['role'] ?? 'renter']
+                array_filter([
+                    'email' => $email,
+                    'role'  => $signerData['role'] ?? 'renter',
+                    // Recorded because a Cc recipient can open the signing link
+                    // and execute as this signer — the audit trail should show
+                    // who else was given that ability.
+                    'cc'    => $cc !== [] ? $cc : null,
+                ], static fn($v): bool => $v !== null)
             );
         }
 

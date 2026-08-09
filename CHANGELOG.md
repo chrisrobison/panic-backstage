@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `contracts` — Optional Cc on the send-for-signature email
 - **Added** `payments` — Printable client invoice with a scannable payment QR
 - **Documentation** `deploy` — Add a cdr-owned PHP-FPM pool for the Backstage vhosts
 - **Fixed** `events` — Write our own codex config instead of copying the user's
