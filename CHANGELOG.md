@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** `deploy` — Add a cdr-owned PHP-FPM pool for the Backstage vhosts
 - **Fixed** `events` — Write our own codex config instead of copying the user's
 - **Fixed** `contracts` — Keep clause bodies editable after a deal-terms autosave
 - **Added** `calendar` — Push to Google Calendar inline on save, delete cancellations
