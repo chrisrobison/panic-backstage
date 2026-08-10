@@ -18,6 +18,19 @@ test('event workspace exposes a Promote action for the event campaign', async (p
   assert.ok(await page.exists(selector), 'Promote action links to the event campaign workspace');
 });
 
+test('event workspace opens an editable clone dialog without copying operational records', async (page) => {
+  if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
+  await page.openEvent();
+  if (!(await page.exists('[data-clone-event]'))) return page.skip('no create_events capability for this user');
+  await page.click('[data-clone-event]');
+  assert.ok(await page.until(`document.querySelector('[data-clone-event-form]')`), 'clone dialog opens');
+  assert.ok(await page.eval(`document.querySelector('[data-clone-event-form] [name="title"]').value.length > 0`), 'event name is pre-filled');
+  assert.ok(await page.eval(`document.querySelector('[data-clone-event-form] [name="date"]').value.length === 10`), 'a new date is editable and pre-filled');
+  assert.includes(await page.eval(`document.querySelector('[data-clone-event-form]').textContent`), 'Contracts, payments, ticket sales', 'dialog explains what is not copied');
+  await page.click('[data-cancel-clone]');
+  assert.ok(await page.until(`!document.querySelector('[data-clone-event-form]')`), 'clone dialog closes without creating anything');
+});
+
 test('event Promote action opens campaign workspace or create prompt', async (page) => {
   if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
   await page.openEvent();

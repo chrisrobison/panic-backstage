@@ -821,6 +821,10 @@ final class Kernel
             if ($child === 'series') {
                 return [Events\Series::class, ['eventId' => $eventId]];
             }
+            // Editable one-off copy: POST /events/{id}/clone
+            if ($child === 'clone') {
+                return [Events::class, ['cloneEventId' => $eventId]];
+            }
             return match ($child) {
                 'tasks'      => [Events\Tasks::class,    ['eventId' => $eventId, 'taskId'     => $childId]],
                 'blockers',

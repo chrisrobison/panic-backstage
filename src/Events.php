@@ -94,6 +94,9 @@ final class Events extends BaseEndpoint
 
     public function handle(Request $request): Response
     {
+        if ($this->params['cloneEventId'] ?? null) {
+            return $this->cloneEvent($request, (int) $this->params['cloneEventId']);
+        }
         if ($this->params['fromTemplateId'] ?? null) {
             return $this->fromTemplate($request, (int) $this->params['fromTemplateId']);
         }
@@ -513,6 +516,99 @@ final class Events extends BaseEndpoint
         $this->pushToSheet($id);
         $this->pushToCalendar($id);
         return $this->ok(['id' => $id]);
+    }
+
+    /**
+     * Create an editable one-off copy of an event.
+     *
+     * Only reusable event details are copied. The clone is always a private
+     * Hold and deliberately has no series link, contract, deposit, settlement,
+     * payment, ticket-sale, task, asset, staffing, or other execution records.
+     * The caller supplies the occurrence-specific date and may override the
+     * title/times before anything is inserted.
+     */
+    private function cloneEvent(Request $request, int $sourceId): Response
+    {
+        if ($request->method() !== 'POST') {
+            return Response::methodNotAllowed();
+        }
+        if ($denied = $this->requireGlobalCapability('create_events')) {
+            return $denied;
+        }
+        if ($denied = $this->requireEventCapability($sourceId, 'read_event')) {
+            return $denied;
+        }
+        $source = $this->db->one('SELECT * FROM events WHERE id = ?', [$sourceId]);
+        if (!$source) {
+            return $this->notFound('Source event not found');
+        }
+
+        $body = $request->body();
+        $date = trim((string) ($body['date'] ?? ''));
+        $title = trim((string) ($body['title'] ?? $source['title'] ?? ''));
+        if ($date === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            return Response::json(['error' => 'A valid clone date is required.'], 422);
+        }
+        if ($title === '') {
+            return Response::json(['error' => 'Event name is required.'], 422);
+        }
+
+        $endDate = self::nullableDate($body['end_date'] ?? null, $date);
+        if ($err = self::endDateBeforeStartError($endDate, $date)) {
+            return $err;
+        }
+        $loadIn = date_or_null($body['load_in_time'] ?? $source['load_in_time'] ?? null);
+        $doors  = date_or_null($body['doors_time'] ?? $source['doors_time'] ?? null);
+        $show   = date_or_null($body['show_time'] ?? $source['show_time'] ?? null);
+        $end    = date_or_null($body['end_time'] ?? $source['end_time'] ?? null);
+        if ($err = self::timeOrderError($loadIn, $doors, $show)) {
+            return $err;
+        }
+
+        $resourceId = self::nullableInt($body['resource_id'] ?? $source['resource_id'] ?? null);
+        if ($resourceId !== null) {
+            [$resourceId, $resourceError] = $this->resolveResourceId(['resource_id' => $resourceId], (int) $source['venue_id']);
+            if ($resourceError) return $resourceError;
+        }
+        if ($conflict = $this->checkRoomConflict(
+            (int) $source['venue_id'],
+            $date,
+            $doors ?: $show,
+            $end,
+            null,
+            $endDate,
+            $resourceId,
+            self::conflictBlockersFor('proposed')
+        )) {
+            return $conflict;
+        }
+
+        $id = $this->db->insert(
+            "INSERT INTO events
+                (venue_id, resource_id, title, slug, event_type, status,
+                 description_public, description_internal, av_requirements, catering_notes,
+                 date, end_date, doors_time, show_time, end_time, load_in_time, is_non_music,
+                 age_restriction, ticket_price, capacity, estimated_guests, public_visibility,
+                 public_subtitle, public_tags, owner_user_id,
+                 promoter_name, promoter_email, promoter_phone, client_org,
+                 booker_name, booker_email, booker_phone, ticket_system)
+             VALUES (?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (int) $source['venue_id'], $resourceId, $title, $this->uniqueSlug($title . '-' . $date), $source['event_type'],
+                $source['description_public'], $source['description_internal'], $source['av_requirements'], $source['catering_notes'],
+                $date, $endDate, $doors, $show, $end, $loadIn, (int) ($source['is_non_music'] ?? 0),
+                $source['age_restriction'], (float) ($source['ticket_price'] ?? 0), $source['capacity'] ?: null, $source['estimated_guests'] ?: null,
+                $source['public_subtitle'], $source['public_tags'], $source['owner_user_id'] ?: $this->userId(),
+                $source['promoter_name'], $source['promoter_email'], $source['promoter_phone'], $source['client_org'],
+                $source['booker_name'], $source['booker_email'], $source['booker_phone'], $source['ticket_system'],
+            ]
+        );
+        $this->assignEventCode($id);
+        log_activity($this->db, $id, $this->userId(), 'event cloned', ['source_event_id' => $sourceId]);
+        log_activity($this->db, $sourceId, $this->userId(), 'event cloned to new hold', ['cloned_event_id' => $id]);
+        $this->pushToSheet($id);
+        $this->pushToCalendar($id);
+        return $this->ok(['id' => $id, 'source_event_id' => $sourceId]);
     }
 
     /** Statuses that lock the core event record once reached — see guardArchivedEdit(). */

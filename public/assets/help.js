@@ -556,7 +556,7 @@ const HELP_CONTENT = {
       <li><strong>Event Title</strong> (required) — the public-facing name, e.g. "Friday Night Live with The Slackers".</li>
       <li><strong>Date</strong> (required) — show date. Defaults to today.</li>
       <li><strong>End Date</strong> — optional, only for events spanning more than one calendar day. See <a href="#help-multi-day-events">Multi-day events</a>.</li>
-      <li><strong>Recurring Event</strong> — optional. Check this to spin off a whole series (weekly, every other week, monthly by weekday or by date) instead of a single show — see <a href="#help-recurring-events">Recurring events</a>.</li>
+      <li><strong>Recurring Event</strong> — optional. Check this to spin off a whole series (weekly, every other week, monthly by weekday or by date) instead of a single show — see <a href="#help-recurring-events">Recurring events</a>. For a few related dates with different times, open the first event and use <strong>Clone</strong> instead.</li>
       <li><strong>Venue</strong> (required) — which venue the show is at. Only shown once your account has more than one venue to choose from; a single-venue install skips straight to Room.</li>
       <li><strong>Room</strong> — which space within that venue is being used (e.g. Ground Floor 21+, Upstairs, Both Rooms). Optional — leave it blank if the venue has no separate rooms defined. See <a href="#help-admin-venue">Venue &amp; rooms</a>.</li>
       <li><strong>Event Type</strong> (required) — Live Music, Karaoke, Open Mic, Promoter Night, DJ Night, Comedy, Private Event, or Special Event.</li>

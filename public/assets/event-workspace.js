@@ -688,6 +688,7 @@ class EventWorkspace extends PanicElement {
         ${isPrivate ? '' : `<a class="button secondary" href="${esc(appUrl(data.links.public_page))}" target="_blank" rel="noreferrer">Public Page</a>`}
         ${isPrivate ? '' : `<button class="secondary" data-qr-toggle title="Show a QR code linking to this event's public page"><i class="fa-solid fa-qrcode" aria-hidden="true"></i> QR Code</button>`}
         ${can(data, 'edit_event') ? `<a class="button secondary" href="#new-event-${esc(String(event.id))}" title="Re-run this event through the guided setup wizard, pre-filled with its current details"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Wizard</a>` : ''}
+        ${(can(data, 'read_event') && getAppCapabilities()?.create_events) ? `<button type="button" class="secondary" data-clone-event title="Create an editable Hold using this event's reusable details"><i class="fa-solid fa-clone" aria-hidden="true"></i> Clone</button>` : ''}
         ${can(data, 'edit_event') ? `<pb-event-history-undo></pb-event-history-undo>` : ''}
         ${sectionsDropdown}
         ${can(data, 'read_event') ? `<details class="print-menu">
@@ -797,6 +798,7 @@ class EventWorkspace extends PanicElement {
     const historyUndoEl = $('pb-event-history-undo', this);
     if (historyUndoEl) historyUndoEl.eventId = event.id;
     $('[data-qr-toggle]', this)?.addEventListener('click', () => this._openQrModal(data));
+    $('[data-clone-event]', this)?.addEventListener('click', () => this._openCloneModal(event));
     $('[data-pos-set]', this)?.addEventListener('click', () => this.setPosEvent(event.id));
     $$('[data-print]', this).forEach((button) => button.addEventListener('click', async () => {
       button.closest('details.print-menu')?.removeAttribute('open');
@@ -889,6 +891,46 @@ class EventWorkspace extends PanicElement {
       } finally {
         btn.disabled = false;
         btn.innerHTML = originalHtml;
+      }
+    });
+  }
+
+  _openCloneModal(event) {
+    const nextDate = isoDate(addDays(new Date(`${event.date}T12:00:00`), 1));
+    const isNonMusic = Number(event.is_non_music) === 1;
+    const { dialog, close } = openModal({
+      title: `Clone ${event.title}`,
+      bodyHtml: `<form class="grid-form padded" data-clone-event-form>
+        <p class="wide info-note">Creates a new editable <strong>Hold</strong> with the event details and contacts copied. Contracts, payments, ticket sales, assets, tasks, staffing, and execution records are not copied.</p>
+        <label class="wide">Event name<input name="title" required value="${esc(event.title)}"></label>
+        <label>Date<input type="date" name="date" required value="${esc(nextDate)}"></label>
+        <label>End date <span class="field-hint">Optional</span><input type="date" name="end_date" min="${esc(nextDate)}"></label>
+        <label>Load-in<input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"></label>
+        ${isNonMusic ? '' : `<label>Doors<input type="time" name="doors_time" value="${esc(event.doors_time || '')}"></label>`}
+        <label>${isNonMusic ? 'Start' : 'Show'}<input type="time" name="show_time" value="${esc(event.show_time || '')}"></label>
+        <label>End<input type="time" name="end_time" value="${esc(event.end_time || '')}"></label>
+        <div class="wide inline-actions"><button type="submit"><i class="fa-solid fa-clone" aria-hidden="true"></i> Create Editable Hold</button><button type="button" class="secondary" data-cancel-clone>Cancel</button></div>
+      </form>`,
+      focus: '[name="date"]',
+    });
+    const form = $('[data-clone-event-form]', dialog);
+    const dateInput = $('[name="date"]', form);
+    const endDateInput = $('[name="end_date"]', form);
+    dateInput?.addEventListener('change', () => { if (endDateInput) endDateInput.min = dateInput.value; });
+    $('[data-cancel-clone]', dialog)?.addEventListener('click', close);
+    form?.addEventListener('submit', async (submitEvent) => {
+      submitEvent.preventDefault();
+      const submit = $('button[type="submit"]', form);
+      if (submit) { submit.disabled = true; submit.textContent = 'Cloning…'; }
+      try {
+        const body = Object.fromEntries(new FormData(form).entries());
+        const result = await api(`/events/${event.id}/clone`, { method: 'POST', body: JSON.stringify(body) });
+        close();
+        publish('toast.show', { message: 'Editable Hold created from this event.' });
+        location.hash = `#event-${result.id}-details`;
+      } catch (error) {
+        publish('toast.show', { message: error.message, tone: 'error' });
+        if (submit) { submit.disabled = false; submit.innerHTML = '<i class="fa-solid fa-clone" aria-hidden="true"></i> Create Editable Hold'; }
       }
     });
   }

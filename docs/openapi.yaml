@@ -11074,6 +11074,39 @@ components:
         type: integer
       description: Tenant id.
 paths:
+  /api/events/{eventId}/clone:
+    post:
+      operationId: events_clone
+      summary: Clone an event into an editable Hold
+      description: Copies reusable event details and contacts while resetting status to Hold and omitting contracts, payments, sales, assets, tasks, staffing, series membership, and execution records.
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date]
+              properties:
+                title: { type: string }
+                date: { type: string, format: date }
+                end_date: { type: string, format: date, nullable: true }
+                load_in_time: { type: string, nullable: true }
+                doors_time: { type: string, nullable: true }
+                show_time: { type: string, nullable: true }
+                end_time: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Clone created
+        '403':
+          description: Missing read-event or create-event permission
+        '422':
+          description: Invalid date, times, or room conflict
+
   /api/auth/magic-link:
     post:
       operationId: auth_request_magic_link
