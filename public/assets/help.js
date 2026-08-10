@@ -12,6 +12,7 @@ export const HELP_SECTIONS = [
     icon: 'fa-solid fa-flag-checkered',
     items: [
       { slug: 'welcome',      title: 'Welcome' },
+      { slug: 'august-2026-update', title: 'August 2026 operations update' },
       { slug: 'sign-in',      title: 'Signing in' },
       { slug: 'account',      title: 'Account &amp; passkeys' },
       { slug: 'roles',        title: 'Roles &amp; permissions' },
@@ -73,6 +74,7 @@ export const HELP_SECTIONS = [
     icon: 'fa-solid fa-calendar-check',
     items: [
       { slug: 'event-create',    title: 'Creating an event' },
+      { slug: 'event-clone',     title: 'Cloning an event' },
       { slug: 'event-wizard',    title: 'Event creation wizard' },
       { slug: 'private-events',  title: 'Private events &amp; rentals' },
       { slug: 'overview',        title: 'Overview &amp; readiness' },
@@ -209,6 +211,46 @@ const HELP_CONTENT = {
       <figcaption>The dashboard — the left sidebar navigates the app; the cards summarize the next two weeks of shows.</figcaption>
     </figure>
     <p>If this is your first visit, start with <a href="#help-sign-in">Signing in</a>, then <a href="#help-navigation">Main navigation</a>, then <a href="#help-event-create">Creating an event</a>. Section "?" icons inside each event open the relevant help page in a new tab so you do not lose your place.</p>
+  `,
+
+  'august-2026-update': `
+    <h2>August 2026 operations update</h2>
+    <p>This update closes the outstanding booking-operations issues and changes several day-to-day workflows. The details also live in their normal help topics; this page is the staff briefing for what changed.</p>
+
+    <h3>Creating and owning events</h3>
+    <ul>
+      <li><strong>Quick Create no longer invents Doors or Show times.</strong> Enter the real times. The form now captures the contract contact and booker, and pre-fills the signed-in staff member as Booker.</li>
+      <li><strong>Contract Name / Point of Contact</strong> is the person or organization the agreement is written to; <strong>Booker</strong> is the person who arranged the booking. They are separate roles even when one person happens to fill both.</li>
+      <li><strong>Owner is read-only.</strong> Backstage assigns ownership from the creator/onboarding workflow. A forged form or API request cannot silently reassign it.</li>
+      <li><strong>Clone creates an editable new Hold.</strong> Reusable facts and contacts copy; contracts, payments, ticket sales, assets, tasks, staffing, execution records, ticket links, and series membership do not. See <a href="#help-event-clone">Cloning an event</a>.</li>
+    </ul>
+
+    <h3>Intake, rooms, and the calendar</h3>
+    <ul>
+      <li><strong>Contract Details is required for Intake Complete and later.</strong> Use it for the agreed deal summary and instructions the contract writer needs.</li>
+      <li><strong>Load In / Access through Load Out / Clear is the room-occupancy window.</strong> Both are required at Intake Complete. Calendar chips start with Load In, Google Calendar uses the same window, and conflict checks include the existing 30-minute buffer.</li>
+      <li>A tentative Hold may overlap another tentative Hold, but it cannot be placed over an Intake Complete/confirmed-or-later booking in the same room. Invalid time orderings are rejected.</li>
+      <li><strong>Ground Floor (21+)</strong> is the canonical downstairs room at Mabuhay Gardens and has a 250-person capacity. It is managed as a room under Admin &rarr; Venue, not as a duplicate venue.</li>
+      <li>A fatal calendar load failure now appears as a large centered alert with <strong>Try again</strong>; background scroll failures leave the visible calendar in place and use a sticky error notification.</li>
+    </ul>
+
+    <h3>Contracts and closeout</h3>
+    <ul>
+      <li>When the venue pays for security or sound, generated contracts say the service is provided at the Venue's cost and keep the internal hourly rate private. Artist, Promoter, Client, and Shared responsibility still prints the applicable rate.</li>
+      <li>Square and Stripe payments now contribute their exact provider-reported processing fee and tax to protected Closeout cost lines. Backstage never estimates a percentage; a later provider correction updates the same lines without duplicates.</li>
+    </ul>
+
+    <h3>Free events and recurring series</h3>
+    <ul>
+      <li>A $0 tier is a real self-service registration: checkout completes without Stripe/Square, inventory is reserved, and the attendee receives the normal QR ticket.</li>
+      <li>Registration captures the attendee in Contacts. The marketing checkbox starts unchecked; only an affirmative opt-in enables marketing email. Registration itself is not consent.</li>
+      <li><strong>Ticketing and Settlement answer different questions.</strong> Ticketing's sold count is tickets actually issued by Backstage. A manual Settlement total may also include cash-door or outside-platform sales, so the two counts can legitimately differ.</li>
+      <li>New recurring series copy in-house ticket tiers to every occurrence, reset sold counts, and shift date-based sales windows. A series can also have one stable public link that resolves to today's or the next visible occurrence.</li>
+      <li>The current Zinggflower link is <a href="./event.html?series=zinggflower" target="_blank" rel="noreferrer"><code>event.html?series=zinggflower</code></a>.</li>
+    </ul>
+
+    <h3>Hold expiration begins September 13, 2026</h3>
+    <p>The nightly Hold-expiry job remains inactive until <strong>September 13, 2026</strong>. On its first active run it gives every existing Hold a fresh 14-day baseline and cancels nothing. After that baseline, Backstage warns the relevant staff at day 12 and automatically cancels a Hold at day 14 if it has not advanced. Moving the event out of Hold stops that clock; if it is intentionally returned to Hold later, that new status change starts a fresh 14-day period.</p>
   `,
 
   'sign-in': `
@@ -518,7 +560,7 @@ const HELP_CONTENT = {
 
     <h3>The two ways to create an event</h3>
     <p>Click the <strong>+ New event</strong> button in the top bar to open the <a href="#help-event-wizard">Event Creation Wizard</a> — a 7-step guided flow that walks you from title and date through deal structure, financial terms, production requirements, and promotion, then creates both the event <em>and</em> a pre-populated contract draft in a single click. This is the recommended path for any show that will have a booking agreement.</p>
-    <p>If you need to spin up a simple show quickly and deal with the contract separately, use the <strong>Quick Create instead</strong> button in the wizard's sidebar. It opens a compact modal: pick a template (or choose "Blank event"), fill in the date and event times (including Load In/Load Out when known), and click <em>Create event</em>. The new event opens immediately in its workspace.</p>
+    <p>If you need to spin up a simple show quickly and deal with the contract separately, use the <strong>Quick Create instead</strong> button in the wizard's sidebar. It opens a compact modal: pick a template (or choose "Blank event"), fill in the date, the real event times (including Load In/Load Out when known), and the contract contact. Doors and Show deliberately start blank so a plausible-looking default cannot become an accidental booking fact. Booker name/email are pre-filled from your signed-in account. Click <em>Create event</em> and the new event opens immediately in its workspace.</p>
     <p class="help-tip">📋 <strong>Private event / venue rental?</strong> See <a href="#help-private-events">Private events &amp; rentals</a> — the workflow is shorter and the wizard handles the rental deal type automatically.</p>
 
     <h3>Approvals and status</h3>
@@ -527,7 +569,7 @@ const HELP_CONTENT = {
     <h3>Working through the event workspace</h3>
     <p>After creation, the event workspace opens with a set of tabs. Work through them roughly in this order:</p>
     <ol>
-      <li><a href="#help-details">Event details</a> — set venue, type, status, owner, ticket price, capacity, and age restriction.</li>
+      <li><a href="#help-details">Event details</a> — set venue, type, status, ticket price, capacity, and age restriction; review the automatically assigned read-only owner.</li>
       <li><a href="#help-lineup">Lineup</a> — add the bands or performers, capture payout terms, and confirm them.</li>
       <li><a href="#help-contracts">Contracts</a> — capture the deal as structured terms, generate the agreement, and walk it through approval to signed. (The wizard pre-creates a contract draft for you.)</li>
       <li><a href="#help-ticketing">Ticketing &amp; door</a> — link an external ticket URL, or sell in-house: set up tiers, comps, and door-scanner links.</li>
@@ -542,6 +584,24 @@ const HELP_CONTENT = {
       <li><a href="#help-settlement">Settlement</a> — after the show, reconcile the numbers and close the books.</li>
     </ol>
     <p>You don't have to do these strictly in order, and not every show needs every tab. A couple of supporting tools run alongside: the <a href="#help-print">Print</a> menu produces night-of packets (run sheet, staffing, guest list, or a combined master packet), and the <a href="#help-activity">Activity log</a> at the bottom of the event records who changed what, so hand-offs between bookers and night-of staff stay clean.</p>
+  `,
+
+  'event-clone': `
+    <h2>Cloning an event</h2>
+    <p>Use <strong>Clone</strong> in an event workspace when a similar show needs a separate date and editable times, but should not become a recurring series. The dialog starts with the original title, the next date, and the original Load In, Doors/Start, Show, End, and Load Out times. Review every value before creating the copy.</p>
+    <h3>What the clone copies</h3>
+    <ul>
+      <li>Reusable event facts such as venue, room, type, age restriction, capacity, public description, and operational notes.</li>
+      <li>The Contract Name / Point of Contact, Booker, and Contract Details.</li>
+      <li>Editable schedule values shown in the dialog.</li>
+    </ul>
+    <h3>What the clone deliberately leaves behind</h3>
+    <ul>
+      <li>Contracts and contract versions, payments, settlement/closeout records, ticket orders, issued tickets, and external ticket URLs.</li>
+      <li>Assets, tasks, staffing, invites, execution records, and recurring-series membership.</li>
+    </ul>
+    <p>The new event always starts as an <strong>unpublished Hold</strong> with its own owner and activity history. This prevents a copied show from looking contractually signed, paid, announced, or sold when none of those things happened for the new date.</p>
+    <div class="tip"><strong>Clone vs. recurrence:</strong> Clone is best for a few related dates that need individual editing. Use <a href="#help-recurring-events">Recurring events</a> for a repeating weekly/monthly schedule; recurring creation also copies in-house ticket tiers to every occurrence.</div>
   `,
 
   'event-wizard': `
@@ -741,6 +801,7 @@ const HELP_CONTENT = {
       <li><strong>Doors / Show / End</strong> — the public-facing show times. Setting one will auto-fill reasonable defaults for the others if they're empty.</li>
       <li><strong>Age restriction</strong> — shown on the public page and in the run sheet (e.g. 21+, All Ages).</li>
       <li><strong>Paid deposit</strong> — the deposit amount confirmed received. Required to advance past Intake Complete.</li>
+      <li><strong>Contract Details</strong> — the staff-facing deal summary and special instructions needed to prepare the agreement. A nonblank value is required for Intake Complete and every later booking status.</li>
     </ul>
 
     <h3>Workshop / Comedy / Non-Music events</h3>
@@ -1175,6 +1236,11 @@ const HELP_CONTENT = {
       <li>The buyer picks quantities and checks out. Backstage holds that inventory for <strong>15 minutes</strong> and sends them to the processor's hosted checkout page — card details never touch Backstage.</li>
       <li>When the processor confirms payment, Backstage issues the tickets, emails each one as a QR code, and updates the sold count. If payment fails or times out, the hold is released and the inventory comes back.</li>
     </ol>
+
+    <h3>Free registration ($0 tiers)</h3>
+    <p>A tier priced at $0 uses the same inventory, order, email, QR ticket, and door-scanning workflow as a paid tier, but checkout completes immediately without opening Stripe or Square. Use an <em>on sale</em> tier such as <strong>Free Registration</strong> when attendance is free but you still need a headcount and attendee list.</p>
+    <p>The registration form asks for the attendee's contact details and includes a separate marketing-consent checkbox. It is <strong>unchecked by default</strong>. Completing registration creates or updates the attendee in Contacts, but only an affirmative checkbox enables marketing email; registering for an event is not itself consent.</p>
+    <div class="note"><strong>Recurring free events:</strong> When a new recurring series is created, Backstage copies its in-house tiers to every occurrence, resets sold counts to zero, and shifts date-based sales windows with each occurrence. A stable series URL such as <code>event.html?series=zinggflower</code> automatically opens today's or the next visible occurrence.</div>
 
     <h3>Comp tickets</h3>
     <p>Use the <em>Comp tickets</em> section to issue free tickets (guests, press, trade) without a payment. Enter the recipient's name, email, tier, and quantity, and Backstage emails them a real scannable QR just like a paid ticket. Comps still count against the tier's inventory, so they can't push you into an oversell.</p>
@@ -1722,8 +1788,8 @@ const HELP_CONTENT = {
     <h3>Public show statuses</h3>
     <ol>
       <li><strong>Empty</strong> — the date slot exists but nothing is confirmed for it yet.</li>
-      <li><strong>Hold</strong> — a show idea or inquiry is live; the band/promoter deal is not yet confirmed. The date is informally held. Requires title, date, venue, door/end times, and a producer/artist contact.</li>
-      <li><strong>Intake Complete</strong> — deal structure is agreed and a contract is being built. Age restriction, ticket price, capacity, and a deposit amount must be set. When this status is set, venue admins and management are automatically emailed with next steps for the contract.</li>
+      <li><strong>Hold</strong> — a show idea or inquiry is live; the deal is not yet confirmed. The date is informally held. Requires title, date, venue, real Doors/Start and End times, Contract Name / Point of Contact, and Booker details.</li>
+      <li><strong>Intake Complete</strong> — deal structure is agreed and a contract is being built. Load In, Load Out, Contract Details, age restriction, ticket price, capacity, and a deposit amount must be set. When this status is set, venue admins and management are automatically emailed with next steps for the contract.</li>
       <li><strong>Booked</strong> — a signed contract (or approved contract in the contract builder) plus a confirmed deposit. The show is locked.</li>
       <li><strong>Needs Assets</strong> — booked but blocked on flyer, artist photos, bio, or social content. An automatic email is sent to the producer/artist when this status is set.</li>
       <li><strong>Assets Approved</strong> — public description, ticket link, and an approved poster/flyer are all in. Andres and Colleen are notified to add the show to the website and newsletter; Molly gets a dedicated email with the full promo packet for the linktree and Instagram.</li>
@@ -1749,6 +1815,9 @@ const HELP_CONTENT = {
 
     <h3>Notes</h3>
     <p>Status transitions are validated by the server — some forward moves require certain fields to be filled (e.g. you cannot advance to Booked without a contract). The pipeline and calendar display the current status for every event.</p>
+
+    <h3>Automatic Hold expiration (starting September 13, 2026)</h3>
+    <p>The nightly expiration sweep is scheduled to activate on <strong>September 13, 2026</strong>. Its first active run gives every existing Hold a new 14-day baseline and exits without warning or cancelling anything. On later runs, a Hold that has not advanced receives a warning at day 12 and is automatically moved to Cancelled at day 14. Moving out of Hold stops the clock; returning the event to Hold later records a new Hold start and begins a fresh 14-day period. This policy prevents forgotten Holds from blocking the calendar indefinitely without surprising staff on activation day.</p>
 
     <div class="tip"><strong>Checking a whole book of shows at once:</strong> the per-event workspace only shows you one event's gaps at a time. For a single view across every upcoming event — who's missing a booker/producer contact, a deposit, show times, an age restriction, and more — see the Intake Readiness Report at <code>docs/event-intake-status.html</code>. It reads live from the same API this app uses (you need to already be logged in to Backstage) and every field shown is directly editable in place.</div>
   `,
