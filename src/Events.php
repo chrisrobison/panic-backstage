@@ -83,9 +83,9 @@ final class Events extends BaseEndpoint
         'owner_user_id'        => 'Owner',
         'venue_id'             => 'Venue',
         'resource_id'          => 'Room',
-        'promoter_name'        => 'Producer / Artist',
-        'promoter_email'       => 'Producer Email',
-        'promoter_phone'       => 'Producer Phone',
+        'promoter_name'        => 'Contract Name / Point of Contact',
+        'promoter_email'       => 'Contract Contact Email',
+        'promoter_phone'       => 'Contract Contact Phone',
         'client_org'           => 'Client Organization',
         'booker_name'          => 'Booker',
         'booker_email'         => 'Booker Email',
@@ -1145,9 +1145,9 @@ final class Events extends BaseEndpoint
                 'venue_id'       => 'Venue / location',
                 $startField      => $startLabel,
                 'end_time'       => 'End time',
-                'promoter_name'  => 'Producer/Artist name',
-                'promoter_email' => 'Producer/Artist email',
-                'promoter_phone' => 'Producer/Artist phone',
+                'promoter_name'  => 'Contract name / point of contact',
+                'promoter_email' => 'Contract contact email',
+                'promoter_phone' => 'Contract contact phone',
                 'booker_name'    => 'Booker name',
                 'booker_email'   => 'Booker email',
                 'booker_phone'   => 'Booker phone',
@@ -1468,7 +1468,7 @@ final class Events extends BaseEndpoint
                     'event_admin_url' => htmlspecialchars($link,                                                ENT_QUOTES, 'UTF-8'),
                 ];
                 $externalRecipients = array_filter([
-                    $event['promoter_email'] ? ['name' => $event['promoter_name'] ?? 'Producer/Artist', 'email' => $event['promoter_email']] : null,
+                    $event['promoter_email'] ? ['name' => $event['promoter_name'] ?? 'Contract contact', 'email' => $event['promoter_email']] : null,
                     $event['booker_email']   ? ['name' => $event['booker_name']   ?? 'Booker',          'email' => $event['booker_email']]   : null,
                 ]);
                 foreach ($externalRecipients as $recipient) {

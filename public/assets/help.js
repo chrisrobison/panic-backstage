@@ -323,7 +323,7 @@ const HELP_CONTENT = {
       <li><strong>Event ID</strong> — the internal numeric ID (exact match) and the human-readable code shown on the event, e.g. <code>EVT-214</code> (partial match).</li>
       <li><strong>Title</strong></li>
       <li><strong>Public description</strong> and <strong>Internal notes</strong></li>
-      <li><strong>Producer/Artist</strong> and <strong>Booker</strong> — both name and email</li>
+      <li><strong>Contract Name / Point of Contact</strong> and <strong>Booker</strong> — both name and email</li>
       <li><strong>Organization</strong> (private-event client/company name)</li>
     </ul>
     <p>Type at least 2 characters — anything shorter would match nearly every event and isn't a useful result yet. Results are capped at 50 and sorted by date (most recent first), same as the plain Events list.</p>
@@ -581,8 +581,8 @@ const HELP_CONTENT = {
     </table>
     <p>A matching <strong>Contract Template</strong> is auto-suggested based on the deal type. You can override it with any template in your library. Smart clause selection runs automatically after the event is created.</p>
 
-    <h3>Step 3 — Artist / Promoter</h3>
-    <p><em>Skipped for Free / Internal events.</em> Enter the booking counterparty — the artist, band, promoter, or client:</p>
+    <h3>Step 3 — Contract Name / Point of Contact</h3>
+    <p><em>Skipped for Free / Internal events.</em> Enter who the contract should be written to and the primary contact for the event:</p>
     <ul>
       <li><strong>Contact Name</strong> — start typing to search your Contacts list. Selecting a match auto-fills the organization and email. You can also type a name not in the system.</li>
       <li><strong>Band / Organization</strong> — label, agency, promoter company, or group name.</li>
@@ -758,8 +758,8 @@ const HELP_CONTENT = {
       <li><strong>Walk-through happened</strong> — checkbox to confirm the pre-show walk-through is done.</li>
     </ul>
 
-    <h3>Producer / Artist section (public shows)</h3>
-    <p>The producer or primary artist contact — required to advance to <strong>Hold</strong> and above. This is the person Backstage sends the <em>Promo Materials Needed</em> email to when the event reaches Needs Assets.</p>
+    <h3>Contract Name / Point of Contact section (public shows)</h3>
+    <p>The person the contract is written to and the primary event contact — required to advance to <strong>Hold</strong> and above. This is the person Backstage sends the <em>Promo Materials Needed</em> email to when the event reaches Needs Assets.</p>
     <ul>
       <li><strong>Booker</strong> — the talent buyer or agent. Also required for Hold and above on public shows.</li>
     </ul>
@@ -768,7 +768,7 @@ const HELP_CONTENT = {
     <p>When Type is set to <strong>Private Event</strong>, the form changes completely. Public-only fields (ticket price, ticket URL, ticket system, public description, the Booker section) are hidden and replaced with rental-specific fields. See <a href="#help-private-events">Private events &amp; rentals</a> for the full workflow.</p>
     <ul>
       <li><strong>Estimated guests</strong> — expected headcount. Distinct from the hard-cap Capacity.</li>
-      <li><strong>Client / Primary Contact</strong> — the person booking the rental (replaces Producer / Artist).</li>
+      <li><strong>Client / Primary Contact</strong> — the person booking the rental (replaces Contract Name / Point of Contact).</li>
       <li><strong>Organization</strong> — company, family name, band, or group renting the space.</li>
       <li><strong>AV / Tech requirements</strong> — what the client needs for sound, lighting, projection, etc.</li>
       <li><strong>Catering / Bar notes</strong> — bar service, vendor access, alcohol requirements.</li>
@@ -1543,7 +1543,7 @@ const HELP_CONTENT = {
       <li><strong>Answer questions</strong> — about the event currently open, or events in general ("what's booked next month?", "who's the promoter on this show?", "any events still missing a contract?"). Answers are grounded in a real lookup against your data, not guessed — if it doesn't have access to something, it says so rather than making an answer up.</li>
       <li><strong>Propose a change</strong> — two specific kinds, each ending in a proposal card in the chat with <strong>Apply</strong> / <strong>Discard</strong> buttons, never an immediate change:
         <ul>
-          <li><em>Bulk booker/promoter info updates</em> — e.g. "update all Zingflower events with this new booker email," across up to 25 matching events at once. Only contact fields can change this way (promoter name/email/phone, client org, booker name/email/phone) — nothing else.</li>
+          <li><em>Bulk booker/contact info updates</em> — e.g. "update all Zingflower events with this new booker email," across up to 25 matching events at once. Only contact fields can change this way (contract contact name/email/phone, client org, booker name/email/phone) — nothing else.</li>
           <li><em>Recurring series</em> — e.g. "turn this into a weekly series for the next 8 weeks." Subject to the exact same rules as building one by hand in <a href="#help-recurring-events">Recurring events</a>: max 52 occurrences, none more than 90 days out, and every date is checked for room conflicts before anything is proposed.</li>
         </ul>
       </li>

@@ -208,13 +208,13 @@ const WIZARD_FLOW = {
       ],
     },
 
-    // ── Step 3: Artist / Promoter ────────────────────────────────────────────
+    // ── Step 3: Contract name / point of contact ─────────────────────────────
     // Skipped for free / internal events that have no counterparty.
     {
       id: 'counterparty',
-      title: 'Artist / Promoter',
+      title: 'Contract Name / Point of Contact',
       icon: 'fa-solid fa-user-group',
-      description: 'Who is performing or booking this show? Type a name or search your contacts.',
+      description: 'Who should the contract be written to, and who is the primary contact for this event?',
       condition: { field: 'deal_type', notIn: ['free_event', 'internal', ''] },
       fields: [
         {

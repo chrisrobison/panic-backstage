@@ -142,7 +142,7 @@ async function openEventQuickCreate({ date = null } = {}) {
          prefilled with the signed-in user, which is who it almost always is. -->
     <fieldset class="wide quick-create-contacts">
       <legend>Contacts <span class="field-hint muted small">Optional now — required at Intake Complete</span></legend>
-      <label>Producer / Artist <input name="promoter_name" placeholder="Who is performing"></label>
+      <label>Contract Name / Point of Contact <input name="promoter_name" placeholder="Performer or contract signer"></label>
       <label>Their email <input type="email" name="promoter_email" placeholder="name@example.com"></label>
       <label>Their phone <input name="promoter_phone" placeholder="Optional"></label>
       <label>Booker <input name="booker_name" value="${esc(sessionUser.name || '')}"></label>

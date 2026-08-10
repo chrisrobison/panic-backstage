@@ -26,7 +26,7 @@
 | P1-5 | Archived auto-email (settlement) | ✅ Done | `auto-complete-events.php` extended |
 | P1-6 | Intake Complete required-field enforcement | ✅ Done | Full field list in `validateStatusTransition` |
 | P1-7 | Color-code calendar by floor | ✅ Done | Already implemented via `roomTone()` |
-| P1-8 | Rename "Producer" → "Producer/Artist" | ✅ Done | `event-workspace.js` updated |
+| P1-8 | Clarify contract contact vs. booker | ✅ Done | `event-workspace.js` updated |
 | P2-1 | Staffing ratio helper | ⏳ Blocked | **OQ-6: What are the ratios?** |
 | P2-2 | Hold auto-expiration cron | ⏳ Blocked | Needs OQ-1 answered |
 | P2-3 | Settled automation | ⏳ Blocked | **OQ-4: Auto or manual?** |
@@ -61,7 +61,7 @@
 | P1-5 | Archived auto-email to settlement team |
 | P1-6 | Intake Complete required-field enforcement |
 | P1-7 | Color-code calendar by floor |
-| P1-8 | Rename "Producer" → "Producer/Artist" everywhere |
+| P1-8 | Clarify "Contract Name / Point of Contact" everywhere |
 
 ### P2 — Nice to Have (July 15+)
 
@@ -113,7 +113,7 @@ Any status → Canceled at any time
 - Location/Venue
 - Doors time
 - End time
-- Producer/Artist name, email, phone
+- Contract name / point of contact, email, phone
 - Booker name, email, phone
 
 **At Intake Complete (confirmed) — all above plus:**
@@ -150,7 +150,7 @@ Any status → Canceled at any time
 - ✅ Color-coded by floor (already implemented via `roomTone()`)
 
 ### Forms
-- ✅ "Producer / Promoter" renamed to "Producer / Artist"
+- ✅ Contract contact is clearly distinguished from the booker
 - ✅ Load In/Tech time input added to event form
 - 🔲 Venue cost note (Ground Floor: ~$2,000/day · Upstairs: ~$3,000/day) — P2
 
@@ -215,7 +215,7 @@ Send to Colleen/Tom — need answers before implementing remaining items.
 ### Phase 1 — Core Workflow (June 21–July 1) ✅ COMPLETE
 - Field enforcement at Hold and Intake Complete
 - Load-In time field
-- Rename Producer/Artist
+- Clarify contract name / point of contact
 - Expand notification emails
 
 ### Phase 2 — Automation (July 1–15) 🔄 IN PROGRESS

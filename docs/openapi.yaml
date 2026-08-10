@@ -1413,7 +1413,7 @@ components:
         promoter_name:
           type: string
           nullable: true
-          description: Producer/Artist (public events) or client (private events).
+          description: Contract name / point of contact (public events) or client (private events).
         promoter_email:
           type: string
           nullable: true

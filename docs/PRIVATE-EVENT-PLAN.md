@@ -72,7 +72,7 @@ Hold (proposed) → Intake Complete (confirmed) → Booked → Archived (complet
 
 **Hidden:** ticket price, ticket URL, ticket system, public visibility, public description, Booker section
 
-**Renamed:** "Producer / Artist" → "Client / Primary Contact"
+**Private-event label:** "Contract Name / Point of Contact" → "Client / Primary Contact"
 
 **Added:** Organization, Estimated Guests, AV / Tech Requirements, Catering / Bar Notes
 

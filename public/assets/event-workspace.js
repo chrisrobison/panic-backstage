@@ -327,10 +327,10 @@ class EventOverview extends EventBusCard {
         </div>
       </div>`;
     };
-    rows.push(contactBlock(isPrivate ? 'Client / Primary Contact' : 'Promoter / Artist', event.promoter_name, event.promoter_email, event.promoter_phone));
+    rows.push(contactBlock(isPrivate ? 'Client / Primary Contact' : 'Contract Name / Point of Contact', event.promoter_name, event.promoter_email, event.promoter_phone));
     if (!isPrivate) rows.push(contactBlock('Booker', event.booker_name, event.booker_email, event.booker_phone));
     const body = rows.filter(Boolean).join('') || emptyState('No contacts on file yet.');
-    return ovCard({ icon: 'address-book', title: 'Promoter / Contacts', help: 'details', body, footerLabel: 'Edit Details', footerTab: 'details' });
+    return ovCard({ icon: 'address-book', title: 'Event Contacts', help: 'details', body, footerLabel: 'Edit Details', footerTab: 'details' });
   }
 
   _lineupCard(data) {
@@ -1049,7 +1049,7 @@ class EventDetailsForm extends HTMLElement {
         <label>Estimated guests <input type="number" name="estimated_guests" value="${esc(event.estimated_guests || '')}" placeholder="Expected headcount"${disabled}></label>
         <label>Capacity (max) <input type="number" name="capacity" value="${esc(event.capacity || '')}"${disabled}></label>
         <label class="check-label"><input type="checkbox" name="walkthrough_done" value="1" ${Number(event.walkthrough_done) ? 'checked' : ''}${disabled}> Walk-through happened</label>
-        <p class="form-section-head wide">Producer / Artist <span class="form-section-note">Required for Hold and above</span></p>
+        <p class="form-section-head wide">Contract Name / Point of Contact <span class="form-section-note">Who the contract is written to and the primary event contact; required for Hold and above</span></p>
         <label>Name <input name="promoter_name" value="${esc(event.promoter_name || '')}" placeholder="Full name"${disabled}></label>
         <label>Email <input type="email" name="promoter_email" value="${esc(event.promoter_email || '')}" placeholder="email@example.com"${disabled}></label>
         <label>Phone <input type="tel" name="promoter_phone" value="${esc(event.promoter_phone || '')}" placeholder="415-555-0100"${disabled}></label>

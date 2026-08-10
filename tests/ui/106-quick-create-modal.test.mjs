@@ -48,6 +48,11 @@ test('quick-create no longer pre-fills invented Doors/Show times', async (page) 
 
 test('quick-create collects contacts and pre-fills the booker', async (page) => {
   assert.ok(await page.exists('[data-form="quick-create"] .quick-create-contacts'), 'the contacts fieldset renders');
+  assert.includes(
+    await page.eval(`document.querySelector('[data-form="quick-create"] .quick-create-contacts').textContent`),
+    'Contract Name / Point of Contact',
+    'the contract contact is clearly distinguished from the booker',
+  );
 
   // Booker is whoever is placing the hold — prefilled from the session so
   // staff stop typing their own name into the artist field.
@@ -59,9 +64,9 @@ test('quick-create collects contacts and pre-fills the booker', async (page) => 
   const bookerEmail = await page.eval(`${field('booker_email')}.value`);
   assert.includes(bookerEmail, '@', 'Booker email is pre-filled too');
 
-  // Artist/producer contact is collected but must not block a fast hold.
-  assert.ok(await page.exists(`[data-form="quick-create"] [name="promoter_name"]`), 'producer/artist name is collected');
-  assert.notOk(await page.eval(`${field('promoter_name')}.required`), 'artist contact stays optional at Hold');
+  // Contract contact is collected but must not block a fast hold.
+  assert.ok(await page.exists(`[data-form="quick-create"] [name="promoter_name"]`), 'contract contact name is collected');
+  assert.notOk(await page.eval(`${field('promoter_name')}.required`), 'contract contact stays optional at Hold');
   assert.notOk(await page.eval(`${field('booker_name')}.required`), 'booker stays optional at Hold');
 
   await page.eval(closeModal);
