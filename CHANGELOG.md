@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `ui` — Preserve bus subscriptions across startup race
 - **Fixed** `ci` — Keep fresh-schema migrations and unit tests hermetic
 - **Added** `events` — Schedule safe hold-expiry activation
 - **Added** `ticketing` — Add free-event audience registration

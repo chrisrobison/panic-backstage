@@ -108,8 +108,14 @@ function setAppCapabilities(capabilities) { _appCapabilities = capabilities || {
 let _panReady = false;
 const _panPending = [];
 document.addEventListener('pan:sys.ready', () => {
-  _panReady = true;
-  _panPending.splice(0).forEach((fn) => fn());
+  // pan-bus-lite dispatches pan:sys.ready synchronously, then assigns
+  // window.pan.bus later in the same connectedCallback. Defer the flush one
+  // microtask so subscribers are not silently discarded when core.js wins
+  // that module-loading race.
+  queueMicrotask(() => {
+    _panReady = true;
+    _panPending.splice(0).forEach((fn) => fn());
+  });
 }, { once: true });
 // Fallback: if the CDN never responds, stop buffering after 3s so we degrade to
 // silent no-ops instead of an unbounded pending-call queue.
