@@ -11,9 +11,10 @@ declare(strict_types=1);
  * with a warning email sent 48 hours ahead of time so whoever's holding the
  * date has a chance to advance it or reach out. The reporter explicitly
  * asked to delay turning this on for ~2 months after filing (to give staff
- * time to adjust), so it's gated behind HOLD_EXPIRY_ENABLED in .env — the
- * script (and the cron entry that runs it nightly) can ship now, inert,
- * and get switched on later with a one-line env change.
+ * time to adjust), so it can be scheduled with HOLD_EXPIRY_ACTIVATES_ON or
+ * enabled immediately with HOLD_EXPIRY_ENABLED. On its first active run it
+ * automatically baselines every existing Hold and exits; subsequent nightly
+ * runs use those safe, fresh 14-day clocks.
  *
  * Selects events where:
  *   - status = 'proposed' (Hold)
@@ -29,19 +30,13 @@ declare(strict_types=1);
  *
  * Designed to be invoked nightly from cron via scripts/cron-expire-holds.sh.
  *
- * IMPORTANT — before ever setting HOLD_EXPIRY_ENABLED=1: run
- *   php scripts/expire-holds.php --reset-baseline
- * once, by hand. As of 2026-07 there are ~70 open Holds in production, most
- * weeks old — without a baseline reset, the very first enabled run would
- * mass-cancel the large majority of them in one pass.
- *
  * Options:
  *   --dry-run         Report what would happen; write nothing, send nothing.
  *   --force            Bypass the HOLD_EXPIRY_ENABLED gate (for manual
  *                       testing only — cron never passes this).
- *   --reset-baseline   One-time: give every currently-open Hold a fresh
- *                       "started now" marker and exit (ignores the enabled
- *                       gate; run by hand, not from cron — see above).
+ *   --reset-baseline   Manual maintenance escape hatch: give every currently-
+ *                       open Hold a fresh "started now" marker and exit. Normal
+ *                       activation performs this automatically exactly once.
  *   --event-id=N       Restrict the run to a single event id — for safely
  *                       testing/debugging one Hold without touching the
  *                       rest of the pipeline board.
@@ -82,36 +77,60 @@ try {
     exit(1);
 }
 
-// ── One-time baseline reset ─────────────────────────────────────────────────
-// Run this ONCE, by hand, the day this feature is switched on — NOT from
-// cron. It gives every currently-open Hold a fresh "started now" marker (the
-// same event_activity_log signal holdStartedAt() below reads), so pre-
-// existing Holds get a full 14-day runway instead of being instantly
-// canceled by their real (possibly months-old) creation date. Skipping this
-// before flipping HOLD_EXPIRY_ENABLED on would mass-cancel every Hold
-// already older than 2 weeks in one run — as of 2026-07, that's the large
-// majority of the ~70 open Holds in production. See issue #17.
+// ── Baseline reset / activation gate ────────────────────────────────────────
 if ($resetBaseline) {
-    $openHolds = $db->all("SELECT id FROM events WHERE status = 'proposed'");
-    foreach ($openHolds as $row) {
-        if ($dryRun) continue;
-        log_activity($db, (int) $row['id'], null, 'status changed', [
-            'changes' => [['field' => 'Status', 'from' => 'proposed', 'to' => 'proposed']],
-            'note'    => 'hold-expiry baseline reset (issue #17 activation)',
-        ]);
-    }
+    $count = resetHoldBaselines($db, $dryRun);
     printf(
         "[%s] expire-holds: reset baseline for %d open hold(s)%s\n",
         $ts(),
-        count($openHolds),
+        $count,
         $dryRun ? ' (dry run — nothing written)' : ''
     );
     exit(0);
 }
 
-if (!$force && !filter_var(getenv('HOLD_EXPIRY_ENABLED') ?: '', FILTER_VALIDATE_BOOLEAN)) {
-    printf("[%s] expire-holds: HOLD_EXPIRY_ENABLED is not set — feature is off, nothing to do.\n", $ts());
-    exit(0);
+$enabled = filter_var(getenv('HOLD_EXPIRY_ENABLED') ?: '', FILTER_VALIDATE_BOOLEAN);
+$activationDate = trim((string) (getenv('HOLD_EXPIRY_ACTIVATES_ON') ?: ''));
+$scheduledActivation = false;
+
+if (!$force && !$enabled) {
+    if ($activationDate === '') {
+        printf("[%s] expire-holds: no activation date or enable flag — feature is off, nothing to do.\n", $ts());
+        exit(0);
+    }
+    $parsedActivation = \DateTimeImmutable::createFromFormat('!Y-m-d', $activationDate);
+    if ($parsedActivation === false || $parsedActivation->format('Y-m-d') !== $activationDate) {
+        fwrite(STDERR, "[expire-holds] HOLD_EXPIRY_ACTIVATES_ON must be YYYY-MM-DD.\n");
+        exit(1);
+    }
+    if (date('Y-m-d') < $activationDate) {
+        printf("[%s] expire-holds: scheduled for %s — feature is not active yet.\n", $ts(), $activationDate);
+        exit(0);
+    }
+    $scheduledActivation = true;
+}
+
+// The first enabled/scheduled run never expires anything. It writes one
+// fresh "Hold started" marker for every existing Hold, records completion in
+// the singleton app_settings row, and exits. This turns the former mandatory
+// human checklist into an idempotent deployment invariant.
+if (!$force) {
+    $db->run('INSERT IGNORE INTO app_settings (id) VALUES (1)');
+    $state = $db->one('SELECT hold_expiry_activated_at FROM app_settings WHERE id = 1');
+    if (empty($state['hold_expiry_activated_at'])) {
+        $count = resetHoldBaselines($db, $dryRun);
+        if (!$dryRun) {
+            $db->run('UPDATE app_settings SET hold_expiry_activated_at = NOW() WHERE id = 1');
+        }
+        printf(
+            "[%s] expire-holds: %s activation baseline for %d open hold(s)%s; expiry begins on the next nightly run.\n",
+            $ts(),
+            $scheduledActivation ? 'scheduled' : 'immediate',
+            $count,
+            $dryRun ? ' (dry run — nothing written)' : ''
+        );
+        exit(0);
+    }
 }
 
 const WARNING_DAYS = 12; // send the 48h warning at day 12
@@ -235,3 +254,18 @@ printf(
     $dryRun ? ' (dry run)' : ''
 );
 exit(0);
+
+/** Give every current Hold a fresh start marker; return how many were found. */
+function resetHoldBaselines(Database $db, bool $dryRun): int
+{
+    $openHolds = $db->all("SELECT id FROM events WHERE status = 'proposed'");
+    if (!$dryRun) {
+        foreach ($openHolds as $row) {
+            log_activity($db, (int) $row['id'], null, 'status changed', [
+                'changes' => [['field' => 'Status', 'from' => 'proposed', 'to' => 'proposed']],
+                'note'    => 'hold-expiry activation baseline (issue #17)',
+            ]);
+        }
+    }
+    return count($openHolds);
+}

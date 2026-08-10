@@ -357,17 +357,15 @@ Effort: **L**.
 
 ### E1. #17 — Holds expire after two weeks
 
-**Built and shipped** in `df06b9c`, deliberately inert behind
-`HOLD_EXPIRY_ENABLED`, per the reporter's own "implement it in two months"
-request (filed 2026-07-13 → due **~2026-09-13**).
+**Built and shipped** in `df06b9c`, with automatic safe activation added in
+the issue-closing follow-up, per the reporter's own "implement it in two
+months" request (filed 2026-07-13 → due **~2026-09-13**).
 
-**Action, so it doesn't get lost:**
-1. Run `php scripts/expire-holds.php --reset-baseline` **once**, by hand.
-2. Set `HOLD_EXPIRY_ENABLED=1` in `.env`.
-
-Step 1 is mandatory — without it the first enabled run mass-cancels the ~70
-open Holds that are already older than the threshold. No code changes
-needed.
+**Activation:** scheduled for 2026-09-13 with
+`HOLD_EXPIRY_ACTIVATES_ON`. The first active nightly run automatically gives
+every open Hold a fresh 14-day baseline, persists the one-time activation in
+`app_settings`, and exits; no human checklist or mass-cancellation risk
+remains. `HOLD_EXPIRY_ENABLED=1` is still available for immediate activation.
 
 ---
 
@@ -419,7 +417,7 @@ Ordered by value-per-risk, with dependencies respected.
 
 **Calendared**
 
-13. **~2026-09-13:** enable hold expiry (#17) — baseline reset, then flag.
+13. **2026-09-13:** hold expiry (#17) self-activates and baselines automatically.
 
 ---
 

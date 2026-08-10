@@ -70,6 +70,7 @@ CREATE TABLE `app_settings` (
   `id` tinyint(1) NOT NULL DEFAULT 1,
   `brand_name` varchar(190) DEFAULT NULL,
   `logo_url` varchar(500) DEFAULT NULL,
+  `hold_expiry_activated_at` datetime DEFAULT NULL,
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   CONSTRAINT `app_settings_singleton` CHECK (`id` = 1)

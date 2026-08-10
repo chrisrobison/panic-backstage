@@ -5,10 +5,9 @@
 #
 #   20 4 * * * /home/cdr/domains/panicbooking.com/www/backstage/scripts/cron-expire-holds.sh
 #
-# The underlying script is a no-op until HOLD_EXPIRY_ENABLED is set in .env
-# (see expire-holds.php and issue #17 — the reporter asked for a ~2 month
-# runway after filing before this goes live), so it's safe to wire into cron
-# now: it'll just log "feature is off" every night until it's switched on.
+# The underlying script is a no-op until HOLD_EXPIRY_ACTIVATES_ON arrives or
+# HOLD_EXPIRY_ENABLED is set in .env. First activation safely baselines every
+# existing Hold before any warning/expiry sweep can run.
 #
 # Behavior:
 #   - Uses flock(1) so an overrun never overlaps. If a previous run is

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Schedule safe hold-expiry activation
 - **Added** `ticketing` — Add free-event audience registration
 - **Fixed** `contracts` — Hide venue-covered service rates (#24)
 - **Added** `payments` — Reconcile processor fees and taxes (#27)
