@@ -717,7 +717,7 @@ final class Events extends BaseEndpoint
                 }
                 $this->db->run("UPDATE events SET {$key} = ? WHERE id = ?", [$coerced, $id]);
                 $labels  = self::EVENT_FIELD_LABELS;
-                $label   = $labels[$key] ?? $key;
+                $label   = $labels[$key];
                 $oldStr  = (string) ($oldRow[$key] ?? '');
                 $newStr  = (string) ($coerced ?? '');
                 log_activity($this->db, $id, $this->userId(), 'event updated', [
