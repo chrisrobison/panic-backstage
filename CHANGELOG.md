@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `events` — Make event ownership read-only (#32)
 - **Added** `events` — Block rooms from load-in through load-out (#22, #29, #33)
 - **Added** `events` — Clone editable holds (#34)
 - **Fixed** `venues` — Correct the Mabuhay Ground Floor name and 250-person capacity, including over-capacity event records (#36)

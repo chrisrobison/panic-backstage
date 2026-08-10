@@ -1749,12 +1749,6 @@ components:
           type: boolean
           default: false
           description: Forced false for private_event.
-        owner_user_id:
-          type: integer
-          nullable: true
-          description: >-
-            Defaults to the caller, or to the configured private-event handler when
-            event_type=private_event.
         promoter_name:
           type: string
           nullable: true
@@ -12606,7 +12600,8 @@ paths:
         Requires the `create_events` global capability. `title`, `date`, `venue_id`, and
         `event_type` are required (422 if missing). Booker fields default to the authenticated user
         when omitted. Private events (`event_type=private_event`) are forced non-public and
-        auto-assigned to the configured private-event handler when no `owner_user_id` is given. If
+        assigned automatically (the caller for ordinary events, or the configured private-event
+        handler for private events); callers cannot select or later edit `owner_user_id`. If
         `status` is set to a booking-confirmed status
         (confirmed/booked/needs_assets/assets_approved/ready_to_announce/published/advanced/completed/settled), a
         409 room-conflict check runs against the venue/date/time window. A sequential `EVT-N`

@@ -735,7 +735,7 @@ const HELP_CONTENT = {
       <li><strong>Room</strong> — which space within that venue, if any are defined (see <a href="#help-admin-venue">Venue &amp; rooms</a>). Drives the calendar's room colour-coding and room-conflict checks.</li>
       <li><strong>Type</strong> — live music, karaoke, open mic, promoter night, DJ night, comedy, private event, or special event. Changing to or from <em>private event</em> changes the entire form layout.</li>
       <li><strong>Status</strong> — see <a href="#help-statuses">Event status reference</a>. Private events show a filtered dropdown.</li>
-      <li><strong>Owner</strong> — the staff member responsible. Owners get implicit access to the event.</li>
+      <li><strong>Owner</strong> — shown read-only in the workspace summary. Backstage assigns it automatically when the event is created or onboarded; bookers cannot reassign it from Event Details.</li>
       <li><strong>Load In / Access</strong> — when the event first needs access to the room. This starts the room-occupancy window and is the time shown on calendar chips.</li>
       <li><strong>Load Out / Clear</strong> — when people, gear, and breakdown are completely out of the room. This ends the room-occupancy window.</li>
       <li><strong>Doors / Show / End</strong> — the public-facing show times. Setting one will auto-fill reasonable defaults for the others if they're empty.</li>
@@ -1358,7 +1358,7 @@ const HELP_CONTENT = {
     <h3>Roles</h3>
     <p>A user's global role determines what they can do across the whole app (admins see every event; others only see what they own or collaborate on). Per-event collaborator roles are managed from each event's <a href="#help-invites">Invites</a> panel. See <a href="#help-roles">Roles &amp; permissions</a> for the full breakdown.</p>
     <h3>Deleting a user</h3>
-    <p>You cannot delete yourself. You cannot delete a user who currently owns events — reassign their events first (via each event's <em>Owner</em> field). Deleting a user removes their <code>event_collaborators</code> rows; their authored activity-log entries remain but show as orphaned.</p>
+    <p>You cannot delete yourself. You also cannot delete a user who still owns events; event ownership is system-assigned and intentionally not editable by bookers. Transfer those records through an administrator-controlled maintenance workflow first. Deleting a user removes their <code>event_collaborators</code> rows; their authored activity-log entries remain but show as orphaned.</p>
   `,
 
   contacts: `

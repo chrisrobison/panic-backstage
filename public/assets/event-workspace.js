@@ -1,7 +1,7 @@
 // ── Event workspace shell ────────────────────────────────────────────────────
 // The event workspace (tabs, print menu, publish toggle) plus the read-only
 // summary/readiness/next-action bus cards and the autosaving details form.
-import { setTokens, esc, titleCase, statuses, appUrl, apiUrl, assetUrl, getAppUser, getAppCapabilities, getToken, publish, subscribe, api, formData, broadcastEventData, refreshSection, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, openModal, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, apiUrl, assetUrl, getAppUser, getAppCapabilities, getToken, publish, subscribe, api, formData, broadcastEventData, refreshSection, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, openModal, $, $$ } from './core.js';
 import { openPrintWindow } from './print.js';
 import './paint-splat.js';
 import './event-vendors.js';
@@ -1046,7 +1046,6 @@ class EventDetailsForm extends HTMLElement {
           ${roomSelectField(data.resources, event.venue_id, event.resource_id, disabled)}
           <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
           <label>Status ${statusSelect}</label>
-          <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
           <label class="check-label wide"><input type="checkbox" name="is_non_music" value="1" ${Number(event.is_non_music) ? 'checked' : ''}${disabled}> Workshop / Comedy / Non-Music event <span class="form-section-note">Hides Doors and renames Show to Start</span></label>
           <label>Load In / Access <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>
           ${isNonMusic ? '' : `<label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>`}
@@ -1082,7 +1081,6 @@ class EventDetailsForm extends HTMLElement {
         ${roomSelectField(data.resources, event.venue_id, event.resource_id, disabled)}
         <label>Type ${select('event_type', ['live_music','karaoke','open_mic','promoter_night','dj_night','comedy','private_event','special_event'], event.event_type).replace('<select ', `<select${disabled} `)}</label>
         <label>Status ${statusSelect}</label>
-        <label>Owner ${ownerSelect(data.users, event.owner_user_id).replace('<select ', `<select${disabled} `)}</label>
         <label class="check-label wide"><input type="checkbox" name="is_non_music" value="1" ${Number(event.is_non_music) ? 'checked' : ''}${disabled}> Workshop / Comedy / Non-Music event <span class="form-section-note">Hides Doors and renames Show to Start</span></label>
         <label>Load In / Access <input type="time" name="load_in_time" value="${esc(event.load_in_time || '')}"${disabled}></label>
         ${isNonMusic ? '' : `<label>Doors <input type="time" name="doors_time" value="${esc(event.doors_time || '')}"${disabled}></label>`}
@@ -1125,7 +1123,7 @@ class EventDetailsForm extends HTMLElement {
     // Fields mirrored in the workspace summary (pb-event-summary). When one of
     // these changes we re-broadcast fresh event data on the bus so the summary
     // facts update live; other fields skip the extra round-trip.
-    const summaryFields = new Set(['title', 'date', 'load_in_time', 'doors_time', 'show_time', 'load_out_time', 'status', 'owner_user_id', 'public_visibility', 'is_non_music']);
+    const summaryFields = new Set(['title', 'date', 'load_in_time', 'doors_time', 'show_time', 'load_out_time', 'status', 'public_visibility', 'is_non_music']);
     const save = async (changedName) => {
       const body = formData(form);
       // Private events are never publicly visible — the hidden input sends 0,

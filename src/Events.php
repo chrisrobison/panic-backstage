@@ -483,7 +483,8 @@ final class Events extends BaseEndpoint
 
         // Private events are never publicly visible and auto-assign to Colleen.
         $publicVisibility = $isPrivate ? 0 : (boolish($body['public_visibility'] ?? false) ? 1 : 0);
-        $ownerId = ($body['owner_user_id'] ?? null) ?: ($isPrivate ? $this->getPrivateEventHandlerId() : $this->userId());
+        // Ownership is automatic and never caller-selectable (issue #32).
+        $ownerId = $isPrivate ? $this->getPrivateEventHandlerId() : $this->userId();
 
         [$resourceId, $resourceError] = $this->resolveResourceId($body, (int) $body['venue_id']);
         if ($resourceError) {
@@ -745,12 +746,14 @@ final class Events extends BaseEndpoint
         $updateDate        = $body['date'] ?? $old['date'];
         $updateWalkthrough = boolish($body['walkthrough_done'] ?? $old['walkthrough_done']) ? 1 : 0;
         $updateIsNonMusic  = boolish($body['is_non_music'] ?? $old['is_non_music'] ?? false) ? 1 : 0;
-        // owner_user_id follows the same array_key_exists convention as
-        // resource_id below: omit the key to leave it alone, send '' or null
-        // to explicitly clear it.
-        $updateOwnerUserId = array_key_exists('owner_user_id', $body)
-            ? self::nullableInt($body['owner_user_id'])
-            : self::nullableInt($old['owner_user_id'] ?? null);
+        // Ownership is assigned by the creation/onboarding workflow and is
+        // read-only afterward. Reject an actual reassignment even if a caller
+        // crafts a PATCH now that the UI selector is gone (issue #32).
+        $updateOwnerUserId = self::nullableInt($old['owner_user_id'] ?? null);
+        if (array_key_exists('owner_user_id', $body)
+            && self::nullableInt($body['owner_user_id']) !== $updateOwnerUserId) {
+            return Response::json(['error' => 'Event ownership is assigned automatically and cannot be edited.'], 422);
+        }
         // Validate status transition when the status is being changed
         if (isset($body['status']) && $body['status'] !== ($old['status'] ?? '')) {
             $merged = array_merge($old, array_filter((array) $body, fn ($v) => $v !== null && $v !== ''));
