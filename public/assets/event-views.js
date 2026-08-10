@@ -1463,8 +1463,17 @@ class PublicEventPage extends PanicElement {
     // Current links use ?id=<event id>; ?slug=<slug> is kept working for
     // links minted before this page switched off slugs (which changed
     // whenever an event's title/date was edited, breaking shared links).
-    const idOrSlug = params.get('id') || params.get('slug');
+    let idOrSlug = params.get('id') || params.get('slug');
+    const seriesSlug = params.get('series');
     try {
+      // A series URL never changes. Resolve it on each visit so this same
+      // address rolls forward to today's/next public occurrence.
+      let stablePublicPath = null;
+      if (seriesSlug) {
+        const resolved = await api(`/public/series/${encodeURIComponent(seriesSlug)}`);
+        idOrSlug = resolved.event_id;
+        stablePublicPath = resolved.series?.public_page || `event.html?series=${encodeURIComponent(seriesSlug)}`;
+      }
       const data = await api(`/public/events/${encodeURIComponent(idOrSlug || '')}`);
       const event = data.event;
       document.title = event.title ? `${event.title} - Panic Backstage` : 'Panic Backstage Event';
@@ -1472,7 +1481,7 @@ class PublicEventPage extends PanicElement {
       // ?order=&checkout= params from a just-completed purchase. Keyed by id
       // (not slug) so a shared/bookmarked link never goes stale if the event
       // is later renamed or rescheduled.
-      const publicUrl = appUrl(`event.html?id=${encodeURIComponent(event.id)}`);
+      const publicUrl = appUrl(stablePublicPath || `event.html?id=${encodeURIComponent(event.id)}`);
       const priceLabel = publicTicketPriceLabel(event, data.ticket_types);
       const lineup = data.lineup || [];
       const tags = String(event.public_tags || '').split(',').map((t) => t.trim()).filter(Boolean);

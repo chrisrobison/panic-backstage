@@ -307,6 +307,11 @@ final class Kernel
             return [PublicEvents::class, ['idOrSlug' => $segments[2] ?? null]];
         }
 
+        // Stable recurring-event page: resolves the next visible occurrence.
+        if ($segments[0] === 'public' && ($segments[1] ?? '') === 'series') {
+            return [PublicSeries::class, ['slug' => $segments[2] ?? null]];
+        }
+
         // Public ticket purchase (unauthenticated):
         //   GET  /api/public/tickets/{eventId}                    -> list on-sale tiers
         //   POST /api/public/tickets/{eventId}/checkout           -> create checkout session
@@ -864,6 +869,7 @@ final class Kernel
         return in_array($class, [
             AuthEndpoint::class,
             PublicEvents::class,
+            PublicSeries::class,
             Feed::class,                // public ICS/RSS syndication of public_visibility events
             Invites::class,
             Me::class,                  // returns null user gracefully when unauthenticated

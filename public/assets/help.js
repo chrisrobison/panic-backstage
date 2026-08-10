@@ -819,7 +819,7 @@ const HELP_CONTENT = {
 
   'recurring-events': `
     <h2>Recurring events</h2>
-    <p>A recurring series is <strong>not</strong> a single event that magically shows up on multiple dates — every occurrence is created as its own fully independent event, with its own contract, staffing, ticketing, guest list, and status. Occurrences are linked only so the app can show you the rest of the series and let you jump between them. Editing, cancelling, or rebooking one occurrence never touches any of the others.</p>
+    <p>A recurring series is <strong>not</strong> a single event that magically shows up on multiple dates — every occurrence is created as its own fully independent event, with its own contract, staffing, ticketing, guest list, and status. In-house ticket tiers are copied when the series is created (with zero tickets sold and date-based sales windows shifted to the occurrence). Occurrences are linked only so the app can show you the rest of the series and let you jump between them. Editing, cancelling, or rebooking one occurrence never touches any of the others.</p>
 
     <h3>Starting a series</h3>
     <p>There are two ways to spin one up:</p>
@@ -842,6 +842,7 @@ const HELP_CONTENT = {
 
     <h3>Managing an existing series</h3>
     <p>Open any occurrence's <a href="#help-scheduling">Scheduling</a> tab — the Recurrence panel lists every sibling in the series with its date and status, and links to jump straight to any of them. If one occurrence needs to drop out of the series (it was cancelled, moved to a different venue, whatever), use <strong>Remove this event from the series</strong> on that occurrence — it becomes a fully standalone event again and the rest of the series is unaffected.</p>
+    <p class="help-tip">💡 The panel includes one <strong>Reusable public link</strong> for the whole series. Put that URL on the venue website once; it automatically opens today's or the next public occurrence as dates pass.</p>
     <p class="help-tip">💡 There's no bulk edit across a series (no "change this and all future occurrences"). Each occurrence is a completely normal event once created — update its time, venue, staffing, or anything else the same way you would for any other show.</p>
     <p class="help-tip">💡 Venue admins can also ask the <a href="#help-ai-assistant">AI Assistant</a> to set one up conversationally (e.g. "turn this into a weekly series for the next 8 weeks") — it runs through the exact same 52-occurrence/90-day/conflict checks as doing it by hand here, and proposes the series for you to review before anything is created.</p>
   `,

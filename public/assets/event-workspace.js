@@ -1234,10 +1234,12 @@ class EventRecurrencePanel extends PanicElement {
     if (!this._series && !this._canEdit) { this.innerHTML = ''; return; }
 
     if (this._series) {
+      const publicUrl = this._series.public_page ? appUrl(this._series.public_page) : '';
       this.innerHTML = `<section class="panel">
         <div class="section-head padded"><h2>Recurrence ${helpLink('recurring-events', 'Recurrence')}</h2></div>
         <div class="padded">
           <p>Part of a series — <strong>${esc(this._series.description || 'Recurring')}</strong> (${this._siblings.length} events).</p>
+          ${publicUrl ? `<p><strong>Reusable public link</strong><br><a href="${esc(publicUrl)}" target="_blank" rel="noopener">${esc(publicUrl)}</a> <button type="button" class="secondary compact" data-copy-series-link>Copy link</button></p>` : ''}
           <ul class="recurrence-siblings">
             ${this._siblings.map((sibling) => {
               const isThis = Number(sibling.id) === Number(this._eventId);
@@ -1249,6 +1251,14 @@ class EventRecurrencePanel extends PanicElement {
         </div>
       </section>`;
       $('[data-remove-series]', this)?.addEventListener('click', () => this.removeFromSeries());
+      $('[data-copy-series-link]', this)?.addEventListener('click', async (event) => {
+        try {
+          await navigator.clipboard.writeText(publicUrl);
+          event.currentTarget.textContent = 'Copied';
+        } catch (_) {
+          publish('toast.show', { message: 'Could not copy the link.', tone: 'error' });
+        }
+      });
       return;
     }
 

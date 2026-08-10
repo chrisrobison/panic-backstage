@@ -2333,6 +2333,17 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   padding: 10px 12px;
 }
 .tkp-buyer input:focus { outline: none; border-color: var(--pev-cyan); }
+.tkp-buyer .tkp-consent {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 9px;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.tkp-buyer .tkp-consent input { margin: 2px 0 0; padding: 0; accent-color: var(--pev-cyan); }
 /* Private discount code entry. Intentionally understated — most buyers have
    no code, and the box shouldn't read as "you're missing a deal". */
 .tkp-discount { margin: 0 0 4px; }

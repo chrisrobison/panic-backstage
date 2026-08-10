@@ -56,6 +56,12 @@ function event_public_path(array $event): string
     return 'event.html?id=' . rawurlencode((string) $event['id']);
 }
 
+/** Stable public page for a recurring series; it resolves the next occurrence. */
+function series_public_path(array $series): string
+{
+    return 'event.html?series=' . rawurlencode((string) $series['public_slug']);
+}
+
 function log_activity(Database $db, int $eventId, ?int $userId, string $action, array $details = []): void
 {
     $db->run(

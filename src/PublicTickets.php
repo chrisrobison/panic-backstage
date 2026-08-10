@@ -25,7 +25,7 @@ use function Panic\event_public_path;
  *           surface where guessing at codes would otherwise be free.
  *
  *   POST /api/public/tickets/{eventId}/checkout
- *        body: { buyer_name, buyer_email, buyer_phone?,
+ *        body: { buyer_name, buyer_email, buyer_phone?, marketing_opt_in?,
  *                items: [ { ticket_type_id, quantity }, ... ],
  *                discount_code? }
 
@@ -144,8 +144,9 @@ final class PublicTickets extends BaseEndpoint
         $eventId = (int) $event['id'];
 
         $name  = trim((string) $request->body('buyer_name', ''));
-        $email = trim((string) $request->body('buyer_email', ''));
+        $email = strtolower(trim((string) $request->body('buyer_email', '')));
         $phone = trim((string) $request->body('buyer_phone', ''));
+        $marketingOptIn = boolish($request->body('marketing_opt_in', 0));
 
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return Response::json(['error' => 'A valid email address is required.'], 422);
@@ -201,12 +202,12 @@ final class PublicTickets extends BaseEndpoint
             $orderId = $this->db->insert(
                 "INSERT INTO ticket_orders
                     (event_id, buyer_name, buyer_email, buyer_phone,
-                     amount_cents, currency, status, hold_expires_at, receipt_token,
+                     marketing_opt_in, amount_cents, currency, status, hold_expires_at, receipt_token,
                      discount_code_id, discount_cents)
-                 VALUES (?, ?, ?, ?, ?, ?, 'pending', DATE_ADD(NOW(), INTERVAL ? MINUTE), ?, ?, ?)",
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', DATE_ADD(NOW(), INTERVAL ? MINUTE), ?, ?, ?)",
                 [
                     $eventId, $name, $email, ($phone !== '' ? $phone : null),
-                    $amount, $currency, self::HOLD_MINUTES, $receiptToken,
+                    $marketingOptIn, $amount, $currency, self::HOLD_MINUTES, $receiptToken,
                     $discountCodeId, $discountCents,
                 ]
             );

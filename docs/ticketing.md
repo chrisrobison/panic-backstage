@@ -45,7 +45,9 @@ The baseline `database/schema.sql` creates the ticketing tables and adds
   `quantity_sold`, `sales_start`, `sales_end`, `status`, `sort_order`.
 - `ticket_orders` — purchase/comp batches: `buyer_*`, `provider`
   (`stripe|square|comp`), `provider_ref`, `provider_payment_ref`, `amount_cents`,
-  `status`, `is_comp`, `hold_expires_at`, `paid_at`, `refunded_at`.
+  `status`, `is_comp`, `hold_expires_at`, `paid_at`, `refunded_at`, plus the
+  linked audience `contact_id`, explicit `marketing_opt_in`, and idempotent
+  `audience_synced_at` marker.
 - `ticket_order_items` — line items: `ticket_type_id`, `quantity`,
   `unit_price_cents`.
 - `tickets` — issued units: `code`, `token_hash` (sha256 of the secret, **never**
@@ -172,6 +174,13 @@ PATCH  /api/payment-settings                      switch provider / currency
 5. Webhook **retries never double-issue or double-email** — plaintext tokens are
    generated only on the first successful fulfillment. Fee/tax ledger rows are
    also idempotent: retries update the payment's own rows rather than adding new ones.
+
+Every fulfilled public order, including a $0 registration, also creates or
+updates the buyer in Contacts. The checkout has an unchecked marketing-consent
+box; only an affirmative choice opts the contact into campaigns, and a later
+unchecked registration never revokes an existing opt-in. Audience counts and
+spend are stamped in the fulfillment transaction so webhook retries cannot
+double-count them.
 
 The financial sync never applies an estimated fee percentage or tax rate. A null
 amount means the provider has not made it available yet; an explicit zero means

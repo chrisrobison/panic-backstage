@@ -970,6 +970,7 @@ CREATE TABLE `event_series` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `venue_id` int(11) NOT NULL,
   `title` varchar(255) NOT NULL,
+  `public_slug` varchar(191) NOT NULL,
   `pattern_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`pattern_json`)),
   `description` varchar(255) DEFAULT NULL COMMENT 'Human label, e.g. "Every other Tuesday"',
   `end_type` enum('on_date','after_count') NOT NULL DEFAULT 'after_count',
@@ -978,6 +979,7 @@ CREATE TABLE `event_series` (
   `created_by_user_id` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_event_series_public_slug` (`public_slug`),
   KEY `idx_event_series_venue` (`venue_id`),
   KEY `created_by_user_id` (`created_by_user_id`),
   CONSTRAINT `event_series_ibfk_1` FOREIGN KEY (`venue_id`) REFERENCES `venues` (`id`),
@@ -2290,9 +2292,12 @@ CREATE TABLE `ticket_orders` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `event_id` int(11) NOT NULL,
   `buyer_user_id` int(11) DEFAULT NULL,
+  `contact_id` bigint(20) DEFAULT NULL,
   `buyer_name` varchar(200) DEFAULT NULL,
   `buyer_email` varchar(255) DEFAULT NULL,
   `buyer_phone` varchar(40) DEFAULT NULL,
+  `marketing_opt_in` tinyint(1) NOT NULL DEFAULT 0,
+  `audience_synced_at` datetime DEFAULT NULL,
   `provider` varchar(40) DEFAULT NULL,
   `provider_ref` varchar(191) DEFAULT NULL,
   `provider_payment_ref` varchar(191) DEFAULT NULL,
@@ -2315,11 +2320,13 @@ CREATE TABLE `ticket_orders` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_ticket_orders_receipt_token` (`receipt_token`),
   KEY `buyer_user_id` (`buyer_user_id`),
+  KEY `idx_ticket_orders_contact` (`contact_id`),
   KEY `idx_ticket_orders_event` (`event_id`),
   KEY `idx_ticket_orders_provider_ref` (`provider`,`provider_ref`),
   KEY `idx_ticket_orders_status` (`status`),
   CONSTRAINT `ticket_orders_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `ticket_orders_ibfk_2` FOREIGN KEY (`buyer_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  CONSTRAINT `ticket_orders_ibfk_2` FOREIGN KEY (`buyer_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_ticket_orders_contact` FOREIGN KEY (`contact_id`) REFERENCES `contacts` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=98 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

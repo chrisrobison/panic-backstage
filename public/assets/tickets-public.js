@@ -261,6 +261,7 @@ class TicketPurchase extends PanicElement {
             <label>Name <input name="buyer_name" required autocomplete="name" placeholder="Full name"></label>
             <label>Email <input name="buyer_email" type="email" required autocomplete="email" placeholder="you@example.com"></label>
             <label>Phone <input name="buyer_phone" type="tel" autocomplete="tel" placeholder="Optional"></label>
+            <label class="tkp-consent"><input name="marketing_opt_in" type="checkbox" value="1"> <span>Email me about future Mabuhay events. I can unsubscribe at any time.</span></label>
           </div>
           <p class="tkp-error" role="alert" hidden></p>
           <div class="tkp-footer">
@@ -473,6 +474,7 @@ class TicketPurchase extends PanicElement {
     const buyer_name = this.form.buyer_name.value.trim();
     const buyer_email = this.form.buyer_email.value.trim();
     const buyer_phone = this.form.buyer_phone.value.trim();
+    const marketing_opt_in = this.form.marketing_opt_in.checked;
     if (!buyer_name) {
       this.showError('Please enter your name.');
       return;
@@ -493,6 +495,7 @@ class TicketPurchase extends PanicElement {
           buyer_name,
           buyer_email,
           buyer_phone,
+          marketing_opt_in,
           items,
           // Send the raw code, not the previewed figure: the server re-prices
           // it against this cart and this buyer, so a stale or tampered quote

@@ -8,6 +8,8 @@ use Panic\Capabilities;
 use Panic\Request;
 use Panic\Response;
 use function Panic\log_activity;
+use function Panic\series_public_path;
+use function Panic\slugify;
 
 /**
  * Recurring events: `event_series` is a lightweight grouping + pattern
@@ -65,6 +67,9 @@ final class Series extends BaseEndpoint
             return $this->ok(['series' => null]);
         }
         $series = $this->db->one('SELECT * FROM event_series WHERE id = ?', [$event['series_id']]);
+        if ($series !== null) {
+            $series['public_page'] = series_public_path($series);
+        }
         $events = $this->db->all(
             'SELECT id, title, date, status, slug, external_id FROM events WHERE series_id = ? ORDER BY date',
             [$event['series_id']]
@@ -131,12 +136,14 @@ final class Series extends BaseEndpoint
         $pdo = $this->db->pdo();
         $pdo->beginTransaction();
         try {
+            $publicSlug = $this->uniquePublicSlug((string) $anchor['title']);
             $seriesId = $this->db->insert(
-                'INSERT INTO event_series (venue_id, title, pattern_json, description, end_type, end_date, occurrence_count, created_by_user_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO event_series (venue_id, title, public_slug, pattern_json, description, end_type, end_date, occurrence_count, created_by_user_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     (int) $anchor['venue_id'],
                     $anchor['title'],
+                    $publicSlug,
                     $pattern !== null ? json_encode($pattern) : null,
                     $description,
                     $endType,
@@ -166,6 +173,18 @@ final class Series extends BaseEndpoint
         ]);
 
         return ['ok' => true, 'series_id' => $seriesId, 'created_event_ids' => $createdIds];
+    }
+
+    /** Title-derived public slug, kept unique without ever changing later. */
+    private function uniquePublicSlug(string $title): string
+    {
+        $base = substr(slugify($title), 0, 170);
+        $candidate = $base;
+        $suffix = 2;
+        while ($this->db->one('SELECT id FROM event_series WHERE public_slug = ?', [$candidate]) !== null) {
+            $candidate = $base . '-' . $suffix++;
+        }
+        return $candidate;
     }
 
     /**
@@ -304,9 +323,9 @@ final class Series extends BaseEndpoint
                  ticket_price, capacity, public_visibility,
                  promoter_name, promoter_email, promoter_phone, client_org,
                  booker_name, booker_email, booker_phone,
-                 av_requirements, catering_notes, description_public, ticket_system,
+                 av_requirements, catering_notes, description_public, ticket_system, ticketing_mode,
                  owner_user_id)
-             VALUES (?, ?, ?, ?, ?, \'proposed\', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+             VALUES (?, ?, ?, ?, ?, \'proposed\', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 (int) $anchor['venue_id'], $anchor['resource_id'] ?: null, $anchor['title'], $slug, $anchor['event_type'],
                 $seriesId, $date,
@@ -314,10 +333,27 @@ final class Series extends BaseEndpoint
                 (float) ($anchor['ticket_price'] ?? 0), $anchor['capacity'] ?: null, (int) $anchor['public_visibility'],
                 $anchor['promoter_name'], $anchor['promoter_email'], $anchor['promoter_phone'], $anchor['client_org'],
                 $anchor['booker_name'], $anchor['booker_email'], $anchor['booker_phone'],
-                $anchor['av_requirements'], $anchor['catering_notes'], $anchor['description_public'], $anchor['ticket_system'],
+                $anchor['av_requirements'], $anchor['catering_notes'], $anchor['description_public'], $anchor['ticket_system'], $anchor['ticketing_mode'],
                 $anchor['owner_user_id'] ?: null,
             ]
         );
+        if (($anchor['ticketing_mode'] ?? 'external') === 'internal') {
+            // A recurring free/paid registration should be ready on every
+            // occurrence. Clone the tier definitions, reset sales to zero,
+            // and shift any explicit sale window by the same number of days
+            // as the occurrence itself.
+            $this->db->run(
+                "INSERT INTO ticket_types
+                    (event_id, name, description, price_cents, currency, quantity_total,
+                     quantity_sold, sales_start, sales_end, status, sort_order)
+                 SELECT ?, name, description, price_cents, currency, quantity_total, 0,
+                        DATE_ADD(sales_start, INTERVAL DATEDIFF(?, ?) DAY),
+                        DATE_ADD(sales_end, INTERVAL DATEDIFF(?, ?) DAY),
+                        IF(status = 'sold_out', 'on_sale', status), sort_order
+                   FROM ticket_types WHERE event_id = ?",
+                [$id, $date, $anchor['date'], $date, $anchor['date'], (int) $anchor['id']]
+            );
+        }
         $this->assignEventCode($id);
         log_activity($this->db, $id, $actingUserId, 'event created', ['title' => $anchor['title'], 'series_id' => $seriesId]);
         $this->pushToSheet($id);

@@ -1346,6 +1346,12 @@ components:
           nullable: true
         title:
           type: string
+        public_slug:
+          type: string
+          description: Stable slug used by the reusable public series page.
+        public_page:
+          type: string
+          description: Relative reusable URL that resolves today's or the next public occurrence.
         slug:
           type: string
         event_type:
@@ -8161,6 +8167,26 @@ components:
           type: object
           nullable: true
           description: Latest approved event_assets row of type 'flyer', if any.
+    PublicSeriesResponse:
+      type: object
+      properties:
+        series:
+          type: object
+          properties:
+            id:
+              type: integer
+            title:
+              type: string
+            slug:
+              type: string
+            public_page:
+              type: string
+        event_id:
+          type: integer
+          description: Today's or the next visible non-canceled occurrence, falling back to the latest visible occurrence.
+        event_date:
+          type: string
+          format: date
     PublicTicketType:
       type: object
       properties:
@@ -8222,6 +8248,10 @@ components:
         buyer_phone:
           type: string
           nullable: true
+        marketing_opt_in:
+          type: boolean
+          default: false
+          description: Explicit consent to receive future event marketing; unchecked by default.
         items:
           type: array
           items:
@@ -8241,7 +8271,15 @@ components:
           type: integer
         checkout_url:
           type: string
+          nullable: true
           description: Hosted checkout URL to redirect the buyer's browser to.
+        receipt_token:
+          type: string
+          nullable: true
+          description: Returned for a fully-free order so the page can display its issued tickets immediately.
+        free:
+          type: boolean
+          description: True when a $0 order was fulfilled immediately without a payment provider.
     PublicTicketDiscountRequest:
       type: object
       required:
@@ -14611,7 +14649,8 @@ paths:
         at 52) is required; the recurrence pattern itself is computed client-side and stored only as
         a display label — this endpoint never derives dates from a pattern. Every date is
         pre-validated for room conflicts (409, nothing created) before any row is written. On
-        success, one new `events` row is cloned per date (status reset to `proposed`; a fixed
+        success, one new `events` row is cloned per date (status reset to `proposed`; in-house
+        ticket tiers are copied with quantity_sold reset and sale windows shifted; a fixed
         allowlist of fields is copied from the anchor — deposit, contract/ settlement docs,
         walkthrough flag, and estimated guests are NOT copied) and linked via `series_id`,
         atomically.
@@ -22982,6 +23021,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/public/series/{slug}:
+    get:
+      operationId: publicSeries_resolve
+      summary: Resolve a reusable recurring-series URL
+      description: >-
+        Public, unauthenticated resolver used by event.html?series=... . Returns today's or the
+        next public, non-canceled occurrence in the series; after the final occurrence it falls
+        back to the most recent visible one. The series URL itself never changes.
+      tags:
+        - Public Events
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Series and resolved occurrence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicSeriesResponse'
+        '404':
+          description: Series not found or it has no public occurrence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/public/tickets/{eventId}:
     get:
       operationId: publicTickets_listTypes
@@ -23028,8 +23097,10 @@ paths:
         provider + provider_ref on the order for later webhook/refund matching. Returns the hosted
         checkout_url the buyer's browser should redirect to; the order is fulfilled (tickets issued
         and emailed) asynchronously when the payment provider's webhook confirms payment — see POST
-        /webhooks/{provider}. If checkout cannot be started with the provider, the pending
-        order/hold is released (canceled) and an error is returned.
+        /webhooks/{provider}. A cart totaling $0 skips the provider, fulfills and emails immediately,
+        and returns free=true plus a receipt_token. Every fulfillment captures the buyer in Contacts;
+        marketing_opt_in is honored only when explicitly true. If checkout cannot be started with the
+        provider, the pending order/hold is released (canceled) and an error is returned.
       tags:
         - Public Ticketing
       security: []

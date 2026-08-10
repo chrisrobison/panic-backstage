@@ -163,6 +163,11 @@ final class TicketingService
                 }
             }
 
+            // Feed fulfilled public registrations into the audience CRM in
+            // this same transaction. The order-level timestamp makes this
+            // idempotent under payment-provider webhook retries.
+            $this->syncAudienceContact($db, $order, count($issued));
+
             $db->run(
                 "UPDATE ticket_orders
                     SET status = 'fulfilled',
@@ -179,6 +184,109 @@ final class TicketingService
             }
             throw $e;
         }
+    }
+
+    /**
+     * Capture a fulfilled public buyer in Contacts exactly once per order.
+     * Complimentary/admin-issued batches stay out because they are not proof
+     * that the holder supplied their own details or marketing consent.
+     */
+    private function syncAudienceContact(Database $db, array $order, int $ticketCount): void
+    {
+        if ((int) ($order['is_comp'] ?? 0) === 1 || !empty($order['audience_synced_at'])) {
+            return;
+        }
+
+        $email = strtolower(trim((string) ($order['buyer_email'] ?? '')));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+
+        [$firstName, $lastName] = self::splitBuyerName((string) ($order['buyer_name'] ?? ''));
+        $phone = trim((string) ($order['buyer_phone'] ?? '')) ?: null;
+        $optedIn = (int) ($order['marketing_opt_in'] ?? 0) === 1;
+        $eventId = (int) $order['event_id'];
+
+        $contact = $db->one(
+            'SELECT id, marketing_opted_in FROM contacts WHERE LOWER(email) = ? ORDER BY id LIMIT 1 FOR UPDATE',
+            [$email]
+        );
+
+        if ($contact === null) {
+            $contactId = $db->insert(
+                'INSERT INTO contacts
+                    (source, first_name, last_name, email, phone, events_count, tickets_count,
+                     usd_spend, last_interaction, marketing_opted_in, opt_in_date)
+                 VALUES (\'ticketing\', ?, ?, ?, ?, 1, ?, ?, NOW(), ?, ?)',
+                [
+                    $firstName, $lastName, $email, $phone, $ticketCount,
+                    ((int) ($order['amount_cents'] ?? 0)) / 100,
+                    $optedIn ? 1 : 0,
+                    $optedIn ? date('Y-m-d') : null,
+                ]
+            );
+            log_contact_activity(
+                $db,
+                $contactId,
+                null,
+                'ticket_registration',
+                'Contact captured from ticket registration',
+                ['event_id' => $eventId, 'order_id' => (int) $order['id'], 'tickets' => $ticketCount]
+            );
+        } else {
+            $contactId = (int) $contact['id'];
+            $priorEvent = $db->one(
+                'SELECT 1 FROM ticket_orders
+                  WHERE contact_id = ? AND event_id = ? AND audience_synced_at IS NOT NULL
+                  LIMIT 1',
+                [$contactId, $eventId]
+            );
+            $db->run(
+                'UPDATE contacts
+                    SET first_name = COALESCE(NULLIF(first_name, \'\'), ?),
+                        last_name = COALESCE(NULLIF(last_name, \'\'), ?),
+                        phone = COALESCE(NULLIF(phone, \'\'), ?),
+                        events_count = events_count + ?,
+                        tickets_count = tickets_count + ?,
+                        usd_spend = usd_spend + ?,
+                        last_interaction = NOW(),
+                        opt_in_date = IF(? = 1, COALESCE(opt_in_date, CURDATE()), opt_in_date),
+                        marketing_opted_in = IF(marketing_opted_in = 1 OR ? = 1, 1, 0)
+                  WHERE id = ?',
+                [
+                    $firstName, $lastName, $phone, $priorEvent === null ? 1 : 0,
+                    $ticketCount, ((int) ($order['amount_cents'] ?? 0)) / 100,
+                    $optedIn ? 1 : 0, $optedIn ? 1 : 0, $contactId,
+                ]
+            );
+            log_contact_activity(
+                $db,
+                $contactId,
+                null,
+                'ticket_registration',
+                'Ticket registration added to contact',
+                ['event_id' => $eventId, 'order_id' => (int) $order['id'], 'tickets' => $ticketCount]
+            );
+        }
+
+        $db->run(
+            'UPDATE ticket_orders SET contact_id = ?, audience_synced_at = NOW() WHERE id = ?',
+            [$contactId, (int) $order['id']]
+        );
+    }
+
+    /** @return array{0:?string,1:?string} */
+    private static function splitBuyerName(string $name): array
+    {
+        $parts = preg_split('/\s+/', trim($name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if ($parts === []) {
+            return [null, null];
+        }
+        if (count($parts) === 1) {
+            return [$parts[0], null];
+        }
+        $last = array_pop($parts);
+        return [implode(' ', $parts), $last];
     }
 
     /**
