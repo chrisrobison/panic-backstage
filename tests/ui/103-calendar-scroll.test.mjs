@@ -105,3 +105,25 @@ test('Today button returns to the current month from anywhere in the stack', asy
   await page.until(`document.querySelector('[data-month-key="${currentMonthKey()}"]')`, 8000);
   assert.ok(await page.exists(`[data-month-key="${currentMonthKey()}"]`), 'current month is back in the DOM after clicking Today');
 });
+
+test('calendar load errors render as a large centered state with retry', async (page) => {
+  await page.goto('#calendar');
+  await page.until(`document.querySelector('.calendar-month-block')`);
+  await page.eval(`document.querySelector('pb-event-calendar').showCalendarError(new Error('PB UI TEST — calendar unavailable'))`);
+  assert.ok(await page.exists('.calendar-error-state[role="alert"]'), 'calendar error state is accessible');
+  assert.includes(await page.text('.calendar-error-state'), 'calendar unavailable', 'calendar error includes the failure reason');
+  assert.ok(await page.exists('[data-calendar-retry]'), 'calendar error offers a retry action');
+  const layout = await page.eval(`(() => {
+    const shell = document.querySelector('.calendar-error-shell').getBoundingClientRect();
+    const box = document.querySelector('.calendar-error-state').getBoundingClientRect();
+    return {
+      width: box.width,
+      centerDeltaX: Math.abs((box.left + box.width / 2) - (shell.left + shell.width / 2)),
+      centerDeltaY: Math.abs((box.top + box.height / 2) - (shell.top + shell.height / 2)),
+    };
+  })()`);
+  assert.ok(layout.width >= 500, 'calendar error box is larger than a standard toast');
+  assert.ok(layout.centerDeltaX < 3 && layout.centerDeltaY < 3, 'calendar error box is centered in the calendar');
+  await page.click('[data-calendar-retry]');
+  assert.ok(await page.until(`document.querySelector('.calendar-month-block')`, 10000), 'Try again reloads the calendar');
+});

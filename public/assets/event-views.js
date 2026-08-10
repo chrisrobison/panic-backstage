@@ -494,7 +494,7 @@ class EventCalendar extends PanicElement {
         this._monthBlocks = [await this._fetchMonthWindow(this.month)];
         this.render();
       } catch (error) {
-        this.showError(error);
+        this.showCalendarError(error);
       }
     } else {
       await this.load();
@@ -523,8 +523,27 @@ class EventCalendar extends PanicElement {
       this._zoneMap = resourceZoneMap(this._resources);
       this.render();
     } catch (error) {
-      this.showError(error);
+      this.showCalendarError(error);
     }
+  }
+
+  // A calendar load failure used to render the generic small panel at the
+  // top-left of the content area. Keep this state owned by the calendar, but
+  // make it prominent and centered within the space the grid normally fills.
+  showCalendarError(error) {
+    publish('page.context', { title: 'Calendar', blurb: 'Booking calendar.' });
+    const message = error?.message || String(error || 'The calendar could not be loaded.');
+    this.innerHTML = `<section class="calendar-page">
+      <article class="panel calendar-shell calendar-error-shell">
+        <div class="calendar-error-state" role="alert" aria-live="assertive">
+          <i class="fa-solid fa-triangle-exclamation calendar-error-icon" aria-hidden="true"></i>
+          <h2>Could not load the calendar</h2>
+          <p class="error-text">${esc(message)}</p>
+          <button type="button" data-calendar-retry>Try again</button>
+        </div>
+      </article>
+    </section>`;
+    $('[data-calendar-retry]', this)?.addEventListener('click', () => this.connect(), { once: true });
   }
 
   // Fetches one calendar month's grid window, for an arbitrary month, returned
@@ -677,7 +696,7 @@ class EventCalendar extends PanicElement {
           try {
             this._monthBlocks = [await this._fetchMonthWindow(this.month)];
           } catch (error) {
-            this.showError(error);
+            this.showCalendarError(error);
             return;
           }
         } else if (this.viewMode === 'agenda' && !this._events) {
@@ -1084,7 +1103,7 @@ class EventCalendar extends PanicElement {
       landOnTarget();
       this.render();
     } catch (error) {
-      this.showError(error);
+      this.showCalendarError(error);
     }
   }
 
