@@ -162,14 +162,24 @@ PATCH  /api/payment-settings                      switch provider / currency
 4. The provider calls back to `POST /api/webhooks/{provider}`. The handler:
    - verifies the **HMAC signature** (bad/absent signature → `400`, no action);
    - on `payment_succeeded`, matches the order by `(provider, provider_ref)`,
-     records `provider_payment_ref`, and calls
+     records `provider_payment_ref`, copies the processor's exact reported fee
+     and tax into the order and Closeout ledger, and calls
      `TicketingService::fulfillOrder()`;
    - `fulfillOrder()` is **idempotent** and guards oversell with an atomic
      conditional `UPDATE`, issues one `tickets` row per unit with a fresh
      plaintext token (hash stored), and emails each holder their ticket link + QR;
    - on `payment_failed`, cancels the still-`pending` order to release the hold.
 5. Webhook **retries never double-issue or double-email** — plaintext tokens are
-   generated only on the first successful fulfillment.
+   generated only on the first successful fulfillment. Fee/tax ledger rows are
+   also idempotent: retries update the payment's own rows rather than adding new ones.
+
+The financial sync never applies an estimated fee percentage or tax rate. A null
+amount means the provider has not made it available yet; an explicit zero means
+no charge. Operators can safely retry/backfill historical captured payments with:
+
+```bash
+php scripts/reconcile-payment-financials.php [--event-id=N] [--limit=N] [--pending-only]
+```
 
 **Comps** skip the provider: `POST /api/events/{id}/ticketing/comp` creates a
 `comp` order, issues tickets immediately, and emails the QR.

@@ -2236,7 +2236,7 @@ const HELP_CONTENT = {
     <ul>
       <li>Deposit Received, Invoice Payment, Credit, Outstanding Balance, Artist Payout, Promoter Payout, Vendor Payout, Staff Payout, Adjustment</li>
     </ul>
-    <div class="tip"><strong>Note:</strong> These are ledger line-item categories — manual entries in the Closeout P&amp;L — separate from the structured payment records (Deposit, Balance Payment, Refund, Credit, and more) tracked on the event's <a href="#help-payments">Payments tab</a>. The two aren't automatically reconciled with each other.</div>
+    <div class="tip"><strong>Provider fees and tax:</strong> For in-house ticket orders and Payments-tab checkout links paid through Square or Stripe, Backstage reads the processor's exact reported fee and tax and creates protected <em>Provider reported</em> cost lines automatically. It does not estimate a percentage or tax rate. A manual payment record still needs manual ledger entries unless it went through one of those checkout links.</div>
 
     <h3>Adding a ledger entry</h3>
     <ol>
@@ -2247,7 +2247,7 @@ const HELP_CONTENT = {
     </ol>
 
     <h3>Voiding an entry</h3>
-    <p>Click the <strong>Void</strong> button next to any entry. You'll be prompted to enter a reason for the void. Voided entries remain visible in the ledger with strikethrough text — there is no delete. The complete record is preserved for audit.</p>
+    <p>Click the <strong>Void</strong> button next to any manual entry. You'll be prompted to enter a reason for the void. Voided entries remain visible in the ledger with strikethrough text — there is no delete. Provider-reported fee and tax lines are protected because the payment processor owns those figures; a later reconciliation updates them in place.</p>
 
     <h3>The P&amp;L Summary</h3>
     <p>The right panel shows a live P&amp;L summary: <strong>Gross Revenue</strong>, <strong>Total Costs</strong>, <strong>Venue Net</strong>, and <strong>Margin %</strong>. These figures are always calculated server-side — the app never trusts a submitted total.</p>

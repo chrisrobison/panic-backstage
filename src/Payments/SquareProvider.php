@@ -240,6 +240,54 @@ final class SquareProvider implements PaymentProvider
         return ['ok' => false, 'refund_ref' => null, 'error' => $this->errorMessage($json, $code)];
     }
 
+    public function financials(string $providerPaymentRef, string $providerRef): array
+    {
+        if ($this->accessToken === '' || $providerPaymentRef === '') {
+            return ['processing_fee_cents' => null, 'tax_cents' => null, 'status' => 'unavailable'];
+        }
+
+        [$paymentCode, $paymentBody] = $this->http('GET', '/v2/payments/' . rawurlencode($providerPaymentRef), []);
+        $paymentJson = json_decode($paymentBody, true);
+        $payment = is_array($paymentJson) ? ($paymentJson['payment'] ?? null) : null;
+        if ($paymentCode < 200 || $paymentCode >= 300 || !is_array($payment)) {
+            return ['processing_fee_cents' => null, 'tax_cents' => null, 'status' => 'unavailable'];
+        }
+
+        $feeCents = null;
+        if (array_key_exists('processing_fee', $payment) && is_array($payment['processing_fee'])) {
+            $feeCents = 0;
+            foreach ($payment['processing_fee'] as $fee) {
+                if (is_array($fee)) {
+                    $feeCents += (int) ($fee['amount_money']['amount'] ?? 0);
+                }
+            }
+        } elseif ((int) ($payment['amount_money']['amount'] ?? -1) === 0) {
+            // Square omits processing_fee entirely on a genuine $0 checkout.
+            // The captured amount makes zero exact here, not an estimate.
+            $feeCents = 0;
+        }
+
+        $taxCents = null;
+        $orderRef = (string) ($payment['order_id'] ?? $providerRef);
+        if ($orderRef !== '') {
+            [$orderCode, $orderBody] = $this->http('GET', '/v2/orders/' . rawurlencode($orderRef), []);
+            $orderJson = json_decode($orderBody, true);
+            if ($orderCode >= 200 && $orderCode < 300 && is_array($orderJson['order'] ?? null)) {
+                $reportedTax = $orderJson['order']['total_tax_money']['amount'] ?? null;
+                $taxCents = is_numeric($reportedTax) ? (int) $reportedTax : null;
+            }
+        }
+
+        $status = $feeCents !== null && $taxCents !== null
+            ? 'reported'
+            : (($feeCents !== null || $taxCents !== null) ? 'partial' : 'unavailable');
+        return [
+            'processing_fee_cents' => $feeCents,
+            'tax_cents' => $taxCents,
+            'status' => $status,
+        ];
+    }
+
     /**
      * Fallback: resolve a webhook provider_ref (a Square order id) to our
      * internal ticket_orders.id by reading the order's reference_id, which

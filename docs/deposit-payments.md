@@ -148,6 +148,9 @@ already-`received` row is a no-op — and on success:
 - Sets `status = 'received'`, `received_at = NOW()`, and
   `checkout_payment_ref` (the provider's payment/charge id, kept for any
   future refund flow — mirrors `ticket_orders.provider_payment_ref`).
+- Reads the provider's exact reported processor fee and tax, persists those
+  values on `event_payments`, and idempotently syncs protected
+  `processing_fees` / `taxes` cost rows into the event Closeout ledger.
 - Writes an `event_payment_audit` row (`action = 'checkout_paid'`) and an
   `event_activity_log` entry, same trail a manual "mark received" edit would
   leave.

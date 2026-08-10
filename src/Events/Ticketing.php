@@ -1022,6 +1022,7 @@ final class Ticketing extends BaseEndpoint
             $amount = (int) $order['amount_cents'];
             $providerKey = (string) ($order['provider'] ?? '');
             $paymentRef = (string) ($order['provider_payment_ref'] ?? '');
+            $provider = null;
 
             $entry = ['order_id' => $orderId, 'amount_cents' => $amount, 'ok' => false, 'error' => null];
 
@@ -1051,6 +1052,12 @@ final class Ticketing extends BaseEndpoint
                 "UPDATE ticket_orders SET status = 'refunded', refunded_at = NOW() WHERE id = ?",
                 [$orderId]
             );
+
+            // Some processors adjust fees after a refund. Refresh the exact
+            // provider figures now; the reconciliation command can retry later.
+            if ($provider !== null && $paymentRef !== '') {
+                (new \Panic\Payments\FinancialReconciler($this->db))->reconcileTicketOrder($provider, $order);
+            }
 
             $entry['ok'] = true;
             $refundedOrders++;

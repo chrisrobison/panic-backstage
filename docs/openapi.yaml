@@ -2756,6 +2756,25 @@ components:
           type: string
           description: DECIMAL(10,2) returned by PDO as a numeric string, e.g. "150.00".
           example: '150.00'
+        processor_fee_cents:
+          type: integer
+          nullable: true
+          description: Exact processor fee reported by the checkout provider; null while not yet available.
+        tax_cents:
+          type: integer
+          nullable: true
+          description: Exact tax reported by the checkout provider; zero means the provider charged no tax.
+        financials_status:
+          type: string
+          enum:
+            - pending
+            - partial
+            - reported
+            - unavailable
+        financials_updated_at:
+          type: string
+          format: date-time
+          nullable: true
         currency:
           type: string
           example: USD
@@ -2808,7 +2827,17 @@ components:
         external_ref:
           type: string
           nullable: true
-          description: External processor reference, e.g. Stripe payment link ID (plink_...).
+          description: Provider checkout/order reference used to match the webhook.
+        checkout_provider:
+          type: string
+          nullable: true
+          enum:
+            - stripe
+            - square
+        checkout_payment_ref:
+          type: string
+          nullable: true
+          description: Provider payment/charge reference used for refunds and financial reconciliation.
         created_at:
           type: string
           format: date-time
@@ -24389,9 +24418,10 @@ paths:
         provider's SDK validates against the raw request body inside `provider->verifyWebhook()`
         (e.g. Stripe's `Stripe-Signature` header, Square's HMAC header) — an invalid or missing
         signature returns 400 and takes no action. On a recognized 'payment_succeeded' event,
-        matches the pending order by (provider, provider_ref), records provider_payment_ref, and
-        calls the idempotent TicketingService::fulfillOrder() (issuing + emailing tickets on the
-        first delivery only; retries no-op). On 'payment_failed', cancels the still-pending order
+        matches the pending order by (provider, provider_ref), records provider_payment_ref,
+        reconciles the provider's exact processing fee and tax into the event ledger, and calls the
+        idempotent TicketingService::fulfillOrder() (issuing + emailing tickets on the first
+        delivery only; retries do not duplicate tickets or ledger lines). On 'payment_failed', cancels the still-pending order
         and releases its inventory hold. Always returns HTTP 200 once the signature itself is valid
         — including for event types this endpoint ignores — so the provider stops retrying a
         delivered, understood webhook. Note: the `square-pos` provider segment is intercepted

@@ -61,6 +61,15 @@ interface PaymentProvider
     public function verifyWebhook(Request $request): ?array;
 
     /**
+     * Read the provider's finalized processing fee and tax for one payment.
+     * Null amounts mean the provider has not reported that figure yet; zero
+     * means it explicitly reported none. Implementations never estimate.
+     *
+     * @return array{processing_fee_cents:?int,tax_cents:?int,status:string}
+     */
+    public function financials(string $providerPaymentRef, string $providerRef): array;
+
+    /**
      * Refund a captured payment (full or partial).
      *
      * @param string $providerPaymentRef ticket_orders.provider_payment_ref.

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `payments` — Reconcile processor fees and taxes (#27)
 - **Fixed** `calendar` — Center and enlarge load errors (#30)
 - **Added** `contracts` — Require contract details at intake (#31)
 - **Fixed** `events` — Make event ownership read-only (#32)

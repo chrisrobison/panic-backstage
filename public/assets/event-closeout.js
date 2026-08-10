@@ -124,9 +124,10 @@ class EventCloseout extends PanicElement {
     const entryRow = (entry) => {
       const voided = Number(entry.is_void);
       const style  = voided ? ' style="text-decoration:line-through;opacity:0.4"' : '';
-      const voidBtn = (editable && !voided)
+      const automatic = entry.source === 'ticketing_sync';
+      const voidBtn = (editable && !voided && !automatic)
         ? `<button type="button" class="small danger" data-void="${esc(String(entry.id))}">Void</button>`
-        : '';
+        : (automatic ? '<span class="tag">Provider reported</span>' : '');
       return `<tr${style}>
         <td>${esc(titleCase(entry.category))}</td>
         <td>${esc(entry.description || '')}</td>

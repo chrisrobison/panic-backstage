@@ -192,6 +192,38 @@ final class StripeProvider implements PaymentProvider
         return ['ok' => false, 'refund_ref' => null, 'error' => $msg];
     }
 
+    public function financials(string $providerPaymentRef, string $providerRef): array
+    {
+        if ($this->secretKey === '' || $providerPaymentRef === '') {
+            return ['processing_fee_cents' => null, 'tax_cents' => null, 'status' => 'unavailable'];
+        }
+
+        [$intentCode, $intentBody] = $this->http(
+            'GET',
+            '/v1/payment_intents/' . rawurlencode($providerPaymentRef),
+            ['expand[]' => 'latest_charge.balance_transaction']
+        );
+        $intent = json_decode($intentBody, true);
+        $balance = is_array($intent) ? ($intent['latest_charge']['balance_transaction'] ?? null) : null;
+        $feeCents = $intentCode >= 200 && $intentCode < 300 && is_array($balance)
+            ? (int) ($balance['fee'] ?? 0)
+            : null;
+
+        $taxCents = null;
+        if ($providerRef !== '') {
+            [$sessionCode, $sessionBody] = $this->http('GET', '/v1/checkout/sessions/' . rawurlencode($providerRef), []);
+            $session = json_decode($sessionBody, true);
+            if ($sessionCode >= 200 && $sessionCode < 300 && is_array($session)) {
+                $taxCents = (int) ($session['total_details']['amount_tax'] ?? 0);
+            }
+        }
+
+        $status = $feeCents !== null && $taxCents !== null
+            ? 'reported'
+            : (($feeCents !== null || $taxCents !== null) ? 'partial' : 'unavailable');
+        return ['processing_fee_cents' => $feeCents, 'tax_cents' => $taxCents, 'status' => $status];
+    }
+
     /**
      * Stripe needs no fallback: the checkout session id is used as provider_ref
      * on both sides (createCheckout returns it, the webhook echoes object.id),
@@ -251,18 +283,25 @@ final class StripeProvider implements PaymentProvider
      */
     private function http(string $method, string $path, array $form): array
     {
+        if ($method === 'GET' && $form !== []) {
+            $path .= '?' . http_build_query($form);
+            $form = [];
+        }
         $ch = curl_init(self::API_BASE . $path);
-        curl_setopt_array($ch, [
+        $options = [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CUSTOMREQUEST  => $method,
-            CURLOPT_POSTFIELDS     => http_build_query($form),
             CURLOPT_TIMEOUT        => 20,
             CURLOPT_HTTPHEADER     => [
                 'Authorization: Bearer ' . $this->secretKey,
                 'Content-Type: application/x-www-form-urlencoded',
                 'Stripe-Version: 2024-06-20',
             ],
-        ]);
+        ];
+        if ($method !== 'GET') {
+            $options[CURLOPT_POSTFIELDS] = http_build_query($form);
+        }
+        curl_setopt_array($ch, $options);
         $body = curl_exec($ch);
         if ($body === false) {
             $err = curl_error($ch);

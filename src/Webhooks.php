@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Panic;
 
 use Panic\Events\Payments as EventPayments;
+use Panic\Payments\FinancialReconciler;
 use Panic\Payments\PaymentProvider;
 use Panic\Payments\PaymentProviders;
 
@@ -111,6 +112,7 @@ final class Webhooks extends BaseEndpoint
                 'UPDATE ticket_orders SET provider_payment_ref = ? WHERE id = ?',
                 [$paymentRef, $orderId]
             );
+            $order['provider_payment_ref'] = $paymentRef;
         }
 
         $ticketing = new TicketingService();
@@ -127,11 +129,13 @@ final class Webhooks extends BaseEndpoint
             $tickets,
             static fn(array $t): bool => !empty($t['token'])
         ));
-        if ($deliverable === []) {
-            return;
+        if ($deliverable !== []) {
+            $ticketing->emailTickets($this->db, $this->root, $orderId, $deliverable);
         }
 
-        $ticketing->emailTickets($this->db, $this->root, $orderId, $deliverable);
+        // Do not put provider reporting ahead of ticket issuance/delivery.
+        // A provider may publish fees a moment later, so retries fill them in.
+        (new FinancialReconciler($this->db))->reconcileTicketOrder($provider, $order);
     }
 
     /** Release the inventory hold for a payment that failed/expired. */
@@ -274,6 +278,17 @@ final class Webhooks extends BaseEndpoint
             $newlyReceived = $changed === 1;
         }
 
+        if ($paymentRef !== '') {
+            // Repair an older/partial webhook delivery that marked the row
+            // received before its charge id was persisted. Never replace an
+            // existing id; that is the refund/reconciliation authority.
+            $this->db->run(
+                "UPDATE event_payments SET checkout_payment_ref = ?
+                  WHERE id = ? AND (checkout_payment_ref IS NULL OR checkout_payment_ref = '')",
+                [$paymentRef, $paymentId]
+            );
+            $payment['checkout_payment_ref'] = $paymentRef;
+        }
         if ($newlyReceived) {
             $this->db->run(
                 'INSERT INTO event_payment_audit (payment_id, event_id, user_id, action, note)
@@ -313,5 +328,9 @@ final class Webhooks extends BaseEndpoint
         } catch (\Throwable $e) {
             error_log("Webhook {$provider->key()}: receipt delivery failed for payment {$paymentId}: " . $e->getMessage());
         }
+
+        // Payment state and receipt delivery take priority over the secondary
+        // provider lookup; webhook retries safely update the same ledger rows.
+        (new FinancialReconciler($this->db))->reconcileEventPayment($provider, $payment);
     }
 }
