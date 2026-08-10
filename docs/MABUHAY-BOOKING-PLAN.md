@@ -152,7 +152,7 @@ Any status → Canceled at any time
 ### Forms
 - ✅ "Producer / Promoter" renamed to "Producer / Artist"
 - ✅ Load In/Tech time input added to event form
-- 🔲 Venue cost note (Downstairs: ~$2,000/day · Upstairs: ~$3,000/day) — P2
+- 🔲 Venue cost note (Ground Floor: ~$2,000/day · Upstairs: ~$3,000/day) — P2
 
 ---
 

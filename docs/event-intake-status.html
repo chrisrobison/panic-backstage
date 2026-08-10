@@ -592,7 +592,7 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-const ROOM_LABELS = { downstairs: 'Downstairs', upstairs: 'Upstairs', both: 'Both Rooms' };
+const ROOM_LABELS = { downstairs: 'Ground Floor', upstairs: 'Upstairs', both: 'Both Rooms' };
 const STATUS_LABELS = { proposed: 'Hold', confirmed: 'Intake Complete', booked: 'Booked', published: 'Published', needs_assets: 'Needs Assets', assets_approved: 'Assets Approved', ready_to_announce: 'Ready to Announce', advanced: 'Advanced', completed: 'Completed', settled: 'Settled' };
 const TERMINAL_CONTRACT_STATUSES = ['voided', 'canceled', 'declined', 'expired', 'superseded', 'error'];
 const CONTRACT_STATUS_LABELS = { draft: 'Draft', needs_review: 'Needs review', approved: 'Approved', ready_to_send: 'Ready to send', sent: 'Sent', viewed: 'Viewed', partially_signed: 'Partially signed', signed_by_client: 'Signed by client', countersigned: 'Countersigned', signed: 'Signed', fully_executed: 'Fully executed', expired: 'Expired', superseded: 'Superseded', declined: 'Declined', canceled: 'Canceled', voided: 'Voided', error: 'Error' };

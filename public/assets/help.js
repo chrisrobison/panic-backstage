@@ -355,7 +355,7 @@ const HELP_CONTENT = {
     <p>The coloured dot on each chip indicates which room the event is booked into. Rooms are configured under <a href="#help-admin-venue">Admin &rarr; Venue &amp; rooms</a> — for the current venue, that's:</p>
     <ul>
       <li><strong>Blue dot</strong> — Upstairs</li>
-      <li><strong>Red dot</strong> — Downstairs (21+)</li>
+      <li><strong>Red dot</strong> — Ground Floor (21+)</li>
       <li><strong>Green dot</strong> — Both Rooms</li>
     </ul>
     <p>The legend below the calendar toolbar always reflects whatever rooms are actually configured, so it updates automatically if a room is renamed, added, or archived. An event with no room selected shows in the default (red/"down") slot.</p>
@@ -558,7 +558,7 @@ const HELP_CONTENT = {
       <li><strong>End Date</strong> — optional, only for events spanning more than one calendar day. See <a href="#help-multi-day-events">Multi-day events</a>.</li>
       <li><strong>Recurring Event</strong> — optional. Check this to spin off a whole series (weekly, every other week, monthly by weekday or by date) instead of a single show — see <a href="#help-recurring-events">Recurring events</a>.</li>
       <li><strong>Venue</strong> (required) — which venue the show is at. Only shown once your account has more than one venue to choose from; a single-venue install skips straight to Room.</li>
-      <li><strong>Room</strong> — which space within that venue is being used (e.g. Downstairs 21+, Upstairs, Both Rooms). Optional — leave it blank if the venue has no separate rooms defined. See <a href="#help-admin-venue">Venue &amp; rooms</a>.</li>
+      <li><strong>Room</strong> — which space within that venue is being used (e.g. Ground Floor 21+, Upstairs, Both Rooms). Optional — leave it blank if the venue has no separate rooms defined. See <a href="#help-admin-venue">Venue &amp; rooms</a>.</li>
       <li><strong>Event Type</strong> (required) — Live Music, Karaoke, Open Mic, Promoter Night, DJ Night, Comedy, Private Event, or Special Event.</li>
       <li><strong>Doors Open / Show Time / End / Curfew</strong> — defaults to 7 pm / 8 pm / 11 pm.</li>
       <li><strong>Age Restriction</strong> — All Ages, 18+, or 21+.</li>

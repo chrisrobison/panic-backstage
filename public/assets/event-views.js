@@ -150,7 +150,7 @@ async function openEventQuickCreate({ date = null } = {}) {
       <label>Booker phone <input name="booker_phone" placeholder="Optional"></label>
     </fieldset>
 
-    <p class="info-note wide">Venue costs (full day): <strong>Downstairs (21+)</strong> — $2,000 · <strong>Upstairs</strong> — $3,000. Events must not lose money.</p>
+    <p class="info-note wide">Venue costs (full day): <strong>Ground Floor (21+)</strong> — $2,000 · <strong>Upstairs</strong> — $3,000. Events must not lose money.</p>
     <div class="wide quick-create-actions">
       <button type="submit" class="primary">Create event</button>
       <button type="button" class="secondary" data-close>Cancel</button>
@@ -756,7 +756,7 @@ class EventCalendar extends PanicElement {
       const render = (e) => miniEvent(e, iso);
       return `<div class="cell-zone zone-up" data-floor="Upstairs">${up.map(render).join('')}</div>`
         + (both.length ? `<div class="zone-both">${both.map(render).join('')}</div>` : '')
-        + `<div class="cell-zone zone-down" data-floor="Downstairs (21+)">${down.map(render).join('')}</div>`;
+        + `<div class="cell-zone zone-down" data-floor="Ground Floor (21+)">${down.map(render).join('')}</div>`;
     };
 
     return `<section class="calendar-month-block" data-month-key="${esc(block.key)}">
@@ -1186,7 +1186,7 @@ class EventCalendar extends PanicElement {
     ${dayHasConflict ? '<p class="cal-day-conflict-flag"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Room conflict — two events are booked in the same room at overlapping times.</p>' : ''}
     ${section('Upstairs', up, 'up')}
     ${both.length ? section('Both Rooms', both, 'both') : ''}
-    ${section('Downstairs', down, 'down')}`;
+    ${section('Ground Floor', down, 'down')}`;
   }
 
   _wireAgenda() {

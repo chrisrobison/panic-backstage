@@ -10,6 +10,9 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `venues` — Correct Ground Floor capacity (#36)
+- **Fixed** `venues` — Correct Ground Floor capacity (#36)
+- **Fixed** `venues` — Correct the Mabuhay Ground Floor name and 250-person capacity, including over-capacity event records (#36)
 - **Changed** — Fix event payment receipts and Square matching
 - **Fixed** `tests` — Stop the invoice print test asserting one machine's venue
 - **Fixed** `migrations` — Guard 091/092 column adds so a fresh database migrates
