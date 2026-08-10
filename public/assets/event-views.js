@@ -125,8 +125,11 @@ async function openEventQuickCreate({ date = null } = {}) {
     <!-- Deliberately not prefilled. These used to default to 19:00/20:00, so
          every Hold carried times nobody had entered (issue #25) — which is
          the likely source of the incoherent times in issue #26. -->
+    <label>Load In <span class="field-hint muted small">Room blocked from here</span><input type="time" name="load_in_time"></label>
     <label>Doors <input type="time" name="doors_time" required></label>
     <label>Show <input type="time" name="show_time" required></label>
+    <label>End <input type="time" name="end_time"></label>
+    <label>Load Out <span class="field-hint muted small">Completely clear</span><input type="time" name="load_out_time"></label>
 
     <fieldset class="quick-create-blank-fields" hidden>
       ${venues.length > 1
@@ -731,23 +734,29 @@ class EventCalendar extends PanicElement {
       const meta = this._zoneOf(event);
       const isMultiDay = Boolean(event.end_date && event.end_date !== event.date);
       const isContinuation = isMultiDay && iso !== event.date;
-      const time = this._fmtTime(event.doors_time || event.show_time);
-      const loadIn = event.load_in_time ? `Load-in ${this._fmtTime(event.load_in_time)}` : '';
+      const occupancyStart = event.load_in_time || event.doors_time || event.show_time;
+      const time = this._fmtTime(occupancyStart);
+      const timeLabel = event.load_in_time ? `Load-in ${time}` : time;
+      const loadOut = event.load_out_time ? `Load-out ${this._fmtTime(event.load_out_time)}` : '';
       const isPrivate = event.event_type === 'private_event';
       const hasConflict = conflictIds.has(event.id);
       const preIntake = needsIntake(event);
       const rangeLabel = isMultiDay ? `${shortDate(new Date(event.date + 'T12:00:00'))} – ${shortDate(new Date(event.end_date + 'T12:00:00'))}` : null;
-      const tip = [isPrivate ? '🔒 Private' : null, hasConflict ? '⚠ Room conflict' : null, preIntake ? 'Intake not complete' : null, statusLabel(event.status), meta.label, rangeLabel, time, loadIn].filter(Boolean).join(' · ');
+      const tip = [isPrivate ? '🔒 Private' : null, hasConflict ? '⚠ Room conflict' : null, preIntake ? 'Intake not complete' : null, statusLabel(event.status), meta.label, rangeLabel, timeLabel, loadOut].filter(Boolean).join(' · ');
       return `<a class="mini-event${isPrivate ? ' mini-event-private' : ''}${preIntake ? ' mini-event-preintake' : ''}${isContinuation ? ' mini-event-continued' : ''}${hasConflict ? ' mini-event-conflict' : ''}" href="#event-${esc(event.id)}" title="${esc(tip)}">`
         + `<span class="status-dot ${roomTone(meta.zone)}"></span>`
         + (isPrivate ? '<span class="mini-event-lock" aria-hidden="true">🔒</span>' : '')
         + (isContinuation ? '<span class="mini-event-continues" aria-hidden="true">&#8618;</span>' : '')
         + `<span class="mini-event-title">${esc(event.title)}</span>`
-        + (time && !isContinuation ? `<span class="mini-event-time">${esc(time)}</span>` : '')
+        + (timeLabel && !isContinuation ? `<span class="mini-event-time">${esc(timeLabel)}</span>` : '')
         + `</a>`;
     };
 
+    const byOccupancyStart = (a, b) => String(a.load_in_time || a.doors_time || a.show_time || '99:99')
+      .localeCompare(String(b.load_in_time || b.doors_time || b.show_time || '99:99'));
+
     const dayCellBody = (dayEvents, iso) => {
+      dayEvents = dayEvents.slice().sort(byOccupancyStart);
       const visible = dayEvents.filter((e) => e.status !== 'canceled');
       if (!visible.length) return `<div class="program-night">${this.canCreate ? '+ Available' : 'Available'}</div>`;
       const up   = visible.filter((e) => this._zoneOf(e).zone === 'up');
@@ -1137,7 +1146,9 @@ class EventCalendar extends PanicElement {
   _renderDayContent() {
     const events       = this._events;
     const selectedDate = this.selectedDate;
-    const dayEvents    = events.filter((e) => eventSpansDay(e, selectedDate) && e.status !== 'canceled');
+    const dayEvents    = events.filter((e) => eventSpansDay(e, selectedDate) && e.status !== 'canceled')
+      .sort((a, b) => String(a.load_in_time || a.doors_time || a.show_time || '99:99')
+        .localeCompare(String(b.load_in_time || b.doors_time || b.show_time || '99:99')));
     const dateObj      = new Date(selectedDate + 'T12:00:00');
     const dayLabel     = dateObj.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -1150,7 +1161,7 @@ class EventCalendar extends PanicElement {
     const agendaRow = (event) => {
       const isMultiDay = Boolean(event.end_date && event.end_date !== event.date);
       const isContinuation = isMultiDay && selectedDate !== event.date;
-      const time = isContinuation ? '' : this._fmtTime(event.doors_time || event.show_time);
+      const time = isContinuation ? '' : this._fmtTime(event.load_in_time || event.doors_time || event.show_time);
       const isPrivate = event.event_type === 'private_event';
       const hasConflict = conflictIds.has(event.id);
       const preIntake = needsIntake(event);
@@ -1383,8 +1394,11 @@ class TemplatePicker extends PanicElement {
       <form data-template="${esc(template.id)}" class="grid-form compact">
         <label>Date <input type="date" name="date" value="${esc(tomorrow)}" required></label>
         <!-- Not prefilled, same as the quick-create modal — see issue #25. -->
+        <label>Load In <input type="time" name="load_in_time"></label>
         <label>Doors <input type="time" name="doors_time" required></label>
         <label>Show <input type="time" name="show_time" required></label>
+        <label>End <input type="time" name="end_time"></label>
+        <label>Load Out <input type="time" name="load_out_time"></label>
         <label>Title <input name="title" value="${esc(template.default_title || template.name)}"></label>
         <button>Create event</button>
       </form>

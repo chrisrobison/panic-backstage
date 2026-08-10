@@ -110,11 +110,11 @@ try {
         }
     }
     $freeDates = [];
-    for ($cursor = new DateTimeImmutable('+400 days'); count($freeDates) < 2; $cursor = $cursor->modify('+1 day')) {
+    for ($cursor = new DateTimeImmutable('+400 days'); count($freeDates) < 3; $cursor = $cursor->modify('+1 day')) {
         $d = $cursor->format('Y-m-d');
         if (!isset($busy[$d])) { $freeDates[] = $d; $busy[$d] = true; }
     }
-    [$dateA, $dateB] = $freeDates;
+    [$dateA, $dateB, $dateC] = $freeDates;
 
     // Same window as the fixtures, so any conflict is a real one.
     $conflictArgs = fn(string $date, ?array $blockers) => [
@@ -147,6 +147,16 @@ try {
         'a canceled event does not block a new Hold');
     ok($check->invoke($events, ...$conflictArgs($canceledDate, $blockersFor('confirmed'))) === null,
         'a canceled event does not block a new confirmed booking either');
+
+    // ── occupancy spans Load In through Load Out, not Doors through End ─────
+    $occupancyId = $makeEvent($dateC, 'confirmed');
+    $db->run("UPDATE events SET load_in_time = '12:00', doors_time = '18:00', end_time = '22:00', load_out_time = '23:00' WHERE id = ?", [$occupancyId]);
+    ok($check->invoke($events, $venueId, $dateC, '10:00', '11:00', null, null, $roomId, $blockersFor('proposed')) === null,
+        'an event clear 30 minutes before load-in fits');
+    ok($check->invoke($events, $venueId, $dateC, '11:45', '12:30', null, null, $roomId, $blockersFor('proposed')) !== null,
+        'load-in blocks the room before doors');
+    ok($check->invoke($events, $venueId, $dateC, '22:30', '23:30', null, null, $roomId, $blockersFor('proposed')) !== null,
+        'load-out blocks the room after event end');
 } finally {
     foreach ($created as $id) {
         try { $db->run('DELETE FROM events WHERE id = ? AND title LIKE ?', [$id, 'PB TEST ROOMGUARD — %']); }

@@ -364,7 +364,7 @@ const HELP_CONTENT = {
     <p>If two events share the same room on overlapping dates (or overlapping times, on the same day), both are flagged in red: the day cell's background and date number turn red on the Grid, the event chip gets a red outline with a "⚠ Room conflict" note in its tooltip, and the Agenda view adds a red banner and a warning icon on each affected row. This is a visual warning, not a hard block by itself — the app already refuses to save two <em>confirmed</em> bookings that conflict, so in practice this flag mostly catches two tentative <strong>Holds</strong> placed on the same room, which the system deliberately allows until one of them is confirmed.</p>
 
     <h3>Times on chips</h3>
-    <p>Each calendar chip shows the Doors time (or Show time if no Doors time is set) as a small badge on the right. Hovering the chip shows a tooltip with Status · Room · Doors time · Load-In time.</p>
+    <p>Each calendar chip starts with the <strong>Load-in</strong> time (falling back to Doors or Start only when Load-in is not yet entered). Hovering the chip shows Status, Room, Load-in, and Load-out. Events in the same room are conflict-checked across that complete occupancy window, with a 30-minute buffer.</p>
 
     <h3>Private events</h3>
     <p>Private venue rentals (Type = Private Event) are shown on the calendar with a 🔒 lock icon and a subtle grey background so staff can distinguish them from publicly promoted shows at a glance. Private events are never announced publicly and will never appear on the public calendar or event page.</p>
@@ -518,7 +518,7 @@ const HELP_CONTENT = {
 
     <h3>The two ways to create an event</h3>
     <p>Click the <strong>+ New event</strong> button in the top bar to open the <a href="#help-event-wizard">Event Creation Wizard</a> — a 7-step guided flow that walks you from title and date through deal structure, financial terms, production requirements, and promotion, then creates both the event <em>and</em> a pre-populated contract draft in a single click. This is the recommended path for any show that will have a booking agreement.</p>
-    <p>If you need to spin up a simple show quickly and deal with the contract separately, use the <strong>Quick Create instead</strong> button in the wizard's sidebar. It opens a compact modal: pick a template (or choose "Blank event"), fill in date and doors/show times, and click <em>Create event</em>. The new event opens immediately in its workspace.</p>
+    <p>If you need to spin up a simple show quickly and deal with the contract separately, use the <strong>Quick Create instead</strong> button in the wizard's sidebar. It opens a compact modal: pick a template (or choose "Blank event"), fill in the date and event times (including Load In/Load Out when known), and click <em>Create event</em>. The new event opens immediately in its workspace.</p>
     <p class="help-tip">📋 <strong>Private event / venue rental?</strong> See <a href="#help-private-events">Private events &amp; rentals</a> — the workflow is shorter and the wizard handles the rental deal type automatically.</p>
 
     <h3>Approvals and status</h3>
@@ -675,7 +675,7 @@ const HELP_CONTENT = {
       <thead><tr><th>Status</th><th>What it means</th><th>What's required to reach it</th></tr></thead>
       <tbody>
         <tr><td><strong>Hold</strong></td><td>Inquiry received; date informally held.</td><td>Title, date, venue, door time, end time, client name/email/phone.</td></tr>
-        <tr><td><strong>Intake Complete</strong></td><td>All client details confirmed; contract being built.</td><td>Age restriction, estimated guests, deposit amount.</td></tr>
+        <tr><td><strong>Intake Complete</strong></td><td>All client details confirmed; contract being built.</td><td>Load-in, load-out, age restriction, estimated guests, deposit amount.</td></tr>
         <tr><td><strong>Booked</strong></td><td>Contract approved/signed; deposit confirmed.</td><td>Contract in Approved, Sent, or Signed status (or contract URL on file).</td></tr>
         <tr><td><strong>Archived</strong></td><td>Event happened; settlement pending.</td><td>Auto-set by nightly script if still active past the event date.</td></tr>
         <tr><td><strong>Settled</strong></td><td>Settlement filed; books closed.</td><td>Manual advance.</td></tr>
@@ -736,19 +736,20 @@ const HELP_CONTENT = {
       <li><strong>Type</strong> — live music, karaoke, open mic, promoter night, DJ night, comedy, private event, or special event. Changing to or from <em>private event</em> changes the entire form layout.</li>
       <li><strong>Status</strong> — see <a href="#help-statuses">Event status reference</a>. Private events show a filtered dropdown.</li>
       <li><strong>Owner</strong> — the staff member responsible. Owners get implicit access to the event.</li>
-      <li><strong>Load-In / Tech</strong> — when the crew and gear arrive for load-in and soundcheck. Shown on calendar chips as a tooltip and in the print run-sheet header.</li>
+      <li><strong>Load In / Access</strong> — when the event first needs access to the room. This starts the room-occupancy window and is the time shown on calendar chips.</li>
+      <li><strong>Load Out / Clear</strong> — when people, gear, and breakdown are completely out of the room. This ends the room-occupancy window.</li>
       <li><strong>Doors / Show / End</strong> — the public-facing show times. Setting one will auto-fill reasonable defaults for the others if they're empty.</li>
       <li><strong>Age restriction</strong> — shown on the public page and in the run sheet (e.g. 21+, All Ages).</li>
       <li><strong>Paid deposit</strong> — the deposit amount confirmed received. Required to advance past Intake Complete.</li>
     </ul>
 
     <h3>Workshop / Comedy / Non-Music events</h3>
-    <p>Check <strong>Workshop / Comedy / Non-Music event</strong> for a show where "Doors" and "Load-In / Tech" don't really apply — a workshop, class, comedy night, or similar. Checking it:</p>
+    <p>Check <strong>Workshop / Comedy / Non-Music event</strong> for a workshop, class, comedy night, or similar event where public "Doors" do not apply. Checking it:</p>
     <ul>
-      <li>Hides the <strong>Load-In / Tech</strong> and <strong>Doors</strong> fields from this form (and from the workspace summary's fact row) — their existing values, if any, are left alone in the database, just no longer shown or editable.</li>
+      <li>Hides <strong>Doors</strong>. Load In and Load Out remain visible because every event occupies the room for setup and breakdown.</li>
       <li>Relabels <strong>Show</strong> to <strong>Start</strong> everywhere it appears for this event, including the public page (which shows a single "Start 7:30 PM" instead of "Doors 6:30 PM · Show 7:30 PM").</li>
     </ul>
-    <p>Because Doors is hidden, the Hold-status requirement and the Run Sheet readiness check both switch to requiring <strong>Start</strong> (Show) instead for a non-music event — you're never blocked waiting on a field the form no longer shows you. Room-conflict detection also falls back to Start when Doors is empty, so scheduling checks stay accurate.</p>
+    <p>Because Doors is hidden, the Hold-status requirement and the Run Sheet readiness check both switch to requiring <strong>Start</strong> (Show) instead for a non-music event. Room-conflict detection still uses Load In through Load Out.</p>
 
     <h3>Public show fields</h3>
     <ul>
@@ -893,7 +894,7 @@ const HELP_CONTENT = {
     </ul>
     <h3>Adding items</h3>
     <p>Use the add form with title, type, start, end, and notes. Save and the row joins the schedule. Edit times inline; save each row when you change it.</p>
-    <p><strong>Populate from event data</strong> fills in items automatically from what's already entered elsewhere on the event: load-in, doors, and curfew from <a href="#help-details">Event details</a>, one set per band from the <a href="#help-lineup">Lineup</a>, and staff call times from <a href="#help-staffing">Staffing</a>. It only adds items that aren't already on the run sheet, so it's safe to click again later as those times change.</p>
+    <p><strong>Populate from event data</strong> fills in items automatically from what's already entered elsewhere on the event: load-in, doors, curfew, and load-out from <a href="#help-details">Event details</a>, one set per band from the <a href="#help-lineup">Lineup</a>, and staff call times from <a href="#help-staffing">Staffing</a>. It only adds items that aren't already on the run sheet, so it's safe to click again later as those times change.</p>
     <p>The <strong>Add preset</strong> dropdown stamps in a standard run-sheet shape (<em>3 Bands</em>, <em>4 Bands</em>, or <em>Staff Only</em>) timed relative to the doors time, as a starting point you can then edit. Unlike Populate, presets don't check for duplicates — use them on an empty run sheet or expect to clean up if the sheet already has items.</p>
     <h3>Printing</h3>
     <p>The run-of-show printout (see <a href="#help-print">Printable packets</a>) prints the schedule as a single-sheet timeline that staff and bands can keep on hand night of show.</p>

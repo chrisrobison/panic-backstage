@@ -139,6 +139,12 @@ const WIZARD_FLOW = {
           source: 'event_types',
         },
         {
+          id: 'load_in_time',
+          label: 'Load In / Access',
+          type: 'time',
+          help: 'When the room first becomes occupied for setup.',
+        },
+        {
           id: 'doors_time',
           label: 'Doors Open',
           type: 'time',
@@ -155,6 +161,12 @@ const WIZARD_FLOW = {
           label: 'End / Curfew',
           type: 'time',
           default: '23:00',
+        },
+        {
+          id: 'load_out_time',
+          label: 'Load Out / Clear',
+          type: 'time',
+          help: 'When people, gear, and breakdown are completely clear of the room.',
         },
         {
           id: 'age_restriction',
@@ -595,9 +607,11 @@ class EventContractWizard extends PanicElement {
     d.venue_id            = event.venue_id != null ? String(event.venue_id) : '';
     d.resource_id         = event.resource_id != null ? String(event.resource_id) : '';
     d.event_type          = event.event_type || '';
+    if (event.load_in_time) d.load_in_time = String(event.load_in_time).slice(0, 5);
     if (event.doors_time) d.doors_time = String(event.doors_time).slice(0, 5);
     if (event.show_time)  d.show_time  = String(event.show_time).slice(0, 5);
     if (event.end_time)   d.end_time   = String(event.end_time).slice(0, 5);
+    if (event.load_out_time) d.load_out_time = String(event.load_out_time).slice(0, 5);
     d.age_restriction     = event.age_restriction || '';
     d.capacity             = event.capacity != null ? String(event.capacity) : '';
     d.public_description   = event.description_public || '';
@@ -1560,9 +1574,11 @@ class EventContractWizard extends PanicElement {
     // clear resource_id server-side, not leave a stale value in place.
     payload.resource_id      = d.resource_id ? Number(d.resource_id) : null;
     if (d.event_type)         payload.event_type         = d.event_type;
+    if (d.load_in_time)       payload.load_in_time       = d.load_in_time;
     if (d.doors_time)         payload.doors_time         = d.doors_time;
     if (d.show_time)          payload.show_time          = d.show_time;
     if (d.end_time)           payload.end_time           = d.end_time;
+    if (d.load_out_time)      payload.load_out_time      = d.load_out_time;
     if (d.capacity)           payload.capacity           = Number(d.capacity);
     if (d.age_restriction)    payload.age_restriction    = d.age_restriction;
     if (d.public_description) payload.public_description = d.public_description;

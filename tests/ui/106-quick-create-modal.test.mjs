@@ -44,6 +44,8 @@ test('quick-create no longer pre-fills invented Doors/Show times', async (page) 
   assert.equal(await page.eval(`${field('show_time')}.value`), '', 'Show starts empty');
   assert.ok(await page.eval(`${field('doors_time')}.required`), 'Doors is required');
   assert.ok(await page.eval(`${field('show_time')}.required`), 'Show is required');
+  assert.ok(await page.exists('[data-form="quick-create"] [name="load_in_time"]'), 'Load In can be captured on a new Hold');
+  assert.ok(await page.exists('[data-form="quick-create"] [name="load_out_time"]'), 'Load Out can be captured on a new Hold');
 });
 
 test('quick-create collects contacts and pre-fills the booker', async (page) => {

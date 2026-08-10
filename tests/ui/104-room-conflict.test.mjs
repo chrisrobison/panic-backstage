@@ -41,12 +41,18 @@ function isoDate(d) {
 // confirmed-or-later booking, so creating the two throwaway holds can't 409.
 // Multi-day bookings are expanded across their whole span, matching
 // EventRowHelpers::checkRoomConflict()'s own date-overlap rule.
-function pickFreeDate(events, roomId) {
+function pickFreeDate(events, room, resources) {
   const committed = new Set(['confirmed', 'booked', 'needs_assets', 'assets_approved',
     'ready_to_announce', 'published', 'advanced', 'completed', 'settled']);
+  const venueRooms = (resources || []).filter((candidate) => Number(candidate.venue_id) === Number(room.venue_id));
+  const blockingRoomIds = new Set(
+    room.zone === 'both'
+      ? venueRooms.map((candidate) => Number(candidate.id))
+      : [Number(room.id), ...venueRooms.filter((candidate) => candidate.zone === 'both').map((candidate) => Number(candidate.id))],
+  );
   const busy = new Set();
   (events || []).forEach((event) => {
-    if (Number(event.resource_id) !== Number(roomId) || !committed.has(event.status)) return;
+    if (!blockingRoomIds.has(Number(event.resource_id)) || !committed.has(event.status)) return;
     for (let d = event.date, end = event.end_date || event.date; d <= end;) {
       busy.add(d);
       const next = new Date(d + 'T00:00:00');
@@ -69,7 +75,7 @@ test('room double-booking is flagged red on the calendar, agenda, and dashboard'
   assert.ok(room, 'at least one active room is available for conflict testing');
 
   const existing = await apiFetch(page, '/events');
-  const targetIso = pickFreeDate(existing.events || existing || [], room.id);
+  const targetIso = pickFreeDate(existing.events || existing || [], room, venueData.resources || []);
   if (!targetIso) page.skip('no date in the next 28 days is free of committed bookings in this room');
 
   const base = {
@@ -80,11 +86,11 @@ test('room double-booking is flagged red on the calendar, agenda, and dashboard'
   };
   const eventA = await apiFetch(page, '/events', {
     method: 'POST',
-    body: JSON.stringify({ ...base, title: 'PB UI TEST — room conflict A (safe to delete)', doors_time: '19:00', end_time: '23:00' }),
+    body: JSON.stringify({ ...base, title: 'PB UI TEST — room conflict A (safe to delete)', load_in_time: '17:00', doors_time: '19:00', end_time: '23:00', load_out_time: '23:45' }),
   });
   const eventB = await apiFetch(page, '/events', {
     method: 'POST',
-    body: JSON.stringify({ ...base, title: 'PB UI TEST — room conflict B (safe to delete)', doors_time: '20:00', end_time: '23:59' }),
+    body: JSON.stringify({ ...base, title: 'PB UI TEST — room conflict B (safe to delete)', load_in_time: '18:00', doors_time: '20:00', end_time: '23:59', load_out_time: '00:30' }),
   });
   assert.ok(eventA.id, 'event A created');
   assert.ok(eventB.id, 'event B created (overlapping room+time — allowed while both stay "proposed")');
@@ -113,6 +119,11 @@ test('room double-booking is flagged red on the calendar, agenda, and dashboard'
       await page.count(`${dayCell} .mini-event-conflict`),
       2,
       'both conflicting event chips are individually flagged',
+    );
+    assert.includes(
+      await page.eval(`document.querySelector('${dayCell} .mini-event-time')?.textContent || ''`),
+      'Load-in',
+      'calendar chips start with the room-occupancy load-in time',
     );
 
     // --- Agenda view (mini-grid dot + day list) ---

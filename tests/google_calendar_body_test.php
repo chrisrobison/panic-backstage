@@ -45,6 +45,7 @@ function row(array $overrides = []): array {
         'show_time'       => null,
         'end_time'        => null,
         'load_in_time'    => null,
+        'load_out_time'   => null,
         'room'            => null,
         'capacity'        => null,
         'promoter_name'   => null,
@@ -97,6 +98,13 @@ ok(($timed['start']['timeZone'] ?? '') === 'America/Los_Angeles', 'sends local t
 $doorsOnly = GoogleCalendar::eventBody(row(['doors_time' => '18:00:00']), APP_URL);
 ok(($doorsOnly['start']['dateTime'] ?? '') === '2026-09-10T18:00:00', 'doors_time is the fallback start');
 ok(($doorsOnly['end']['dateTime'] ?? '')   === '2026-09-10T21:00:00', 'missing end_time defaults to +3h');
+
+$occupied = GoogleCalendar::eventBody(row([
+    'load_in_time' => '16:00:00', 'doors_time' => '18:00:00', 'show_time' => '20:00:00',
+    'end_time' => '23:00:00', 'load_out_time' => '01:00:00',
+]), APP_URL);
+ok(($occupied['start']['dateTime'] ?? '') === '2026-09-10T16:00:00', 'load-in drives the staff-calendar start');
+ok(($occupied['end']['dateTime'] ?? '') === '2026-09-11T01:00:00', 'load-out drives the staff-calendar end across midnight');
 
 // ── The two time edge cases ─────────────────────────────────────────────────
 $midnight = GoogleCalendar::eventBody(row(['show_time' => '21:00:00', 'end_time' => '02:00:00']), APP_URL);

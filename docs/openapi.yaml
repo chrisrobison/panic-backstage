@@ -1452,13 +1452,19 @@ components:
         load_in_time:
           type: string
           nullable: true
+          description: Start of the room-occupancy window.
+        load_out_time:
+          type: string
+          nullable: true
+          description: Time the event is completely clear of the room; end of the occupancy window.
         is_non_music:
           type: integer
           enum: [0, 1]
           description: >-
             Workshop/comedy/non-music event. When true, the admin UI and the
-            public event page hide doors_time/load_in_time and label
-            show_time "Start" instead of "Show".
+            public event page hide doors_time and label show_time "Start"
+            instead of "Show". Load-in and load-out remain visible because
+            they define room occupancy for every event type.
         age_restriction:
           type: string
           nullable: true
@@ -1683,15 +1689,20 @@ components:
         load_in_time:
           type: string
           nullable: true
+          description: Start of the room-occupancy window.
+        load_out_time:
+          type: string
+          nullable: true
+          description: End of the room-occupancy window, when the room is completely clear.
         is_non_music:
           type: integer
           enum: [0, 1]
           default: 0
           description: >-
-            Workshop/comedy/non-music event. When true, doors_time/load_in_time
-            are hidden in the UI and show_time is labeled "Start" instead of
-            "Show" — see Events::validateStatusTransition() for how the Hold
-            gate requires show_time instead of doors_time in that case.
+            Workshop/comedy/non-music event. When true, doors_time is hidden
+            in the UI and show_time is labeled "Start" instead of "Show".
+            Load-in/load-out remain required at Intake Complete because they
+            define the room-occupancy window for every event type.
         age_restriction:
           type: string
           nullable: true
@@ -11096,6 +11107,7 @@ paths:
                 date: { type: string, format: date }
                 end_date: { type: string, format: date, nullable: true }
                 load_in_time: { type: string, nullable: true }
+                load_out_time: { type: string, nullable: true }
                 doors_time: { type: string, nullable: true }
                 show_time: { type: string, nullable: true }
                 end_time: { type: string, nullable: true }

@@ -526,12 +526,12 @@ function renderContract(data) {
   const scheduleItems = schedule.length
     ? schedule.map((s) => `${esc(s.title)}: ${esc(timeLabel(s.start_time))}${s.end_time ? ` &ndash; ${esc(timeLabel(s.end_time))}` : ''}`)
     : [
-        `Load-In / Setup: ${blank}`,
+        `Load-In / Setup: ${esc(timeLabel(event.load_in_time))}`,
         `Soundcheck: ${blank}`,
         `Doors: ${esc(timeLabel(event.doors_time))}`,
         `Show Start: ${esc(timeLabel(event.show_time))}`,
         `Event End: ${esc(timeLabel(event.end_time))}`,
-        'Strike Complete: Within one (1) hour after event end unless otherwise approved by Venue',
+        `Load-Out / Clear: ${esc(timeLabel(event.load_out_time))}`,
       ];
   blocks.push(`<h2 class="k-section">2. Event Details</h2>
     ${sub('Space Requested')}${list([event.room ? esc(titleCase(event.room)) : blank])}

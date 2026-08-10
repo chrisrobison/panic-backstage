@@ -608,11 +608,11 @@ function evaluate(e) {
   if (!isValidEmail(e.booker_email)) { missingCore.push(isNonBlank(e.booker_email) ? 'Booker email (invalid)' : 'Booker email'); bookerOk = false; }
   if (!isValidPhone(e.booker_phone)) { missingCore.push(isNonBlank(e.booker_phone) ? 'Booker phone (invalid)' : 'Booker phone'); bookerOk = false; }
 
-  // Producer
+  // Contract name / point of contact
   let producerOk = true;
-  if (!isNonBlank(e.promoter_name)) { missingCore.push('Producer name'); producerOk = false; }
-  if (!isValidEmail(e.promoter_email)) { missingCore.push(isNonBlank(e.promoter_email) ? 'Producer email (invalid)' : 'Producer email'); producerOk = false; }
-  if (!isValidPhone(e.promoter_phone)) { missingCore.push(isNonBlank(e.promoter_phone) ? 'Producer phone (invalid)' : 'Producer phone'); producerOk = false; }
+  if (!isNonBlank(e.promoter_name)) { missingCore.push('Contract name / point of contact'); producerOk = false; }
+  if (!isValidEmail(e.promoter_email)) { missingCore.push(isNonBlank(e.promoter_email) ? 'Contract contact email (invalid)' : 'Contract contact email'); producerOk = false; }
+  if (!isValidPhone(e.promoter_phone)) { missingCore.push(isNonBlank(e.promoter_phone) ? 'Contract contact phone (invalid)' : 'Contract contact phone'); producerOk = false; }
 
   // Owner
   const ownerOk = e.owner_user_id !== null && e.owner_user_id !== undefined;
@@ -626,14 +626,18 @@ function evaluate(e) {
   const descOk = isNonBlank(e.description_public);
   if (!descOk) missingCore.push('Public description');
 
-  // Show times
-  const doorsOk = isNonBlank(e.doors_time);
+  // Show + room occupancy times
+  const loadInOk = isNonBlank(e.load_in_time);
+  const loadOutOk = isNonBlank(e.load_out_time);
+  const doorsOk = Number(e.is_non_music) === 1 || isNonBlank(e.doors_time);
   const showOk = isNonBlank(e.show_time);
   const endOk = isNonBlank(e.end_time);
-  const timesOk = doorsOk && showOk && endOk;
+  const timesOk = loadInOk && doorsOk && showOk && endOk && loadOutOk;
+  if (!loadInOk) missingCore.push('Load-in time');
   if (!doorsOk) missingCore.push('Doors time');
   if (!showOk) missingCore.push('Show time');
   if (!endOk) missingCore.push('End time');
+  if (!loadOutOk) missingCore.push('Load-out time');
 
   // Age restriction
   const ageOk = isNonBlank(e.age_restriction);
@@ -757,9 +761,11 @@ function logisticsCardHtml(e, r) {
     <div class="detail-card" data-card="logistics">
       <h4>Logistics</h4>
       <div class="row"><span class="k">Deposit</span><span>${editable(e, 'deposit_amount', 'number', depositDisplay, !r.depositOk)}${depositNote}</span></div>
+      <div class="row"><span class="k">Load In</span>${editable(e, 'load_in_time', 'time', fmtTime(e.load_in_time) || '', !isNonBlank(e.load_in_time))}</div>
       <div class="row"><span class="k">Doors</span>${editable(e, 'doors_time', 'time', fmtTime(e.doors_time) || '', !isNonBlank(e.doors_time))}</div>
       <div class="row"><span class="k">Show</span>${editable(e, 'show_time', 'time', fmtTime(e.show_time) || '', !isNonBlank(e.show_time))}</div>
       <div class="row"><span class="k">End</span>${editable(e, 'end_time', 'time', fmtTime(e.end_time) || '', !isNonBlank(e.end_time))}</div>
+      <div class="row"><span class="k">Load Out</span>${editable(e, 'load_out_time', 'time', fmtTime(e.load_out_time) || '', !isNonBlank(e.load_out_time))}</div>
       <div class="row"><span class="k">Age restriction</span>${editable(e, 'age_restriction', 'text', isNonBlank(e.age_restriction) ? esc(e.age_restriction) : '', !r.ageOk)}</div>
     </div>`;
 }
@@ -964,7 +970,7 @@ function refreshRowIndicators(eventId) {
 function cardBuilderFor(field) {
   if (field.startsWith('booker_')) return { key: 'booker', build: (e, r) => contactCardHtml('Booker', 'booker', e, r) };
   if (field.startsWith('promoter_')) return { key: 'promoter', build: (e, r) => contactCardHtml('Producer', 'promoter', e, r) };
-  if (['deposit_amount', 'doors_time', 'show_time', 'end_time', 'age_restriction'].includes(field)) return { key: 'logistics', build: logisticsCardHtml };
+  if (['deposit_amount', 'load_in_time', 'doors_time', 'show_time', 'end_time', 'load_out_time', 'age_restriction'].includes(field)) return { key: 'logistics', build: logisticsCardHtml };
   if (['potential_revenue', 'estimated_guests', 'capacity'].includes(field)) return { key: 'optional', build: optionalCardHtml };
   if (field === 'description_public') return { key: 'description', build: descCardHtml };
   return null;
@@ -1181,8 +1187,8 @@ async function loadEvents() {
 
   events.sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-    const at = a.show_time || '';
-    const bt = b.show_time || '';
+    const at = a.load_in_time || a.doors_time || a.show_time || '';
+    const bt = b.load_in_time || b.doors_time || b.show_time || '';
     return at < bt ? -1 : at > bt ? 1 : 0;
   });
 

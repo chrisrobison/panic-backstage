@@ -114,7 +114,7 @@ final class Schedule extends BaseEndpoint
      */
     private function fromEventData(int $eventId): Response
     {
-        $event = $this->db->one('SELECT load_in_time, doors_time, end_time FROM events WHERE id = ?', [$eventId]);
+        $event = $this->db->one('SELECT load_in_time, doors_time, end_time, load_out_time FROM events WHERE id = ?', [$eventId]);
         $lineup = $this->db->all(
             'SELECT display_name, set_time, set_length_minutes FROM event_lineup WHERE event_id = ? AND set_time IS NOT NULL ORDER BY billing_order, set_time',
             [$eventId]
@@ -133,6 +133,9 @@ final class Schedule extends BaseEndpoint
         }
         if (!empty($event['end_time'])) {
             $candidates[] = ['Curfew', 'curfew', $event['end_time'], null];
+        }
+        if (!empty($event['load_out_time'])) {
+            $candidates[] = ['Load Out', 'other', $event['load_out_time'], null];
         }
         foreach ($lineup as $item) {
             $end = null;

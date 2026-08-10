@@ -212,8 +212,8 @@
         </div>
 
         <div class="mbf-line mbf-third">
-          <label class="mbf-label" for="mbf-breakdown">Breakdown <span class="mbf-opt">(time needed after)</span></label>
-          <input type="text" id="mbf-breakdown" maxlength="120" placeholder="e.g., 1 hour">
+          <label class="mbf-label" for="mbf-load-out">Load Out <span class="mbf-opt">(completely clear of venue)</span></label>
+          <input type="text" id="mbf-load-out" maxlength="120" placeholder="e.g., 1:00 AM">
         </div>
 
         <div class="mbf-line mbf-third">
@@ -536,7 +536,7 @@
       addLine(lines, 'Location preference', v.location);
       addLine(lines, 'Showtime', v.showtime);
       addLine(lines, 'Load in', v.loadIn);
-      addLine(lines, 'Breakdown', v.breakdown);
+      addLine(lines, 'Load out / completely clear', v.loadOut);
       addLine(lines, 'Ticket price', v.ticketPrice ? ('$' + v.ticketPrice) : '');
       addLine(lines, 'Sound / lighting / AV needs', v.avNeeds === 'Other' ? ('Other — ' + v.avOther) : v.avNeeds);
       addLine(lines, 'Preferred layout', v.layout === 'Other' ? ('Other — ' + v.layoutOther) : v.layout);
@@ -582,7 +582,7 @@
         showtime: $('mbf-showtime').value,
         attendance: $('mbf-attendance').value,
         loadIn: $('mbf-load-in').value,
-        breakdown: $('mbf-breakdown').value,
+        loadOut: $('mbf-load-out').value,
         ticketPrice: $('mbf-ticket-price').value,
         avNeeds: avNeeds.value,
         avOther: $('mbf-av-other').value,

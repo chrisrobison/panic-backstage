@@ -162,15 +162,19 @@ final class GoogleCalendar
         $title  = trim((string) ($event['title'] ?? '')) ?: '(untitled event)';
 
         $date     = (string) $event['date'];
-        $hasTimes = !empty($event['show_time']) || !empty($event['doors_time']) || !empty($event['end_time']);
+        $hasTimes = !empty($event['load_in_time']) || !empty($event['doors_time']) || !empty($event['show_time'])
+            || !empty($event['end_time']) || !empty($event['load_out_time']);
 
         if ($hasTimes) {
-            $startTime = (string) ($event['show_time'] ?: $event['doors_time'] ?: self::DEFAULT_START_TIME);
+            // Staff calendar blocks the operational occupancy window. Public
+            // show times still appear in the description below.
+            $startTime = (string) ($event['load_in_time'] ?: $event['doors_time'] ?: $event['show_time'] ?: self::DEFAULT_START_TIME);
             $start     = new \DateTime($date . ' ' . $startTime, $tz);
 
-            if (!empty($event['end_time'])) {
+            $occupancyEnd = $event['load_out_time'] ?: $event['end_time'];
+            if (!empty($occupancyEnd)) {
                 $endDate = !empty($event['end_date']) ? (string) $event['end_date'] : $date;
-                $end     = new \DateTime($endDate . ' ' . $event['end_time'], $tz);
+                $end     = new \DateTime($endDate . ' ' . $occupancyEnd, $tz);
                 if ($end < $start) {
                     $end->modify('+1 day'); // show runs past midnight
                 } elseif ($end == $start) {
@@ -237,12 +241,13 @@ final class GoogleCalendar
         if (!empty($event['load_in_time'])) $times[] = 'Load-in ' . self::hhmm((string) $event['load_in_time']);
         if (!empty($event['doors_time']))   $times[] = 'Doors ' . self::hhmm((string) $event['doors_time']);
         if (!empty($event['show_time']))    $times[] = 'Show ' . self::hhmm((string) $event['show_time']);
+        if (!empty($event['load_out_time'])) $times[] = 'Load-out ' . self::hhmm((string) $event['load_out_time']);
         if ($times) {
             $lines[] = implode(' · ', $times);
         }
 
         if (!empty($event['promoter_name'])) {
-            $lines[] = 'Promoter: ' . $event['promoter_name'];
+            $lines[] = 'Contract contact: ' . $event['promoter_name'];
         }
         if (!empty($event['booker_name'])) {
             $lines[] = 'Booker: ' . $event['booker_name'];

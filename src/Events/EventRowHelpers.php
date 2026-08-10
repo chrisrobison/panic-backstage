@@ -45,7 +45,7 @@ trait EventRowHelpers
     }
 
     /**
-     * Check whether the given venue/room + date + time window conflicts with
+     * Check whether the given venue/room + date + occupancy window conflicts with
      * any existing booking (with a 30-minute buffer between events). Returns
      * a 409 Response describing the conflict, or null if the slot is clear.
      *
@@ -64,7 +64,7 @@ trait EventRowHelpers
      * blocked by a real booking but two speculative Holds may still compete
      * for the same date (see Events::conflictBlockersFor()).
      */
-    private function checkRoomConflict(int $venueId, string $date, ?string $doorsTime, ?string $endTime, ?int $excludeId = null, ?string $endDate = null, ?int $resourceId = null, ?array $blockingStatuses = null): ?\Panic\Response
+    private function checkRoomConflict(int $venueId, string $date, ?string $occupancyStart, ?string $occupancyEnd, ?int $excludeId = null, ?string $endDate = null, ?int $resourceId = null, ?array $blockingStatuses = null): ?\Panic\Response
     {
         if ($resourceId !== null) {
             $resource = $this->db->one('SELECT zone FROM resources WHERE id = ? AND venue_id = ? LIMIT 1', [$resourceId, $venueId]);
@@ -110,7 +110,7 @@ trait EventRowHelpers
             foreach ($blockingStatuses as $status) { $args[] = $status; }
         }
         $rows = $this->db->all(
-            "SELECT id, title, date, end_date, doors_time, show_time, end_time FROM events WHERE $col IN ($ph) AND date <= ? AND COALESCE(end_date, date) >= ?$excl AND $statusClause",
+            "SELECT id, title, date, end_date, load_in_time, doors_time, show_time, end_time, load_out_time FROM events WHERE $col IN ($ph) AND date <= ? AND COALESCE(end_date, date) >= ?$excl AND $statusClause",
             $args
         );
         $isMultiDayNew = $endDate && $endDate !== $date;
@@ -127,13 +127,13 @@ trait EventRowHelpers
                 ], 409);
             }
             // Both events are single-day: check the 30-minute time buffer.
-            // A non-music event leaves doors_time null (Doors is hidden from
-            // its form) — fall back to show_time/Start so its window isn't
-            // mistaken for starting at midnight (see timesOverlap() below).
-            $rowStart = $row['doors_time'] ?: $row['show_time'];
-            if ($this->timesOverlap($doorsTime, $endTime, $rowStart, $row['end_time'])) {
+            // The room is occupied from Load In through Load Out. Legacy or
+            // incomplete rows fall back to Doors/Start and End respectively.
+            $rowStart = $row['load_in_time'] ?: $row['doors_time'] ?: $row['show_time'];
+            $rowEnd = $row['load_out_time'] ?: $row['end_time'];
+            if ($this->timesOverlap($occupancyStart, $occupancyEnd, $rowStart, $rowEnd)) {
                 return \Panic\Response::json([
-                    'error' => "Room conflict: \"{$row['title']}\" is already booked at this venue on {$date}. Events must be at least 30 minutes apart.",
+                    'error' => "Room conflict: \"{$row['title']}\" occupies this room during the requested load-in to load-out window on {$date}. Events must be at least 30 minutes apart.",
                     'conflict_event_id' => (int) $row['id'],
                 ], 409);
             }
@@ -233,7 +233,7 @@ trait EventRowHelpers
 
             $ev = $this->db->one(
                 'SELECT e.id, e.title, e.status, e.event_type, e.date, e.end_date,
-                        e.doors_time, e.show_time, e.end_time, e.load_in_time,
+                        e.doors_time, e.show_time, e.end_time, e.load_in_time, e.load_out_time,
                         e.room, e.capacity, e.promoter_name, e.booker_name,
                         e.gcal_event_id,
                         v.name AS venue_name, v.address AS venue_address, v.timezone AS venue_timezone

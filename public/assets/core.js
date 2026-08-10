@@ -345,7 +345,11 @@ function roomConflictIds(events) {
         if (a.date > bEnd || b.date > aEnd) continue; // no date overlap
         const aMulti = Boolean(a.end_date && a.end_date !== a.date);
         const bMulti = Boolean(b.end_date && b.end_date !== b.date);
-        if (aMulti || bMulti || timesOverlap(a.doors_time, a.end_time, b.doors_time, b.end_time)) {
+        const aStart = a.load_in_time || a.doors_time || a.show_time;
+        const aFinish = a.load_out_time || a.end_time;
+        const bStart = b.load_in_time || b.doors_time || b.show_time;
+        const bFinish = b.load_out_time || b.end_time;
+        if (aMulti || bMulti || timesOverlap(aStart, aFinish, bStart, bFinish)) {
           conflicts.add(a.id);
           conflicts.add(b.id);
         }

@@ -76,13 +76,14 @@ runs skip the row for free.
 ### Times
 
 Holds legitimately carry no times (see commit `f469666`, "stop inventing
-times"), so an event with no `doors_time`/`show_time`/`end_time` becomes an
+times"), so an event with no `load_in_time`/`doors_time`/`show_time`/`end_time`/`load_out_time` becomes an
 **all-day** entry rather than a fabricated 7pm slot.
 
-With times: start = `show_time` (falling back to `doors_time`), end =
-`end_time` (falling back to +3h). An `end_time` earlier than the start rolls to
-the next day — shows running past midnight are normal. An `end_time` exactly
-*equal* to the start is treated as "no end recorded" and gets the +3h default,
+With times: start = `load_in_time` (falling back to `doors_time`, then
+`show_time`), end = `load_out_time` (falling back to `end_time`, then +3h).
+This makes the staff calendar block the full room-occupancy window. An end
+earlier than the start rolls to the next day — shows running past midnight are
+normal. An end exactly *equal* to the start is treated as "no end recorded" and gets the +3h default,
 rather than becoming a 24-hour block.
 
 Times are sent as local `dateTime` + `timeZone` from the venue's `timezone`

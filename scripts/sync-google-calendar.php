@@ -68,7 +68,7 @@ $skipList = implode(',', array_map(static fn ($s) => "'" . $s . "'", GoogleCalen
  */
 $rows = $db->all(
     "SELECT e.id, e.title, e.status, e.event_type, e.date, e.end_date,
-            e.doors_time, e.show_time, e.end_time, e.load_in_time,
+            e.doors_time, e.show_time, e.end_time, e.load_in_time, e.load_out_time,
             e.room, e.capacity, e.promoter_name, e.booker_name,
             e.gcal_event_id, e.gcal_synced_at, e.updated_at,
             v.name AS venue_name, v.address AS venue_address, v.timezone AS venue_timezone

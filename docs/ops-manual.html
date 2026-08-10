@@ -1749,7 +1749,7 @@
 
     <p>Click the <span class="ui-label button">+ New event</span> button in the top-right corner of the screen. This opens the <strong>Event Creation Wizard</strong> — a 7-step guided form that collects everything needed for a new show: event basics, deal structure, contact details, financial terms, production requirements, and promotion settings. When you finish, the wizard creates both the event <em>and</em> a pre-populated contract draft in one click. This is the recommended path for any show that will have a booking agreement.</p>
 
-    <p>If you need a quick placeholder first and want to deal with the contract separately, click <strong>⚡ Quick Create instead</strong> in the wizard's sidebar. A compact modal appears: pick a template (or <em>Blank event</em>), confirm date, title, and door/show times, and click <em>Create event</em>. The new event opens immediately in its workspace. Any date already entered in the wizard carries over to the modal.</p>
+    <p>If you need a quick placeholder first and want to deal with the contract separately, click <strong>⚡ Quick Create instead</strong> in the wizard's sidebar. A compact modal appears: pick a template (or <em>Blank event</em>), confirm date, title, and event times (including Load In/Load Out when known), and click <em>Create event</em>. The new event opens immediately in its workspace. Any date already entered in the wizard carries over to the modal.</p>
 
     <p>The most important decision you make at creation time is <strong>Event Type</strong>. This changes how the event behaves throughout the system:</p>
 
@@ -1816,7 +1816,7 @@
 
     <div class="callout tip">
       <span class="callout-title">Clone a similar event with different times</span>
-      <p>Open the existing event and click <span class="ui-label button">Clone</span>. Change the date, name, or load-in/doors/show/end times before creating it. Backstage creates a separate editable Hold with the reusable event details and contacts, but does not copy contracts, payments, ticket sales, assets, tasks, staffing, or execution records.</p>
+      <p>Open the existing event and click <span class="ui-label button">Clone</span>. Change the date, name, or load-in/doors/show/end/load-out times before creating it. Backstage creates a separate editable Hold with the reusable event details and contacts, but does not copy contracts, payments, ticket sales, assets, tasks, staffing, or execution records.</p>
     </div>
 
     <!-- MULTI-DAY EVENTS ────────────────────────────────────────────────── -->
@@ -2068,10 +2068,10 @@
 
     <div class="callout tip">
       <span class="callout-title">🎤 Workshops, comedy nights &amp; other non-music events</span>
-      <p>Check <span class="ui-label field">Workshop / Comedy / Non-Music event</span> on the Details tab for a show where "Doors" doesn't really apply. This hides <span class="ui-label field">Doors</span> and <span class="ui-label field">Load-In / Tech</span> from the form (their values, if any, are left alone — just no longer shown) and relabels <span class="ui-label field">Show</span> to <span class="ui-label field">Start</span> everywhere, including the public page. The Hold requirement above swaps accordingly: a non-music event needs <strong>Start</strong> filled in instead of <strong>Doors</strong>.</p>
+      <p>Check <span class="ui-label field">Workshop / Comedy / Non-Music event</span> on the Details tab for a show where "Doors" doesn't really apply. This hides <span class="ui-label field">Doors</span> and relabels <span class="ui-label field">Show</span> to <span class="ui-label field">Start</span> everywhere, including the public page. <span class="ui-label field">Load In / Access</span> and <span class="ui-label field">Load Out / Clear</span> remain visible because setup and breakdown occupy the room for every event type.</p>
     </div>
 
-    <p>Once the Hold is saved, the event appears on the calendar with a colored chip showing the event name and door time. Other staff can see the date is taken.</p>
+    <p>Once the Hold is saved, the event appears on the calendar with a colored chip showing the event name and load-in time (or Doors/Start until Load In is entered). Other staff can see when the room first becomes occupied.</p>
 
     <!-- INTAKE COMPLETE ──────────────────────────────────────────────────── -->
     <h2 id="intake">Step 2: Intake Complete</h2>
@@ -2082,6 +2082,14 @@
 
     <div class="field-ref">
       <div class="field-ref-title">Required for Intake Complete</div>
+      <div class="field-row">
+        <div class="field-name">Load In / Access</div>
+        <div class="field-desc">When the event first needs the room. Required at Intake Complete and used as the start of calendar conflict checks.</div>
+      </div>
+      <div class="field-row">
+        <div class="field-name">Load Out / Clear</div>
+        <div class="field-desc">When setup, guests, gear, and breakdown are completely clear. Required at Intake Complete and used as the end of calendar conflict checks.</div>
+      </div>
       <div class="field-row">
         <div class="field-name">Deposit amount</div>
         <div class="field-desc">The dollar amount of the deposit agreed to. This will appear in the contract.</div>
@@ -2103,8 +2111,8 @@
     <p>When the status changes to Intake Complete, the system automatically emails venue admins with a notification so they can begin contract drafting.</p>
 
     <div class="callout tip">
-      <span class="callout-title">💡 Load-in time</span>
-      <p>While not strictly required for Intake Complete, this is a good time to confirm and enter the <span class="ui-label field">Load-In / Tech</span> time. The band's crew and sound tech need to know their call time, and it shows on the calendar chip so operations staff can see it at a glance.</p>
+      <span class="callout-title">💡 Room occupancy</span>
+      <p>Backstage blocks the room from <span class="ui-label field">Load In / Access</span> through <span class="ui-label field">Load Out / Clear</span>, including a 30-minute buffer when checking another event. These are operational times, not merely public show times.</p>
     </div>
 
     <!-- INTAKE READINESS REPORT ──────────────────────────────────────────── -->
@@ -2450,7 +2458,7 @@
       <ul>
         <li>Create event and set Type to Private Event</li>
         <li>Fill in client name, email, phone, and organization</li>
-        <li>Enter date, load-in time, doors time, and end time</li>
+        <li>Enter date, load-in time, doors/start time, end time, and load-out time</li>
         <li>Note AV / tech requirements</li>
         <li>Note catering / bar preferences</li>
         <li>Advance status to Hold (system confirms minimum fields)</li>
