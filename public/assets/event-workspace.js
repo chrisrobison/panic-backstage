@@ -1065,6 +1065,8 @@ class EventDetailsForm extends HTMLElement {
           <p class="form-section-head wide">Event Requirements</p>
           <label class="wide">AV / Tech requirements <textarea name="av_requirements" placeholder="Sound system, lighting, projector, microphones…"${disabled}>${esc(event.av_requirements || '')}</textarea></label>
           <label class="wide">Catering / Bar notes <textarea name="catering_notes" placeholder="Bar service, catering vendors, alcohol requirements…"${disabled}>${esc(event.catering_notes || '')}</textarea></label>
+          <p class="form-section-head wide">Contract Details <span class="form-section-note">Required for Intake Complete</span></p>
+          <label class="wide">Agreed terms <textarea name="contract_details" placeholder="Fees, splits, included services, restrictions, and other negotiated terms…"${disabled}>${esc(event.contract_details || '')}</textarea></label>
           <label class="wide">Internal notes <textarea name="description_internal" placeholder="Staff-only notes about this event"${disabled}>${esc(event.description_internal || '')}</textarea></label>
           <p class="form-section-note wide">💰 For rental pricing, contact <strong>Tom Watson</strong>: <a href="mailto:tom@themab.org">tom@themab.org</a></p>
           <input type="hidden" name="public_visibility" value="0">
@@ -1102,6 +1104,8 @@ class EventDetailsForm extends HTMLElement {
         <label>Name <input name="booker_name" value="${esc(event.booker_name || '')}" placeholder="Full name"${disabled}></label>
         <label>Email <input type="email" name="booker_email" value="${esc(event.booker_email || '')}" placeholder="email@example.com"${disabled}></label>
         <label>Phone <input type="tel" name="booker_phone" value="${esc(event.booker_phone || '')}" placeholder="415-555-0100"${disabled}></label>
+        <p class="form-section-head wide">Contract Details <span class="form-section-note">Required for Intake Complete</span></p>
+        <label class="wide">Agreed terms <textarea name="contract_details" placeholder="Fees, splits, included services, restrictions, and other negotiated terms…"${disabled}>${esc(event.contract_details || '')}</textarea></label>
         <label class="wide">Public description <textarea name="description_public"${disabled}>${esc(event.description_public || '')}</textarea></label>
         <label>Public subtitle <input name="public_subtitle" value="${esc(event.public_subtitle || '')}" placeholder="e.g. ON BROADWAY (UPSTAIRS)"${disabled}></label>
         <label>Public tags <input name="public_tags" value="${esc(event.public_tags || '')}" placeholder="e.g. karaoke, 21+" title="Comma-separated. Shown as pills on the public event page."${disabled}></label>

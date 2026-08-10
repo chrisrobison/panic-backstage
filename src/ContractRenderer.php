@@ -22,6 +22,7 @@ final class ContractRenderer
         'venue_city' => 'Venue city', 'venue_state' => 'Venue state',
         'counterparty_display' => 'Counterparty', 'title' => 'Contract title',
         'event_date' => 'Event date', 'event_end_date' => 'Event end date', 'event_room' => 'Room', 'event_title' => 'Event',
+        'contract_details' => 'Contract details', 'load_in_time' => 'Load-in time', 'load_out_time' => 'Load-out time',
         'rental_fee' => 'Rental fee', 'deposit_amount' => 'Deposit', 'balance_due_date' => 'Balance due date',
         'bar_minimum' => 'Bar minimum', 'guarantee_amount' => 'Guarantee',
         'door_split_artist' => 'Artist/promoter split', 'door_split_venue' => 'Venue split',
@@ -148,9 +149,12 @@ final class ContractRenderer
             'event_room' => self::titleize($event['room'] ?? ($vars['room'] ?? 'venue')),
             'age_restriction' => (string) $ageRestriction,
             'capacity' => $event['capacity'] ?? '',
+            'contract_details' => $event['contract_details'] ?? '',
+            'load_in_time' => $event['load_in_time'] ?? '',
             'doors_time' => $event['doors_time'] ?? '',
             'show_time' => $event['show_time'] ?? '',
             'end_time' => $event['end_time'] ?? '',
+            'load_out_time' => $event['load_out_time'] ?? '',
         ];
 
         // Deal-term column tokens (formatted by key heuristics).

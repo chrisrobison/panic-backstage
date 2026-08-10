@@ -626,6 +626,10 @@ function evaluate(e) {
   const descOk = isNonBlank(e.description_public);
   if (!descOk) missingCore.push('Public description');
 
+  // Negotiated terms must be captured before the event can reach Intake Complete.
+  const contractDetailsOk = isNonBlank(e.contract_details);
+  if (!contractDetailsOk) missingCore.push('Contract details');
+
   // Show + room occupancy times
   const loadInOk = isNonBlank(e.load_in_time);
   const loadOutOk = isNonBlank(e.load_out_time);
@@ -667,7 +671,7 @@ function evaluate(e) {
   else if (e.resource_capacity !== null && e.resource_capacity !== undefined && !capacityMatches) missingOptional.push(`Capacity ≠ room cap. (${e.resource_capacity})`);
 
   return {
-    bookerOk, producerOk, ownerOk, depositOk, descOk, timesOk, ageOk,
+    bookerOk, producerOk, ownerOk, depositOk, descOk, contractDetailsOk, timesOk, ageOk,
     contractOk, contractIsUploaded, hasUploadedUrl,
     revenueOk, revenueMatches, guestsOk, capacityOk, capacityMatches,
     missingCore, missingOptional,
@@ -793,6 +797,15 @@ function descCardHtml(e, r) {
     </div>`;
 }
 
+function contractDetailsCardHtml(e, r) {
+  const display = isNonBlank(e.contract_details) ? esc(e.contract_details) : '';
+  return `
+    <div class="detail-card" data-card="contract-details" style="grid-column: 1 / -1;">
+      <h4>Contract Details ${!r.contractDetailsOk ? '<span style="color:var(--velvet)">— required for Intake Complete</span>' : ''}</h4>
+      <div class="desc">${editable(e, 'contract_details', 'multiline', display, !r.contractDetailsOk, false, 'No negotiated terms yet — click to add them.')}</div>
+    </div>`;
+}
+
 function contractCardHtml(e, r) {
   const contractUrl = isNonBlank(e.contract_url) ? e.contract_url : (isNonBlank(e.venue_contract_url) ? e.venue_contract_url : null);
   const isDeadContract = e.contract_id !== null && e.contract_id !== undefined && TERMINAL_CONTRACT_STATUSES.includes(e.contract_status);
@@ -826,6 +839,7 @@ function detailRow(e, r, idx) {
         ${logisticsCardHtml(e, r)}
         ${contractCardHtml(e, r)}
         ${optionalCardHtml(e, r)}
+        ${contractDetailsCardHtml(e, r)}
         ${descCardHtml(e, r)}
       </div>
     </td>
@@ -972,6 +986,7 @@ function cardBuilderFor(field) {
   if (field.startsWith('promoter_')) return { key: 'promoter', build: (e, r) => contactCardHtml('Producer', 'promoter', e, r) };
   if (['deposit_amount', 'load_in_time', 'doors_time', 'show_time', 'end_time', 'load_out_time', 'age_restriction'].includes(field)) return { key: 'logistics', build: logisticsCardHtml };
   if (['potential_revenue', 'estimated_guests', 'capacity'].includes(field)) return { key: 'optional', build: optionalCardHtml };
+  if (field === 'contract_details') return { key: 'contract-details', build: contractDetailsCardHtml };
   if (field === 'description_public') return { key: 'description', build: descCardHtml };
   return null;
 }

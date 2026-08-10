@@ -70,6 +70,7 @@ test('Event Details form drops ticket + contract fields (now in their own sectio
   assert.ok(await page.exists('#details [name="title"]'), 'title field still present');
   assert.ok(await page.exists('#details [name="load_in_time"]'), 'Load In is available for the room occupancy start');
   assert.ok(await page.exists('#details [name="load_out_time"]'), 'Load Out is available for the room occupancy end');
+  assert.ok(await page.exists('#details [name="contract_details"]'), 'Contract Details can be captured before Intake Complete');
   assert.notOk(await page.exists('#details [name="owner_user_id"]'), 'Owner is read-only and has no reassignment dropdown');
 });
 

@@ -80,12 +80,12 @@ try {
         "INSERT INTO events
             (venue_id, resource_id, title, slug, event_type, status, date,
              load_in_time, doors_time, show_time, end_time, load_out_time, age_restriction,
-             description_public, description_internal, av_requirements, catering_notes,
+             description_public, description_internal, av_requirements, catering_notes, contract_details,
              ticket_price, ticket_url, ticket_system, deposit_amount, contract_url,
              capacity, public_visibility, owner_user_id,
              promoter_name, promoter_email, promoter_phone, booker_name, booker_email, booker_phone)
          VALUES (?, ?, ?, ?, 'live_music', 'booked', ?, '17:00', '18:00', '19:00', '22:00', '23:00', '21+',
-                 'Public copy', 'Private copy', 'Projector', 'Green room water',
+                 'Public copy', 'Private copy', 'Projector', 'Green room water', 'Guarantee $500; house sound included.',
                  25, 'https://tickets.example.invalid/source', 'external', 500, 'https://contracts.example.invalid/source',
                  200, 1, ?, 'Contract Person', 'contract@example.invalid', '555-1000', 'Venue Booker', 'booker@example.invalid', '555-2000')",
         [$venueId, $roomId, $marker, \Panic\slugify($marker . '-' . $sourceDate), $sourceDate, (int) $admin['id']]
@@ -112,7 +112,7 @@ try {
     $clone = $db->one('SELECT * FROM events WHERE id = ?', [$cloneId]);
     ok(($clone['status'] ?? null) === 'proposed', 'clone always starts as a Hold');
     ok(($clone['date'] ?? null) === $cloneDate && ($clone['show_time'] ?? null) === '13:00:00' && ($clone['load_out_time'] ?? null) === '23:00:00', 'date/times use editable overrides and preserve load-out');
-    ok(($clone['description_public'] ?? null) === 'Public copy' && ($clone['promoter_name'] ?? null) === 'Contract Person', 'reusable details and contacts are copied');
+    ok(($clone['description_public'] ?? null) === 'Public copy' && ($clone['contract_details'] ?? null) === 'Guarantee $500; house sound included.' && ($clone['promoter_name'] ?? null) === 'Contract Person', 'reusable details, contract terms, and contacts are copied');
     ok((int) ($clone['public_visibility'] ?? 1) === 0, 'clone is not published automatically');
     ok(empty($clone['series_id']) && empty($clone['contract_url']) && empty($clone['ticket_url']) && empty($clone['deposit_amount']), 'series, contract, ticket URL, and deposit are reset');
     $taskCount = $db->one('SELECT COUNT(*) n FROM event_tasks WHERE event_id = ?', [$cloneId]);

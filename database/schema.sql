@@ -1168,6 +1168,7 @@ CREATE TABLE `events` (
   `description_internal` text DEFAULT NULL,
   `av_requirements` text DEFAULT NULL,
   `catering_notes` text DEFAULT NULL,
+  `contract_details` text DEFAULT NULL,
   `referral_source` varchar(255) DEFAULT NULL,
   `promoter_name` varchar(255) DEFAULT NULL,
   `promoter_email` varchar(255) DEFAULT NULL,
