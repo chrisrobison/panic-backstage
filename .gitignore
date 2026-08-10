@@ -17,6 +17,9 @@ storage/backups/
 # regenerable on demand from contracts/contract_sections/contract_signers
 # (see scripts/regenerate-contract-pdf.php) if ever lost from disk.
 storage/contracts/
+# Generated payment receipts contain client names/emails and are reproducible
+# from the payment + ledger rows. Keep them on the server, never in Git.
+storage/receipts/
 # Uploaded W-9s — highly sensitive (SSN/EIN) PII; never committed. See
 # PayeeSubmissionEndpoint::storeW9() and the storage/ block in .htaccess.
 storage/payees/

@@ -13,7 +13,6 @@ use RuntimeException;
 use function Panic\log_activity;
 use function Panic\date_or_null;
 use function Panic\boolish;
-use function Panic\event_public_path;
 
 /**
  * Event payment records — deposits, balance payments, refunds, etc.
@@ -527,21 +526,25 @@ final class Payments extends BaseEndpoint
         $label       = ucfirst(str_replace('_', ' ', (string) $payment['payment_type'])) . ' — ' . ($event['title'] ?? 'Event');
         $email       = (string) ($event['booker_email'] ?? '') ?: (string) ($event['promoter_email'] ?? '');
 
-        // Bounce back to the event's public page — plain ?deposit=paid/canceled
-        // query flags, deliberately NOT the ?checkout=success&order=... shape
-        // tickets-public.js reads (that component polls a real ticket_orders
-        // row by that order id + a receipt token; a payment id there would 404).
-        $appUrl   = rtrim((string) (getenv('APP_URL') ?: ''), '/');
-        $eventUrl = $appUrl . '/' . event_public_path(['id' => $eventId]);
-        $success  = $eventUrl . '&deposit=paid';
-        $cancel   = $eventUrl . '&deposit=canceled';
+        // The return target is token-gated and independent of the event's
+        // public_visibility. Private rental clients therefore get a real
+        // confirmation page instead of being bounced into PublicEvents' 404.
+        $receiptService = new \Panic\EventPaymentReceiptService($this->db, $this->root);
+        $receiptToken = $receiptService->ensureToken((int) $payment['id']);
+        $receiptUrl = $receiptService->receiptUrl((int) $payment['id'], $receiptToken);
+        $success = $receiptUrl;
+        $cancel  = $receiptUrl . '&checkout=canceled';
 
         $provider = PaymentProviders::active($this->db, new Env());
 
         $order = [
             'id'          => (int) $payment['id'],
+            // Keep event-payment ids out of ticket_orders' numeric namespace
+            // in provider metadata/reference_id. Exact webhook matching still
+            // uses the provider-issued ref persisted below.
+            'internal_reference' => 'payment:' . (int) $payment['id'],
             'currency'    => $currency,
-            'buyer_email' => $email,
+            'buyer_email' => (string) ($event['promoter_email'] ?? '') ?: $email,
         ];
         $items = [[
             'name'             => $label,

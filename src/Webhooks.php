@@ -76,14 +76,31 @@ final class Webhooks extends BaseEndpoint
     /** Fulfill the matched order (idempotent) and email any freshly-issued tickets. */
     private function handleSuccess(PaymentProvider $provider, string $providerRef, string $paymentRef): void
     {
-        $order = $this->matchOrder($provider, $providerRef);
+        // Match order matters. Both direct lookups compare against an id the
+        // PROVIDER issued and we stored verbatim, so they are exact and can
+        // never match the wrong row. resolveInternalOrderId() is a heuristic
+        // — it reads back an id WE chose (Square's order reference_id) — so it
+        // must run last, after every exact possibility is exhausted.
+        //
+        // Getting this order wrong caused a real incident on 2026-08-09: a
+        // client's event payment (event_payments #8) resolved through the
+        // fallback to the unrelated ticket_orders #8, which was then
+        // "self-healed", cancelled and fulfilled — issuing tickets — while her
+        // actual payment was never recorded. See
+        // scripts/repair-square-ref-collision.php.
+        $order = $this->matchOrderByRef($provider, $providerRef);
+
         if ($order === null) {
             $payment = $this->matchEventPayment($provider, $providerRef);
-            if ($payment === null) {
-                error_log("Webhook {$provider->key()}: no order or payment for provider_ref '{$providerRef}'.");
+            if ($payment !== null) {
+                $this->fulfillEventPayment($provider, $payment, $paymentRef);
                 return;
             }
-            $this->fulfillEventPayment($provider, $payment, $paymentRef);
+            $order = $this->matchOrderByReferenceId($provider, $providerRef);
+        }
+
+        if ($order === null) {
+            error_log("Webhook {$provider->key()}: no order or payment for provider_ref '{$providerRef}'.");
             return;
         }
         $orderId = (int) $order['id'];
@@ -120,7 +137,19 @@ final class Webhooks extends BaseEndpoint
     /** Release the inventory hold for a payment that failed/expired. */
     private function handleFailure(PaymentProvider $provider, string $providerRef): void
     {
-        $order = $this->matchOrder($provider, $providerRef);
+        // Same ordering rule as handleSuccess, and for the same reason: a
+        // failed/cancelled EVENT PAYMENT must never be resolved onto a ticket
+        // order through the reference_id heuristic and cancel it. That is
+        // exactly how ticket_orders #8 got cancelled on 2026-08-09. Event
+        // payments hold no inventory, so there is nothing to release for them
+        // — recognizing the ref as one is enough to stop here.
+        $order = $this->matchOrderByRef($provider, $providerRef);
+        if ($order === null) {
+            if ($this->matchEventPayment($provider, $providerRef) !== null) {
+                return;
+            }
+            $order = $this->matchOrderByReferenceId($provider, $providerRef);
+        }
         if ($order === null) {
             return;
         }
@@ -133,49 +162,68 @@ final class Webhooks extends BaseEndpoint
         );
     }
 
-    /**
-     * Match an order by the provider that created it + its checkout reference.
-     *
-     * Primary path: a direct (provider, provider_ref) lookup — this is what
-     * succeeds for every order created after provider_ref was aligned with the
-     * value the webhook echoes (Stripe: session id; Square: order id).
-     *
-     * Fallback path: if the direct lookup misses, ask the provider to resolve
-     * the webhook ref to our internal order id (Square reads it back from the
-     * order's reference_id). This recovers legacy Square orders that stored the
-     * payment_link id as provider_ref. On a fallback hit we backfill
-     * provider_ref to the webhook ref so retries take the fast path and the row
-     * is self-consistent going forward.
-     */
-    private function matchOrder(PaymentProvider $provider, string $providerRef): ?array
+    /** Exact match on the reference the provider itself issued. Never ambiguous. */
+    private function matchOrderByRef(PaymentProvider $provider, string $providerRef): ?array
     {
         if ($providerRef === '') {
             return null;
         }
-        $providerKey = $provider->key();
-
-        $order = $this->db->one(
+        return $this->db->one(
             'SELECT * FROM ticket_orders WHERE provider = ? AND provider_ref = ? LIMIT 1',
-            [$providerKey, $providerRef]
+            [$provider->key(), $providerRef]
         );
-        if ($order !== null) {
-            return $order;
-        }
+    }
 
+    /**
+     * Heuristic recovery for legacy Square ticket orders that stored the
+     * payment_link id as provider_ref: ask the provider to read our own id
+     * back out of the order's reference_id.
+     *
+     * MUST be called only after every exact match has missed — the value it
+     * reads is one WE wrote, and historically both ticket orders and event
+     * payments wrote a bare integer there from two different tables, so a
+     * number alone does not identify which table it came from. New event
+     * payment links are namespaced ("payment:8"), which resolveInternalOrderId
+     * rejects outright, but links minted before that change are still live.
+     */
+    private function matchOrderByReferenceId(PaymentProvider $provider, string $providerRef): ?array
+    {
+        if ($providerRef === '') {
+            return null;
+        }
         $internalId = $provider->resolveInternalOrderId($providerRef);
         if ($internalId === null || $internalId <= 0) {
             return null;
         }
+
+        // A bare legacy reference can name rows in both tables. If an active
+        // event payment occupies this id, the value is ambiguous and must not
+        // be interpreted as a ticket order. New event-payment checkouts use a
+        // namespaced reference and never reach this fallback.
+        $paymentCollision = $this->db->one(
+            "SELECT id FROM event_payments
+             WHERE id = ? AND checkout_provider = ? AND status != 'voided' LIMIT 1",
+            [$internalId, $provider->key()]
+        );
+        if ($paymentCollision !== null) {
+            error_log(sprintf(
+                'Webhook %s: bare reference_id %d is ambiguous with event_payments; refusing ticket-order fallback.',
+                $provider->key(),
+                $internalId
+            ));
+            return null;
+        }
+
         $order = $this->db->one(
             'SELECT * FROM ticket_orders WHERE id = ? AND provider = ? LIMIT 1',
-            [$internalId, $providerKey]
+            [$internalId, $provider->key()]
         );
         if ($order === null) {
             return null;
         }
 
-        // Self-heal: align provider_ref with the value the webhook carries so
-        // subsequent retries match directly without another provider round-trip.
+        // Safe after the cross-table ambiguity check: align legacy orders
+        // that stored Square's payment-link id with the webhook's order id.
         $this->db->run(
             'UPDATE ticket_orders SET provider_ref = ? WHERE id = ?',
             [$providerRef, (int) $order['id']]
@@ -214,31 +262,56 @@ final class Webhooks extends BaseEndpoint
     {
         $paymentId = (int) $payment['id'];
         $eventId   = (int) $payment['event_id'];
+        $newlyReceived = false;
 
-        if ($payment['status'] === 'received') {
-            return; // Already processed by an earlier delivery of this webhook.
+        if (($payment['status'] ?? '') !== 'received') {
+            $changed = $this->db->run(
+                "UPDATE event_payments
+                 SET status = 'received', received_at = NOW(), checkout_payment_ref = ?, method = ?
+                 WHERE id = ? AND status != 'received'",
+                [$paymentRef !== '' ? $paymentRef : null, $provider->key(), $paymentId]
+            );
+            $newlyReceived = $changed === 1;
         }
 
-        $this->db->run(
-            "UPDATE event_payments
-             SET status = 'received', received_at = NOW(), checkout_payment_ref = ?
-             WHERE id = ?",
-            [$paymentRef !== '' ? $paymentRef : null, $paymentId]
-        );
-        $this->db->run(
-            'INSERT INTO event_payment_audit (payment_id, event_id, user_id, action, note)
-             VALUES (?, ?, NULL, ?, ?)',
-            [$paymentId, $eventId, 'checkout_paid', ucfirst($provider->key()) . ' checkout completed (webhook)']
-        );
+        if ($newlyReceived) {
+            $this->db->run(
+                'INSERT INTO event_payment_audit (payment_id, event_id, user_id, action, note)
+                 VALUES (?, ?, NULL, ?, ?)',
+                [$paymentId, $eventId, 'checkout_paid', ucfirst($provider->key()) . ' checkout completed (webhook)']
+            );
 
-        if (($payment['payment_type'] ?? '') === 'deposit') {
-            EventPayments::syncDepositStatus($this->db, $eventId);
+            if (($payment['payment_type'] ?? '') === 'deposit') {
+                EventPayments::syncDepositStatus($this->db, $eventId);
+            }
+
+            log_activity($this->db, $eventId, null, ucfirst($provider->key()) . ' payment received (webhook)', [
+                'payment_id' => $paymentId,
+                'provider'   => $provider->key(),
+                'amount'     => $payment['amount'],
+            ]);
         }
 
-        log_activity($this->db, $eventId, null, ucfirst($provider->key()) . ' payment received (webhook)', [
-            'payment_id' => $paymentId,
-            'provider'   => $provider->key(),
-            'amount'     => $payment['amount'],
-        ]);
+        // Receipt delivery is deliberately retryable independently of payment
+        // fulfillment. If the MTA was down on the first webhook, a provider
+        // retry sees status=received but receipt_emailed_at=NULL and tries again.
+        $receipt = new EventPaymentReceiptService($this->db, $this->root);
+        try {
+            $token = $receipt->ensureToken($paymentId);
+            $data = $receipt->load($paymentId, $token);
+            if ($data !== null && empty($data['receipt_emailed_at']) && $receipt->email($data)) {
+                $this->db->run(
+                    'UPDATE event_payments SET receipt_emailed_at = NOW() WHERE id = ? AND receipt_emailed_at IS NULL',
+                    [$paymentId]
+                );
+                $this->db->run(
+                    'INSERT INTO event_payment_audit (payment_id, event_id, user_id, action, note)
+                     VALUES (?, ?, NULL, ?, ?)',
+                    [$paymentId, $eventId, 'receipt_emailed', 'Payment receipt emailed to client']
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log("Webhook {$provider->key()}: receipt delivery failed for payment {$paymentId}: " . $e->getMessage());
+        }
     }
 }

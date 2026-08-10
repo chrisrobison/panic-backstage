@@ -83,11 +83,12 @@ final class SquareProvider implements PaymentProvider
             throw new RuntimeException('Cannot create a Square checkout with no line items.');
         }
 
+        $internalReference = (string) ($order['internal_reference'] ?? ($order['id'] ?? ''));
         $payload = [
             'idempotency_key' => $this->idempotencyKey('link-' . (string) ($order['id'] ?? '') . '-'),
             'order'           => [
                 'location_id'   => $this->locationId,
-                'reference_id'  => (string) ($order['id'] ?? ''),
+                'reference_id'  => $internalReference,
                 'line_items'    => $lineItems,
             ],
             'checkout_options' => [

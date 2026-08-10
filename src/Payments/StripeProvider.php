@@ -54,15 +54,16 @@ final class StripeProvider implements PaymentProvider
         $currency = strtolower((string) ($order['currency'] ?? 'usd'));
 
         // Stripe wants form-encoded, deeply-nested params. Build line_items[n][...].
+        $internalReference = (string) ($order['internal_reference'] ?? ($order['id'] ?? ''));
         $form = [
             'mode'                 => 'payment',
             'success_url'          => $successUrl,
             'cancel_url'           => $cancelUrl,
-            'client_reference_id'  => (string) ($order['id'] ?? ''),
+            'client_reference_id'  => $internalReference,
             // Carry the internal order id through to the webhook regardless of
             // which object Stripe hands us back.
-            'metadata[order_id]'   => (string) ($order['id'] ?? ''),
-            'payment_intent_data[metadata][order_id]' => (string) ($order['id'] ?? ''),
+            'metadata[order_id]'   => $internalReference,
+            'payment_intent_data[metadata][order_id]' => $internalReference,
         ];
 
         $email = (string) ($order['buyer_email'] ?? '');

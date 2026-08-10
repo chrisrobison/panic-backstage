@@ -320,6 +320,17 @@ final class Kernel
             ]];
         }
 
+        // Private event-payment receipts (opaque receipt token; event need not
+        // be publicly visible):
+        //   GET /api/public/payments/{paymentId}/receipt?token=...
+        //   GET /api/public/payments/{paymentId}/download?token=...
+        if ($segments[0] === 'public' && ($segments[1] ?? '') === 'payments') {
+            return [EventPaymentReceipts::class, [
+                'paymentId' => $this->intOrNull($segments[2] ?? null),
+                'action'    => $segments[3] ?? 'receipt',
+            ]];
+        }
+
         // Public booking-inquiry intake (unauthenticated; embeddable widget):
         //   POST    /api/public/inquiries   -> create a lead (source=website)
         //   OPTIONS /api/public/inquiries   -> CORS preflight
@@ -853,6 +864,7 @@ final class Kernel
             Invites::class,
             Me::class,                  // returns null user gracefully when unauthenticated
             PublicTickets::class,        // public ticket browse + checkout
+            EventPaymentReceipts::class, // private receipt page/PDF, authenticated by opaque token
             PublicInquiry::class,        // public booking-inquiry widget intake; answers its own CORS preflight
             Webhooks::class,            // payment provider webhooks (ticketing), authenticated by signature
             PosWebhook::class,          // Square POS webhook (bar/merch ledger), authenticated by signature

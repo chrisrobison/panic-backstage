@@ -26,7 +26,9 @@ interface PaymentProvider
      * Create a hosted checkout session for an order.
      *
      * @param array $order ticket_orders row (id, amount_cents, currency,
-     *                     buyer_email, buyer_name, ...).
+     *                     buyer_email, buyer_name, ...), optionally with an
+     *                     internal_reference string when callers need a
+     *                     namespaced provider-side reference.
      * @param array $items list of line items, each:
      *                     ['ticket_type_id'=>int,'name'=>string,
      *                      'quantity'=>int,'unit_price_cents'=>int].
