@@ -50,12 +50,17 @@ The baseline `database/schema.sql` plus migration `017_contract_signatures.sql` 
 `rental_fee`, `deposit_amount`, `balance_due_date`, `bar_minimum`,
 `guarantee_amount`, `door_split_artist|venue|promoter`,
 `advance_ticket_price`, `door_ticket_price`, `security_count`, `security_rate`,
-`security_paid_by`, `sound_tech_included`, `lighting_tech_included`,
+`security_paid_by`, `sound_rate`, `sound_paid_by`, `sound_tech_included`, `lighting_tech_included`,
 `merch_venue_percent`, `recurrence_rule`, `term_start`, `term_end`,
 `trial_period_weeks`, `termination_notice_days`, `review_cadence`,
 `revenue_split_house`, `revenue_split_producer`. Everything else a clause needs
 lives in `variables_json` (e.g. `marketing_deadline`, `ticket_platform`,
 `insurance_amount`, `beneficiary`, `radius_miles`).
+
+Security and sound-tech rates are internal when their corresponding `*_paid_by`
+value is `venue`: rendered contracts state that the Venue covers the service but
+omit the hourly amount. Artist, promoter, client, and shared responsibility render
+the rate and payer. A venue-covered rate is also not treated as a missing term.
 
 ---
 

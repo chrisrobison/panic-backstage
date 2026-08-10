@@ -6595,6 +6595,19 @@ components:
             - promoter
             - client
             - shared
+        sound_rate:
+          type: number
+          nullable: true
+          description: Internal hourly sound-tech cost; rendered only when sound_paid_by is not venue.
+        sound_paid_by:
+          type: string
+          nullable: true
+          enum:
+            - venue
+            - artist
+            - promoter
+            - client
+            - shared
         sound_tech_included:
           type: boolean
           nullable: true
@@ -6974,6 +6987,7 @@ components:
             type: string
         security_paid_by:
           type: array
+          description: Valid payer values shared by security_paid_by and sound_paid_by.
           items:
             type: string
         capabilities:
@@ -7133,6 +7147,19 @@ components:
           type: number
           nullable: true
         security_paid_by:
+          type: string
+          nullable: true
+          enum:
+            - venue
+            - artist
+            - promoter
+            - client
+            - shared
+        sound_rate:
+          type: number
+          nullable: true
+          description: Internal hourly sound-tech cost; rendered only when sound_paid_by is not venue.
+        sound_paid_by:
           type: string
           nullable: true
           enum:
@@ -10018,6 +10045,10 @@ components:
         merch_venue_percent:
           type: string
         sound_tech_included:
+          type: string
+        sound_rate:
+          type: string
+        sound_paid_by:
           type: string
         lighting_tech_included:
           type: string

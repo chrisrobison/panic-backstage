@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `contracts` — Hide venue-covered service rates (#24)
 - **Added** `payments` — Reconcile processor fees and taxes (#27)
 - **Fixed** `calendar` — Center and enlarge load errors (#30)
 - **Added** `contracts` — Require contract details at intake (#31)

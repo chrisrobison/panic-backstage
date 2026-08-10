@@ -53,10 +53,10 @@ function seed_contract_library(\PDO $pdo): void
             'Ticketing shall be managed via {{ticket_platform}}. Advance tickets shall be priced at {{advance_ticket_price}} and door tickets at {{door_ticket_price}}. The Venue shall control the box office and provide a final settlement count at the conclusion of the event.'],
 
         ['security', 'Security Staffing', 'operational', 'medium', 0, ['security_count', 'security_rate', 'security_paid_by'],
-            'Security staffing shall consist of {{security_count}} licensed guard(s) at a rate of {{security_rate}} per hour. Security costs shall be borne by the {{security_paid_by}}. Guards shall be on duty from doors through final load-out and clearance of the premises.'],
+            'Security staffing shall consist of {{security_count}} licensed guard(s). {{security_terms}} Guards shall be on duty from doors through final load-out and clearance of the premises.'],
 
         ['production', 'Production & Technical', 'operational', 'none', 0, [],
-            'Production support for this event: sound technician included — {{sound_tech_included}}; lighting technician included — {{lighting_tech_included}}. The Counterparty shall deliver a stage plot and input list no later than seven (7) days before the event. Any equipment beyond the Venue'."'".'s standard package is the Counterparty'."'".'s responsibility.'],
+            'Production support for this event: sound technician — {{sound_tech_terms}} Lighting technician included — {{lighting_tech_included}}. The Counterparty shall deliver a stage plot and input list no later than seven (7) days before the event. Any equipment beyond the Venue'."'".'s standard package is the Counterparty'."'".'s responsibility.'],
 
         ['all_ages', 'All-Ages Alcohol Control', 'risk', 'high', 0, [],
             'As this is an all-ages event, the following controls apply: all patrons of legal drinking age shall be wristbanded after ID verification at entry; alcohol service is restricted to wristbanded patrons in designated areas only; minors shall not be served alcohol or permitted in age-restricted areas; and the Counterparty acknowledges the enhanced security and door-staffing requirements associated with all-ages programming.'],

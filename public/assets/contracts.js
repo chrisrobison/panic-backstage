@@ -6,7 +6,7 @@ import { esc, titleCase, publish, api, apiUrl, getToken, formData, badge, option
 // a follow-up; this gives the Admin ▸ Contracts nav item a destination.
 // ── Contract / Deal Builder ──────────────────────────────────────────────────
 
-const CONTRACT_DEAL_COLUMNS = ['rental_fee', 'deposit_amount', 'balance_due_date', 'bar_minimum', 'guarantee_amount', 'door_split_artist', 'door_split_venue', 'door_split_promoter', 'advance_ticket_price', 'door_ticket_price', 'security_count', 'security_rate', 'security_paid_by', 'sound_tech_included', 'lighting_tech_included', 'merch_venue_percent', 'recurrence_rule', 'term_start', 'term_end', 'trial_period_weeks', 'termination_notice_days', 'review_cadence', 'revenue_split_house', 'revenue_split_producer'];
+const CONTRACT_DEAL_COLUMNS = ['rental_fee', 'deposit_amount', 'balance_due_date', 'bar_minimum', 'guarantee_amount', 'door_split_artist', 'door_split_venue', 'door_split_promoter', 'advance_ticket_price', 'door_ticket_price', 'security_count', 'security_rate', 'security_paid_by', 'sound_rate', 'sound_paid_by', 'sound_tech_included', 'lighting_tech_included', 'merch_venue_percent', 'recurrence_rule', 'term_start', 'term_end', 'trial_period_weeks', 'termination_notice_days', 'review_cadence', 'revenue_split_house', 'revenue_split_producer'];
 
 
 function contractStatusTone(status) {
@@ -457,7 +457,7 @@ class ContractEditor extends PanicElement {
     const groups = [
       ['Counterparty', [['counterparty_name', 'Name', 'text'], ['counterparty_org', 'Organization', 'text'], ['counterparty_email', 'Email', 'email']], true],
       ['Money & Splits', [['rental_fee', 'Rental fee ($)', 'number'], ['deposit_amount', 'Deposit ($)', 'number'], ['balance_due_date', 'Balance due', 'date'], ['bar_minimum', 'Bar minimum ($)', 'number'], ['guarantee_amount', 'Guarantee ($)', 'number'], ['revenue_split_house', 'House split (%)', 'number'], ['revenue_split_producer', 'Producer split (%)', 'number'], ['door_split_artist', 'Artist door (%)', 'number'], ['door_split_venue', 'Venue door (%)', 'number'], ['door_split_promoter', 'Promoter door (%)', 'number'], ['advance_ticket_price', 'Advance ticket ($)', 'number'], ['door_ticket_price', 'Door ticket ($)', 'number'], ['merch_venue_percent', 'Venue merch (%)', 'number']], false],
-      ['Security & Production', [['security_count', '# Guards', 'number'], ['security_rate', 'Security rate ($/hr)', 'number'], ['security_paid_by', 'Security paid by', 'paidby'], ['sound_tech_included', 'Sound tech included', 'bool'], ['lighting_tech_included', 'Lighting tech included', 'bool']], false],
+      ['Security & Production', [['security_count', '# Guards', 'number'], ['security_rate', 'Security rate ($/hr)', 'number'], ['security_paid_by', 'Security paid by', 'paidby'], ['sound_tech_included', 'Sound tech included', 'bool'], ['sound_rate', 'Sound tech rate ($/hr)', 'number'], ['sound_paid_by', 'Sound tech paid by', 'paidby'], ['lighting_tech_included', 'Lighting tech included', 'bool']], false],
       ['Recurring / Residency', [['recurrence_rule', 'Recurrence', 'text'], ['term_start', 'Term start', 'date'], ['term_end', 'Term end', 'date'], ['trial_period_weeks', 'Trial (weeks)', 'number'], ['termination_notice_days', 'Termination notice (days)', 'number'], ['review_cadence', 'Review cadence', 'text']], false],
     ];
     const field = ([name, label, type]) => {

@@ -30,6 +30,8 @@ final class WizardDefaults extends BaseEndpoint
         'bar_minimum',
         'merch_venue_percent',
         'sound_tech_included',
+        'sound_rate',
+        'sound_paid_by',
         'lighting_tech_included',
         'security_count',
         'security_rate',

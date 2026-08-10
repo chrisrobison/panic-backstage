@@ -357,6 +357,24 @@ const WIZARD_FLOW = {
           type: 'bool',
         },
         {
+          id: 'sound_rate',
+          label: 'Sound Tech Rate ($/hr)',
+          type: 'number',
+        },
+        {
+          id: 'sound_paid_by',
+          label: 'Sound Tech Paid By',
+          type: 'select',
+          options: [
+            { value: '',         label: '—' },
+            { value: 'venue',    label: 'Venue' },
+            { value: 'artist',   label: 'Artist' },
+            { value: 'promoter', label: 'Promoter' },
+            { value: 'client',   label: 'Client' },
+            { value: 'shared',   label: 'Shared' },
+          ],
+        },
+        {
           id: 'lighting_tech_included',
           label: 'Lighting Tech Included?',
           type: 'bool',
@@ -380,6 +398,8 @@ const WIZARD_FLOW = {
             { value: 'venue',    label: 'Venue' },
             { value: 'artist',   label: 'Artist' },
             { value: 'promoter', label: 'Promoter' },
+            { value: 'client',   label: 'Client' },
+            { value: 'shared',   label: 'Shared' },
           ],
         },
         {
@@ -479,9 +499,9 @@ const NUMERIC_DEAL_FIELDS = [
   'guarantee_amount', 'deposit_amount', 'bar_minimum', 'rental_fee',
   'door_split_artist', 'door_split_venue', 'door_split_promoter',
   'advance_ticket_price', 'door_ticket_price', 'merch_venue_percent',
-  'security_count', 'security_rate', 'revenue_split_house', 'revenue_split_producer',
+  'security_count', 'security_rate', 'sound_rate', 'revenue_split_house', 'revenue_split_producer',
 ];
-const STRING_DEAL_FIELDS  = ['balance_due_date', 'security_paid_by', 'tech_rider_notes'];
+const STRING_DEAL_FIELDS  = ['balance_due_date', 'security_paid_by', 'sound_paid_by', 'tech_rider_notes'];
 const BOOL_DEAL_FIELDS    = ['sound_tech_included', 'lighting_tech_included'];
 
 

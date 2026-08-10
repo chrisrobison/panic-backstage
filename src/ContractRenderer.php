@@ -30,6 +30,9 @@ final class ContractRenderer
         'advance_ticket_price' => 'Advance ticket price', 'door_ticket_price' => 'Door ticket price',
         'security_count' => 'Number of guards', 'security_rate' => 'Security rate',
         'security_paid_by' => 'Security paid by',
+        'security_terms' => 'Security billing terms',
+        'sound_rate' => 'Sound tech rate', 'sound_paid_by' => 'Sound tech paid by',
+        'sound_tech_terms' => 'Sound tech terms',
         'sound_tech_included' => 'Sound tech included', 'lighting_tech_included' => 'Lighting tech included',
         'merch_venue_percent' => 'Venue merch %',
         'recurrence_rule' => 'Recurrence', 'term_start' => 'Term start', 'term_end' => 'Term end',
@@ -45,7 +48,7 @@ final class ContractRenderer
         'rental_fee', 'deposit_amount', 'balance_due_date', 'bar_minimum', 'guarantee_amount',
         'door_split_artist', 'door_split_venue', 'door_split_promoter',
         'advance_ticket_price', 'door_ticket_price',
-        'security_count', 'security_rate', 'security_paid_by',
+        'security_count', 'security_rate', 'security_paid_by', 'sound_rate', 'sound_paid_by',
         'sound_tech_included', 'lighting_tech_included', 'merch_venue_percent',
         'recurrence_rule', 'term_start', 'term_end', 'trial_period_weeks',
         'termination_notice_days', 'review_cadence', 'revenue_split_house', 'revenue_split_producer',
@@ -161,6 +164,13 @@ final class ContractRenderer
         foreach (self::DEAL_COLUMNS as $col) {
             $tokens[$col] = self::formatValue($col, $contract[$col] ?? null);
         }
+        $tokens['security_terms'] = self::serviceTerms(
+            'Security',
+            $contract['security_rate'] ?? null,
+            $contract['security_paid_by'] ?? null,
+            true
+        );
+        $tokens['sound_tech_terms'] = self::soundTechTerms($contract);
         // Long-tail variable tokens.
         foreach ($vars as $k => $v) {
             if (!isset($tokens[$k]) || $tokens[$k] === '') {
@@ -233,6 +243,14 @@ final class ContractRenderer
             $required = self::decodeList($section['required_fields_json'] ?? null);
             foreach ($required as $key) {
                 if (isset($seen[$key])) {
+                    continue;
+                }
+                // A venue-covered service has no counterparty rate to fill in
+                // or reveal. The payer selection makes that omission explicit.
+                if ($key === 'security_rate' && ($tokens['security_paid_by'] ?? '') === 'venue') {
+                    continue;
+                }
+                if ($key === 'sound_rate' && ($tokens['sound_paid_by'] ?? '') === 'venue') {
                     continue;
                 }
                 $value = $tokens[$key] ?? '';
@@ -357,6 +375,53 @@ final class ContractRenderer
     private static function isDateKey(string $key): bool
     {
         return str_ends_with($key, '_date') || in_array($key, ['term_start', 'term_end'], true);
+    }
+
+    /** Complete contract wording for a service's rate and responsibility. */
+    private static function serviceTerms(string $service, mixed $rate, mixed $paidBy, bool $sentence = false): string
+    {
+        $payer = strtolower(trim((string) $paidBy));
+        if ($payer === 'venue') {
+            return $sentence
+                ? "{$service} is provided at the Venue's cost."
+                : "included at the Venue's cost";
+        }
+
+        $rateText = self::formatValue(strtolower(str_replace(' ', '_', $service)) . '_rate', $rate);
+        $payerText = $payer !== '' ? self::titleize($payer) : '';
+        if ($rateText !== '' && $payerText !== '') {
+            return $sentence
+                ? "{$service} is billed at {$rateText} per hour and costs shall be borne by the {$payerText}."
+                : "included at {$rateText} per hour, payable by the {$payerText}";
+        }
+        if ($payerText !== '') {
+            return $sentence
+                ? "{$service} costs shall be borne by the {$payerText}."
+                : "included; costs borne by the {$payerText}";
+        }
+        if ($rateText !== '') {
+            return $sentence
+                ? "{$service} is billed at {$rateText} per hour; billing responsibility is not yet specified."
+                : "included at {$rateText} per hour; billing responsibility is not yet specified";
+        }
+        return $sentence ? '' : 'included; billing responsibility is not yet specified';
+    }
+
+    private static function soundTechTerms(array $contract): string
+    {
+        $included = $contract['sound_tech_included'] ?? null;
+        if ($included === null || $included === '') {
+            return '';
+        }
+        if (!self::truthy($included)) {
+            return 'not included';
+        }
+        return self::serviceTerms(
+            'Sound tech',
+            $contract['sound_rate'] ?? null,
+            $contract['sound_paid_by'] ?? null,
+            false
+        );
     }
 
     private static function formatDate(mixed $value): string

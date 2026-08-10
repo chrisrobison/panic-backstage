@@ -717,6 +717,14 @@ class AdminWizardDefaults extends PanicElement {
             <legend><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Production &amp; security</legend>
             <div class="wd-grid">
               ${this._field({ id: 'sound_tech_included',    label: 'Sound tech included',    type: 'bool' })}
+              ${this._field({ id: 'sound_rate',             label: 'Sound tech rate ($/hr)', type: 'number' })}
+              ${this._field({ id: 'sound_paid_by',          label: 'Sound tech paid by',     type: 'select', options: [
+                { value: 'venue',     label: 'Venue'    },
+                { value: 'artist',    label: 'Artist'   },
+                { value: 'promoter',  label: 'Promoter' },
+                { value: 'client',    label: 'Client'   },
+                { value: 'shared',    label: 'Shared'   },
+              ]})}
               ${this._field({ id: 'lighting_tech_included', label: 'Lighting tech included',  type: 'bool' })}
               ${this._field({ id: 'security_count',         label: '# security guards',       type: 'number' })}
               ${this._field({ id: 'security_rate',          label: 'Security rate ($/hr)',     type: 'number' })}
@@ -724,6 +732,8 @@ class AdminWizardDefaults extends PanicElement {
                 { value: 'venue',     label: 'Venue'    },
                 { value: 'artist',    label: 'Artist'   },
                 { value: 'promoter',  label: 'Promoter' },
+                { value: 'client',    label: 'Client'   },
+                { value: 'shared',    label: 'Shared'   },
               ]})}
             </div>
           </fieldset>

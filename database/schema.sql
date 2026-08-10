@@ -458,6 +458,8 @@ CREATE TABLE `contracts` (
   `security_count` int(11) DEFAULT NULL,
   `security_rate` decimal(10,2) DEFAULT NULL,
   `security_paid_by` enum('venue','artist','promoter','client','shared') DEFAULT NULL,
+  `sound_rate` decimal(10,2) DEFAULT NULL,
+  `sound_paid_by` enum('venue','artist','promoter','client','shared') DEFAULT NULL,
   `sound_tech_included` tinyint(1) DEFAULT NULL,
   `lighting_tech_included` tinyint(1) DEFAULT NULL,
   `merch_venue_percent` decimal(5,2) DEFAULT NULL,

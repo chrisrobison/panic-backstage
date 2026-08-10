@@ -1028,6 +1028,7 @@ const HELP_CONTENT = {
       <li><strong>Preview (center).</strong> A live render of the contract. Blank required values show as highlighted <span class="contract-token-missing">[ placeholders ]</span> so you can see what's still unfilled. Use <em>Generate version</em> to snapshot it, and <em>Download PDF</em> to produce a file (generated right in your browser).</li>
       <li><strong>Status, checks &amp; clauses (right).</strong> The workflow status, missing-term and risk warnings, the clause list, and version history.</li>
     </ul>
+    <div class="tip"><strong>Venue-covered services stay internal:</strong> Set <em>Security paid by</em> or <em>Sound tech paid by</em> to <strong>Venue</strong> when the house absorbs that cost. The contract says the service is provided at the Venue's cost but does not reveal the internal hourly rate. If Artist, Promoter, Client, or Shared is selected, the hourly rate appears with the billing responsibility.</div>
 
     <h3>Smart clause selection</h3>
     <p>Each template starts with a sensible set of clauses. As you change the deal terms, Backstage automatically adds or removes condition-based clauses — for example an all-ages event pulls in the <em>All-Ages Alcohol Control</em> and <em>Security</em> clauses; a bar minimum greater than zero pulls in the <em>Bar Minimum</em> clause. Auto-selected clauses are tagged <span class="auto-tag">auto</span>. Use <em>Smart re-check</em> to re-run the rules after big changes.</p>

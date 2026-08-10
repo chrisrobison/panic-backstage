@@ -432,7 +432,8 @@ snapshots (<code>included</code>, <code>auto_selected</code>,
 <code>door_split_artist|venue|promoter</code>,
 <code>advance_ticket_price</code>, <code>door_ticket_price</code>,
 <code>security_count</code>, <code>security_rate</code>,
-<code>security_paid_by</code>, <code>sound_tech_included</code>,
+<code>security_paid_by</code>, <code>sound_rate</code>,
+<code>sound_paid_by</code>, <code>sound_tech_included</code>,
 <code>lighting_tech_included</code>, <code>merch_venue_percent</code>,
 <code>recurrence_rule</code>, <code>term_start</code>,
 <code>term_end</code>, <code>trial_period_weeks</code>,
@@ -442,6 +443,11 @@ Everything else a clause needs lives in <code>variables_json</code>
 (e.g. <code>marketing_deadline</code>, <code>ticket_platform</code>,
 <code>insurance_amount</code>, <code>beneficiary</code>,
 <code>radius_miles</code>).</p>
+<p>Security and sound-tech rates are internal when their corresponding
+<code>*_paid_by</code> value is <code>venue</code>: rendered contracts state
+that the Venue covers the service but omit the hourly amount. Artist,
+promoter, client, and shared responsibility render the rate and payer. A
+venue-covered rate is also not treated as a missing term.</p>
 <hr />
 <h2 id="backend">Backend</h2>
 <p>PHP, no framework, PSR-4 autoload (<code>Panic\Foo</code> →

@@ -267,6 +267,9 @@ final class Contracts extends BaseEndpoint
         if (in_array($field, ['sound_tech_included', 'lighting_tech_included'], true)) {
             return ($value === '' || $value === null) ? null : boolish($value);
         }
+        if (in_array($field, ['security_paid_by', 'sound_paid_by'], true)) {
+            return in_array($value, ['venue', 'artist', 'promoter', 'client', 'shared'], true) ? $value : null;
+        }
         if ($value === '' || $value === null) {
             return null;
         }
