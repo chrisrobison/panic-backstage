@@ -18,7 +18,7 @@ SET @ticket_contact_fk_exists := (
 SET @ticket_contact_fk_sql := IF(
   @ticket_contact_fk_exists = 0,
   'ALTER TABLE `ticket_orders` ADD CONSTRAINT `fk_ticket_orders_contact` FOREIGN KEY (`contact_id`) REFERENCES `contacts` (`id`) ON DELETE SET NULL',
-  'SELECT 1'
+  'DO 0'
 );
 PREPARE ticket_contact_fk_stmt FROM @ticket_contact_fk_sql;
 EXECUTE ticket_contact_fk_stmt;
