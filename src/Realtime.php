@@ -85,13 +85,14 @@ final class Realtime extends BaseEndpoint
 
     /**
      * Opt-in, not opt-out: an SSE connection pins a PHP-FPM (or `php -S`)
-     * worker for up to ttlSeconds() per open tab, which the reference pool
-     * config (deploy/php-fpm/panic.conf, pm.max_children = 6) cannot absorb
-     * for more than a handful of simultaneously open tabs — see
-     * docs/realtime-data.md's "Production configuration". An install that
-     * never set REALTIME_ENABLED must not silently start pinning workers
-     * after an upgrade, so only an explicit truthy value turns this on;
-     * anything else (absent, blank, "false", "0") is disabled.
+     * worker for up to ttlSeconds() per open tab, and no PHP-FPM process
+     * manager mode lets two requests share one worker — see
+     * docs/realtime-data.md's "Production configuration" for how the
+     * reference pool config (deploy/php-fpm/panic.conf) is sized for this.
+     * An install that never set REALTIME_ENABLED must not silently start
+     * pinning workers after an upgrade, so only an explicit truthy value
+     * turns this on; anything else (absent, blank, "false", "0") is
+     * disabled.
      */
     private static function enabled(): bool
     {

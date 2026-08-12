@@ -477,22 +477,31 @@ fallback:  direct HTTP only                    (worker unsupported/broken)
 An SSE connection pins one PHP-FPM (or `php -S`) worker for up to
 `REALTIME_STREAM_TTL_SECONDS`, and each open tab immediately reconnects when
 that ends — so, unlike an ordinary short-lived endpoint, "concurrent open
-tabs" is a better sizing input than "requests per second." Size
-`pm.max_children` for a meaningful fraction of concurrently signed-in staff
-holding a live connection at once, not just burst HTTP concurrency.
+tabs" is a better sizing input than "requests per second." No PHP-FPM
+process manager mode lets two simultaneous requests share one worker — a
+worker blocked in `streamLoop()` for one tab is unavailable to every other
+request, realtime or not, until that stream ends. The only lever is how many
+workers the pool can have running at once, i.e. `pm.max_children`.
 
 **This is exactly why realtime defaults to off.** `deploy/php-fpm/panic.conf`
-(this repo's own reference pool config) ships `pm.max_children = 6` — sized
-for ordinary short-lived requests across ~200 shared vhosts, not for several
-staff each pinning a worker continuously. Setting `REALTIME_ENABLED=true`
-against an unsized pool risks starving ordinary API requests once more than
-a handful of staff have the app open, which is why the flag requires an
-explicit opt-in (`REALTIME_ENABLED=true` or `REALTIME_ENABLED=1` — anything
-else, including leaving it unset, stays disabled; see **Rollout / feature
-flags** above) rather than shipping on by default. Before enabling it on an
-existing install: raise `pm.max_children` for that pool to comfortably cover
-the number of staff who might have the app open in a tab at the same time,
-first. The app is fully functional with realtime off.
+(this repo's own reference pool config) runs `pm = ondemand` with
+`pm.max_children = 20` — workers are forked purely on demand and reaped
+after `pm.process_idle_timeout` of inactivity, so the higher ceiling doesn't
+cost standing idle-worker memory while realtime is off or quiet, but still
+gives headroom for roughly a dozen-plus concurrently open realtime tabs plus
+ordinary API traffic once it's on. (`pm = dynamic`'s standing
+`pm.start_servers`/`pm.min_spare_servers` baseline is the wrong shape for a
+feature that's mostly idle; `ondemand` was chosen for that reason.) Even
+with that headroom, `REALTIME_ENABLED` still defaults to `false` — the
+right ceiling depends on how many staff will realistically have the app
+open at once and how much memory the host actually has (this reference
+config sized `pm.max_children = 20` against `php.ini`'s 128M
+`memory_limit` per worker and this host's available memory; re-derive both
+numbers for your own install rather than trusting this figure blindly), so
+it's still an explicit opt-in (`REALTIME_ENABLED=true` or
+`REALTIME_ENABLED=1` — anything else, including leaving it unset, stays
+disabled; see **Rollout / feature flags** above) rather than shipping on by
+default. The app is fully functional with realtime off.
 
 - **PHP-FPM**: `request_terminate_timeout` must be ≥
   `REALTIME_STREAM_TTL_SECONDS` (plus headroom) or FPM will kill the worker
