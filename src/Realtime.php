@@ -83,10 +83,24 @@ final class Realtime extends BaseEndpoint
 
     // ─── Config (env-injectable so tests can use short TTL/poll values) ──────
 
+    /**
+     * Opt-in, not opt-out: an SSE connection pins a PHP-FPM (or `php -S`)
+     * worker for up to ttlSeconds() per open tab, which the reference pool
+     * config (deploy/php-fpm/panic.conf, pm.max_children = 6) cannot absorb
+     * for more than a handful of simultaneously open tabs — see
+     * docs/realtime-data.md's "Production configuration". An install that
+     * never set REALTIME_ENABLED must not silently start pinning workers
+     * after an upgrade, so only an explicit truthy value turns this on;
+     * anything else (absent, blank, "false", "0") is disabled.
+     */
     private static function enabled(): bool
     {
-        $flag = strtolower(trim((string) (getenv('REALTIME_ENABLED') ?: 'true')));
-        return $flag !== 'false' && $flag !== '0' && $flag !== '';
+        $raw = getenv('REALTIME_ENABLED');
+        if ($raw === false) {
+            return false; // not set at all
+        }
+        $flag = strtolower(trim($raw));
+        return $flag === 'true' || $flag === '1';
     }
 
     private static function ttlSeconds(): int
@@ -152,12 +166,6 @@ final class Realtime extends BaseEndpoint
         $heartbeatSeconds = self::heartbeatSeconds();
         $lastWrite = microtime(true);
 
-        // Per-connection memo of per-event read access so a burst of
-        // child-table rows from one editor's transaction (event + tasks +
-        // blockers all touched together) costs one permission query per
-        // event id, not one per row.
-        $eventAccessCache = [];
-
         while (true) {
             if (connection_aborted()) {
                 return;
@@ -165,6 +173,17 @@ final class Realtime extends BaseEndpoint
             if (microtime(true) >= $deadline) {
                 return;
             }
+
+            // Per-polling-batch memo of per-event read access — a burst of
+            // child-table rows from one editor's transaction (event + tasks
+            // + blockers all touched together) still costs one permission
+            // query per event id, not one per row, but a permission revoked
+            // between batches (e.g. a collaborator removed mid-stream) is
+            // re-checked on the very next poll rather than staying
+            // effectively cached until the connection's ~55s TTL forces a
+            // reconnect. Deliberately re-declared each iteration rather than
+            // hoisted above the loop.
+            $eventAccessCache = [];
 
             try {
                 $rows = $this->db->all(

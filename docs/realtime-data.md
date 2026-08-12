@@ -154,9 +154,10 @@ Inside `data-worker.js`:
 
 - **In-flight GET dedup**: simultaneous identical `GET /events/123` requests
   from different components share one `fetch()` and one response.
-- **Cache**: successful JSON GET responses only, keyed `METHOD:path`, 5
+- **Cache**: successful JSON GET responses only, keyed `METHOD:path`, 2
   second max age. `options.cache === 'no-store'` bypasses both dedup and
-  cache for a single call.
+  cache for a single call — as does supplying any custom `options.headers`
+  (see below).
 - **Invalidation**: any successful mutation (non-GET, `ok: true`) clears the
   *entire* cache. Any realtime invalidation (any entity, including
   `global`) also clears the entire cache.
@@ -169,6 +170,46 @@ served) is much higher than the cost of an extra fetch, and clearing
 everything keeps the cache trivially easy to reason about. This does leave
 room for a future stale-while-revalidate layer without a rewrite — the cache
 entry shape (`{ status, ok, body, cachedAt }` per key) already supports it.
+The short 2s max age is deliberate: the primary optimization is in-flight
+dedup + realtime invalidation, not long-lived browser-side caching — a
+short TTL bounds how stale a GET made *without* a realtime signal (e.g. a
+non-mapped table, or realtime disabled) can be.
+
+### Request identity: custom headers bypass cache/dedup
+
+The cache/dedup key is `METHOD:path` — it does not account for headers. A
+caller that supplies its own `options.headers` (none of today's call sites
+do, but the contract must hold regardless) could otherwise share a cached or
+in-flight response with a request that is not actually equivalent (e.g. a
+different `Accept` or a conditional header). Rather than build a canonical
+header-hashing scheme, a GET with any custom headers is simply treated like
+`cache: 'no-store'`: it always fetches, and it neither reads nor writes the
+cache or the in-flight map. Plain GETs (the overwhelming majority) are
+unaffected and keep full caching/dedup.
+
+### Cache generation (epoch) and the stale in-flight GET race
+
+Clearing the cache on invalidation isn't enough by itself: a GET that began
+*before* an invalidation can still resolve *after* it, and without more care
+that late arrival could both (a) get handed to a caller that asked for data
+after the invalidation, via in-flight dedup, and (b) repopulate the
+now-supposedly-fresh cache with the stale value it fetched. `data-worker.js`
+guards against both with a simple in-memory `cacheEpoch` counter, bumped by
+`clearCache()` (so both a successful mutation and a realtime invalidation
+advance it identically):
+
+- Each GET captures `requestEpoch = cacheEpoch` when it starts.
+- Its in-flight map entry carries that epoch: `{ epoch, promise }`.
+- A later GET for the same key only dedups onto that entry if
+  `existing.epoch === cacheEpoch` (i.e. nothing has invalidated since the
+  in-flight request started) — otherwise it starts its own fetch.
+- When a GET resolves, it's only written into the cache if
+  `requestEpoch === cacheEpoch` still holds.
+
+The original in-flight request is never cancelled — it still resolves
+normally for whichever caller originally issued it — it just stops being
+eligible to satisfy a newer request or repopulate the cache once an
+invalidation has moved the epoch past it.
 
 ---
 
@@ -261,9 +302,13 @@ Re-checked on every row, not just at connection time:
   (`Capabilities::hasGlobal()`).
 - `entity: 'event'` → requires `read_event` on that specific event
   (`Capabilities::hasEvent()` — the same per-event ownership/collaborator
-  check every other event endpoint uses). Memoized per connection per event
-  id so a burst of child-table rows for one event costs one permission
-  query, not one per row.
+  check every other event endpoint uses). Memoized per database polling
+  batch (not for the lifetime of the connection) per event id, so a burst of
+  child-table rows for one event within a single poll still costs one
+  permission query, not one per row — while a permission change (e.g. a
+  collaborator removed mid-stream) is re-checked on the very next poll
+  rather than staying effectively cached until the connection's ~55s TTL
+  forces a reconnect.
 - `entity: 'global'` → always visible (see above).
 
 A user who isn't allowed to see a lead or event never learns even the bare
@@ -402,14 +447,18 @@ degraded:  worker + HTTP, no realtime         (REALTIME_ENABLED=false, or stream
 fallback:  direct HTTP only                    (worker unsupported/broken)
 ```
 
-- **Server**: `REALTIME_ENABLED=false` in `.env` makes the endpoint 404
-  without a deploy. The client falls back to direct HTTP/no realtime
-  meanwhile, but each open tab keeps retrying with capped backoff (up to
-  every 30s — see **Reconnect behavior**) so flipping the flag back on is
-  picked up automatically, with no page reload required. That backoff means
-  a disabled/unreachable stream costs roughly one small request every 30s
-  per open tab, not zero — see **Production configuration** for why that
-  still matters for FPM pool sizing.
+- **Server**: realtime is **opt-in** — `REALTIME_ENABLED` is absent, blank,
+  `false`, or `0` in `.env.example`'s shipped default, and any of those
+  (including simply never setting it) makes the endpoint 404, exactly like
+  explicitly setting `REALTIME_ENABLED=false`. Only `REALTIME_ENABLED=true`
+  or `REALTIME_ENABLED=1` turns it on. See **Production configuration**
+  below for why this defaults off and what to check before enabling it. The
+  client falls back to direct HTTP/no realtime meanwhile, but each open tab
+  keeps retrying with capped backoff (up to every 30s — see **Reconnect
+  behavior**) so flipping the flag on later is picked up automatically, with
+  no page reload required. That backoff means a disabled/unreachable stream
+  costs roughly one small request every 30s per open tab, not zero — worth
+  knowing even while it's off by default.
 - **Client, worker path**: `localStorage.backstage_worker_disabled = '1'`
   forces every `api()` call to the pre-existing direct-fetch path, skipping
   worker construction entirely.
@@ -432,16 +481,18 @@ tabs" is a better sizing input than "requests per second." Size
 `pm.max_children` for a meaningful fraction of concurrently signed-in staff
 holding a live connection at once, not just burst HTTP concurrency.
 
-**Check this before enabling realtime on an existing install.**
-`deploy/php-fpm/panic.conf` (this repo's own reference pool config) ships
-`pm.max_children = 6` — sized for ordinary short-lived requests across ~200
-shared vhosts, not for several staff each pinning a worker continuously.
-Deploying this feature with `REALTIME_ENABLED=true` (the default) against an
-unsized pool risks starving ordinary API requests once more than a handful
-of staff have the app open. Either raise `pm.max_children` for that pool
-first, or set `REALTIME_ENABLED=false` in that install's `.env` until it is
-— the app is fully functional with realtime off (see **Rollout / feature
-flags** above).
+**This is exactly why realtime defaults to off.** `deploy/php-fpm/panic.conf`
+(this repo's own reference pool config) ships `pm.max_children = 6` — sized
+for ordinary short-lived requests across ~200 shared vhosts, not for several
+staff each pinning a worker continuously. Setting `REALTIME_ENABLED=true`
+against an unsized pool risks starving ordinary API requests once more than
+a handful of staff have the app open, which is why the flag requires an
+explicit opt-in (`REALTIME_ENABLED=true` or `REALTIME_ENABLED=1` — anything
+else, including leaving it unset, stays disabled; see **Rollout / feature
+flags** above) rather than shipping on by default. Before enabling it on an
+existing install: raise `pm.max_children` for that pool to comfortably cover
+the number of staff who might have the app open in a tab at the same time,
+first. The app is fully functional with realtime off.
 
 - **PHP-FPM**: `request_terminate_timeout` must be ≥
   `REALTIME_STREAM_TTL_SECONDS` (plus headroom) or FPM will kill the worker
