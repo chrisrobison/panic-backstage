@@ -1,3 +1,5 @@
+import { dataClient } from './data-client.js';
+
 // ── JWT token storage ────────────────────────────────────────────────────────
 const TOKEN_KEY   = 'backstage_access_token';
 
@@ -152,21 +154,67 @@ function subscribe(topic, handler, signal) {
 }
 
 
+// ── Data layer wiring (Web Worker transport + realtime invalidations) ───────
+// See docs/realtime-data.md. Initializing here (module load, every page that
+// imports core.js) mirrors the existing top-of-file token bootstrapping —
+// the worker just sits idle until something calls api() or AppShell starts
+// realtime, so it's harmless on pages that never do either (login.html,
+// invite.html, the public event page).
+dataClient.init(apiUrl(''));
+
+// Republish the worker's realtime signals onto the existing PAN/LARC page
+// bus — this is the ONLY bridge between the worker and the rest of the app;
+// components never talk to the worker or EventSource directly (see the
+// architecture doc's "PAN/LARC Bridge" section).
+dataClient.onRealtimeStatus(({ state, detail }) => publish('realtime.status', { state, detail }));
+dataClient.onRealtimeInvalidate(({ entity, id, revision }) => publish('data.invalidated', { entity, id, revision }));
+
+// Exposed for manual QA / debugging (see docs/realtime-data.md's "Logging
+// and debugging" section) — read-only from a component's point of view;
+// nothing in the app relies on this global.
+window.PBData = dataClient;
+
+
+/**
+ * A single request through the direct-fetch path — the pre-worker
+ * implementation, kept as the fallback used when the worker is unavailable,
+ * disabled, or the request isn't worker-eligible (e.g. FormData uploads).
+ * Returns the same {status, ok, body} shape as the worker path so api()
+ * doesn't need to know which one actually ran the request.
+ */
+async function _directFetch(path, options, token) {
+  const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetch(apiUrl(path), { ...options, headers: { ...headers, ...(options.headers || {}) } });
+  const body = response.status === 204 ? null : await response.json().catch(() => null);
+  return { status: response.status, ok: response.ok, body };
+}
+
+/** One request, routed through the worker when eligible+available, else direct fetch. Never throws — mirrors _directFetch's {status,ok,body} shape. */
+async function _execute(path, options, token) {
+  if (dataClient.canHandle(options)) {
+    try {
+      return await dataClient.request(path, options, token);
+    } catch (err) {
+      // A worker that fails a single request is treated as broken for the
+      // rest of the session (safer than guessing which failures are
+      // transient) — see docs/realtime-data.md's fallback hierarchy.
+      dataClient.disable(`request failed: ${err?.message || err}`);
+    }
+  }
+  return _directFetch(path, options, token);
+}
+
 async function api(path, options = {}) {
   publish('events.requested', { path });
-  const doFetch = async (token) => {
-    const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    return fetch(apiUrl(path), { ...options, headers: { ...headers, ...(options.headers || {}) } });
-  };
 
-  let response = await doFetch(getToken());
+  let result = await _execute(path, options, getToken());
 
   // On 401, attempt a silent token refresh then retry once
-  if (response.status === 401) {
+  if (result.status === 401) {
     const newToken = await tryRefresh();
     if (newToken) {
-      response = await doFetch(newToken);
+      result = await _execute(path, options, newToken);
     } else {
       clearTokens();
       location.href = appUrl('login.html');
@@ -174,13 +222,12 @@ async function api(path, options = {}) {
     }
   }
 
-  const body = response.status === 204 ? null : await response.json().catch(() => null);
-  if (!response.ok) {
-    const message = body?.error || `Request failed: ${response.status}`;
+  if (!result.ok) {
+    const message = result.body?.error || `Request failed: ${result.status}`;
     publish('api.error', { message, path });
     throw new Error(message);
   }
-  return body;
+  return result.body;
 }
 
 
@@ -796,4 +843,4 @@ function mdToHtml(text) {
   }).join('\n');
 }
 
-export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, getAppCapabilities, setAppCapabilities, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox, openAssetFileViewer, openModal, timesOverlap, roomConflictIds, roomConflictDates };
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, getAppCapabilities, setAppCapabilities, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox, openAssetFileViewer, openModal, timesOverlap, roomConflictIds, roomConflictDates, dataClient };

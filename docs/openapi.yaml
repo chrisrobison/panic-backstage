@@ -210,6 +210,11 @@ tags:
     description: Sent-mail log.
   - name: Database Browser
     description: Read-only tenant database inspector (admin).
+  - name: Realtime
+    description: >-
+      Server-Sent Events invalidation stream (see docs/realtime-data.md). Tells the browser which
+      entities may be stale so it can re-fetch them through the normal JSON API — never a data API
+      itself.
   - name: DB History
     description: Audit-trigger change log with undo/redo (admin).
   - name: Messages
@@ -27373,6 +27378,57 @@ paths:
                 $ref: '#/components/schemas/Error'
         '500':
           description: Undo failed (undo_sql execution threw); the transaction was rolled back
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/realtime/stream:
+    get:
+      operationId: realtime_stream
+      summary: Realtime invalidation stream (Server-Sent Events)
+      description: >-
+        Long-lived `text/event-stream` connection. Polls `db_history` (see
+        scripts/generate-audit-triggers.php) roughly once a second and emits one `invalidate` event
+        per changed entity the requesting user is allowed to see:
+        `id: <db_history.id>` / `event: invalidate` / `data: {"entity":"event","id":123,"revision":48291}`.
+        Never includes row contents (old_row/new_row) — only enough to know what to re-fetch through
+        the normal JSON API. Unclassified tables emit a content-free `{"entity":"global"}` fallback
+        instead of being silently dropped. The connection intentionally ends after roughly a minute
+        so it can't outlive PHP-FPM/proxy request-duration limits; resume with the browser's
+        automatically-sent `Last-Event-ID` header (or `?since=<revision>` for tooling) to continue
+        exactly where it left off with no gap. Reached via the `backstage_access` session cookie in
+        practice (EventSource cannot set an Authorization header) — see docs/realtime-data.md.
+        Returns 404 when `REALTIME_ENABLED=false`. The client falls back to direct HTTP polling/no
+        realtime meanwhile, but does keep retrying this endpoint with capped exponential backoff (up
+        to every 30s) for as long as the app shell is open, so re-enabling the flag is picked up by
+        an already-open tab without a page reload.
+      tags:
+        - Realtime
+      parameters:
+        - name: since
+          in: query
+          description: >-
+            Resume point (a db_history.id). Ignored when the Last-Event-ID request header is
+            present — that always wins. Mainly for tooling/tests; browsers rely on Last-Event-ID.
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: >-
+            `text/event-stream` — a live connection, not a single JSON body. Emits periodic
+            `: heartbeat` comment lines to keep idle connections open through proxies.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Realtime is disabled (REALTIME_ENABLED=false)
           content:
             application/json:
               schema:

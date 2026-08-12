@@ -4,13 +4,22 @@
 // "shell owns data + API calls, children render + bubble events" shape as
 // tasks-shell.js. Mounted by app.js's router for each of the five saved-
 // view routes seeded in nav_items (migration 077_add_booking_inbox_tasks_link_and_nav.sql).
-import { esc, api, getAppCapabilities, openModal, publish, subscribe, PanicElement, $, $$ } from '../core.js';
+import { esc, api, getAppCapabilities, openModal, publish, subscribe, dataClient, PanicElement, $, $$ } from '../core.js';
 import './inbox-list.js';
 import './inbox-workspace.js';
 import './inbox-detail-panel.js';
 import { openOnboardDialog } from './inbox-onboard-dialog.js';
 
-const POLL_INTERVAL_MS = 8000;
+// Realtime (see docs/realtime-data.md) replaces the old constant 8s poll:
+// a `lead`-entity invalidation on the PAN/LARC bus (republished by core.js
+// from the worker's EventSource — src/Realtime.php on the server side)
+// triggers the same pollChanges() this used to run on a timer, debounced so
+// one database transaction that touches several lead_* tables (e.g. a
+// status change that also logs an audit row) doesn't cause several
+// back-to-back reloads. A much slower fallback poll only runs while
+// realtime is unavailable/unhealthy, for resilience — see _onRealtimeStatus.
+const INVALIDATION_DEBOUNCE_MS = 200;
+const FALLBACK_POLL_INTERVAL_MS = 60000;
 
 class InboxApp extends PanicElement {
   connect() {
@@ -30,13 +39,46 @@ class InboxApp extends PanicElement {
 
     this.renderShell();
     this.bootstrap();
-    this._pollTimer = setInterval(() => this.pollChanges(), POLL_INTERVAL_MS);
+
+    this._pollTimer = null;
+    this._invalidationDebounce = null;
+    // Read the worker's current realtime state directly (rather than
+    // defaulting to "unhealthy") so mounting the Inbox after realtime has
+    // already connected doesn't spin up a needless fallback timer.
+    this._realtimeHealthy = dataClient.getRealtimeState().state === 'connected';
+    if (!this._realtimeHealthy) this._startFallbackPolling();
+    subscribe('realtime.status', (msg) => this._onRealtimeStatus(msg), this.abort.signal);
+    subscribe('data.invalidated', (msg) => this._onInvalidation(msg), this.abort.signal);
+  }
+
+  _onRealtimeStatus({ state }) {
+    const healthy = state === 'connected';
+    if (healthy === this._realtimeHealthy) return;
+    this._realtimeHealthy = healthy;
+    if (healthy) {
+      clearInterval(this._pollTimer);
+      this._pollTimer = null;
+    } else {
+      this._startFallbackPolling();
+    }
+  }
+
+  _startFallbackPolling() {
+    if (this._pollTimer) return;
+    this._pollTimer = setInterval(() => this.pollChanges(), FALLBACK_POLL_INTERVAL_MS);
+  }
+
+  _onInvalidation({ entity }) {
+    if (entity !== 'lead') return;
+    clearTimeout(this._invalidationDebounce);
+    this._invalidationDebounce = setTimeout(() => this.pollChanges(), INVALIDATION_DEBOUNCE_MS);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._app?.classList.remove('workspace-outbox');
     clearInterval(this._pollTimer);
+    clearTimeout(this._invalidationDebounce);
   }
 
   async bootstrap() {

@@ -619,6 +619,13 @@ final class Kernel
             return [DbHistory::class, ['id' => $this->intOrNull($segments[1] ?? null), 'action' => $segments[2] ?? null]];
         }
 
+        // Realtime invalidation stream (Phase 2 data layer — see
+        // docs/realtime-data.md):
+        //   GET /api/realtime/stream
+        if ($segments[0] === 'realtime') {
+            return [Realtime::class, ['action' => $segments[1] ?? null]];
+        }
+
         // Messages — in-app staff messaging (Inbox / Archive / Outbox)
         //   /api/messages
         //   /api/messages/recipients | /api/messages/unread-count

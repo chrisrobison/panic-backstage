@@ -5,7 +5,12 @@ namespace Panic;
 
 final class Response
 {
-    public function __construct(private readonly mixed $body, private readonly int $status = 200, private readonly array $headers = []) {}
+    public function __construct(
+        private readonly mixed $body,
+        private readonly int $status = 200,
+        private readonly array $headers = [],
+        private readonly bool $stream = false
+    ) {}
 
     public static function json(mixed $body, int $status = 200, array $headers = []): self
     {
@@ -24,6 +29,33 @@ final class Response
     public static function noContent(): self
     {
         return new self(null, 204);
+    }
+
+    /**
+     * A long-lived, incrementally-flushed response (currently: the
+     * realtime SSE endpoint — see src/Realtime.php). $emitter is invoked
+     * by send() in place of the normal echo/json_encode body handling; it
+     * is responsible for its own echo/flush calls and for returning once
+     * the connection should end (client disconnect, TTL elapsed, etc.).
+     *
+     * Kept generic (not SSE-specific) so this stays a small, reusable
+     * extension of the existing Response abstraction rather than one-off
+     * procedural code bypassing Kernel — see the Realtime-related section
+     * of docs/realtime-data.md for why streaming needed a first-class
+     * Response variant instead of `echo`-ing directly from the endpoint.
+     */
+    public static function stream(callable $emitter, array $headers = []): self
+    {
+        return new self($emitter, 200, array_merge([
+            'Content-Type'      => 'text/event-stream; charset=utf-8',
+            'Cache-Control'     => 'no-cache',
+            // Tell reverse proxies (nginx) not to buffer this response —
+            // without it, chunks can sit in the proxy buffer instead of
+            // reaching the browser, defeating the whole point of SSE. See
+            // docs/realtime-data.md's proxy configuration notes.
+            'X-Accel-Buffering' => 'no',
+            'Connection'        => 'keep-alive',
+        ], $headers), true);
     }
 
     public static function methodNotAllowed(): self
@@ -53,7 +85,7 @@ final class Response
 
     public function withHeader(string $name, string|array $value): self
     {
-        return new self($this->body, $this->status, [...$this->headers, $name => $value]);
+        return new self($this->body, $this->status, [...$this->headers, $name => $value], $this->stream);
     }
 
     public function send(): void
@@ -67,6 +99,13 @@ final class Response
             } else {
                 header("$name: $value", true);
             }
+        }
+        if ($this->stream) {
+            // $body is the emitter callable passed to Response::stream();
+            // everything from here on (echo/flush loop, connection-abort
+            // checks, return-to-end-the-request) is its responsibility.
+            ($this->body)();
+            return;
         }
         if ($this->status === 204 || isset($this->headers['Location'])) {
             return;

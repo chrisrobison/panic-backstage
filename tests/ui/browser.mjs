@@ -87,7 +87,15 @@ export class CDP {
 export async function startDevServer({ root, base, port, log = () => {} }) {
   if (await reachable(base + '/')) { log('using already-running server at ' + base); return null; }
   log(`starting PHP dev server on :${port}`);
-  const server = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', 'public', 'public/router.php'], { cwd: root, stdio: 'ignore' });
+  // PHP's built-in server is single-threaded by default (one request at a
+  // time). The realtime SSE endpoint (GET /api/realtime/stream — see
+  // src/Realtime.php) intentionally holds its connection open for tens of
+  // seconds once the app shell opens it, which would otherwise starve every
+  // other concurrent api() call the page makes for the rest of the test run.
+  // PHP_CLI_SERVER_WORKERS gives the dev server a small worker pool so the
+  // long-lived stream and ordinary short requests can run side by side.
+  const env = { ...process.env, PHP_CLI_SERVER_WORKERS: process.env.PHP_CLI_SERVER_WORKERS || '8' };
+  const server = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', 'public', 'public/router.php'], { cwd: root, stdio: 'ignore', env });
   if (!(await waitFor(() => reachable(base + '/')))) {
     try { server.kill('SIGTERM'); } catch { /* ignore */ }
     throw new Error('dev server did not come up at ' + base);

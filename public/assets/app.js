@@ -1,4 +1,4 @@
-import { getRefreshToken, clearTokens, appUrl, setAppUser, setAppCapabilities, esc, publish, subscribe, api, broadcastEventData, refreshSection, table, PanicElement, $, $$ } from './core.js';
+import { getRefreshToken, clearTokens, appUrl, setAppUser, setAppCapabilities, esc, publish, subscribe, api, broadcastEventData, refreshSection, table, PanicElement, $, $$, dataClient } from './core.js';
 import './ai-drawer.js';
 import { openCredentialSetupModal } from './auth.js';
 import './core.js';
@@ -59,6 +59,12 @@ class AppShell extends PanicElement {
         location.href = appUrl('login.html');
         return;
       }
+      // Realtime is scoped to the authenticated app shell only — login.html/
+      // invite.html/the public event page never mount <pb-app-shell>, so
+      // they never open an EventSource. Safe to call unconditionally even
+      // when the worker itself failed to start (see data-client.js's
+      // isAvailable() guard inside startRealtime()). See docs/realtime-data.md.
+      dataClient.startRealtime();
       this.renderNav();
       this.applyCapabilities();
       this.applyUserPrefs();
@@ -168,6 +174,7 @@ class AppShell extends PanicElement {
     <pb-toast-stack></pb-toast-stack>
     <pb-ai-drawer></pb-ai-drawer>`;
     $('#logout', this).addEventListener('click', async () => {
+      dataClient.stopRealtime();
       await api('/auth/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => {});
       clearTokens();
       location.href = appUrl('login.html');

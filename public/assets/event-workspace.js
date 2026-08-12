@@ -598,6 +598,23 @@ class EventWorkspace extends PanicElement {
       this.data = data;
       this._updateHeader(data);
     }, this.abort.signal);
+    // Realtime (see docs/realtime-data.md): an `event`-entity invalidation
+    // for the event currently open here means fetch fresh data and feed it
+    // into the existing event.changed / broadcastEventData path above —
+    // exactly the same mechanism an in-app save already uses, so this can't
+    // introduce any new failure mode. Debounced because one editor's
+    // transaction can touch several child tables (event + tasks + blockers)
+    // and land several invalidations back to back. Safe for in-progress
+    // edits: event.changed only ever reaches read-only summary/readiness/
+    // automation cards and this header patch — the autosaving Details form
+    // (EventDetailsForm) deliberately never subscribes to it.
+    let invalidationDebounce = null;
+    subscribe('data.invalidated', (msg) => {
+      if (msg.entity !== 'event' || Number(msg.id) !== Number(this.eventId)) return;
+      clearTimeout(invalidationDebounce);
+      invalidationDebounce = setTimeout(() => this._refreshFromInvalidation(), 250);
+    }, this.abort.signal);
+    this.abort.signal.addEventListener('abort', () => clearTimeout(invalidationDebounce), { once: true });
     // Overview cards (and any future in-panel link) can jump to another tab
     // by rendering a `<button data-goto-tab="lineup">` — no custom events,
     // no shadow DOM to cross, just a delegated click listener.
@@ -615,6 +632,14 @@ class EventWorkspace extends PanicElement {
       if (!event.target.closest('[data-ask-ai]')) return;
       document.querySelector('pb-ai-drawer')?.open({ eventId: this.data?.event?.id });
     }, { signal: this.abort.signal });
+  }
+
+  /** Best-effort re-fetch triggered by a realtime invalidation — see the data.invalidated subscription in connect(). */
+  async _refreshFromInvalidation() {
+    if (!this.eventId) return;
+    try {
+      broadcastEventData(await api(`/events/${this.eventId}`));
+    } catch { /* best-effort — a later invalidation or manual refresh will retry */ }
   }
 
   /** Re-publish the topbar page context and patch the publish button after an in-place event update. */
