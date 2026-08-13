@@ -177,6 +177,32 @@ try {
 
     $siblingCount = (int) $db->one('SELECT COUNT(*) AS c FROM events WHERE series_id = ?', [$result['series_id']])['c'];
     ok($siblingCount === 3, 'the series now has 3 members total (anchor + 2 created occurrences)');
+
+    // ── attemptCreate() extending an existing series ─────────────────────────
+    // Use one of the just-created siblings (not the founding anchor) as the
+    // new anchor — mirrors the UI, which lets you "Add more dates" from
+    // whichever occurrence's page is open.
+    $sibling = $result['created_event_ids'][0];
+    [$dateOcc3] = pickFreeDates($booked, 1, $horizonCutoff);
+
+    // $dateOcc2 belongs to the *other* sibling (created_event_ids[1]), not to
+    // $sibling itself — this specifically exercises the new "taken by any
+    // series member" check, not just the pre-existing "own date" check.
+    $duplicateAttempt = $series->attemptCreate($sibling, [$dateOcc2], null, null, 'after_count', null, null, $userId, $role);
+    ok($duplicateAttempt['ok'] === false && $duplicateAttempt['status'] === 422,
+        'attemptCreate() rejects a date that already belongs to another event in the same series');
+
+    $extendResult = $series->attemptCreate($sibling, [$dateOcc3], 'AI test series — extended', null, 'after_count', null, null, $userId, $role);
+    ok($extendResult['ok'] === true && $extendResult['extended'] === true && count($extendResult['created_event_ids']) === 1,
+        'attemptCreate() extends the existing series instead of rejecting an anchor that already has a series_id');
+    ok($extendResult['series_id'] === $result['series_id'], 'the extended occurrence is appended to the same event_series row, not a new one');
+    foreach ($extendResult['created_event_ids'] ?? [] as $id) { $createdEventIds[] = $id; }
+
+    $siblingCountAfterExtend = (int) $db->one('SELECT COUNT(*) AS c FROM events WHERE series_id = ?', [$result['series_id']])['c'];
+    ok($siblingCountAfterExtend === 4, 'the series now has 4 members after extending (anchor + 2 + 1 extended)');
+
+    $seriesRow = $db->one('SELECT occurrence_count FROM event_series WHERE id = ?', [$result['series_id']]);
+    ok((int) $seriesRow['occurrence_count'] === 4, 'event_series.occurrence_count is reconciled against actual membership after extending');
 } finally {
     // ── Cleanup: every throwaway row this script created, regardless of outcome ──
     foreach (array_unique($createdEventIds) as $id) {

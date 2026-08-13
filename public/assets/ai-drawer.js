@@ -190,7 +190,8 @@ class AiDrawer extends PanicElement {
     if (!dates.length) {
       return `<p class="ai-proposal-empty">No occurrence dates.</p>`;
     }
-    const summary = `${esc(diff.anchor_title || 'This event')} → ${dates.length} new occurrence${dates.length === 1 ? '' : 's'}`;
+    const verb = diff.extending_series_id ? 'extends its existing series with' : '→';
+    const summary = `${esc(diff.anchor_title || 'This event')} ${verb} ${dates.length} new occurrence${dates.length === 1 ? '' : 's'}`;
     return `<p class="ai-proposal-summary">${summary}</p>
       <ul class="ai-proposal-dates">${dates.map((date) => `<li>${esc(date)}</li>`).join('')}</ul>`;
   }

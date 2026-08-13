@@ -421,7 +421,11 @@ final class Assistant extends BaseEndpoint
             return $result;
         }
 
-        return ['ok' => true, 'payload' => ['series_id' => $result['series_id'], 'created_event_ids' => $result['created_event_ids']]];
+        return ['ok' => true, 'payload' => [
+            'series_id' => $result['series_id'],
+            'created_event_ids' => $result['created_event_ids'],
+            'extended' => $result['extended'] ?? false,
+        ]];
     }
 
     /**

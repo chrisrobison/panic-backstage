@@ -357,12 +357,16 @@ function handle_propose_recurring_series($id, Database $db, int $userId, string 
         return;
     }
 
+    $existingSeriesId = !empty($preview['anchor']['series_id']) ? (int) $preview['anchor']['series_id'] : null;
     $diff = [
         'event_id' => $eventId,
         'anchor_title' => $preview['anchor']['title'] ?? null,
         'description' => $description,
         'dates' => $preview['dates'],
         'occurrence_count' => count($preview['dates']),
+        // Set when the anchor is already part of a series — this proposal
+        // will extend that series with more dates, not found a new one.
+        'extending_series_id' => $existingSeriesId,
     ];
     $expiresAt = (new DateTimeImmutable('+30 minutes'))->format('Y-m-d H:i:s');
 

@@ -1201,16 +1201,19 @@ class EventRecurrencePanel extends PanicElement {
     this._eventId = null;
     this._series = undefined; // undefined = not loaded yet
     this._siblings = [];
+    this._extending = false; // "Add more dates" fields toggled open?
   }
 
   set data(data) {
     const event = data.event;
     this._canEdit = can(data, 'edit_event');
     this._anchorDate = event.date;
+    this._title = event.title;
     const isNewEvent = this._eventId !== event.id;
     this._eventId = event.id;
     if (isNewEvent) {
       this._series = undefined;
+      this._extending = false;
       this.load();
     } else if (this._series !== undefined) {
       this.render();
@@ -1247,10 +1250,22 @@ class EventRecurrencePanel extends PanicElement {
               return `<li>${isThis ? dateLabel : `<a href="#event-${esc(String(sibling.id))}">${dateLabel}</a>`} ${badge(sibling.status)}${isThis ? ' <span class="muted small">(this event)</span>' : ''}</li>`;
             }).join('')}
           </ul>
-          ${this._canEdit ? '<button type="button" class="secondary" data-remove-series>Remove this event from the series</button>' : ''}
+          ${this._canEdit ? `<div class="calendar-actions">
+            <button type="button" class="secondary" data-toggle-extend>${this._extending ? 'Cancel' : 'Add more dates'}</button>
+            <button type="button" class="secondary" data-remove-series>Remove this event from the series</button>
+          </div>` : ''}
+          ${this._extending ? `<div class="grid-form" data-extend-form>
+            <p class="muted small">New dates are generated using <strong>${esc(this._title || this._series.description || 'this event')}</strong> as the template (its times, pricing, and notes) and are appended to this same series.</p>
+            <pb-recurrence-fields></pb-recurrence-fields>
+            <button type="button" class="wide secondary" data-extend-series disabled>Add recurring events</button>
+          </div>` : ''}
         </div>
       </section>`;
       $('[data-remove-series]', this)?.addEventListener('click', () => this.removeFromSeries());
+      $('[data-toggle-extend]', this)?.addEventListener('click', () => {
+        this._extending = !this._extending;
+        this.render();
+      });
       $('[data-copy-series-link]', this)?.addEventListener('click', async (event) => {
         try {
           await navigator.clipboard.writeText(publicUrl);
@@ -1259,6 +1274,28 @@ class EventRecurrencePanel extends PanicElement {
           publish('toast.show', { message: 'Could not copy the link.', tone: 'error' });
         }
       });
+      if (this._extending) {
+        const fields = $('pb-recurrence-fields', this);
+        // Anchor the new pattern to the series' latest known date (not
+        // necessarily this event's own date) so generated dates continue
+        // forward from wherever the series currently ends, regardless of
+        // which occurrence's page this was opened from.
+        const latestDate = this._siblings.reduce(
+          (max, sibling) => (sibling.date > max ? sibling.date : max),
+          this._anchorDate
+        );
+        fields.anchorDate = latestDate;
+        const extendBtn = $('[data-extend-series]', this);
+        let current = null;
+        fields.addEventListener('change', (event) => {
+          current = event.detail;
+          extendBtn.disabled = !current;
+          extendBtn.textContent = current
+            ? `Add ${current.dates.length} recurring event${current.dates.length === 1 ? '' : 's'}`
+            : 'Add recurring events';
+        });
+        extendBtn.addEventListener('click', () => this.createSeries(current, extendBtn));
+      }
       return;
     }
 
@@ -1303,8 +1340,12 @@ class EventRecurrencePanel extends PanicElement {
           dates: value.dates,
         }),
       });
-      publish('toast.show', { message: `Created ${res.created_event_ids.length} recurring events.`, tone: 'success' });
+      const message = res.extended
+        ? `Added ${res.created_event_ids.length} more dates to the series.`
+        : `Created ${res.created_event_ids.length} recurring events.`;
+      publish('toast.show', { message, tone: 'success' });
       this._series = undefined;
+      this._extending = false;
       await this.load();
     } catch (err) {
       publish('toast.show', { message: err.message || 'Could not create the series.', tone: 'error' });

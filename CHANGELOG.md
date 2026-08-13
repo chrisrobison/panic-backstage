@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Let recurring series be extended with more dates
 - **Added** `feed` — Add one-click "Add to Google Calendar" subscribe redirect
 - **Documentation** — Document August 2026 operations changes
 - **Fixed** `ui` — Preserve bus subscriptions across startup race

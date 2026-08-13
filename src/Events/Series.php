@@ -23,6 +23,12 @@ use function Panic\slugify;
  * never re-derives dates from a pattern — it receives the resulting explicit
  * date list, validates it, and stores the pattern/description alongside it
  * purely for later display.
+ *
+ * Extending an existing series: POST /events/{id}/series also accepts an
+ * anchor that is *already* a series member. In that case attemptCreate()
+ * appends the new dates to that same event_series row (cloning template
+ * fields from whichever occurrence was used as the anchor) instead of
+ * creating a second series — see the branch on $existingSeriesId below.
  */
 final class Series extends BaseEndpoint
 {
@@ -113,7 +119,7 @@ final class Series extends BaseEndpoint
      *
      * @return array{ok: bool, status?: int, error?: string, horizon_date?: string,
      *     beyond_horizon_dates?: list<string>, conflict_dates?: list<string>,
-     *     series_id?: int, created_event_ids?: list<int>}
+     *     series_id?: int, created_event_ids?: list<int>, extended?: bool}
      */
     public function attemptCreate(
         int $eventId,
@@ -132,32 +138,56 @@ final class Series extends BaseEndpoint
         }
         $anchor = $validated['anchor'];
         $dates  = $validated['dates'];
+        // If the anchor is already a series member, this call is extending
+        // that series rather than founding a new one — see class docblock.
+        $existingSeriesId = $anchor['series_id'] ? (int) $anchor['series_id'] : null;
 
         $pdo = $this->db->pdo();
         $pdo->beginTransaction();
         try {
-            $publicSlug = $this->uniquePublicSlug((string) $anchor['title']);
-            $seriesId = $this->db->insert(
-                'INSERT INTO event_series (venue_id, title, public_slug, pattern_json, description, end_type, end_date, occurrence_count, created_by_user_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [
-                    (int) $anchor['venue_id'],
-                    $anchor['title'],
-                    $publicSlug,
-                    $pattern !== null ? json_encode($pattern) : null,
-                    $description,
-                    $endType,
-                    $endType === 'on_date' ? ($endDate ?: null) : null,
-                    $endType === 'after_count' ? ($occurrenceCount ?? (count($dates) + 1)) : null,
-                    $actingUserId,
-                ]
-            );
+            if ($existingSeriesId !== null) {
+                $seriesId = $existingSeriesId;
+                // Keep the series row's display pattern/description current —
+                // it reflects the most recently applied recurrence.
+                $this->db->run(
+                    'UPDATE event_series SET pattern_json = ?, description = ? WHERE id = ?',
+                    [$pattern !== null ? json_encode($pattern) : null, $description, $seriesId]
+                );
+            } else {
+                $publicSlug = $this->uniquePublicSlug((string) $anchor['title']);
+                $seriesId = $this->db->insert(
+                    'INSERT INTO event_series (venue_id, title, public_slug, pattern_json, description, end_type, end_date, occurrence_count, created_by_user_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [
+                        (int) $anchor['venue_id'],
+                        $anchor['title'],
+                        $publicSlug,
+                        $pattern !== null ? json_encode($pattern) : null,
+                        $description,
+                        $endType,
+                        $endType === 'on_date' ? ($endDate ?: null) : null,
+                        $endType === 'after_count' ? ($occurrenceCount ?? (count($dates) + 1)) : null,
+                        $actingUserId,
+                    ]
+                );
 
-            $this->db->run('UPDATE events SET series_id = ? WHERE id = ?', [$seriesId, $eventId]);
+                $this->db->run('UPDATE events SET series_id = ? WHERE id = ?', [$seriesId, $eventId]);
+            }
 
             $createdIds = [];
             foreach ($dates as $date) {
                 $createdIds[] = $this->cloneOccurrence($anchor, $date, $seriesId, $actingUserId);
+            }
+
+            if ($existingSeriesId !== null) {
+                // Reconcile occurrence_count/end_date against actual membership
+                // rather than trusting the request body — robust regardless of
+                // what end_type/end_date/occurrence_count the caller sent.
+                $totals = $this->db->one('SELECT COUNT(*) AS n, MAX(date) AS last_date FROM events WHERE series_id = ?', [$seriesId]);
+                $this->db->run(
+                    "UPDATE event_series SET occurrence_count = ?, end_date = CASE WHEN end_type = 'on_date' THEN ? ELSE end_date END WHERE id = ?",
+                    [(int) ($totals['n'] ?? 0), $totals['last_date'] ?? null, $seriesId]
+                );
             }
 
             $pdo->commit();
@@ -167,12 +197,12 @@ final class Series extends BaseEndpoint
             return ['ok' => false, 'status' => 500, 'error' => 'Could not create the series. Nothing was changed.'];
         }
 
-        log_activity($this->db, $eventId, $actingUserId, 'recurring series created', [
+        log_activity($this->db, $eventId, $actingUserId, $existingSeriesId !== null ? 'recurring series extended' : 'recurring series created', [
             'series_id' => $seriesId,
             'occurrences' => count($createdIds),
         ]);
 
-        return ['ok' => true, 'series_id' => $seriesId, 'created_event_ids' => $createdIds];
+        return ['ok' => true, 'series_id' => $seriesId, 'created_event_ids' => $createdIds, 'extended' => $existingSeriesId !== null];
     }
 
     /** Title-derived public slug, kept unique without ever changing later. */
@@ -225,9 +255,17 @@ final class Series extends BaseEndpoint
         if (!$anchor) {
             return ['ok' => false, 'status' => 404, 'error' => 'Event not found'];
         }
+
+        // Dates already occupied by this event and (when extending) its
+        // existing siblings — none of the newly requested dates may repeat one.
+        $takenDates = [$anchor['date']];
         if (!empty($anchor['series_id'])) {
-            return ['ok' => false, 'status' => 422, 'error' => 'This event is already part of a series.'];
+            $siblingDates = $this->db->all('SELECT date FROM events WHERE series_id = ?', [$anchor['series_id']]);
+            foreach ($siblingDates as $row) {
+                $takenDates[] = $row['date'];
+            }
         }
+        $takenDates = array_unique($takenDates);
 
         $dates = array_values(array_unique(array_filter(array_map('strval', $dates))));
         if (!$dates) {
@@ -240,8 +278,8 @@ final class Series extends BaseEndpoint
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
                 return ['ok' => false, 'status' => 422, 'error' => "Invalid date: {$date}"];
             }
-            if ($date === $anchor['date']) {
-                return ['ok' => false, 'status' => 422, 'error' => "Occurrence dates must not include the event's own date ({$date})."];
+            if (in_array($date, $takenDates, true)) {
+                return ['ok' => false, 'status' => 422, 'error' => "Occurrence dates must not repeat an existing date in the series ({$date})."];
             }
         }
 
@@ -303,7 +341,11 @@ final class Series extends BaseEndpoint
             }
             return Response::json($payload, $result['status']);
         }
-        return $this->ok(['series_id' => $result['series_id'], 'created_event_ids' => $result['created_event_ids']]);
+        return $this->ok([
+            'series_id' => $result['series_id'],
+            'created_event_ids' => $result['created_event_ids'],
+            'extended' => $result['extended'] ?? false,
+        ]);
     }
 
     /**
