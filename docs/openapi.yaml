@@ -10788,6 +10788,10 @@ components:
             json:
               type: string
               format: uri
+            google:
+              type: string
+              format: uri
+              description: One-click "Add to Google Calendar" redirect (GET /api/feed/google).
         params:
           type: object
           description: Documents the accepted query params and their types (fixed shape).
@@ -28113,6 +28117,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WidgetEventsFeed'
+  /api/feed/google:
+    get:
+      operationId: feed_googleCalendar
+      summary: One-click "Add to Google Calendar" redirect
+      description: >-
+        Public — no authentication. Not a feed format — a 302 redirect into Google Calendar's own
+        "subscribe to a URL" flow (calendar.google.com/calendar/render?cid=...), pointed at
+        /feeds/public-events.ics. Use as the href of an "Add to Google Calendar" link so the browser
+        lands on Google Calendar with the subscription prompt already filled in, instead of the user
+        copying the ICS URL into Settings > Add calendar > From URL themselves. Same
+        venue/days/past/limit query params as the other feed endpoints are forwarded onto the
+        subscribed ICS URL, so a filtered link subscribes to that same filtered feed. Also reachable
+        under the friendlier alias GET /feeds/google-calendar (routed to this same Feed endpoint;
+        see src/Kernel.php).
+      tags:
+        - Feeds
+      security: []
+      parameters:
+        - name: venue
+          in: query
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+        - name: past
+          in: query
+          schema:
+            type: string
+            enum:
+              - '0'
+              - '1'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 500
+            maximum: 1000
+      responses:
+        '302':
+          description: Redirect to calendar.google.com's subscribe-by-URL flow. No response body.
   /api/invite/{token}:
     parameters:
       - name: token
@@ -28465,6 +28511,15 @@ paths:
       responses:
         '200':
           description: JSON feed.
+  /feeds/google-calendar:
+    get:
+      operationId: feeds_googleCalendarAlias
+      summary: Friendly alias for the "Add to Google Calendar" redirect
+      tags: [Feeds]
+      security: []
+      responses:
+        '302':
+          description: Redirect to calendar.google.com's subscribe-by-URL flow. No response body.
   /super:
     get:
       operationId: superAdmin_ui

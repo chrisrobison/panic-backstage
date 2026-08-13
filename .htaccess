@@ -82,6 +82,7 @@ RewriteRule ^(login|event|upcoming|invite|scanner|sign|payee-request)\.html$ pub
 # Friendly public calendar-feed alias — see the matching rule in
 # public/.htaccess and the routing comment in src/Kernel.php.
 RewriteRule ^feeds/public-events\.(ics|rss|json)$ public/api/index.php [L,QSA]
+RewriteRule ^feeds/google-calendar$ public/api/index.php [L,QSA]
 
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

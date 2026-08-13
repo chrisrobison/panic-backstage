@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `feed` — Add one-click "Add to Google Calendar" subscribe redirect
 - **Documentation** — Document August 2026 operations changes
 - **Fixed** `ui` — Preserve bus subscriptions across startup race
 - **Fixed** `ci` — Keep fresh-schema migrations and unit tests hermetic

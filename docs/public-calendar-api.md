@@ -35,13 +35,15 @@ GET  /api/feed                 discovery index (lists the URLs below)
 GET  /api/feed/events.ics      iCalendar (Google/Apple Calendar subscription)
 GET  /api/feed/events.rss      RSS 2.0 (news aggregators, "what's on" widgets)
 GET  /api/feed/events.json     structured JSON (embeddable widgets; CORS-open)
+GET  /api/feed/google          302 → Google Calendar's own "subscribe by URL" flow
 
-# Same three formats, friendlier URL (no /api prefix) — for calendar
+# Same formats, friendlier URL (no /api prefix) — for calendar
 # subscription links / marketing copy. Identical data + gating; just a nicer
 # path, routed to the same Feed endpoint (see src/Kernel.php).
 GET  /feeds/public-events.ics
 GET  /feeds/public-events.rss
 GET  /feeds/public-events.json
+GET  /feeds/google-calendar
 
 # Single event — full detail for one event's public page (no JWT)
 GET  /public/events/{idOrSlug} event + venue + lineup + latest approved flyer
@@ -83,11 +85,29 @@ the concrete feed it wants:
   "feeds": {
     "ics": "https://panicbooking.com/backstage/api/feed/events.ics",
     "rss": "https://panicbooking.com/backstage/api/feed/events.rss",
-    "json": "https://panicbooking.com/backstage/api/feed/events.json"
+    "json": "https://panicbooking.com/backstage/api/feed/events.json",
+    "google": "https://panicbooking.com/backstage/api/feed/google"
   },
   "params": { "venue": "slug", "days": "int", "past": "0|1", "limit": "int" },
   "upcoming": 25
 }
+```
+
+## `GET /api/feed/google` — Add to Google Calendar
+
+Not a feed format — a **302 redirect** into Google Calendar's own
+"subscribe to a URL" flow (`calendar.google.com/calendar/render?cid=...`),
+pointed at `/feeds/public-events.ics`. Use this as the `href` of an "Add to
+Google Calendar" button/link: the browser lands on Google Calendar with the
+"Add this calendar?" prompt already filled in, instead of the user having to
+copy the ICS URL and paste it into Settings → Add calendar → From URL
+themselves. Same query params as the feed endpoints (`venue`/`days`/`past`/
+`limit`) are forwarded onto the subscribed feed, so a filtered link (e.g.
+one venue only) subscribes to that same filtered feed. No response body —
+it's a redirect, nothing to cache.
+
+```
+<a href="https://panicbooking.com/backstage/feeds/google-calendar">Add to Google Calendar</a>
 ```
 
 ## `GET /api/feed/events.ics` — iCalendar

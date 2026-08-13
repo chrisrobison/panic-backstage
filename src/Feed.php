@@ -40,6 +40,16 @@ final class Feed extends BaseEndpoint
         }
 
         $format = strtolower((string) ($this->params['format'] ?? $request->query('format', '')));
+
+        // One-click "Add to Google Calendar": redirects the browser straight
+        // into Google Calendar's own "subscribe by URL" flow instead of
+        // making the user copy/paste the ICS link into Settings > Add
+        // calendar > From URL. No event data is fetched here — Google fetches
+        // the ICS feed itself once the subscription lands.
+        if ($format === 'google' || $format === 'google-calendar') {
+            return Response::redirect($this->googleCalendarUrl($request));
+        }
+
         $events = $this->fetchEvents($request);
 
         if (str_contains($format, 'ics') || str_contains($format, 'ical')) {
@@ -56,9 +66,10 @@ final class Feed extends BaseEndpoint
         $base = $this->appUrl();
         return $this->ok([
             'feeds' => [
-                'ics'  => $base . '/api/feed/events.ics',
-                'rss'  => $base . '/api/feed/events.rss',
-                'json' => $base . '/api/feed/events.json',
+                'ics'    => $base . '/api/feed/events.ics',
+                'rss'    => $base . '/api/feed/events.rss',
+                'json'   => $base . '/api/feed/events.json',
+                'google' => $base . '/api/feed/google', // one-click "Add to Google Calendar" (302 redirect)
             ],
             'params'   => ['venue' => 'slug', 'days' => 'int', 'past' => '0|1', 'limit' => 'int'],
             'upcoming' => count($events),
@@ -114,6 +125,44 @@ final class Feed extends BaseEndpoint
         }
         unset($event);
         return $events;
+    }
+
+    // ── "Add to Google Calendar" redirect ───────────────────────────────────────
+
+    /**
+     * Build Google Calendar's own "subscribe to a URL" deep link
+     * (calendar.google.com/calendar/render?cid=...). Google resolves `cid` as
+     * a calendar feed to subscribe to (not a one-off event), fetching it
+     * itself on whatever refresh cadence it chooses — same feed, same
+     * public_visibility gate, as /feeds/public-events.ics. `webcal://` is the
+     * conventional scheme for this (some clients special-case it), but
+     * Google accepts a plain https URL too; we send webcal for compatibility
+     * with other calendar apps that might reuse this link.
+     *
+     * Any of the feed's own filter params (venue/days/past/limit) are
+     * forwarded onto the subscribed ICS URL, so a filtered "Add to Google
+     * Calendar" link (e.g. one venue's shows only) subscribes to that same
+     * filtered feed rather than everything.
+     */
+    private function googleCalendarUrl(Request $request): string
+    {
+        $query = [];
+        foreach (['venue', 'days', 'past', 'limit'] as $key) {
+            $value = (string) $request->query($key, '');
+            if ($value !== '') {
+                $query[$key] = $value;
+            }
+        }
+        $qs = $query === [] ? '' : ('?' . http_build_query($query));
+
+        // Reuse appUrl() (not host()): a tenant/deployment can be mounted
+        // under a base path (e.g. https://panicbooking.com/backstage), and
+        // host() alone would drop that prefix, producing a 404 feed URL.
+        // Swap only the scheme for webcal, keep host + path intact.
+        $webcalBase = preg_replace('#^https?://#i', '', $this->appUrl());
+        $webcalUrl  = 'webcal://' . $webcalBase . '/feeds/public-events.ics' . $qs;
+
+        return 'https://calendar.google.com/calendar/render?cid=' . rawurlencode($webcalUrl);
     }
 
     // ── iCalendar ─────────────────────────────────────────────────────────────

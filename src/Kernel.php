@@ -746,6 +746,13 @@ final class Kernel
             return [Feed::class, ['format' => $segments[1]]];
         }
 
+        // Same friendly-alias treatment for the one-click "Add to Google
+        // Calendar" redirect (see Feed::googleCalendarUrl()):
+        //   GET /feeds/google-calendar
+        if ($segments[0] === 'feeds' && ($segments[1] ?? '') === 'google-calendar') {
+            return [Feed::class, ['format' => 'google']];
+        }
+
         // Venues + resources listing (lightweight; used by the calendar zone map and sidebar)
         // PATCH  /api/venues/{id}                      — update venue details (venue_admin only)
         // GET/POST/PATCH/DELETE /api/venues/{id}/resources[/{rid}] — manage rooms (venue_admin)
