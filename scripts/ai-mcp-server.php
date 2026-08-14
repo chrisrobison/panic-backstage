@@ -176,7 +176,7 @@ const AI_MCP_TOOLS = [
         ],
     ],
     'propose_recurring_series' => [
-        'description' => 'PROPOSE turning an existing event into the anchor of a recurring series, given an explicit list of occurrence dates you compute (e.g. "every Tuesday for the next 8 weeks"). This does NOT create anything by itself — it validates the dates (max 52 occurrences, none more than 90 days from today, no room conflicts) and stores a proposal for a human to review and explicitly click "Apply" on. If validation fails, you will get back a clear error (e.g. which dates are beyond the 90-day booking horizon, or which dates conflict with an existing booking) — adjust and try again rather than guessing around it. After a successful call, tell the user their proposal is ready to review; do not claim the series has been created.',
+        'description' => 'PROPOSE turning an existing event into the anchor of a recurring series, given an explicit list of occurrence dates you compute (e.g. "every Tuesday for the next 8 weeks"). This does NOT create anything by itself — it validates the dates (max 52 occurrences, none more than 90 days from today) and stores a proposal for a human to review and explicitly click "Apply" on. Room conflicts do NOT block the proposal: the result tells you which dates (if any) collide with an existing booking, and the human resolves each one — skip it, or move it to a free room — in the panel when they click Apply, so mention any conflicted dates in your reply rather than treating them as a reason to retry with different dates. If validation of the dates themselves fails (e.g. beyond the 90-day booking horizon, too many occurrences, a malformed date), you will get back a clear error — adjust and try again rather than guessing around it. After a successful call, tell the user their proposal is ready to review; do not claim the series has been created.',
         'inputSchema' => [
             'type'       => 'object',
             'properties' => [
@@ -326,11 +326,22 @@ function handle_propose_booker_update($id, Database $db, int $userId, string $ro
 }
 
 /**
- * PROPOSE-only: validates the series (same rules attemptCreate() will
- * re-run at apply time — see Series::previewSeries()) and stores the
- * result. Never creates any event — that only happens in
- * Ai\Assistant::applyRecurringSeries(), via Series::attemptCreate(), only
- * reachable through a human-clicked POST /api/ai/proposals/{id}/apply.
+ * PROPOSE-only: validates the series' shape (same date-format/dedup/
+ * MAX_OCCURRENCES/90-day-horizon rules attemptCreate() will re-run at apply
+ * time — see Series::checkConflicts(), which shares that validation with
+ * validateSeries() via prepareDates()) and stores the result. Never creates
+ * any event — that only happens in Ai\Assistant::applyRecurringSeries(), via
+ * Series::attemptCreate(), only reachable through a human-clicked
+ * POST /api/ai/proposals/{id}/apply.
+ *
+ * Unlike those shape checks, a room conflict does NOT abort the proposal —
+ * checkConflicts() (not the stricter validateSeries()/previewSeries()) is
+ * used here specifically so a conflicted date still gets proposed, with the
+ * conflict named in the diff. The human resolves it the same way the
+ * Recurrence panel and event wizard do: applyProposal() re-checks live at
+ * Apply time and the drawer opens the same "Resolve recurring-event
+ * conflicts" dialog before ever calling apply. This mirrors those two entry
+ * points rather than special-casing the AI path as more restrictive.
  */
 function handle_propose_recurring_series($id, Database $db, int $userId, string $role, int $conversationId, string $root, array $args): void
 {
@@ -350,13 +361,14 @@ function handle_propose_recurring_series($id, Database $db, int $userId, string 
     $auth = new Auth();
     $auth->setUser(['id' => $userId, 'name' => '', 'email' => '', 'role' => $role]);
     $series = new Series($db, $auth, [], $root);
-    $preview = $series->previewSeries($eventId, $dates, $userId, $role);
+    $preview = $series->checkConflicts($eventId, $dates, $userId, $role);
 
     if (!$preview['ok']) {
         mcp_tool_error($id, (string) $preview['error']);
         return;
     }
 
+    $conflictDates = array_column($preview['conflicts'], 'date');
     $existingSeriesId = !empty($preview['anchor']['series_id']) ? (int) $preview['anchor']['series_id'] : null;
     $diff = [
         'event_id' => $eventId,
@@ -367,6 +379,10 @@ function handle_propose_recurring_series($id, Database $db, int $userId, string 
         // Set when the anchor is already part of a series — this proposal
         // will extend that series with more dates, not found a new one.
         'extending_series_id' => $existingSeriesId,
+        // Which of `dates` collide with an existing booking, purely for the
+        // drawer to show an inline heads-up on the card — informational
+        // only; Apply always re-checks live rather than trusting this.
+        'conflict_dates' => $conflictDates,
     ];
     $expiresAt = (new DateTimeImmutable('+30 minutes'))->format('Y-m-d H:i:s');
 
@@ -387,7 +403,10 @@ function handle_propose_recurring_series($id, Database $db, int $userId, string 
         'proposal_id' => $proposalId,
         'occurrence_count' => count($preview['dates']),
         'dates' => $preview['dates'],
-        'note' => 'PROPOSAL ONLY — nothing has been created yet. The user must review and click Apply in the panel to create these events.',
+        'conflict_dates' => $conflictDates,
+        'note' => $conflictDates
+            ? (count($conflictDates) . ' of these dates conflict with an existing booking. PROPOSAL ONLY — nothing has been created yet. Tell the user which dates conflict; they can skip or move each one to a free room when they click Apply in the panel.')
+            : 'PROPOSAL ONLY — nothing has been created yet. The user must review and click Apply in the panel to create these events.',
     ]);
 }
 

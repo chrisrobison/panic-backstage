@@ -18,7 +18,7 @@
 //     endDate: 'YYYY-MM-DD',         // on_date
 //   }
 
-import { esc } from './core.js';
+import { esc, api, openModal, badge, shortDate, publish, $, $$ } from './core.js';
 
 const MAX_OCCURRENCES = 52;
 // Rolling booking-horizon cap, alongside MAX_OCCURRENCES — mirrors the
@@ -308,4 +308,120 @@ class RecurrenceFields extends HTMLElement {
 
 customElements.define('pb-recurrence-fields', RecurrenceFields);
 
-export { generateOccurrenceDates, describeRecurrence };
+// ── Room-conflict resolution ────────────────────────────────────────────────
+// Shared by every entry point that can create/extend a recurring series —
+// the Recurrence panel (event-workspace.js's EventRecurrencePanel), the New
+// Event wizard (event-wizard.js), and the AI Assistant drawer's "Apply" on a
+// propose_recurring_series proposal (ai-drawer.js). A room conflict on one or
+// more generated dates no longer rejects the whole pattern outright: the
+// server's POST /events/{id}/series/conflicts preflight (always 200, never
+// throws for "there are conflicts" — only for a genuinely malformed request)
+// reports which dates collide and which other rooms are free that day, and
+// this module turns that into the "Resolve recurring-event conflicts"
+// dialog. Each caller still does its own actual series create/apply POST
+// afterward — this module only gets the caller from "here's the dates I want"
+// to "here's the dates to actually submit, plus any room reassignments",
+// same shape either way: `{ dates, roomOverrides }`.
+
+/** Calls the conflicts preflight. Returns the (possibly empty) conflicts array; throws on a genuine validation failure (bad pattern shape, too many occurrences, beyond the 90-day horizon) — the same error the actual create/apply call would throw, just caught earlier. */
+async function checkSeriesConflicts(eventId, dates) {
+  const res = await api(`/events/${eventId}/series/conflicts`, {
+    method: 'POST',
+    body: JSON.stringify({ dates }),
+  });
+  return res.conflicts || [];
+}
+
+/**
+ * Renders the resolution dialog — one row per date in `dates`; conflicted
+ * ones (per `conflicts`) get a resolution <select> (skip, or move to one of
+ * that date's free rooms), clean ones are listed with no control. Resolves
+ * to `{ dates: finalDates, roomOverrides }` (skipped dates simply omitted)
+ * when the user clicks Continue, or `null` if they back out — via the
+ * Cancel button, Escape, the header Close button, or the backdrop — treated
+ * uniformly via openModal()'s `onClose` hook so none of those paths can
+ * leave the caller awaiting a Promise that never settles.
+ */
+function openSeriesConflictModal(dates, conflicts) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finishOnce = (result) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+
+    const conflictByDate = new Map(conflicts.map((c) => [c.date, c]));
+    const rows = dates.map((date) => {
+      const conflict = conflictByDate.get(date);
+      const dateLabel = esc(shortDate(new Date(`${date}T12:00:00`)));
+      if (!conflict) {
+        return `<tr data-date="${esc(date)}"><td>${dateLabel}</td><td class="muted small">No conflict</td><td></td></tr>`;
+      }
+      const roomOptions = conflict.available_rooms.map((r) => `<option value="${esc(r.id)}">Move to ${esc(r.name)}</option>`).join('');
+      return `<tr data-date="${esc(date)}" data-conflict>
+        <td>${dateLabel}</td>
+        <td>Conflicts with <a href="#event-${esc(String(conflict.conflict_event_id))}" target="_blank">${esc(conflict.conflict_title)}</a> ${badge(conflict.conflict_status)}</td>
+        <td><select data-resolution><option value="">Skip this date</option>${roomOptions}</select></td>
+      </tr>`;
+    }).join('');
+
+    const { dialog, close } = openModal({
+      title: 'Resolve recurring-event conflicts',
+      wide: true,
+      bodyHtml: `<div class="modal-card-body padded">
+        <p>${conflicts.length} of ${dates.length} date${dates.length === 1 ? '' : 's'} in this pattern conflict with an existing booking. For each conflicted date, move it to a free room or skip it — the rest of the series is unaffected either way.</p>
+        <table class="data-table recurrence-conflict-table">
+          <thead><tr><th>Date</th><th>Conflict</th><th>Resolution</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div class="calendar-actions">
+          <button type="button" class="secondary" data-cancel-conflicts>Cancel</button>
+          <button type="button" data-resolve-conflicts>Continue</button>
+        </div>
+      </div>`,
+      onClose: () => finishOnce(null),
+    });
+
+    $('[data-cancel-conflicts]', dialog).addEventListener('click', close);
+    $('[data-resolve-conflicts]', dialog).addEventListener('click', () => {
+      const finalDates = [];
+      const roomOverrides = {};
+      $$('tr[data-date]', dialog).forEach((row) => {
+        const date = row.dataset.date;
+        const resolution = $('select[data-resolution]', row);
+        if (!resolution) { finalDates.push(date); return; } // no conflict on this date
+        if (!resolution.value) return; // skipped
+        finalDates.push(date);
+        roomOverrides[date] = Number(resolution.value);
+      });
+      if (!finalDates.length) {
+        publish('toast.show', { message: 'Every conflicted date was skipped, and there were no clean dates left to create.', tone: 'error' });
+        return; // keep the dialog open — nothing to resolve to yet
+      }
+      finishOnce({ dates: finalDates, roomOverrides });
+      close();
+    });
+  });
+}
+
+/**
+ * The one-call orchestrator most callers want: checks `dates` for room
+ * conflicts and, if any exist, opens the resolution dialog. Returns
+ * `{ dates, roomOverrides }` to submit — either `dates` unchanged with an
+ * empty `roomOverrides` (the clean-pattern case, no dialog shown at all) or
+ * whatever the user resolved in the dialog — or `null` if the user backed
+ * out of a shown dialog (never null for a clean pattern; there's nothing to
+ * cancel out of). Throws on the same preflight validation failures
+ * checkSeriesConflicts() does. Callers that need finer control over UI state
+ * around the preflight network call (e.g. a submit button's disabled/label
+ * state — see EventRecurrencePanel.submitSeries()) can call
+ * checkSeriesConflicts()/openSeriesConflictModal() directly instead.
+ */
+async function resolveSeriesConflicts(eventId, dates) {
+  const conflicts = await checkSeriesConflicts(eventId, dates);
+  if (!conflicts.length) return { dates, roomOverrides: {} };
+  return openSeriesConflictModal(dates, conflicts);
+}
+
+export { generateOccurrenceDates, describeRecurrence, checkSeriesConflicts, openSeriesConflictModal, resolveSeriesConflicts };

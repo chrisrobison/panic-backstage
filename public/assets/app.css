@@ -7861,6 +7861,7 @@ pb-ai-drawer.ai-drawer-open {
 .ai-diff-before { text-decoration: line-through; opacity: .7; }
 .ai-diff-after { color: var(--proc-ai, #0f9488); font-weight: 600; }
 .ai-proposal-summary { font-size: 13px; font-weight: 600; margin: 0 0 6px; }
+.ai-proposal-conflict-note { color: var(--amber, #d97706); font-size: 12.5px; font-weight: 650; margin: 0 0 8px; display: flex; align-items: flex-start; gap: 6px; }
 .ai-proposal-dates {
   display: flex;
   flex-wrap: wrap;

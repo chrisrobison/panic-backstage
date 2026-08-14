@@ -88,7 +88,7 @@ final class Assistant extends BaseEndpoint
         }
         if ($action === 'proposals' && $id !== null) {
             if ($sub === 'apply') {
-                return $request->method() === 'POST' ? $this->applyProposal((int) $id) : Response::methodNotAllowed();
+                return $request->method() === 'POST' ? $this->applyProposal((int) $id, $request) : Response::methodNotAllowed();
             }
             if ($sub === null) {
                 return $request->method() === 'DELETE' ? $this->discardProposal((int) $id) : Response::methodNotAllowed();
@@ -281,8 +281,18 @@ final class Assistant extends BaseEndpoint
      * it directly through the app (Series::attemptCreate() /
      * BookerUpdate::apply()) rather than trusting the stored diff blindly —
      * the underlying data may have changed since the proposal was computed.
+     *
+     * Accepts an optional JSON body — currently only meaningful for
+     * propose_recurring_series — carrying the human's resolution of a room
+     * conflict discovered client-side (the drawer runs the same
+     * /events/{id}/series/conflicts preflight the Recurrence panel and event
+     * wizard use, before ever calling this endpoint): `dates` narrows the
+     * proposal's original date list to skip conflicted ones, and
+     * `room_overrides` reassigns others to a free room. See
+     * applyRecurringSeries() for how these are validated against the stored
+     * proposal rather than trusted outright.
      */
-    private function applyProposal(int $proposalId): Response
+    private function applyProposal(int $proposalId, Request $request): Response
     {
         $userId = $this->userId();
         $role   = $this->role();
@@ -299,6 +309,7 @@ final class Assistant extends BaseEndpoint
         if (!is_array($args)) {
             $args = [];
         }
+        $body = $request->body();
 
         // Every write below runs through Database::setActor() so db_history
         // attributes it (and can undo it) as an AI-assisted change distinct
@@ -308,7 +319,7 @@ final class Assistant extends BaseEndpoint
 
         $result = match ($loaded['tool_name']) {
             'propose_booker_update'    => $this->applyBookerUpdate($args, $userId, $role),
-            'propose_recurring_series' => $this->applyRecurringSeries($args, $userId, $role),
+            'propose_recurring_series' => $this->applyRecurringSeries($args, $userId, $role, $body),
             default                    => ['ok' => false, 'status' => 500, 'error' => 'Unknown proposal type.'],
         };
 
@@ -398,15 +409,46 @@ final class Assistant extends BaseEndpoint
     }
 
     /**
+     * @param array $body Optional client-supplied conflict resolution — see
+     *     applyProposal()'s docblock. Both keys are optional and validated
+     *     against $args (the stored proposal), never trusted outright: a
+     *     resolved `dates` list must be a subset of what was originally
+     *     proposed (skip-only — a human resolving a conflict can narrow the
+     *     series, never expand it beyond what the model proposed and the
+     *     human already saw), and `room_overrides` entries for any other
+     *     date are silently ignored.
      * @return array{ok: bool, status?: int, error?: string, payload?: array}
      */
-    private function applyRecurringSeries(array $args, int $userId, string $role): array
+    private function applyRecurringSeries(array $args, int $userId, string $role, array $body = []): array
     {
         $eventId = (int) ($args['event_id'] ?? 0);
-        $dates   = is_array($args['dates'] ?? null) ? array_values(array_filter(array_map('strval', $args['dates']))) : [];
+        $proposedDates = is_array($args['dates'] ?? null) ? array_values(array_filter(array_map('strval', $args['dates']))) : [];
         $description = isset($args['description']) && is_string($args['description']) ? trim($args['description']) : null;
-        if ($eventId <= 0 || !$dates) {
+        if ($eventId <= 0 || !$proposedDates) {
             return ['ok' => false, 'status' => 422, 'error' => 'This proposal is missing required data.'];
+        }
+
+        $dates = $proposedDates;
+        if (array_key_exists('dates', $body) && is_array($body['dates'])) {
+            $resolvedDates = array_values(array_unique(array_filter(array_map('strval', $body['dates']))));
+            if (array_diff($resolvedDates, $proposedDates)) {
+                return ['ok' => false, 'status' => 422, 'error' => 'Resolved dates must be a subset of the dates originally proposed.'];
+            }
+            if (!$resolvedDates) {
+                return ['ok' => false, 'status' => 422, 'error' => 'Every date was skipped — nothing to create.'];
+            }
+            $dates = $resolvedDates;
+        }
+        $roomOverrides = [];
+        foreach ((array) ($body['room_overrides'] ?? []) as $date => $resourceId) {
+            // Ignore an override for a date outside the original proposal —
+            // never a channel for smuggling in a date the human never saw.
+            if (!in_array((string) $date, $proposedDates, true)) {
+                continue;
+            }
+            if ($resourceId !== null && $resourceId !== '') {
+                $roomOverrides[(string) $date] = (int) $resourceId;
+            }
         }
 
         // Delegates to Series::attemptCreate() — the exact same validation
@@ -415,7 +457,7 @@ final class Assistant extends BaseEndpoint
         // this can never create a series the human flow wouldn't also allow.
         $series = new Series($this->db, $this->auth, [], $this->root);
         $result = $series->attemptCreate(
-            $eventId, $dates, $description, null, 'after_count', null, count($dates) + 1, $userId, $role
+            $eventId, $dates, $description, null, 'after_count', null, count($dates) + 1, $userId, $role, $roomOverrides
         );
         if (!$result['ok']) {
             return $result;

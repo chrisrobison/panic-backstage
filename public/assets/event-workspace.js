@@ -7,7 +7,7 @@ import './paint-splat.js';
 import './event-vendors.js';
 import './event-execution.js';
 import './event-closeout.js';
-import './recurrence.js'; // registers <pb-recurrence-fields>, used by EventRecurrencePanel below
+import { checkSeriesConflicts, openSeriesConflictModal } from './recurrence.js'; // also registers <pb-recurrence-fields>, used by EventRecurrencePanel below
 import './processes/process-step-form.js'; // registers <pb-process-step-form>, used by EventAutomation below
 
 function factCell(label, value) {
@@ -1363,11 +1363,7 @@ class EventRecurrencePanel extends PanicElement {
     button.textContent = 'Checking for conflicts…';
     let conflicts;
     try {
-      const res = await api(`/events/${this._eventId}/series/conflicts`, {
-        method: 'POST',
-        body: JSON.stringify({ dates: value.dates }),
-      });
-      conflicts = res.conflicts || [];
+      conflicts = await checkSeriesConflicts(this._eventId, value.dates);
     } catch (err) {
       // Date-shape/horizon errors (bad pattern, too many occurrences, beyond
       // the booking horizon) are reported the same way create() itself would.
@@ -1382,65 +1378,9 @@ class EventRecurrencePanel extends PanicElement {
     }
     button.disabled = false;
     button.textContent = originalLabel;
-    this._openConflictModal(value, conflicts, button, originalLabel);
-  }
-
-  // Renders one row per generated date — conflicted dates get a "Conflicts
-  // with …" note plus a resolution dropdown (a free room for that date, or
-  // "Skip this date"); clean dates are listed for context only, with no
-  // control. Submitting builds the final date list (skips omitted) and a
-  // date → resource_id room_overrides map, then calls createSeries().
-  _openConflictModal(value, conflicts, button, originalLabel) {
-    const conflictByDate = new Map(conflicts.map((c) => [c.date, c]));
-    const rows = value.dates.map((date) => {
-      const conflict = conflictByDate.get(date);
-      const dateLabel = esc(shortDate(new Date(`${date}T12:00:00`)));
-      if (!conflict) {
-        return `<tr data-date="${esc(date)}"><td>${dateLabel}</td><td class="muted small">No conflict</td><td></td></tr>`;
-      }
-      const roomOptions = conflict.available_rooms.map((r) => `<option value="${esc(r.id)}">Move to ${esc(r.name)}</option>`).join('');
-      return `<tr data-date="${esc(date)}" data-conflict>
-        <td>${dateLabel}</td>
-        <td>Conflicts with <a href="#event-${esc(String(conflict.conflict_event_id))}" target="_blank">${esc(conflict.conflict_title)}</a> ${badge(conflict.conflict_status)}</td>
-        <td><select data-resolution><option value="">Skip this date</option>${roomOptions}</select></td>
-      </tr>`;
-    }).join('');
-
-    const { dialog, close } = openModal({
-      title: 'Resolve recurring-event conflicts',
-      wide: true,
-      bodyHtml: `<div class="modal-card-body padded">
-        <p>${conflicts.length} of ${value.dates.length} date${value.dates.length === 1 ? '' : 's'} in this pattern conflict with an existing booking. For each conflicted date, move it to a free room or skip it — the rest of the series is unaffected either way.</p>
-        <table class="data-table recurrence-conflict-table">
-          <thead><tr><th>Date</th><th>Conflict</th><th>Resolution</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-        <div class="calendar-actions">
-          <button type="button" class="secondary" data-cancel-conflicts>Cancel</button>
-          <button type="button" data-resolve-conflicts>Continue</button>
-        </div>
-      </div>`,
-    });
-
-    $('[data-cancel-conflicts]', dialog).addEventListener('click', close);
-    $('[data-resolve-conflicts]', dialog).addEventListener('click', async () => {
-      const finalDates = [];
-      const roomOverrides = {};
-      $$('tr[data-date]', dialog).forEach((row) => {
-        const date = row.dataset.date;
-        const resolution = $('select[data-resolution]', row);
-        if (!resolution) { finalDates.push(date); return; } // no conflict on this date
-        if (!resolution.value) return; // skipped
-        finalDates.push(date);
-        roomOverrides[date] = Number(resolution.value);
-      });
-      if (!finalDates.length) {
-        publish('toast.show', { message: 'Every conflicted date was skipped, and there were no clean dates left to create.', tone: 'error' });
-        return;
-      }
-      close();
-      await this.createSeries(value, finalDates, roomOverrides, button, originalLabel);
-    });
+    const resolved = await openSeriesConflictModal(value.dates, conflicts);
+    if (!resolved) return; // user backed out of the dialog
+    await this.createSeries(value, resolved.dates, resolved.roomOverrides, button, originalLabel);
   }
 
   async createSeries(value, dates, roomOverrides, button, originalLabel) {

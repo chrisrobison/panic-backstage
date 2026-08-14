@@ -64,7 +64,7 @@ import {
   $,
   $$,
 } from './core.js';
-import './recurrence.js'; // registers <pb-recurrence-fields>, used by the recurrence_picker field type
+import { resolveSeriesConflicts } from './recurrence.js'; // also registers <pb-recurrence-fields>, used by the recurrence_picker field type
 
 // ── Wizard flow configuration ─────────────────────────────────────────────────
 //
@@ -1472,23 +1472,35 @@ class EventContractWizard extends PanicElement {
 
     // 2 ── Spin off a recurring series, if the Basics step set one up ──────
     // Best-effort: the primary event already exists at this point, so a
-    // failure here (e.g. a room conflict on one of the generated dates)
-    // surfaces as a warning toast rather than aborting the whole wizard.
+    // failure here surfaces as a warning toast rather than aborting the
+    // whole wizard. A room conflict on one or more generated dates no
+    // longer aborts this step outright — resolveSeriesConflicts() opens the
+    // same "Resolve recurring-event conflicts" dialog the Recurrence panel
+    // uses, pausing here (the wizard doesn't navigate away until this whole
+    // method resolves) until the human skips or reassigns each conflicted
+    // date, or backs out of the dialog entirely (in which case the series
+    // is simply not created — the event itself still is).
     const recurrence = this.wizardData.recurrence;
     if (recurrence?.dates?.length) {
       try {
-        const seriesRes = await api(`/events/${createdEvent.id}/series`, {
-          method: 'POST',
-          body: JSON.stringify({
-            pattern: recurrence.pattern,
-            description: recurrence.description,
-            end_type: recurrence.pattern.endType,
-            end_date: recurrence.pattern.endDate || null,
-            occurrence_count: recurrence.pattern.occurrenceCount || null,
-            dates: recurrence.dates,
-          }),
-        });
-        publish('toast.show', { message: `Also created ${seriesRes.created_event_ids.length} recurring events.`, tone: 'success' });
+        const resolved = await resolveSeriesConflicts(createdEvent.id, recurrence.dates);
+        if (resolved) {
+          const seriesRes = await api(`/events/${createdEvent.id}/series`, {
+            method: 'POST',
+            body: JSON.stringify({
+              pattern: recurrence.pattern,
+              description: recurrence.description,
+              end_type: recurrence.pattern.endType,
+              end_date: recurrence.pattern.endDate || null,
+              occurrence_count: recurrence.pattern.occurrenceCount || null,
+              dates: resolved.dates,
+              room_overrides: resolved.roomOverrides,
+            }),
+          });
+          publish('toast.show', { message: `Also created ${seriesRes.created_event_ids.length} recurring events.`, tone: 'success' });
+        } else {
+          publish('toast.show', { message: 'Event created without the recurring series — conflict resolution was cancelled.', tone: 'info' });
+        }
       } catch (err) {
         publish('toast.show', { message: `Event created, but the recurring series could not be created: ${err.message || err}`, tone: 'error' });
       }

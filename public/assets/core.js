@@ -691,7 +691,14 @@ function openAssetFileViewer(src, filename = '', title = '') {
 // Precedent this generalizes: admin.js's openStaffModal(), campaigns.js's
 // recipients/new-campaign/generate-from-events dialogs — all hand-rolled the
 // same backdrop/card/Escape/close-button wiring before this existed.
-function openModal({ title = '', bodyHtml = '', wide = false, focus } = {}) {
+//
+// `onClose`, if given, fires exactly once no matter which of the four ways
+// the dialog actually closes (the caller's own `close()`, the header Close
+// button, Escape, or a backdrop click) — for a caller that resolves a
+// Promise on close (see recurrence.js's openSeriesConflictModal()), so
+// dismissing the dialog any of those ways still settles it instead of
+// leaving the caller awaiting forever.
+function openModal({ title = '', bodyHtml = '', wide = false, focus, onClose } = {}) {
   const dialog = document.createElement('div');
   dialog.className = 'modal-backdrop';
   dialog.innerHTML = `<div class="modal-card${wide ? ' wide' : ''}">
@@ -699,7 +706,14 @@ function openModal({ title = '', bodyHtml = '', wide = false, focus } = {}) {
     ${bodyHtml}
   </div>`;
   document.body.appendChild(dialog);
-  const close = () => { dialog.remove(); document.removeEventListener('keydown', onEsc); };
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    dialog.remove();
+    document.removeEventListener('keydown', onEsc);
+    onClose?.();
+  };
   function onEsc(event) { if (event.key === 'Escape') close(); }
   document.addEventListener('keydown', onEsc);
   $('[data-close]', dialog).addEventListener('click', close);

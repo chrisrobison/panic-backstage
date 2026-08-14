@@ -428,9 +428,19 @@ final class Series extends BaseEndpoint
      * (modulo the ordinary race — see Series class docblock precedent in
      * previewSeries()).
      *
+     * Also used by the AI Assistant's propose_recurring_series MCP tool
+     * (scripts/ai-mcp-server.php's handle_propose_recurring_series()) in
+     * place of previewSeries() — a room conflict no longer aborts the
+     * proposal outright; it's stored anyway (full requested date list) and
+     * the human resolves it via this same dialog at Apply time. Returns
+     * `anchor` (title/series_id/etc.) for exactly that caller's benefit —
+     * previewSeries()/validateSeries() remain the strict, still-used-elsewhere
+     * all-or-conflicts-reject path; this method never rejects on room
+     * conflicts, only reports them.
+     *
      * @return array{ok: bool, status?: int, error?: string, horizon_date?: string,
-     *     beyond_horizon_dates?: list<string>, dates?: list<string>, conflicts?: list<array{
-     *         date: string, conflict_event_id: int, conflict_title: string,
+     *     beyond_horizon_dates?: list<string>, anchor?: array, dates?: list<string>,
+     *     conflicts?: list<array{date: string, conflict_event_id: int, conflict_title: string,
      *         conflict_status: string, available_rooms: list<array{id: int, name: string}>}>}
      */
     public function checkConflicts(int $eventId, array $dates, int $actingUserId, string $actingRole): array
@@ -461,7 +471,7 @@ final class Series extends BaseEndpoint
             ];
         }
 
-        return ['ok' => true, 'dates' => $dates, 'conflicts' => $conflicts];
+        return ['ok' => true, 'anchor' => $anchor, 'dates' => $dates, 'conflicts' => $conflicts];
     }
 
     private function resultToResponse(array $result): Response

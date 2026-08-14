@@ -1,16 +1,23 @@
 import { api, esc, mdToHtml, PanicElement, $ } from './core.js';
+import { resolveSeriesConflicts } from './recurrence.js';
 
 /**
  * <pb-ai-drawer> — the AI Assistant drawer.
  *
  * A persistent right-side slide-over PANEL, not a modal: openModal()
- * deliberately isn't used here, and unlike the mobile nav drawer
- * (app.js's setupMobileDrawer()) there is no backdrop/scrim element — the
- * rest of the app stays fully visible, scrollable, and clickable while
+ * deliberately isn't used for the drawer itself, and unlike the mobile nav
+ * drawer (app.js's setupMobileDrawer()) there is no backdrop/scrim element —
+ * the rest of the app stays fully visible, scrollable, and clickable while
  * this is open. Only an explicit close button and Escape dismiss it; there
  * is no click-outside-to-dismiss since there's nothing to click outside of.
  * See the `.ai-drawer-*` rules in app.css for the slide mechanics (borrowed
  * from the mobile drawer's translateX/transition approach, not its markup).
+ * The one deliberate exception: applying a propose_recurring_series
+ * proposal with a room conflict opens the same modal "Resolve
+ * recurring-event conflicts" dialog the Recurrence panel and event wizard
+ * use (see resolveSeriesConflicts(), imported from recurrence.js) — that's a
+ * focused, blocking sub-decision layered on top of the Apply click, not the
+ * drawer itself behaving as a modal.
  *
  * Mounted once in the app shell (app.js's renderShell()), gated on
  * `capabilities.use_ai_assistant`. Two entry points open the same shared
@@ -192,7 +199,16 @@ class AiDrawer extends PanicElement {
     }
     const verb = diff.extending_series_id ? 'extends its existing series with' : '→';
     const summary = `${esc(diff.anchor_title || 'This event')} ${verb} ${dates.length} new occurrence${dates.length === 1 ? '' : 's'}`;
+    // Informational only — computed once at propose time, purely so the
+    // card doesn't look silent about a conflict the model already knows
+    // about. Apply always re-checks live (see applyProposal()) rather than
+    // trusting this; it can be stale by the time the human clicks Apply.
+    const conflictCount = Array.isArray(diff.conflict_dates) ? diff.conflict_dates.length : 0;
+    const conflictNote = conflictCount
+      ? `<p class="ai-proposal-conflict-note"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ${conflictCount} of these date${conflictCount === 1 ? '' : 's'} conflict${conflictCount === 1 ? 's' : ''} with an existing booking — you'll choose to skip it or move it to a free room when you click Apply.</p>`
+      : '';
     return `<p class="ai-proposal-summary">${summary}</p>
+      ${conflictNote}
       <ul class="ai-proposal-dates">${dates.map((date) => `<li>${esc(date)}</li>`).join('')}</ul>`;
   }
 
@@ -243,12 +259,36 @@ class AiDrawer extends PanicElement {
     if (!message || message.status !== 'pending') return;
     if (!confirm('Apply this change now? This will update real event data.')) return;
 
+    // A recurring-series proposal may have a room conflict on one or more of
+    // its dates — renderSeriesDiff()'s note above was computed at propose
+    // time and can be stale by now, so this checks live and, if needed,
+    // opens the same "Resolve recurring-event conflicts" dialog the
+    // Recurrence panel and event wizard use, before ever calling apply.
+    let seriesResolution = null;
+    if (message.toolName === 'propose_recurring_series') {
+      try {
+        seriesResolution = await resolveSeriesConflicts(message.diff.event_id, message.diff.dates);
+      } catch (error) {
+        message.error = error.message || 'Could not check this proposal for room conflicts.';
+        this.renderTranscript();
+        return;
+      }
+      if (!seriesResolution) return; // user backed out of the conflict dialog — proposal stays pending
+    }
+
     message.status = 'applying';
     message.error = null;
     this.renderTranscript();
 
     try {
-      await api(`/ai/proposals/${proposalId}/apply`, { method: 'POST' });
+      // Only a resolved recurring series needs a body — every other
+      // proposal type still applies exactly whatever was proposed, as
+      // before. See Ai\Assistant::applyRecurringSeries() for how `dates`/
+      // `room_overrides` here are validated against the stored proposal.
+      const body = seriesResolution
+        ? JSON.stringify({ dates: seriesResolution.dates, room_overrides: seriesResolution.roomOverrides })
+        : undefined;
+      await api(`/ai/proposals/${proposalId}/apply`, { method: 'POST', body });
       message.status = 'applied';
     } catch (error) {
       message.status = 'pending';
