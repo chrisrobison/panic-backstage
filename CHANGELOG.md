@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Consolidate secondary event actions into an ellipsis menu
 - **Added** `contracts` — Let one contract cover an entire recurring series
 - **Fixed** `events` — Stop contract_details from re-blocking Booked and beyond
 - **Added** `events` — Let recurring series be extended with more dates

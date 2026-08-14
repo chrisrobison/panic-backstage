@@ -676,6 +676,18 @@ class EventWorkspace extends PanicElement {
         ${toggleableTabs.map(t => `<label class="section-toggle-item"><input type="checkbox" data-section-toggle="${esc(t)}"${prefs[t] !== false ? ' checked' : ''}> ${esc(SECTION_LABELS[t] || titleCase(t))}</label>`).join('')}
       </div>
     </details>`;
+    const moreActions = [
+      isPrivate ? '' : `<button type="button" data-qr-toggle data-event-more-action role="menuitem" title="Show a QR code linking to this event's public page"><i class="fa-solid fa-qrcode" aria-hidden="true"></i><span>QR Code</span></button>`,
+      can(data, 'edit_event') ? `<a href="#new-event-${esc(String(event.id))}" data-event-more-action role="menuitem" title="Re-run this event through the guided setup wizard, pre-filled with its current details"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>Wizard</span></a>` : '',
+      (can(data, 'read_event') && getAppCapabilities()?.create_events) ? `<button type="button" data-clone-event data-event-more-action role="menuitem" title="Create an editable Hold using this event's reusable details"><i class="fa-solid fa-clone" aria-hidden="true"></i><span>Clone</span></button>` : '',
+      isPrivate ? '' : `<a href="#promote-event-${esc(String(event.id))}" data-event-more-action role="menuitem"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i><span>Promote</span></a>`,
+    ].filter(Boolean).join('');
+    const moreActionsMenu = moreActions ? `<details class="event-more-menu" data-event-more>
+      <summary class="button secondary" aria-label="More event actions" aria-haspopup="menu" aria-expanded="false" title="More event actions"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></summary>
+      <div class="event-more-items" role="menu" aria-label="More event actions">
+        ${moreActions}
+      </div>
+    </details>` : '';
     publish('page.context', {
       title: `${event.title}${isPrivate ? ' 🔒' : ''}`,
       blurb: `${eventDateRangeLabel(event)} at ${event.venue_name}`,
@@ -686,11 +698,7 @@ class EventWorkspace extends PanicElement {
       </div>
       <div class="event-actions">
         ${getAppCapabilities()?.use_ai_assistant ? `<button type="button" class="secondary" data-ask-ai title="Ask the AI Assistant about this event"><i class="fa-solid fa-sparkles" aria-hidden="true"></i> Ask AI</button>` : ''}
-        ${isPrivate ? '' : `<a class="button promote-accent" href="#promote-event-${esc(String(event.id))}"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i> Promote</a>`}
         ${isPrivate ? '' : `<a class="button secondary" href="${esc(appUrl(data.links.public_page))}" target="_blank" rel="noreferrer">Public Page</a>`}
-        ${isPrivate ? '' : `<button class="secondary" data-qr-toggle title="Show a QR code linking to this event's public page"><i class="fa-solid fa-qrcode" aria-hidden="true"></i> QR Code</button>`}
-        ${can(data, 'edit_event') ? `<a class="button secondary" href="#new-event-${esc(String(event.id))}" title="Re-run this event through the guided setup wizard, pre-filled with its current details"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Wizard</a>` : ''}
-        ${(can(data, 'read_event') && getAppCapabilities()?.create_events) ? `<button type="button" class="secondary" data-clone-event title="Create an editable Hold using this event's reusable details"><i class="fa-solid fa-clone" aria-hidden="true"></i> Clone</button>` : ''}
         ${can(data, 'edit_event') ? `<pb-event-history-undo></pb-event-history-undo>` : ''}
         ${sectionsDropdown}
         ${can(data, 'read_event') ? `<details class="print-menu">
@@ -710,6 +718,7 @@ class EventWorkspace extends PanicElement {
         </details>` : ''}
         ${(!isPrivate && can(data, 'publish_event')) ? `<button class="danger" data-publish>${Number(event.public_visibility) ? 'Hide Public Page' : 'Publish Public Page'}</button>` : ''}
         ${(can(data, 'manage_contracts') || (can(data, 'view_settlement') && !isPrivate)) ? `<button class="secondary" data-portal-toggle title="Generate a read-only link for a promoter or client — client portal and/or settlement report, no login required"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i> Share</button>` : ''}
+        ${moreActionsMenu}
         <!-- "Set as POS Event" hidden for now: Square is used for online ticketing only,
              not an in-venue POS terminal, so there is no pos_location_map to route to.
              Restore the button below (handler + setPosEvent are still wired) once a POS
@@ -799,6 +808,24 @@ class EventWorkspace extends PanicElement {
     }
     const historyUndoEl = $('pb-event-history-undo', this);
     if (historyUndoEl) historyUndoEl.eventId = event.id;
+    const moreMenu = $('[data-event-more]', this);
+    if (moreMenu) {
+      const moreSummary = $('summary', moreMenu);
+      moreMenu.addEventListener('toggle', () => {
+        moreSummary?.setAttribute('aria-expanded', String(moreMenu.open));
+      });
+      moreMenu.addEventListener('click', (clickEvent) => {
+        if (clickEvent.target.closest('[data-event-more-action]')) moreMenu.removeAttribute('open');
+      });
+      document.addEventListener('click', (clickEvent) => {
+        if (moreMenu.open && !moreMenu.contains(clickEvent.target)) moreMenu.removeAttribute('open');
+      }, { signal: this.abort.signal });
+      document.addEventListener('keydown', (keyEvent) => {
+        if (keyEvent.key !== 'Escape' || !moreMenu.open) return;
+        moreMenu.removeAttribute('open');
+        moreSummary?.focus();
+      }, { signal: this.abort.signal });
+    }
     $('[data-qr-toggle]', this)?.addEventListener('click', () => this._openQrModal(data));
     $('[data-clone-event]', this)?.addEventListener('click', () => this._openCloneModal(event));
     $('[data-pos-set]', this)?.addEventListener('click', () => this.setPosEvent(event.id));

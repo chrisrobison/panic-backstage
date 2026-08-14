@@ -11,17 +11,28 @@ test('event workspace mounts with tabs and core panels', async (page) => {
   assert.ok(await page.exists('#assets'), 'Assets panel present');
 });
 
-test('event workspace exposes a Promote action for the event campaign', async (page) => {
+test('event workspace moves secondary actions into the ellipsis menu', async (page) => {
   if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
   await page.openEvent();
-  const selector = '.event-actions a[href="#promote-event-' + page.eventId + '"]';
-  assert.ok(await page.exists(selector), 'Promote action links to the event campaign workspace');
+  assert.ok(await page.exists('[data-event-more] > summary[aria-label="More event actions"]'), 'ellipsis action button is available');
+  assert.ok(await page.exists('[data-event-more] a[href="#promote-event-' + page.eventId + '"]'), 'Promote remains available in the menu');
+  assert.ok(await page.exists('[data-event-more] [data-qr-toggle]'), 'QR Code is available in the menu');
+  assert.ok(await page.exists('[data-event-more] a[href="#new-event-' + page.eventId + '"]'), 'Wizard remains available in the menu');
+  assert.ok(await page.exists('[data-event-more] [data-clone-event]'), 'Clone remains available in the menu');
+  assert.notOk(await page.exists('.event-actions > [data-qr-toggle]'), 'QR Code no longer clutters the primary action row');
+  assert.notOk(await page.exists('.event-actions > a[href="#promote-event-' + page.eventId + '"]'), 'Promote no longer clutters the primary action row');
+  assert.notOk(await page.visible('[data-event-more] [data-qr-toggle]'), 'menu actions start hidden');
+  await page.click('[data-event-more] > summary');
+  assert.ok(await page.visible('[data-event-more] [data-qr-toggle]'), 'menu slides open to expose its actions');
+  await page.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  assert.notOk(await page.visible('[data-event-more] [data-qr-toggle]'), 'Escape closes the menu');
 });
 
 test('event workspace opens an editable clone dialog without copying operational records', async (page) => {
   if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
   await page.openEvent();
   if (!(await page.exists('[data-clone-event]'))) return page.skip('no create_events capability for this user');
+  await page.click('[data-event-more] > summary');
   await page.click('[data-clone-event]');
   assert.ok(await page.until(`document.querySelector('[data-clone-event-form]')`), 'clone dialog opens');
   assert.ok(await page.eval(`document.querySelector('[data-clone-event-form] [name="title"]').value.length > 0`), 'event name is pre-filled');
@@ -34,7 +45,8 @@ test('event workspace opens an editable clone dialog without copying operational
 test('event Promote action opens campaign workspace or create prompt', async (page) => {
   if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
   await page.openEvent();
-  await page.click('.event-actions a[href="#promote-event-' + page.eventId + '"]');
+  await page.click('[data-event-more] > summary');
+  await page.click('[data-event-more] a[href="#promote-event-' + page.eventId + '"]');
   const ok = await page.until(`document.querySelector('pb-promote-campaign-overview [data-create-campaign], pb-promote-campaign-overview .promote-overview-layout')`);
   assert.ok(ok, 'Promote route renders instead of an error for events without campaigns');
   assert.notOk(await page.exists('pb-promote-campaign-overview .error-text'), 'Promote route does not show the generic API error state');
