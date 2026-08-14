@@ -66,6 +66,31 @@ trait EventRowHelpers
      */
     private function checkRoomConflict(int $venueId, string $date, ?string $occupancyStart, ?string $occupancyEnd, ?int $excludeId = null, ?string $endDate = null, ?int $resourceId = null, ?array $blockingStatuses = null): ?\Panic\Response
     {
+        $conflict = $this->findRoomConflict($venueId, $date, $occupancyStart, $occupancyEnd, $excludeId, $endDate, $resourceId, $blockingStatuses);
+        if (!$conflict) {
+            return null;
+        }
+        $message = $conflict['multi_day']
+            ? "Room conflict: \"{$conflict['title']}\" is already booked at this venue on {$conflict['conflict_date']}."
+            : "Room conflict: \"{$conflict['title']}\" occupies this room during the requested load-in to load-out window on {$date}. Events must be at least 30 minutes apart.";
+        return \Panic\Response::json([
+            'error' => $message,
+            'conflict_event_id' => $conflict['event_id'],
+        ], 409);
+    }
+
+    /**
+     * Same lookup as checkRoomConflict(), but returns the raw conflicting-row
+     * data (event id/title/status/date) instead of a wrapped 409 Response, so
+     * callers building a resolution UI (see Events\Series's conflict preflight)
+     * can render their own message instead of parsing one back out of a
+     * Response. checkRoomConflict() is now a thin wrapper around this for the
+     * existing "just tell me yes/no, with a ready-made error" call sites.
+     *
+     * @return array{event_id: int, title: string, status: string, conflict_date: string, multi_day: bool}|null
+     */
+    private function findRoomConflict(int $venueId, string $date, ?string $occupancyStart, ?string $occupancyEnd, ?int $excludeId = null, ?string $endDate = null, ?int $resourceId = null, ?array $blockingStatuses = null): ?array
+    {
         if ($resourceId !== null) {
             $resource = $this->db->one('SELECT zone FROM resources WHERE id = ? AND venue_id = ? LIMIT 1', [$resourceId, $venueId]);
             $zone     = $resource['zone'] ?? null;
@@ -110,7 +135,7 @@ trait EventRowHelpers
             foreach ($blockingStatuses as $status) { $args[] = $status; }
         }
         $rows = $this->db->all(
-            "SELECT id, title, date, end_date, load_in_time, doors_time, show_time, end_time, load_out_time FROM events WHERE $col IN ($ph) AND date <= ? AND COALESCE(end_date, date) >= ?$excl AND $statusClause",
+            "SELECT id, title, status, date, end_date, load_in_time, doors_time, show_time, end_time, load_out_time FROM events WHERE $col IN ($ph) AND date <= ? AND COALESCE(end_date, date) >= ?$excl AND $statusClause",
             $args
         );
         $isMultiDayNew = $endDate && $endDate !== $date;
@@ -121,10 +146,13 @@ trait EventRowHelpers
                 $conflictDate = $isMultiDayExisting
                     ? "{$row['date']}–{$row['end_date']}"
                     : $row['date'];
-                return \Panic\Response::json([
-                    'error' => "Room conflict: \"{$row['title']}\" is already booked at this venue on {$conflictDate}.",
-                    'conflict_event_id' => (int) $row['id'],
-                ], 409);
+                return [
+                    'event_id' => (int) $row['id'],
+                    'title' => $row['title'],
+                    'status' => $row['status'],
+                    'conflict_date' => $conflictDate,
+                    'multi_day' => true,
+                ];
             }
             // Both events are single-day: check the 30-minute time buffer.
             // The room is occupied from Load In through Load Out. Legacy or
@@ -132,13 +160,42 @@ trait EventRowHelpers
             $rowStart = $row['load_in_time'] ?: $row['doors_time'] ?: $row['show_time'];
             $rowEnd = $row['load_out_time'] ?: $row['end_time'];
             if ($this->timesOverlap($occupancyStart, $occupancyEnd, $rowStart, $rowEnd)) {
-                return \Panic\Response::json([
-                    'error' => "Room conflict: \"{$row['title']}\" occupies this room during the requested load-in to load-out window on {$date}. Events must be at least 30 minutes apart.",
-                    'conflict_event_id' => (int) $row['id'],
-                ], 409);
+                return [
+                    'event_id' => (int) $row['id'],
+                    'title' => $row['title'],
+                    'status' => $row['status'],
+                    'conflict_date' => $row['date'],
+                    'multi_day' => false,
+                ];
             }
         }
         return null;
+    }
+
+    /**
+     * Every active room at $venueId that is NOT conflicted for the given
+     * date/occupancy window — used to offer "move to a free room" choices
+     * when resolving a room conflict. Looped per-room (rather than one batch
+     * query) so each candidate goes through the same zone='both' cross-
+     * blocking logic as findRoomConflict()/checkRoomConflict() instead of
+     * reimplementing it. A room with no rooms defined at all yields [].
+     *
+     * @return list<array{id: int, name: string}>
+     */
+    private function availableRoomsFor(int $venueId, string $date, ?string $occupancyStart, ?string $occupancyEnd, ?string $endDate = null): array
+    {
+        $rooms = $this->db->all(
+            'SELECT id, name FROM resources WHERE venue_id = ? AND active = 1 ORDER BY sort_order, name',
+            [$venueId]
+        );
+        $available = [];
+        foreach ($rooms as $room) {
+            $conflict = $this->findRoomConflict($venueId, $date, $occupancyStart, $occupancyEnd, null, $endDate, (int) $room['id'], null);
+            if ($conflict === null) {
+                $available[] = ['id' => (int) $room['id'], 'name' => $room['name']];
+            }
+        }
+        return $available;
     }
 
     /**

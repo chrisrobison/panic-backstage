@@ -1321,7 +1321,7 @@ class EventRecurrencePanel extends PanicElement {
             ? `Add ${current.dates.length} recurring event${current.dates.length === 1 ? '' : 's'}`
             : 'Add recurring events';
         });
-        extendBtn.addEventListener('click', () => this.createSeries(current, extendBtn));
+        extendBtn.addEventListener('click', () => this.submitSeries(current, extendBtn));
       }
       return;
     }
@@ -1347,12 +1347,104 @@ class EventRecurrencePanel extends PanicElement {
         ? `Create ${current.dates.length} recurring event${current.dates.length === 1 ? '' : 's'}`
         : 'Create recurring events';
     });
-    createBtn.addEventListener('click', () => this.createSeries(current, createBtn));
+    createBtn.addEventListener('click', () => this.submitSeries(current, createBtn));
   }
 
-  async createSeries(value, button) {
+  // Entry point for both "Create recurring events" and "Add more dates":
+  // checks every generated date for a room conflict before touching
+  // anything. Clean patterns skip straight to createSeries(); a pattern
+  // with any conflicted date opens the resolution dialog instead, so the
+  // user can pick a different room or skip that date per conflict rather
+  // than the whole pattern being rejected outright.
+  async submitSeries(value, button) {
     if (!value) return;
     const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Checking for conflicts…';
+    let conflicts;
+    try {
+      const res = await api(`/events/${this._eventId}/series/conflicts`, {
+        method: 'POST',
+        body: JSON.stringify({ dates: value.dates }),
+      });
+      conflicts = res.conflicts || [];
+    } catch (err) {
+      // Date-shape/horizon errors (bad pattern, too many occurrences, beyond
+      // the booking horizon) are reported the same way create() itself would.
+      publish('toast.show', { message: err.message || 'Could not check for conflicts.', tone: 'error' });
+      button.disabled = false;
+      button.textContent = originalLabel;
+      return;
+    }
+    if (!conflicts.length) {
+      await this.createSeries(value, value.dates, {}, button, originalLabel);
+      return;
+    }
+    button.disabled = false;
+    button.textContent = originalLabel;
+    this._openConflictModal(value, conflicts, button, originalLabel);
+  }
+
+  // Renders one row per generated date — conflicted dates get a "Conflicts
+  // with …" note plus a resolution dropdown (a free room for that date, or
+  // "Skip this date"); clean dates are listed for context only, with no
+  // control. Submitting builds the final date list (skips omitted) and a
+  // date → resource_id room_overrides map, then calls createSeries().
+  _openConflictModal(value, conflicts, button, originalLabel) {
+    const conflictByDate = new Map(conflicts.map((c) => [c.date, c]));
+    const rows = value.dates.map((date) => {
+      const conflict = conflictByDate.get(date);
+      const dateLabel = esc(shortDate(new Date(`${date}T12:00:00`)));
+      if (!conflict) {
+        return `<tr data-date="${esc(date)}"><td>${dateLabel}</td><td class="muted small">No conflict</td><td></td></tr>`;
+      }
+      const roomOptions = conflict.available_rooms.map((r) => `<option value="${esc(r.id)}">Move to ${esc(r.name)}</option>`).join('');
+      return `<tr data-date="${esc(date)}" data-conflict>
+        <td>${dateLabel}</td>
+        <td>Conflicts with <a href="#event-${esc(String(conflict.conflict_event_id))}" target="_blank">${esc(conflict.conflict_title)}</a> ${badge(conflict.conflict_status)}</td>
+        <td><select data-resolution><option value="">Skip this date</option>${roomOptions}</select></td>
+      </tr>`;
+    }).join('');
+
+    const { dialog, close } = openModal({
+      title: 'Resolve recurring-event conflicts',
+      wide: true,
+      bodyHtml: `<div class="modal-card-body padded">
+        <p>${conflicts.length} of ${value.dates.length} date${value.dates.length === 1 ? '' : 's'} in this pattern conflict with an existing booking. For each conflicted date, move it to a free room or skip it — the rest of the series is unaffected either way.</p>
+        <table class="data-table recurrence-conflict-table">
+          <thead><tr><th>Date</th><th>Conflict</th><th>Resolution</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div class="calendar-actions">
+          <button type="button" class="secondary" data-cancel-conflicts>Cancel</button>
+          <button type="button" data-resolve-conflicts>Continue</button>
+        </div>
+      </div>`,
+    });
+
+    $('[data-cancel-conflicts]', dialog).addEventListener('click', close);
+    $('[data-resolve-conflicts]', dialog).addEventListener('click', async () => {
+      const finalDates = [];
+      const roomOverrides = {};
+      $$('tr[data-date]', dialog).forEach((row) => {
+        const date = row.dataset.date;
+        const resolution = $('select[data-resolution]', row);
+        if (!resolution) { finalDates.push(date); return; } // no conflict on this date
+        if (!resolution.value) return; // skipped
+        finalDates.push(date);
+        roomOverrides[date] = Number(resolution.value);
+      });
+      if (!finalDates.length) {
+        publish('toast.show', { message: 'Every conflicted date was skipped, and there were no clean dates left to create.', tone: 'error' });
+        return;
+      }
+      close();
+      await this.createSeries(value, finalDates, roomOverrides, button, originalLabel);
+    });
+  }
+
+  async createSeries(value, dates, roomOverrides, button, originalLabel) {
+    originalLabel = originalLabel ?? button.textContent;
     button.disabled = true;
     button.textContent = 'Creating…';
     try {
@@ -1364,7 +1456,8 @@ class EventRecurrencePanel extends PanicElement {
           end_type: value.pattern.endType,
           end_date: value.pattern.endDate || null,
           occurrence_count: value.pattern.occurrenceCount || null,
-          dates: value.dates,
+          dates,
+          room_overrides: roomOverrides,
         }),
       });
       const message = res.extended
@@ -1375,9 +1468,15 @@ class EventRecurrencePanel extends PanicElement {
       this._extending = false;
       await this.load();
     } catch (err) {
+      // Most likely a race — the room got booked between the conflict check
+      // and this submission. Re-run the preflight and reopen the dialog with
+      // fresh data rather than just failing silently.
       publish('toast.show', { message: err.message || 'Could not create the series.', tone: 'error' });
       button.disabled = false;
       button.textContent = originalLabel;
+      if (err.message && /room conflict/i.test(err.message)) {
+        await this.submitSeries(value, button);
+      }
     }
   }
 

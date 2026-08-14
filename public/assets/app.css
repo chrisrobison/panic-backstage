@@ -3315,6 +3315,12 @@ pb-admin-db-browser { display: block; }
 .modal-card form { padding: 18px 22px 22px; }
 .modal-card textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
 
+/* Recurring-series conflict-resolution dialog (EventRecurrencePanel,
+   event-workspace.js) — one row per generated date, conflicted ones get a
+   highlighted background plus a resolution <select>. */
+.recurrence-conflict-table tr[data-conflict] { background: rgba(217, 119, 6, 0.1); }
+.recurrence-conflict-table select[data-resolution] { width: 100%; min-width: 160px; }
+
 /* ── Image lightbox ───────────────────────────────────────────────────── */
 body.lightbox-open { overflow: hidden; }
 .lightbox-backdrop {

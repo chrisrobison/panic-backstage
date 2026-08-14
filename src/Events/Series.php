@@ -52,12 +52,49 @@ final class Series extends BaseEndpoint
     public function handle(Request $request): Response
     {
         $eventId = $this->requireEventId();
+        if (($this->params['action'] ?? null) === 'conflicts') {
+            return $request->method() === 'POST'
+                ? $this->conflicts($request, $eventId)
+                : Response::methodNotAllowed();
+        }
         return match ($request->method()) {
             'GET' => $this->show($eventId),
             'POST' => $this->create($request, $eventId),
             'DELETE' => $this->remove($eventId),
             default => Response::methodNotAllowed(),
         };
+    }
+
+    /**
+     * Preflight, read-only: POST /events/{id}/series/conflicts {dates}.
+     * Runs the same date validation attemptCreate() would (format,
+     * duplicates, MAX_OCCURRENCES, MAX_HORIZON_DAYS) but — unlike
+     * validateSeries()'s hard-fail-on-any-conflict behavior — reports a
+     * per-date conflict breakdown (which event it collides with, and which
+     * other rooms are free that date) instead of rejecting the whole
+     * request. The frontend calls this before submitting; if `conflicts` is
+     * empty it goes straight to POST /series, otherwise it opens the
+     * resolution dialog built from this response. Always 200 on success
+     * (even with conflicts present) so the caller doesn't have to unpack a
+     * thrown error to read them — only date-validation failures (bad
+     * format, too many occurrences, beyond the booking horizon) are actual
+     * HTTP errors here, same statuses as attemptCreate() would give.
+     */
+    private function conflicts(Request $request, int $eventId): Response
+    {
+        $body  = $request->body();
+        $dates = array_values(array_unique(array_filter(array_map('strval', (array) ($body['dates'] ?? [])))));
+
+        $result = $this->checkConflicts($eventId, $dates, $this->userId(), $this->role());
+        if (!$result['ok']) {
+            $payload = ['error' => $result['error']];
+            if (isset($result['horizon_date'])) {
+                $payload['horizon_date'] = $result['horizon_date'];
+                $payload['beyond_horizon_dates'] = $result['beyond_horizon_dates'];
+            }
+            return Response::json($payload, $result['status']);
+        }
+        return $this->ok(['conflicts' => $result['conflicts']]);
     }
 
     private function show(int $eventId): Response
@@ -92,10 +129,20 @@ final class Series extends BaseEndpoint
         $endType     = ($body['end_type'] ?? '') === 'on_date' ? 'on_date' : 'after_count';
         $endDate     = $endType === 'on_date' ? ($body['end_date'] ?: null) : null;
         $occurrenceCount = $endType === 'after_count' ? (int) ($body['occurrence_count'] ?? (count($dates) + 1)) : null;
+        // Per-date room reassignment from the conflict-resolution dialog:
+        // { "2026-09-01": 5, ... } — a date not present here just uses the
+        // anchor event's own resource_id, same as before this feature existed.
+        // Dates the user chose to skip are simply absent from $dates.
+        $roomOverrides = [];
+        foreach ((array) ($body['room_overrides'] ?? []) as $date => $resourceId) {
+            if ($resourceId !== null && $resourceId !== '') {
+                $roomOverrides[(string) $date] = (int) $resourceId;
+            }
+        }
 
         $result = $this->attemptCreate(
             $eventId, $dates, $description, $pattern, $endType, $endDate, $occurrenceCount,
-            $this->userId(), $this->role()
+            $this->userId(), $this->role(), $roomOverrides
         );
         return $this->resultToResponse($result);
     }
@@ -117,6 +164,11 @@ final class Series extends BaseEndpoint
      * callers that aren't building an HTTP response (the MCP propose tool's
      * dry run, see previewSeries()) can consume the same result shape.
      *
+     * @param array<string,int> $roomOverrides Per-date resource_id reassignment
+     *     from the conflict-resolution dialog (see Series::create()) — a date
+     *     not present here clones the anchor's own resource_id, unchanged
+     *     from this feature's pre-existing behavior. Defaulted so existing
+     *     callers (Ai\Assistant::applyRecurringSeries()) compile untouched.
      * @return array{ok: bool, status?: int, error?: string, horizon_date?: string,
      *     beyond_horizon_dates?: list<string>, conflict_dates?: list<string>,
      *     series_id?: int, created_event_ids?: list<int>, extended?: bool}
@@ -130,9 +182,10 @@ final class Series extends BaseEndpoint
         ?string $endDate,
         ?int $occurrenceCount,
         int $actingUserId,
-        string $actingRole
+        string $actingRole,
+        array $roomOverrides = []
     ): array {
-        $validated = $this->validateSeries($eventId, $dates, $actingUserId, $actingRole);
+        $validated = $this->validateSeries($eventId, $dates, $actingUserId, $actingRole, $roomOverrides);
         if (!$validated['ok']) {
             return $validated;
         }
@@ -176,19 +229,20 @@ final class Series extends BaseEndpoint
 
             $createdIds = [];
             foreach ($dates as $date) {
-                $createdIds[] = $this->cloneOccurrence($anchor, $date, $seriesId, $actingUserId);
+                $createdIds[] = $this->cloneOccurrence($anchor, $date, $seriesId, $actingUserId, $roomOverrides[$date] ?? null);
             }
 
-            if ($existingSeriesId !== null) {
-                // Reconcile occurrence_count/end_date against actual membership
-                // rather than trusting the request body — robust regardless of
-                // what end_type/end_date/occurrence_count the caller sent.
-                $totals = $this->db->one('SELECT COUNT(*) AS n, MAX(date) AS last_date FROM events WHERE series_id = ?', [$seriesId]);
-                $this->db->run(
-                    "UPDATE event_series SET occurrence_count = ?, end_date = CASE WHEN end_type = 'on_date' THEN ? ELSE end_date END WHERE id = ?",
-                    [(int) ($totals['n'] ?? 0), $totals['last_date'] ?? null, $seriesId]
-                );
-            }
+            // Reconcile occurrence_count/end_date against actual membership
+            // rather than trusting the request body — robust regardless of
+            // what end_type/end_date/occurrence_count the caller sent, and
+            // necessary (not just for the extend path) now that a caller may
+            // have skipped some requested dates to resolve a room conflict,
+            // landing fewer rows than the originally-generated pattern implied.
+            $totals = $this->db->one('SELECT COUNT(*) AS n, MAX(date) AS last_date FROM events WHERE series_id = ?', [$seriesId]);
+            $this->db->run(
+                "UPDATE event_series SET occurrence_count = ?, end_date = CASE WHEN end_type = 'on_date' THEN ? ELSE end_date END WHERE id = ?",
+                [(int) ($totals['n'] ?? 0), $totals['last_date'] ?? null, $seriesId]
+            );
 
             $pdo->commit();
         } catch (\Throwable $e) {
@@ -237,7 +291,17 @@ final class Series extends BaseEndpoint
         return $this->validateSeries($eventId, $dates, $actingUserId, $actingRole);
     }
 
-    private function validateSeries(int $eventId, array $dates, int $actingUserId, string $actingRole): array
+    /**
+     * Capability/anchor/date-shape checks shared by validateSeries() (the
+     * hard-fail-on-any-conflict path attemptCreate() uses) and
+     * checkConflicts() (the per-date detail-report path the resolution
+     * dialog's preflight uses). Does NOT touch room conflicts — callers
+     * handle that themselves afterward, differently.
+     *
+     * @return array{ok: bool, status?: int, error?: string, horizon_date?: string,
+     *     beyond_horizon_dates?: list<string>, anchor?: array, dates?: list<string>}
+     */
+    private function prepareDates(int $eventId, array $dates, int $actingUserId, string $actingRole): array
     {
         // Same not-found/forbidden split as BaseEndpoint::requireEventCapability()
         // (null access = event doesn't exist; non-null but capability-false =
@@ -300,19 +364,43 @@ final class Series extends BaseEndpoint
             ];
         }
 
+        return ['ok' => true, 'anchor' => $anchor, 'dates' => $dates];
+    }
+
+    /**
+     * @param array<string,int> $roomOverrides Per-date resource_id reassignment
+     *     (see attemptCreate()'s docblock) — a conflict on a date present here
+     *     is checked against the override room instead of the anchor's room,
+     *     so a resolved-via-reassignment date doesn't re-trip this check on
+     *     the real submission after the user already fixed it in the dialog.
+     */
+    private function validateSeries(int $eventId, array $dates, int $actingUserId, string $actingRole, array $roomOverrides = []): array
+    {
+        $prepared = $this->prepareDates($eventId, $dates, $actingUserId, $actingRole);
+        if (!$prepared['ok']) {
+            return $prepared;
+        }
+        $anchor = $prepared['anchor'];
+        $dates  = $prepared['dates'];
+
+        // Reassigned rooms must actually belong to this venue and be active —
+        // resolveResourceId()-style guard, inlined because it lives on Events,
+        // not this trait/class.
+        foreach ($roomOverrides as $resourceId) {
+            $room = $this->db->one('SELECT id FROM resources WHERE id = ? AND venue_id = ? AND active = 1 LIMIT 1', [$resourceId, (int) $anchor['venue_id']]);
+            if (!$room) {
+                return ['ok' => false, 'status' => 422, 'error' => "Room {$resourceId} is not a valid, active room for this venue."];
+            }
+        }
+
         // Validate every occurrence up front so we never create a partial
         // series — same room-conflict rule Events::create()/update() apply.
+        $start = $anchor['load_in_time'] ?: $anchor['doors_time'] ?: $anchor['show_time'];
+        $end   = $anchor['load_out_time'] ?: $anchor['end_time'];
         $conflicts = [];
         foreach ($dates as $date) {
-            $conflict = $this->checkRoomConflict(
-                (int) $anchor['venue_id'],
-                $date,
-                $anchor['load_in_time'] ?: $anchor['doors_time'] ?: $anchor['show_time'],
-                $anchor['load_out_time'] ?: $anchor['end_time'],
-                null,
-                null,
-                $anchor['resource_id'] !== null ? (int) $anchor['resource_id'] : null
-            );
+            $resourceId = $roomOverrides[$date] ?? ($anchor['resource_id'] !== null ? (int) $anchor['resource_id'] : null);
+            $conflict = $this->checkRoomConflict((int) $anchor['venue_id'], $date, $start, $end, null, null, $resourceId);
             if ($conflict) {
                 $conflicts[] = $date;
             }
@@ -326,6 +414,54 @@ final class Series extends BaseEndpoint
         }
 
         return ['ok' => true, 'anchor' => $anchor, 'dates' => $dates];
+    }
+
+    /**
+     * Per-date conflict *detail* report — the read-only preflight
+     * POST /events/{id}/series/conflicts calls this instead of
+     * validateSeries() so a conflicted date doesn't reject the whole
+     * request; instead each conflict names the colliding event and lists
+     * which other rooms are free that date, for the resolution dialog to
+     * offer skip-or-reassign per date. Uses the same strict "every live
+     * booking blocks" rule (blockingStatuses=null) as validateSeries(), so a
+     * date reported clean here is guaranteed clean when actually submitted
+     * (modulo the ordinary race — see Series class docblock precedent in
+     * previewSeries()).
+     *
+     * @return array{ok: bool, status?: int, error?: string, horizon_date?: string,
+     *     beyond_horizon_dates?: list<string>, dates?: list<string>, conflicts?: list<array{
+     *         date: string, conflict_event_id: int, conflict_title: string,
+     *         conflict_status: string, available_rooms: list<array{id: int, name: string}>}>}
+     */
+    public function checkConflicts(int $eventId, array $dates, int $actingUserId, string $actingRole): array
+    {
+        $prepared = $this->prepareDates($eventId, $dates, $actingUserId, $actingRole);
+        if (!$prepared['ok']) {
+            return $prepared;
+        }
+        $anchor = $prepared['anchor'];
+        $dates  = $prepared['dates'];
+        $venueId = (int) $anchor['venue_id'];
+        $start = $anchor['load_in_time'] ?: $anchor['doors_time'] ?: $anchor['show_time'];
+        $end   = $anchor['load_out_time'] ?: $anchor['end_time'];
+        $anchorResourceId = $anchor['resource_id'] !== null ? (int) $anchor['resource_id'] : null;
+
+        $conflicts = [];
+        foreach ($dates as $date) {
+            $conflict = $this->findRoomConflict($venueId, $date, $start, $end, null, null, $anchorResourceId, null);
+            if ($conflict === null) {
+                continue;
+            }
+            $conflicts[] = [
+                'date' => $date,
+                'conflict_event_id' => $conflict['event_id'],
+                'conflict_title' => $conflict['title'],
+                'conflict_status' => $conflict['status'],
+                'available_rooms' => $this->availableRoomsFor($venueId, $date, $start, $end),
+            ];
+        }
+
+        return ['ok' => true, 'dates' => $dates, 'conflicts' => $conflicts];
     }
 
     private function resultToResponse(array $result): Response
@@ -354,10 +490,16 @@ final class Series extends BaseEndpoint
      * occurrence-specific fields (deposit, contract/settlement docs,
      * walkthrough, estimated guests, internal notes) start blank — mirrors
      * how Events::fromTemplate() seeds a new event, not a full row copy.
+     *
+     * $roomOverride, when given, replaces the anchor's own resource_id for
+     * just this occurrence — how a conflict resolved by "move to a
+     * different room" in the dialog actually lands per-date, while every
+     * other occurrence still clones the anchor's room as before.
      */
-    private function cloneOccurrence(array $anchor, string $date, int $seriesId, int $actingUserId): int
+    private function cloneOccurrence(array $anchor, string $date, int $seriesId, int $actingUserId, ?int $roomOverride = null): int
     {
         $slug = $this->uniqueSlug($anchor['title'] . '-' . $date);
+        $resourceId = $roomOverride ?? ($anchor['resource_id'] ?: null);
         $id = $this->db->insert(
             'INSERT INTO events
                 (venue_id, resource_id, title, slug, event_type, status, series_id, date,
@@ -369,7 +511,7 @@ final class Series extends BaseEndpoint
                  owner_user_id)
              VALUES (?, ?, ?, ?, ?, \'proposed\', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
-                (int) $anchor['venue_id'], $anchor['resource_id'] ?: null, $anchor['title'], $slug, $anchor['event_type'],
+                (int) $anchor['venue_id'], $resourceId, $anchor['title'], $slug, $anchor['event_type'],
                 $seriesId, $date,
                 $anchor['doors_time'], $anchor['show_time'], $anchor['end_time'], $anchor['load_in_time'], $anchor['load_out_time'], (int) $anchor['is_non_music'], $anchor['age_restriction'],
                 (float) ($anchor['ticket_price'] ?? 0), $anchor['capacity'] ?: null, (int) $anchor['public_visibility'],

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Resolve recurring-series room conflicts per date instead of all-or-nothing
 - **Added** `events` — Consolidate secondary event actions into an ellipsis menu
 - **Added** `contracts` — Let one contract cover an entire recurring series
 - **Fixed** `events` — Stop contract_details from re-blocking Booked and beyond
