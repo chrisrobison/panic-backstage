@@ -431,6 +431,7 @@ DROP TABLE IF EXISTS `contracts`;
 CREATE TABLE `contracts` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `event_id` int(11) DEFAULT NULL,
+  `series_id` int(11) DEFAULT NULL COMMENT 'When set, this contract also covers every occurrence in the series, not just event_id',
   `venue_id` int(11) DEFAULT NULL,
   `template_id` int(11) DEFAULT NULL,
   `asset_id` int(11) DEFAULT NULL,
@@ -485,6 +486,7 @@ CREATE TABLE `contracts` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_contracts_event` (`event_id`),
+  KEY `idx_contracts_series` (`series_id`),
   KEY `idx_contracts_status` (`status`),
   KEY `idx_contracts_type` (`contract_type`),
   KEY `venue_id` (`venue_id`),
@@ -496,7 +498,8 @@ CREATE TABLE `contracts` (
   CONSTRAINT `contracts_ibfk_2` FOREIGN KEY (`venue_id`) REFERENCES `venues` (`id`) ON DELETE SET NULL,
   CONSTRAINT `contracts_ibfk_3` FOREIGN KEY (`template_id`) REFERENCES `contract_templates` (`id`) ON DELETE SET NULL,
   CONSTRAINT `contracts_ibfk_4` FOREIGN KEY (`created_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `contracts_ibfk_5` FOREIGN KEY (`approved_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  CONSTRAINT `contracts_ibfk_5` FOREIGN KEY (`approved_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `contracts_series_fk` FOREIGN KEY (`series_id`) REFERENCES `event_series` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=95 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

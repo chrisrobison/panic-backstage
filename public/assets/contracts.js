@@ -205,10 +205,23 @@ class EventContracts extends HTMLElement {
     // this picker existed.
     const assetOptions = [...this.assets].sort((a, b) => (a.asset_type === 'contract' ? -1 : 0) - (b.asset_type === 'contract' ? -1 : 0));
 
+    // A series-wide contract (series_id set — see the "Apply to entire
+    // series" checkbox in openCreateModal()) shows up on every occurrence's
+    // Contracts panel, not just the event it was originally generated
+    // against. Badge it either way so it's clear one document covers the
+    // whole run; when viewed from a *different* occurrence than the one it
+    // was created on, say so explicitly rather than implying it's this
+    // event's own contract.
+    const seriesBadge = (c) => {
+      if (!c.series_id) return '';
+      const fromOther = Number(c.event_id) !== Number(this.eventData.event.id);
+      return ` <span class="badge status-blue" title="${fromOther ? 'Covers every occurrence in this series, generated from a different date' : `Covers all ${esc(String(this.list.series?.occurrence_count || ''))} occurrences in this series`}">Series contract</span>`;
+    };
+
     const contractRow = (c) => {
       if (c.provider === 'manual_upload') {
         return `<tr class="contract-uploaded-row clickable-row" data-view-uploaded="${esc(c.id)}">
-          <td><strong>${esc(c.title)}</strong> <span class="badge status-blue">Uploaded</span></td>
+          <td><strong>${esc(c.title)}</strong> <span class="badge status-blue">Uploaded</span>${seriesBadge(c)}</td>
           <td>${esc(titleCase(c.contract_type))}</td>
           <td>${esc(c.counterparty_name || '—')}</td>
           <td>${contractStatusBadge(c.status)}</td>
@@ -220,7 +233,7 @@ class EventContracts extends HTMLElement {
         </tr>`;
       }
       return `<tr class="clickable-row" data-contract-href="#contract-${esc(c.id)}">
-        <td><strong>${esc(c.title)}</strong></td>
+        <td><strong>${esc(c.title)}</strong>${seriesBadge(c)}</td>
         <td>${esc(titleCase(c.contract_type))}</td>
         <td>${esc(c.counterparty_name || '—')}</td>
         <td>${contractStatusBadge(c.status)}</td>
@@ -300,6 +313,16 @@ class EventContracts extends HTMLElement {
     const uploadPicker = assetOptions.length
       ? `<p class="muted small">${canUpload ? '…or attach a contract you already uploaded to this event:' : 'Pick a contract you already uploaded to this event:'}</p><div class="contract-asset-picker">${assetOptions.map(contractAssetPickerRow).join('')}</div>`
       : (canUpload ? '' : '<p class="muted small">No assets uploaded yet, and your role can\'t upload one directly here — ask someone who can to upload the signed contract from the Assets tab, then come back here.</p>');
+    // Only offered when this event is itself part of a recurring series —
+    // covers the whole run (all occurrence dates, past and future) with the
+    // one contract instead of leaving siblings without one. Defaults checked:
+    // a recurring booking is normally one deal, not N separate ones. See
+    // Events\Contracts::create()'s apply_to_series handling.
+    const series = this.list.series;
+    const seriesToggle = series ? `<label class="check-label wide">
+      <input type="checkbox" name="apply_to_series" checked>
+      Apply to entire series <span class="muted small">— covers all ${esc(String(series.occurrence_count))} occurrences, not just this one</span>
+    </label>` : '';
     const { dialog, close } = openModal({
       title: 'Create contract',
       wide: true,
@@ -314,6 +337,7 @@ class EventContracts extends HTMLElement {
             <span><strong>Upload contract</strong><br><small>Attach a signed PDF or photo you already have.</small></span>
           </label>
         </div>
+        ${seriesToggle}
         <div data-generate-fields class="wide">
           <label>Deal type <select name="template_id" required><option value="">Choose a template…</option>${templates.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
           <label>Counterparty <input name="counterparty_name" placeholder="Artist / promoter / client"></label>
@@ -363,7 +387,8 @@ class EventContracts extends HTMLElement {
         uploadBody.set('asset_type', 'contract');
         uploadBody.set('title', title);
         const asset = await api(`/events/${this.eventData.event.id}/assets`, { method: 'POST', body: uploadBody });
-        await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify({ asset_id: asset.id, title }) });
+        const applyToSeries = $('input[name="apply_to_series"]', form)?.checked || false;
+        await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify({ asset_id: asset.id, title, apply_to_series: applyToSeries }) });
         publish('toast.show', { message: 'Contract uploaded and attached.' });
         close();
         this.load();
@@ -380,13 +405,14 @@ class EventContracts extends HTMLElement {
       const data = formData(event.target);
       try {
         let result;
+        const applyToSeries = Boolean(data.apply_to_series);
         if (toggle.checked) {
-          result = await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify({ asset_id: data.asset_id, title: data.title }) });
+          result = await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify({ asset_id: data.asset_id, title: data.title, apply_to_series: applyToSeries }) });
           publish('toast.show', { message: 'Contract attached.' });
           close();
           this.load();
         } else {
-          result = await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify({ template_id: data.template_id, counterparty_name: data.counterparty_name }) });
+          result = await api(`/events/${this.eventData.event.id}/contracts`, { method: 'POST', body: JSON.stringify({ template_id: data.template_id, counterparty_name: data.counterparty_name, apply_to_series: applyToSeries }) });
           publish('toast.show', { message: 'Contract created.' });
           close();
           location.hash = `#contract-${result.id}`;
@@ -421,9 +447,13 @@ class ContractEditor extends PanicElement {
     const contract = data.contract;
     const backHref = contract.event_id ? `#event-${contract.event_id}` : '#admin-contracts';
     const forLabel = data.event ? ` · ${esc(data.event.title)}` : (data.venue ? ` · ${esc(data.venue.name)}` : '');
+    // series_id set means this contract was marked "Apply to entire series"
+    // when created — see EventContracts.openCreateModal() — so it covers
+    // every occurrence, not just the event named in forLabel above.
+    const seriesNote = contract.series_id ? ' <span class="badge status-blue">Covers entire series</span>' : '';
     this.innerHTML = `<section class="event-top">
       <div><a class="back-link" href="${backHref}">&lt;- Back</a><h1>${esc(contract.title)}</h1>
-        <p class="subtle">${esc(titleCase(contract.contract_type))} · ${contractStatusBadge(contract.status)}${forLabel}</p></div>
+        <p class="subtle">${esc(titleCase(contract.contract_type))} · ${contractStatusBadge(contract.status)}${forLabel}${seriesNote}</p></div>
       <div class="event-actions">
         <button class="secondary" data-act="pdf">⬇ Download PDF</button>
         <button class="secondary" data-act="print">🖨 Print / Save PDF</button>

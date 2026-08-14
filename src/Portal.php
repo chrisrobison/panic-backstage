@@ -90,18 +90,22 @@ final class Portal extends BaseEndpoint
         // Fetch event summary — safe public subset only (no internal notes, no capabilities)
         $event = $this->db->one(
             'SELECT id, title, status, event_type, show_time, doors_time, end_time,
-                    age_restriction, public_description
+                    age_restriction, public_description, series_id
              FROM events WHERE id = ?',
             [$eventId]
         );
 
-        // Contract status: prefer the most-executed contract
+        // Contract status: prefer the most-executed contract. Also matches a
+        // series-wide contract (series_id set — see Events\Contracts::create()'s
+        // apply_to_series option) so a client viewing any occurrence in a
+        // recurring run sees the one shared contract that covers it, not just
+        // one generated directly against this specific date.
         $contract = $this->db->one(
             "SELECT id, status, created_at FROM contracts
-             WHERE event_id = ?
+             WHERE event_id = ? OR (series_id IS NOT NULL AND series_id = ?)
              ORDER BY FIELD(status,'fully_executed','signed','sent','draft') DESC, id DESC
              LIMIT 1",
-            [$eventId]
+            [$eventId, !empty($event['series_id']) ? (int) $event['series_id'] : null]
         );
 
         // Payments: inbound only — what the client has paid or still owes

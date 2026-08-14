@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `contracts` — Let one contract cover an entire recurring series
 - **Fixed** `events` — Stop contract_details from re-blocking Booked and beyond
 - **Added** `events` — Let recurring series be extended with more dates
 - **Added** `feed` — Add one-click "Add to Google Calendar" subscribe redirect

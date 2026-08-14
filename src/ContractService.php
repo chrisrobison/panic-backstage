@@ -22,10 +22,11 @@ final class ContractService
             }
         }
         $id = $db->insert(
-            'INSERT INTO contracts (event_id, venue_id, template_id, contract_type, title, counterparty_name, counterparty_org, counterparty_email, created_by_user_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO contracts (event_id, series_id, venue_id, template_id, contract_type, title, counterparty_name, counterparty_org, counterparty_email, created_by_user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $d['event_id'] ?? null,
+                $d['series_id'] ?? null,
                 $d['venue_id'] ?? null,
                 $templateId,
                 $type,
@@ -57,10 +58,11 @@ final class ContractService
     public static function attachUploaded(Database $db, array $d, ?int $userId): int
     {
         return $db->insert(
-            'INSERT INTO contracts (event_id, venue_id, asset_id, contract_type, title, status, provider, signed_at, created_by_user_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?)',
+            'INSERT INTO contracts (event_id, series_id, venue_id, asset_id, contract_type, title, status, provider, signed_at, created_by_user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)',
             [
                 $d['event_id'] ?? null,
+                $d['series_id'] ?? null,
                 $d['venue_id'] ?? null,
                 $d['asset_id'],
                 'other',

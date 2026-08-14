@@ -948,10 +948,7 @@ final class Events extends BaseEndpoint
         // contract was on file (ready to advance) when advancing would
         // actually fail with "contract must be signed, not just sent or
         // approved."
-        $hasContract = self::hasContractUrl($event) || $this->db->one(
-            "SELECT id FROM contracts WHERE event_id = ? AND status IN ('signed','fully_executed') LIMIT 1",
-            [(int) $event['id']]
-        );
+        $hasContract = self::hasContractUrl($event) || $this->hasExecutedContract($event);
         $isPrivate = ($event['event_type'] ?? '') === 'private_event';
 
         if ($isPrivate) {
@@ -998,10 +995,7 @@ final class Events extends BaseEndpoint
             // Same "signed/fully_executed only" list as nextAction() and the
             // Booked-transition gate — see the comment there for why
             // 'approved'/'sent' must not count as "on file".
-            $hasContract = self::hasContractUrl($event) || $this->db->one(
-                "SELECT id FROM contracts WHERE event_id = ? AND status IN ('signed','fully_executed') LIMIT 1",
-                [(int) $event['id']]
-            );
+            $hasContract = self::hasContractUrl($event) || $this->hasExecutedContract($event);
             return [
                 ['label' => 'Client',       'state' => $hasClient ? 'On file' : 'Missing client contact', 'ok' => $hasClient],
                 ['label' => 'Guest count',  'state' => !empty($event['estimated_guests']) ? $event['estimated_guests'] . ' estimated' : 'Not set', 'ok' => !empty($event['estimated_guests'])],
@@ -1049,6 +1043,31 @@ final class Events extends BaseEndpoint
     {
         $value = $event['contract_url'] ?? null;
         return is_string($value) && preg_match('#^https?://#i', trim($value)) === 1;
+    }
+
+    /**
+     * True when this event has a signed/fully_executed contracts row of its
+     * own, OR — if it's part of a recurring series — the series has a
+     * signed/fully_executed contract with series_id set to cover the whole
+     * run (see Events\Contracts::create()'s apply_to_series option). A
+     * sibling occurrence with no contract of its own still satisfies every
+     * "contract on file" gate through that one shared document, matching how
+     * a residency-style deal is legally one signed contract for every night.
+     */
+    private function hasExecutedContract(array $event): bool
+    {
+        if (empty($event['id'])) {
+            return false;
+        }
+        $seriesId = !empty($event['series_id']) ? (int) $event['series_id'] : null;
+        $row = $this->db->one(
+            "SELECT id FROM contracts
+              WHERE status IN ('signed','fully_executed')
+                AND (event_id = ? OR (series_id IS NOT NULL AND series_id = ?))
+              LIMIT 1",
+            [(int) $event['id'], $seriesId]
+        );
+        return (bool) $row;
     }
 
     /**
@@ -1327,21 +1346,16 @@ final class Events extends BaseEndpoint
         // "Sent", "approved", or "draft" contract does NOT satisfy the contract requirement.
         if ($newStatus === 'booked') {
             // ── Contract gate ───────────────────────────────────────────────
-            $hasContractUrl    = self::hasContractUrl($event);
-            $hasExecutedContract = false;
-            if (!empty($event['id'])) {
-                // Also matches a contract that was signed outside the system and
-                // attached as an event asset via the Contracts tab's "Contract
-                // signed and attached" picker — that flow deliberately writes a
-                // normal contracts row (provider='manual_upload', status='signed',
-                // asset_id set) rather than a separate flag, so it satisfies this
-                // same query. See ContractService::attachUploaded().
-                $contractRow = $this->db->one(
-                    "SELECT id, status FROM contracts WHERE event_id = ? AND status IN ('signed','fully_executed') LIMIT 1",
-                    [(int) $event['id']]
-                );
-                $hasExecutedContract = (bool) $contractRow;
-            }
+            $hasContractUrl = self::hasContractUrl($event);
+            // Also matches a contract that was signed outside the system and
+            // attached as an event asset via the Contracts tab's "Contract
+            // signed and attached" picker — that flow deliberately writes a
+            // normal contracts row (provider='manual_upload', status='signed',
+            // asset_id set) rather than a separate flag, so it satisfies this
+            // same check. See ContractService::attachUploaded(). Also matches a
+            // series-wide contract shared from a sibling occurrence — see
+            // hasExecutedContract()'s docblock.
+            $hasExecutedContract = $this->hasExecutedContract($event);
             // Also accept the legacy contract_url as a stand-in for small installs
             if (!$hasContractUrl && !$hasExecutedContract) {
                 $missing[] = $isPrivate
