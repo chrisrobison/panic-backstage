@@ -74,6 +74,19 @@ $readyEvent['contract_details'] = '   ';
 $whitespace = $validate->invoke($endpoint, 'confirmed', $readyEvent);
 ok($whitespace instanceof Response, 'whitespace-only contract details do not satisfy the gate');
 
+// Regression for the bug this NOTE documents: an event with a real signed
+// contract (contract_url here — hasExecutedContract() needs a DB-backed
+// contracts row, which this reflection-only $event array doesn't have) but
+// an empty "Agreed terms" summary must NOT be blocked from advancing to
+// Booked. contract_details only gates the 'confirmed' transition above, not
+// 'booked' or later — this is what "event 668280" was hitting before the fix.
+$bookedReadyEvent = $readyEvent;
+$bookedReadyEvent['contract_details'] = null;
+$bookedReadyEvent['contract_url'] = 'https://contracts.example.invalid/signed.pdf';
+$bookedReadyEvent['deposit_status'] = 'not_required';
+$bookedBlockedOnContractDetails = $validate->invoke($endpoint, 'booked', $bookedReadyEvent);
+ok($bookedBlockedOnContractDetails === null, 'advancing to Booked with an empty "Agreed terms" field is NOT blocked once a real contract is on file');
+
 // Exercise both persistence paths used by the workspace and intake report.
 $venue = $db->one('SELECT id FROM venues ORDER BY id LIMIT 1');
 $admin = $db->one("SELECT id, name, email, role FROM users WHERE role = 'venue_admin' ORDER BY id LIMIT 1");

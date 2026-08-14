@@ -1262,6 +1262,16 @@ final class Events extends BaseEndpoint
         }
 
         // ── Additional fields required at Intake Complete and beyond ─────────
+        // NOTE: 'contract_details' (the free-text "Agreed terms" field — fees,
+        // splits, included services, etc.) is deliberately NOT in this list.
+        // It used to be required at every stage from Intake Complete onward,
+        // which put it back in the way at Booked even when a real signed
+        // contract was already on file (see the dedicated hasExecutedContract
+        // check below) — e.g. event 668280 got blocked advancing to Booked
+        // over an empty "Agreed terms" textarea despite having a signed,
+        // uploaded contract satisfying the actual contract requirement. It's
+        // checked on its own, confirmed-only, further down instead. Revisit
+        // if we decide it should also gate Booked+ again.
         if ($isPrivate) {
             $intakeRequired = [
                 'load_in_time'       => 'Load-in time',
@@ -1270,7 +1280,6 @@ final class Events extends BaseEndpoint
                 'estimated_guests'    => 'Estimated guest count',
                 'deposit_amount'      => 'Deposit amount (use 0 if none)',
                 'description_internal' => 'Internal notes',
-                'contract_details'     => 'Contract details',
             ];
         } else {
             $intakeRequired = [
@@ -1281,7 +1290,6 @@ final class Events extends BaseEndpoint
                 'capacity'            => 'Capacity',
                 'deposit_amount'      => 'Deposit amount (use 0 if none)',
                 'description_internal' => 'Internal notes',
-                'contract_details'     => 'Contract details',
             ];
         }
 
@@ -1303,6 +1311,15 @@ final class Events extends BaseEndpoint
                 if ($value === null || (is_string($value) && trim($value) === '')) {
                     $missing[] = $label;
                 }
+            }
+        }
+
+        // Intake Complete only: "Agreed terms" (contract_details) — see the
+        // note above for why this doesn't also gate Booked and later stages.
+        if ($newStatus === 'confirmed') {
+            $value = $event['contract_details'] ?? null;
+            if ($value === null || (is_string($value) && trim($value) === '')) {
+                $missing[] = 'Contract details';
             }
         }
 
