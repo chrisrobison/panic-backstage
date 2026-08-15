@@ -39,6 +39,12 @@ test('Event workspace: Print > QR Flyer renders title, QR, price, doors, lineup'
   });
   const eventId = created.id;
   assert.ok(eventId, 'test event created');
+  // The QR embeds event_public_path()'s output (see src/Support.php) — fetch
+  // it from the server instead of assuming its shape, so this test doesn't
+  // hardcode a URL scheme.
+  const dash = await apiFetch(page, `/events/${eventId}`);
+  const publicPage = dash?.links?.public_page;
+  assert.ok(publicPage, 'event has a public page link');
 
   try {
     await apiFetch(page, `/events/${eventId}/lineup`, {
@@ -77,7 +83,7 @@ test('Event workspace: Print > QR Flyer renders title, QR, price, doors, lineup'
     assert.includes(html, 'PB UI TEST — QR Flyer', 'flyer includes the show title');
     assert.includes(html, 'qf-title', 'flyer uses the big-title class');
     assert.includes(html, 'assets/qr.png?text=', 'flyer embeds a QR image pointing at the QR PNG endpoint');
-    assert.includes(html, 'event.html%3Fid%3D' + eventId, 'QR payload encodes this event\'s public page URL');
+    assert.includes(html, encodeURIComponent(publicPage), 'QR payload encodes this event\'s public page URL');
     assert.includes(html, '$20', 'flyer shows the ticket price');
     assert.includes(html, '7:00', 'flyer shows the doors time');
     assert.includes(html, 'Band One', 'flyer lists first band');

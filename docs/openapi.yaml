@@ -210,6 +210,11 @@ tags:
     description: Sent-mail log.
   - name: Database Browser
     description: Read-only tenant database inspector (admin).
+  - name: Realtime
+    description: >-
+      Server-Sent Events invalidation stream (see docs/realtime-data.md). Tells the browser which
+      entities may be stale so it can re-fetch them through the normal JSON API — never a data API
+      itself.
   - name: DB History
     description: Audit-trigger change log with undo/redo (admin).
   - name: Messages
@@ -10919,7 +10924,7 @@ components:
         url:
           type: string
           format: uri
-          description: Public event page (event.html?id=...).
+          description: Public event page (/e/{public_slug}, or the legacy event.html?id=... for events that predate it).
         ticket:
           type: object
           properties:
@@ -22997,11 +23002,13 @@ paths:
         Public event detail for the marketing/public-facing event page: the event row (joined with
         venue name/address/city/state), its non-canceled lineup ordered by billing_order/set_time,
         and its latest approved flyer asset (if any). Only returns events with public_visibility =
-        1. The path segment may be either the numeric event id or the event's slug — numeric-looking
-        values are looked up by id, everything else by slug (this keeps older slug-based links
-        working indefinitely even though new links are minted with the id). # TODO: PublicEvents
-        also accepts ?id= or ?slug= query params as a # fallback when the path segment is absent;
-        not modeled as separate # parameters here since the concrete path form above is primary.
+        1. The path segment is resolved in priority order (PublicEventLookup::resolve()): the
+        event's permanent public_slug first, then a numeric-looking value by id, then the mutable
+        `slug` column as a last resort — so a link minted at any point in the app's history
+        (id-keyed, old-slug-keyed, or the current public_slug-keyed /e/{slug} pretty URL) keeps
+        resolving indefinitely. # TODO: PublicEvents also accepts ?id= or ?slug= query params as a
+        # fallback when the path segment is absent; not modeled as separate # parameters here since
+        the concrete path form above is primary.
       tags:
         - Public Events
       security: []
@@ -23009,7 +23016,7 @@ paths:
         - name: idOrSlug
           in: path
           required: true
-          description: Numeric event id or event slug.
+          description: Event public_slug, numeric id, or legacy mutable slug.
           schema:
             type: string
       responses:
@@ -24439,6 +24446,47 @@ paths:
                 type: string
         '404':
           description: No ticket matches this token.
+          content:
+            text/html:
+              schema:
+                type: string
+  /api/e/{slug}:
+    get:
+      operationId: publicEventPage_getPage
+      summary: Server-rendered public event page (SEO-friendly pretty URL)
+      description: >-
+        Public, unauthenticated, no `/api` prefix — this is the pretty URL (see
+        Support::event_public_path()) printed on flyers/QR codes and used for shared/social links,
+        served at GET /e/{slug} (root .htaccess, public/.htaccess, and public/router.php all forward
+        /e/* here, mirroring the /t/{token} rule above). Resolves {slug} the same way
+        /api/public/events/{idOrSlug} does (PublicEventLookup::resolve(): public_slug, then numeric
+        id, then legacy mutable slug), and 404s under the same public_visibility gate. Unlike the
+        JSON endpoint, this renders a full HTML document server-side — real per-event
+        title/meta-description/canonical/Open-Graph/Twitter tags and schema.org Event JSON-LD, so
+        search engines and social-share unfurlers see real content — with the same
+        `<pb-public-event-page>` interactive shell as event.html embedded in the body, so a human
+        visitor gets the identical client-rendered page (ticket purchase, map, share buttons)
+        hydrating on top. Rendered dynamically per request, not a pre-generated static file, so
+        price/availability/cancellation changes are reflected immediately.
+      tags:
+        - Public Events
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: Event's permanent public_slug (or, for older links, its numeric id or legacy mutable slug).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Event page (found and publicly visible).
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          description: Event not found, or exists but is not publicly visible.
           content:
             text/html:
               schema:
@@ -27377,6 +27425,57 @@ paths:
                 $ref: '#/components/schemas/Error'
         '500':
           description: Undo failed (undo_sql execution threw); the transaction was rolled back
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/realtime/stream:
+    get:
+      operationId: realtime_stream
+      summary: Realtime invalidation stream (Server-Sent Events)
+      description: >-
+        Long-lived `text/event-stream` connection. Polls `db_history` (see
+        scripts/generate-audit-triggers.php) roughly once a second and emits one `invalidate` event
+        per changed entity the requesting user is allowed to see:
+        `id: <db_history.id>` / `event: invalidate` / `data: {"entity":"event","id":123,"revision":48291}`.
+        Never includes row contents (old_row/new_row) — only enough to know what to re-fetch through
+        the normal JSON API. Unclassified tables emit a content-free `{"entity":"global"}` fallback
+        instead of being silently dropped. The connection intentionally ends after roughly a minute
+        so it can't outlive PHP-FPM/proxy request-duration limits; resume with the browser's
+        automatically-sent `Last-Event-ID` header (or `?since=<revision>` for tooling) to continue
+        exactly where it left off with no gap. Reached via the `backstage_access` session cookie in
+        practice (EventSource cannot set an Authorization header) — see docs/realtime-data.md.
+        Returns 404 when `REALTIME_ENABLED=false`. The client falls back to direct HTTP polling/no
+        realtime meanwhile, but does keep retrying this endpoint with capped exponential backoff (up
+        to every 30s) for as long as the app shell is open, so re-enabling the flag is picked up by
+        an already-open tab without a page reload.
+      tags:
+        - Realtime
+      parameters:
+        - name: since
+          in: query
+          description: >-
+            Resume point (a db_history.id). Ignored when the Last-Event-ID request header is
+            present — that always wins. Mainly for tooling/tests; browsers rely on Last-Event-ID.
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: >-
+            `text/event-stream` — a live connection, not a single JSON body. Emits periodic
+            `: heartbeat` comment lines to keep idle connections open through proxies.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Realtime is disabled (REALTIME_ENABLED=false)
           content:
             application/json:
               schema:

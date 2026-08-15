@@ -508,6 +508,7 @@ final class Events extends BaseEndpoint
             [(int) $body['venue_id'], $resourceId, $body['title'], $slug, $body['event_type'], $newStatus, $isPrivate ? null : self::nullableString($body['description_public'] ?? null), self::nullableString($body['description_internal'] ?? null), self::nullableString($body['av_requirements'] ?? null), self::nullableString($body['catering_notes'] ?? null), self::nullableString($body['contract_details'] ?? null), $body['date'], $newEndDate, date_or_null($body['doors_time'] ?? null), date_or_null($body['show_time'] ?? null), date_or_null($body['end_time'] ?? null), date_or_null($body['load_in_time'] ?? null), date_or_null($body['load_out_time'] ?? null), boolish($body['is_non_music'] ?? false) ? 1 : 0, $body['age_restriction'] ?? null, $isPrivate ? 0 : (float) ($body['ticket_price'] ?? 0), self::nullableDecimal($body['deposit_amount'] ?? null), self::nullableDecimal($body['potential_revenue'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_url'] ?? null), $isPrivate ? null : self::nullableString($body['ticket_system'] ?? null), self::nullableString($body['contract_url'] ?? null), self::nullableString($body['venue_contract_url'] ?? null), boolish($body['walkthrough_done'] ?? false) ? 1 : 0, self::nullableString($body['settlement_doc_url'] ?? null), ($body['capacity'] ?? null) ?: null, ($body['estimated_guests'] ?? null) ?: null, $publicVisibility, $ownerId, self::nullableString($body['promoter_name'] ?? null), self::nullableString($body['promoter_email'] ?? null), self::nullableString($body['promoter_phone'] ?? null), self::nullableString($body['client_org'] ?? null), $isPrivate ? null : self::nullableString($body['booker_name'] ?? null), $isPrivate ? null : self::nullableString($body['booker_email'] ?? null), $isPrivate ? null : self::nullableString($body['booker_phone'] ?? null)]
         );
         $this->assignEventCode($id);
+        $this->assignPublicSlug($id, $body['title']);
         log_activity($this->db, $id, $this->userId(), 'event created', ['title' => $body['title']]);
 
         // Notify all admins immediately when a private event inquiry comes in.
@@ -609,6 +610,7 @@ final class Events extends BaseEndpoint
             ]
         );
         $this->assignEventCode($id);
+        $this->assignPublicSlug($id, $title);
         log_activity($this->db, $id, $this->userId(), 'event cloned', ['source_event_id' => $sourceId]);
         log_activity($this->db, $sourceId, $this->userId(), 'event cloned to new hold', ['cloned_event_id' => $id]);
         $this->pushToSheet($id);
@@ -919,6 +921,7 @@ final class Events extends BaseEndpoint
              $bookerName, $bookerEmail, self::nullableString($body['booker_phone'] ?? null)]
         );
         $this->assignEventCode($id);
+        $this->assignPublicSlug($id, $title);
         foreach ($this->jsonList($template['checklist_json']) as $task) {
             $this->db->run('INSERT INTO event_tasks (event_id, title, priority) VALUES (?, ?, ?)', [$id, $task['title'] ?? $task, $task['priority'] ?? 'normal']);
         }

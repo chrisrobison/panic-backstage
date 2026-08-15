@@ -96,8 +96,13 @@ jobs:
         run: php scripts/migrate.php
 
       - name: Start local dev server
+        # PHP_CLI_SERVER_WORKERS: the built-in server is single-threaded by
+        # default, which deadlocks against the realtime SSE endpoint (GET
+        # /api/realtime/stream — src/Realtime.php intentionally holds the
+        # connection open for tens of seconds); 86-realtime-stream.sh below
+        # needs a free worker to run concurrently with that held-open request.
         run: |
-          php -S 127.0.0.1:8090 -t public public/router.php > /tmp/php-server.log 2>&1 &
+          PHP_CLI_SERVER_WORKERS=8 php -S 127.0.0.1:8090 -t public public/router.php > /tmp/php-server.log 2>&1 &
           echo $! > /tmp/php-server.pid
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:8090/api/me >/dev/null 2>&1 && exit 0

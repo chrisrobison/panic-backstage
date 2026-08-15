@@ -378,8 +378,8 @@
       <span class="k">"tags"</span>: [<span class="s">"comedy"</span>],
       <span class="k">"image"</span>: <span class="s">"https://themab.org/wp-content/uploads/2026/06/july-11-2026-i-am-a-snail.jpg"</span>,
       <span class="k">"schedule_pricing"</span>: <span class="n">null</span>,
-      <span class="k">"url"</span>: <span class="s">"https://panicbooking.com/backstage/event.html?id=130"</span>,
-      <span class="k">"ticket"</span>: { <span class="k">"mode"</span>: <span class="s">"internal"</span>, <span class="k">"url"</span>: <span class="n">null</span>, <span class="k">"checkout_url"</span>: <span class="s">"https://panicbooking.com/backstage/event.html?id=130"</span> }
+      <span class="k">"url"</span>: <span class="s">"https://panicbooking.com/backstage/e/i-am-a-snail-2026-07-11"</span>,
+      <span class="k">"ticket"</span>: { <span class="k">"mode"</span>: <span class="s">"internal"</span>, <span class="k">"url"</span>: <span class="n">null</span>, <span class="k">"checkout_url"</span>: <span class="s">"https://panicbooking.com/backstage/e/i-am-a-snail-2026-07-11"</span> }
     }
   ]
 }</code></pre>
@@ -491,7 +491,7 @@ if detail:
     print(detail["event"]["title"], "at", detail["event"]["venue_name"])</code></pre>
 
       <h2 id="public-events">GET /public/events/{idOrSlug} — single event detail</h2>
-      <p>Backs an event's own public page (<code>event.html?id=…</code>). Returns the event row <strong>joined with venue name/address/city/state</strong>, its non-canceled lineup (ordered by <code>billing_order</code>/<code>set_time</code>), and its latest approved flyer asset. <code>idOrSlug</code> is looked up by numeric <code>id</code> when it's all digits, otherwise by <code>slug</code>.</p>
+      <p>Backs an event's own public page (<code>/e/{slug}</code> — see the <code>url</code> field above). Returns the event row <strong>joined with venue name/address/city/state</strong>, its non-canceled lineup (ordered by <code>billing_order</code>/<code>set_time</code>), and its latest approved flyer asset. <code>idOrSlug</code> is looked up in priority order: the event's permanent <code>public_slug</code> first, then numeric <code>id</code> when it's all digits, otherwise the legacy mutable <code>slug</code> — so a link minted at any point in the app's history keeps resolving.</p>
 
       <pre class="code-block"><code>{
   <span class="k">"event"</span>: { <span class="k">"id"</span>: <span class="n">130</span>, <span class="k">"title"</span>: <span class="s">"I am a Snail"</span>, <span class="k">"venue_name"</span>: <span class="s">"Mabuhay Gardens"</span>, <span class="cm">"...": "..."</span> },

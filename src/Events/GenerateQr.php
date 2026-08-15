@@ -19,9 +19,10 @@ use function Panic\log_activity;
  *                                              can download/print it like any other asset.
  *
  * Re-running POST regenerates in place (one qr_code asset per event) rather than piling up
- * duplicates — the encoded URL is keyed by the event's stable id (see event_public_path()),
- * so it never changes even if the title/date (and therefore the slug) does — there's nothing
- * to version like the AI flyer prompt.
+ * duplicates — the encoded URL is keyed by the event's permanent public_slug, or its id as a
+ * fallback for pre-public_slug rows (see event_public_path()), either way never changing even
+ * if the title/date (and therefore the mutable `slug` column) does — there's nothing to
+ * version like the AI flyer prompt.
  *
  * Requires the `upload_assets` capability (same gate as flyer generation).
  */
@@ -43,7 +44,7 @@ final class GenerateQr extends BaseEndpoint
     /** Return the URL that would be encoded, so the UI can show it before generating. */
     private function preview(int $eventId): Response
     {
-        $event = $this->db->one('SELECT id FROM events WHERE id = ?', [$eventId]);
+        $event = $this->db->one('SELECT id, public_slug FROM events WHERE id = ?', [$eventId]);
         if (!$event) {
             return $this->notFound();
         }
@@ -52,7 +53,7 @@ final class GenerateQr extends BaseEndpoint
 
     private function generate(int $eventId): Response
     {
-        $event = $this->db->one('SELECT id FROM events WHERE id = ?', [$eventId]);
+        $event = $this->db->one('SELECT id, public_slug FROM events WHERE id = ?', [$eventId]);
         if (!$event) {
             return $this->notFound();
         }

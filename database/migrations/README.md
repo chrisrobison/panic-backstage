@@ -22,8 +22,12 @@ is a genuinely different schema with its own baseline and migrations folder:
   migration written before it was last regenerated has been squashed into it,
   so a brand-new database starts with **zero** pending migrations.
 - New schema changes go here as `NNN_short_description.sql`, numbered in
-  ascending order. **Next number: `105`** (migrations 001–069 were squashed
-  into `../schema.sql` on 2026-07-23).
+  ascending order. **Next number: `106`** (migrations 001–069 were squashed
+  into `../schema.sql` on 2026-07-23). Note: two independent `105_*` files
+  exist (`105_add_contract_series_id.sql` and
+  `105_add_event_public_slug.sql`) from branches that forked at the same
+  point — harmless since the runner tracks applied migrations by full
+  filename, not number, but don't reuse `105` again.
 - Apply pending migrations with the runner:
 
   ```bash

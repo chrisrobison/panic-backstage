@@ -10,6 +10,12 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** `api` — Update the Feed url field's stale event.html?id= description
+- **Added** `events` — Add SEO-friendly /e/{slug} public event pages
+- **Documentation** `realtime` — Add implementation plan for a Rust connection broker
+- **Ops** `realtime` — Switch the reference FPM pool to pm=ondemand and raise the ceiling
+- **Fixed** `realtime` — Close stale-GET/dedup race, make realtime opt-in, scope permission memoization
+- **Added** `realtime` — Add a Web Worker data layer with SSE invalidation streaming
 - **Added** `events` — Wire the event wizard and AI Assistant into the recurring-conflict dialog
 - **Added** `events` — Resolve recurring-series room conflicts per date instead of all-or-nothing
 - **Added** `events` — Consolidate secondary event actions into an ellipsis menu

@@ -268,7 +268,10 @@
     }
 
     function ctaFor(event) {
-      var detailUrl = './event.html?id=' + encodeURIComponent(event.id);
+      // event.url is the feed's own pretty /e/{slug} public-page link (see
+      // Feed.php eventUrl() -> Support::event_public_path()); fall back to
+      // the id-keyed address only if it's somehow missing or malformed.
+      var detailUrl = safeUrl(event.url) || './event.html?id=' + encodeURIComponent(event.id);
       var ticket = event.ticket || { mode: 'none' };
       if (ticket.mode === 'external' && safeUrl(ticket.url)) {
         return '<a class="cta" href="' + esc(safeUrl(ticket.url)) + '" target="_blank" rel="noopener">Tickets ↗</a>';
@@ -332,11 +335,12 @@
           lastMonth = mKey;
         }
         var meta = metaLine(event);
+        var titleUrl = safeUrl(event.url) || './event.html?id=' + encodeURIComponent(event.id);
         html += '<li class="show">' +
           '<div class="datebox"><span class="dow">' + esc(event.weekday) + '</span><span class="dom">' + esc(event.day) + '</span></div>' +
           '<div class="tear" aria-hidden="true"></div>' +
           '<div class="details">' +
-            '<h2><a href="./event.html?id=' + encodeURIComponent(event.id) + '">' + esc(event.title) + '</a></h2>' +
+            '<h2><a href="' + esc(titleUrl) + '">' + esc(event.title) + '</a></h2>' +
             '<p class="meta">' + meta.map(esc).join(' <span class="sep">·</span> ') + '</p>' +
             (event.tags && event.tags.length ? '<div class="tags">' + event.tags.map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') + '</div>' : '') +
           '</div>' +

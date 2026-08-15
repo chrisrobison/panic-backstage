@@ -2,7 +2,7 @@
 // Dashboard, Calendar, Pipeline, Events list, Template picker, and the two
 // public/unauthenticated pages (public event page + invite acceptance). Also
 // owns the quick-create event modal (shared by the calendar and the topbar).
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, setAppUser, publish, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, mdToHtml, roomConflictIds, roomConflictDates, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, appBaseUrl, assetUrl, getAppUser, setAppUser, publish, api, formData, broadcastEventData, refreshSection, eventDate, shortDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, mdToHtml, roomConflictIds, roomConflictDates, $, $$ } from './core.js';
 // Registers <paint-splat> — reused here as the generative "no flyer yet"
 // placeholder on the public event page (same treatment the event workspace
 // summary card uses for the same situation).
@@ -1460,10 +1460,22 @@ class PublicEventPage extends PanicElement {
   async connect() {
     this.setLoading('Loading public event');
     const params = new URLSearchParams(location.search);
-    // Current links use ?id=<event id>; ?slug=<slug> is kept working for
-    // links minted before this page switched off slugs (which changed
-    // whenever an event's title/date was edited, breaking shared links).
+    // Current links use the pretty /e/{public_slug} path (see
+    // Support::event_public_path() and the server-rendered PublicEventPage
+    // endpoint behind it). ?id=<event id> / ?slug=<slug> are kept working
+    // for links minted before that pretty route existed — or for the rare
+    // event that never got a public_slug assigned — falling back to the id,
+    // which never changes either.
     let idOrSlug = params.get('id') || params.get('slug');
+    // Path relative to the app's own mount point: multi-tenant installs can
+    // be served from a sub-path, so this is derived from the app.js script
+    // tag's own resolved URL (appBaseUrl) rather than assumed from
+    // location.pathname directly — same trick appUrl()/apiUrl() use.
+    const mountPath = new URL(appBaseUrl).pathname.replace(/\/+$/, '');
+    let relativePath = location.pathname;
+    if (mountPath && relativePath.startsWith(mountPath)) relativePath = relativePath.slice(mountPath.length);
+    const slugMatch = relativePath.match(/^\/e\/([^/]+)\/?$/);
+    if (slugMatch) idOrSlug = decodeURIComponent(slugMatch[1]);
     const seriesSlug = params.get('series');
     try {
       // A series URL never changes. Resolve it on each visit so this same
@@ -1478,10 +1490,11 @@ class PublicEventPage extends PanicElement {
       const event = data.event;
       document.title = event.title ? `${event.title} - Panic Backstage` : 'Panic Backstage Event';
       // Canonical share URL — not location.href, which may carry transient
-      // ?order=&checkout= params from a just-completed purchase. Keyed by id
-      // (not slug) so a shared/bookmarked link never goes stale if the event
-      // is later renamed or rescheduled.
-      const publicUrl = appUrl(stablePublicPath || `event.html?id=${encodeURIComponent(event.id)}`);
+      // ?order=&checkout= params from a just-completed purchase. Prefers the
+      // event's own permanent public_slug (same priority order as
+      // Support::event_public_path() server-side) over the id-keyed fallback.
+      const publicUrl = appUrl(stablePublicPath
+        || (event.public_slug ? `e/${encodeURIComponent(event.public_slug)}` : `event.html?id=${encodeURIComponent(event.id)}`));
       const priceLabel = publicTicketPriceLabel(event, data.ticket_types);
       const lineup = data.lineup || [];
       const tags = String(event.public_tags || '').split(',').map((t) => t.trim()).filter(Boolean);

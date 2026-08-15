@@ -549,6 +549,11 @@ final class Series extends BaseEndpoint
             );
         }
         $this->assignEventCode($id);
+        // Include the date in the source string (unlike the single-create paths)
+        // so occurrences of the same recurring title get distinct, readable
+        // slugs like "friday-night-jazz-2026-09-04" instead of an opaque
+        // "-2", "-3", ... counter from the base-title collision fallback.
+        $this->assignPublicSlug($id, $anchor['title'] . ' ' . $date);
         log_activity($this->db, $id, $actingUserId, 'event created', ['title' => $anchor['title'], 'series_id' => $seriesId]);
         $this->pushToSheet($id);
         $this->pushToCalendar($id);

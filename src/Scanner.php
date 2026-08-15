@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use function Panic\event_public_path;
 use function Panic\log_activity;
 
 /**
@@ -377,7 +378,7 @@ final class Scanner extends BaseEndpoint
         $canLookup = (bool) (int) ($link['can_lookup'] ?? 0);
 
         $event = $this->db->one(
-            'SELECT title, external_id, ticketing_mode, ticket_url FROM events WHERE id = ?',
+            'SELECT id, title, external_id, ticketing_mode, ticket_url, public_slug FROM events WHERE id = ?',
             [$eventId]
         );
 
@@ -439,7 +440,7 @@ final class Scanner extends BaseEndpoint
         if ($basePath !== '' && !str_ends_with($base, $basePath)) {
             $base .= $basePath;
         }
-        return $base . '/event.html?id=' . rawurlencode((string) $eventId);
+        return $base . '/' . event_public_path($event ?: ['id' => $eventId, 'public_slug' => null]);
     }
 
     /**

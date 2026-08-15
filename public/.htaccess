@@ -14,6 +14,11 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^t/ api/index.php [L]
 
+# Public event pretty URLs (/e/{public_slug}) — same reasoning as /t/ above.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^e/ api/index.php [L]
+
 # Friendly public calendar-feed alias (see src/Kernel.php routing comment):
 #   /feeds/public-events.ics|.rss|.json -> same Feed endpoint as /api/feed/*
 RewriteRule ^feeds/public-events\.(ics|rss|json)$ api/index.php [L]
