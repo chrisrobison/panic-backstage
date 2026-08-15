@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** `api` — Update the Feed url field's stale event.html?id= description
 - **Added** `events` — Add SEO-friendly /e/{slug} public event pages
 - **Documentation** — Document August 2026 operations changes
 - **Fixed** `ui` — Preserve bus subscriptions across startup race

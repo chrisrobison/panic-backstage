@@ -10920,7 +10920,7 @@ components:
         url:
           type: string
           format: uri
-          description: Public event page (event.html?id=...).
+          description: Public event page (/e/{public_slug}, or the legacy event.html?id=... for events that predate it).
         ticket:
           type: object
           properties:
