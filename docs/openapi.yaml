@@ -22998,11 +22998,13 @@ paths:
         Public event detail for the marketing/public-facing event page: the event row (joined with
         venue name/address/city/state), its non-canceled lineup ordered by billing_order/set_time,
         and its latest approved flyer asset (if any). Only returns events with public_visibility =
-        1. The path segment may be either the numeric event id or the event's slug — numeric-looking
-        values are looked up by id, everything else by slug (this keeps older slug-based links
-        working indefinitely even though new links are minted with the id). # TODO: PublicEvents
-        also accepts ?id= or ?slug= query params as a # fallback when the path segment is absent;
-        not modeled as separate # parameters here since the concrete path form above is primary.
+        1. The path segment is resolved in priority order (PublicEventLookup::resolve()): the
+        event's permanent public_slug first, then a numeric-looking value by id, then the mutable
+        `slug` column as a last resort — so a link minted at any point in the app's history
+        (id-keyed, old-slug-keyed, or the current public_slug-keyed /e/{slug} pretty URL) keeps
+        resolving indefinitely. # TODO: PublicEvents also accepts ?id= or ?slug= query params as a
+        # fallback when the path segment is absent; not modeled as separate # parameters here since
+        the concrete path form above is primary.
       tags:
         - Public Events
       security: []
@@ -23010,7 +23012,7 @@ paths:
         - name: idOrSlug
           in: path
           required: true
-          description: Numeric event id or event slug.
+          description: Event public_slug, numeric id, or legacy mutable slug.
           schema:
             type: string
       responses:
@@ -24440,6 +24442,47 @@ paths:
                 type: string
         '404':
           description: No ticket matches this token.
+          content:
+            text/html:
+              schema:
+                type: string
+  /api/e/{slug}:
+    get:
+      operationId: publicEventPage_getPage
+      summary: Server-rendered public event page (SEO-friendly pretty URL)
+      description: >-
+        Public, unauthenticated, no `/api` prefix — this is the pretty URL (see
+        Support::event_public_path()) printed on flyers/QR codes and used for shared/social links,
+        served at GET /e/{slug} (root .htaccess, public/.htaccess, and public/router.php all forward
+        /e/* here, mirroring the /t/{token} rule above). Resolves {slug} the same way
+        /api/public/events/{idOrSlug} does (PublicEventLookup::resolve(): public_slug, then numeric
+        id, then legacy mutable slug), and 404s under the same public_visibility gate. Unlike the
+        JSON endpoint, this renders a full HTML document server-side — real per-event
+        title/meta-description/canonical/Open-Graph/Twitter tags and schema.org Event JSON-LD, so
+        search engines and social-share unfurlers see real content — with the same
+        `<pb-public-event-page>` interactive shell as event.html embedded in the body, so a human
+        visitor gets the identical client-rendered page (ticket purchase, map, share buttons)
+        hydrating on top. Rendered dynamically per request, not a pre-generated static file, so
+        price/availability/cancellation changes are reflected immediately.
+      tags:
+        - Public Events
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: Event's permanent public_slug (or, for older links, its numeric id or legacy mutable slug).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Event page (found and publicly visible).
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          description: Event not found, or exists but is not publicly visible.
           content:
             text/html:
               schema:

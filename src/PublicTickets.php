@@ -266,8 +266,13 @@ final class PublicTickets extends BaseEndpoint
         $env      = new Env();
         $appUrl   = rtrim((string) (getenv('APP_URL') ?: ''), '/');
         $eventUrl = $appUrl . '/' . event_public_path($event);
-        $success  = $eventUrl . '&order=' . $orderId . '&checkout=success&receipt=' . rawurlencode($receiptToken);
-        $cancel   = $eventUrl . '&order=' . $orderId . '&checkout=cancel';
+        // event_public_path() now returns a bare pretty path (/e/{slug}) with
+        // no query string for a slugged event, vs. the legacy event.html?id=
+        // form for one that predates public_slug — pick the right separator
+        // for whichever shape came back instead of assuming '?' is already there.
+        $sep      = str_contains($eventUrl, '?') ? '&' : '?';
+        $success  = $eventUrl . $sep . 'order=' . $orderId . '&checkout=success&receipt=' . rawurlencode($receiptToken);
+        $cancel   = $eventUrl . $sep . 'order=' . $orderId . '&checkout=cancel';
 
         try {
             $provider = PaymentProviders::active($this->db, $env);
@@ -595,7 +600,7 @@ final class PublicTickets extends BaseEndpoint
     private function saleableEvent(int $eventId): ?array
     {
         return $this->db->one(
-            "SELECT id, title, slug
+            "SELECT id, title, slug, public_slug
                FROM events
               WHERE id = ? AND public_visibility = 1 AND ticketing_mode = 'internal'",
             [$eventId]

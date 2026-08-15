@@ -77,6 +77,10 @@ RewriteRule ^api(?:/(.*))?$ public/api/index.php [L,QSA]
 # the SPA catch-all below. Mirror the rule in public/.htaccess here so the
 # root-level rewrite engine sees it before falling through to index.html.
 RewriteRule ^t(?:/(.*))?$ public/api/index.php [L,QSA]
+# Public event pretty URLs (/e/{public_slug}) — same reasoning as /t/ above.
+# Server-rendered by PublicEventPage (see src/Kernel.php) with real
+# title/meta/Open-Graph/JSON-LD tags for search + social-share crawlers.
+RewriteRule ^e(?:/(.*))?$ public/api/index.php [L,QSA]
 RewriteRule ^(login|event|upcoming|invite|scanner|sign|payee-request)\.html$ public/$1.html [L]
 
 # Friendly public calendar-feed alias — see the matching rule in

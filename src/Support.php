@@ -42,10 +42,17 @@ function db_timestamp_to_epoch(?string $value): ?int
 }
 
 /**
- * Relative path (no host) to an event's public-facing page, keyed by the
- * event's stable numeric id rather than its slug. Slugs are regenerated
- * whenever an event's title or date changes (see Events::update()), which
- * silently broke any link built from the old slug — the id never changes.
+ * Relative path (no host) to an event's public-facing page.
+ *
+ * Prefers the pretty, SEO-friendly /e/{public_slug} address (migration 105):
+ * public_slug is assigned once at creation (Events\EventRowHelpers::
+ * assignPublicSlug()) and never changes again, unlike the mutable `slug`
+ * column, which is regenerated from title+date on every edit (see
+ * Events::update()) and would silently break any link built from it. Falls
+ * back to the old id-keyed query string for the (now rare) event row that
+ * predates this column or otherwise never got a slug assigned — the id
+ * never changes either, so that link never breaks — keeping every
+ * previously shared/printed/QR-coded link resolving indefinitely.
  *
  * Callers that need an absolute URL should prefix this with their own
  * app-base URL (see Feed::eventUrl(), EventEmailComposer::eventUrl(),
@@ -53,6 +60,9 @@ function db_timestamp_to_epoch(?string $value): ?int
  */
 function event_public_path(array $event): string
 {
+    if (!empty($event['public_slug'])) {
+        return 'e/' . rawurlencode((string) $event['public_slug']);
+    }
     return 'event.html?id=' . rawurlencode((string) $event['id']);
 }
 

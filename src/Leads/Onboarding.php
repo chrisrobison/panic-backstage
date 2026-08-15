@@ -167,6 +167,8 @@ final class Onboarding
                 ]
             );
 
+            self::assignPublicSlug($db, $eventId, $title);
+
             $db->run(
                 'UPDATE leads SET status=?, converted_event_id=?, converted_at=NOW() WHERE id=?',
                 [$finalStatus, $eventId, $leadId]
@@ -195,6 +197,33 @@ final class Onboarding
         }
 
         return ['event_id' => $eventId, 'title' => $title, 'venue_id' => $venueId];
+    }
+
+    /**
+     * Assign the onboarded event's permanent public_slug (migration 105),
+     * mirroring Events\EventRowHelpers::assignPublicSlug() — this class
+     * isn't a BaseEndpoint and doesn't pull in that trait, so the small bit
+     * of unique-slug logic is duplicated here rather than reworking the
+     * trait's `$this->db` shape for one static caller. Best-effort: a
+     * failure leaves public_slug NULL and event_public_path() falls back to
+     * the id-keyed query string, same as everywhere else.
+     */
+    private static function assignPublicSlug(Database $db, int $eventId, string $title): void
+    {
+        try {
+            $base = substr(slugify($title), 0, 170);
+            if (ctype_digit($base)) {
+                $base .= '-event';
+            }
+            $candidate = $base;
+            $suffix = 2;
+            while ($db->one('SELECT id FROM events WHERE public_slug = ?', [$candidate]) !== null) {
+                $candidate = $base . '-' . $suffix++;
+            }
+            $db->run('UPDATE events SET public_slug = ? WHERE id = ?', [$candidate, $eventId]);
+        } catch (\Throwable $e) {
+            @error_log('public slug assignment failed for event ' . $eventId . ': ' . $e->getMessage());
+        }
     }
 
     /**

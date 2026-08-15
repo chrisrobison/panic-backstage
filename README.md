@@ -493,7 +493,7 @@ Suggested flow:
 Example public event URL after seeding:
 
 ```text
-http://localhost:8000/event.html?slug=local-band-showcase
+http://localhost:8000/e/local-band-showcase
 ```
 
 Endpoint smoke test against a running local or staging server:
@@ -866,7 +866,7 @@ remains the global log of every transactional email the system has sent.
 - Contracts, signatures, deposits, and payments move the event from proposal to committed booking.
 - The event workspace manages lineup, production tasks, run sheet, assets, ticketing, guest list, staffing, and show execution.
 - Settlement, reporting, and closeout complete the same lifecycle record.
-- Public event pages are loaded by `public/event.html?slug=event-slug`.
+- Public event pages are server-rendered (real title/meta/Open-Graph/JSON-LD tags) at the pretty URL `/e/{public_slug}` (see `src/PublicEventPage.php` and `Support::event_public_path()`); older `event.html?id=…`/`?slug=…` links keep resolving indefinitely.
 - Public event API responses only include events with `public_visibility` enabled.
 - Web Components publish PAN-compatible topics such as `app.route.changed`, `events.loaded`, `event.saved`, `event.assetUploaded`, `event.openItemResolved`, `event.publicationChanged`, `toast.show`, and `api.error`.
 

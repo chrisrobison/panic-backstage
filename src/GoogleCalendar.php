@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use function Panic\event_public_path;
+
 /**
  * Minimal, zero-dependency Google Calendar writer for the staff event mirror.
  *
@@ -257,7 +259,7 @@ final class GoogleCalendar
         }
 
         $lines[] = '';
-        $lines[] = rtrim($appUrl, '/') . '/event.html?id=' . (int) $event['id'];
+        $lines[] = rtrim($appUrl, '/') . '/' . event_public_path($event);
         $lines[] = '';
         $lines[] = '— Mirrored from Panic Backstage. Edits here are overwritten on the next sync.';
 

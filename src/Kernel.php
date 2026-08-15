@@ -384,6 +384,16 @@ final class Kernel
             return [TicketView::class, ['token' => $segments[1] ?? null]];
         }
 
+        // Public event page (pretty, SEO-friendly URL, no /api prefix, no JWT):
+        //   GET /e/{public_slug}  (root .htaccess, public/.htaccess, and
+        //   public/router.php all forward /e/* to the API kernel, mirroring
+        //   the /t/{token} rule above). Server-renders real title/meta-
+        //   description/Open-Graph/JSON-LD tags for search + social-share
+        //   crawlers, then the same interactive shell as event.html.
+        if ($segments[0] === 'e') {
+            return [PublicEventPage::class, ['slug' => $segments[1] ?? null]];
+        }
+
         // Dynamically generated QR image (no JWT).
         //   /assets/qr.svg?text=...  → SVG (ticket view pages)
         //   /assets/qr.png?text=...  → PNG (HTML emails; Gmail/Outlook don't support SVG)
@@ -890,6 +900,7 @@ final class Kernel
             ContractSigningEndpoint::class, // public signing flow, authenticated by token hash
             PayeeSubmissionEndpoint::class, // public W-9/address submission, authenticated by token hash
             TicketView::class,          // public ticket page, looked up by token hash
+            PublicEventPage::class,     // /e/{public_slug} server-rendered public event page
             Scanner::class,             // /api/scan/{redeem,sell,context} (scanner-token); JWT mgmt paths
                                         // still gated via requireEventCapability (null user => denied)
             QrCode::class,              // /assets/qr.svg — public QR image generator

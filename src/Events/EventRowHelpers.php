@@ -45,6 +45,51 @@ trait EventRowHelpers
     }
 
     /**
+     * Assign this event's permanent public_slug (see migration 105) — the
+     * SEO-friendly, title-derived address used by event_public_path() for
+     * its /e/{slug} page. Set once, right after insert, exactly like
+     * assignEventCode() above; unlike the mutable `slug` column it is never
+     * regenerated, so a shared/printed/QR link keeps resolving for the life
+     * of the event even after the title or date changes. Call from every
+     * events-row creation path (Events::create()/fromTemplate()/clone(),
+     * Events\Series::cloneOccurrence(), Leads\Onboarding::convert()).
+     *
+     * Best-effort: a failure here (extremely unlikely — see uniquePublicSlug())
+     * leaves public_slug NULL, and event_public_path() falls back to the
+     * id-keyed query string, so a broken slug assignment never blocks event
+     * creation itself.
+     */
+    private function assignPublicSlug(int $id, string $title): void
+    {
+        try {
+            $slug = $this->uniquePublicSlug($title);
+            $this->db->run('UPDATE events SET public_slug = ? WHERE id = ?', [$slug, $id]);
+        } catch (\Throwable $e) {
+            @error_log('public slug assignment failed for event ' . $id . ': ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Title-derived public_slug, kept unique (and never purely numeric —
+     * PublicEvents::handle() treats a bare-digit path segment as an id, so a
+     * numeric-looking slug like "1999" would be unreachable by slug lookup)
+     * without ever changing later. Mirrors Events\Series::uniquePublicSlug().
+     */
+    private function uniquePublicSlug(string $title): string
+    {
+        $base = substr(\Panic\slugify($title), 0, 170);
+        if (ctype_digit($base)) {
+            $base .= '-event';
+        }
+        $candidate = $base;
+        $suffix = 2;
+        while ($this->db->one('SELECT id FROM events WHERE public_slug = ?', [$candidate]) !== null) {
+            $candidate = $base . '-' . $suffix++;
+        }
+        return $candidate;
+    }
+
+    /**
      * Check whether the given venue/room + date + occupancy window conflicts with
      * any existing booking (with a 30-minute buffer between events). Returns
      * a 409 Response describing the conflict, or null if the slot is clear.
@@ -235,7 +280,7 @@ trait EventRowHelpers
                 'SELECT e.id, e.title, e.status, e.event_type, e.date, e.end_date,
                         e.doors_time, e.show_time, e.end_time, e.load_in_time, e.load_out_time,
                         e.room, e.capacity, e.promoter_name, e.booker_name,
-                        e.gcal_event_id,
+                        e.gcal_event_id, e.public_slug,
                         v.name AS venue_name, v.address AS venue_address, v.timezone AS venue_timezone
                  FROM   events e
                  JOIN   venues v ON v.id = e.venue_id

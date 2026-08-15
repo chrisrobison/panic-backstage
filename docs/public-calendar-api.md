@@ -134,8 +134,8 @@ max-age=300` (shorter than ics/rss since it's meant for live-ish widgets).
       "tags": ["comedy"],
       "image": "https://themab.org/wp-content/uploads/2026/06/july-11-2026-i-am-a-snail.jpg",
       "schedule_pricing": null,
-      "url": "https://panicbooking.com/backstage/event.html?id=130",
-      "ticket": { "mode": "internal", "url": null, "checkout_url": "https://panicbooking.com/backstage/event.html?id=130" }
+      "url": "https://panicbooking.com/backstage/e/i-am-a-snail-2026-07-11",
+      "ticket": { "mode": "internal", "url": null, "checkout_url": "https://panicbooking.com/backstage/e/i-am-a-snail-2026-07-11" }
     }
   ]
 }
@@ -288,11 +288,13 @@ if detail:
 
 ## `GET /public/events/{idOrSlug}` — single event detail
 
-Backs an event's own public page (`event.html?id=…`). Returns the event row
-**joined with venue name/address/city/state**, its non-canceled lineup
-(ordered by `billing_order`/`set_time`), and its latest approved flyer asset.
-`idOrSlug` is looked up by numeric `id` when it's all digits, otherwise by
-`slug`.
+Backs an event's own public page (`/e/{slug}` — see the `url` field above).
+Returns the event row **joined with venue name/address/city/state**, its
+non-canceled lineup (ordered by `billing_order`/`set_time`), and its latest
+approved flyer asset. `idOrSlug` is looked up in priority order: the event's
+permanent `public_slug` first, then numeric `id` when it's all digits,
+otherwise the legacy mutable `slug` — so a link minted at any point in the
+app's history keeps resolving.
 
 ```json
 {

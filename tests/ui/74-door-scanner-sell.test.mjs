@@ -69,7 +69,13 @@ async function setup(page) {
     });
     const token = link.body?.token;
     if (!token) throw new Error('no scanner token returned');
-    return { eventId, token };
+    // The scanner's self-serve buy QR encodes event_public_path()'s output
+    // (see src/Scanner.php buyUrl()) — fetch it from the server instead of
+    // assuming its shape, so this test doesn't hardcode a URL scheme.
+    const dash = await api(page, `/events/${eventId}`);
+    const publicPage = dash.body?.links?.public_page;
+    if (!publicPage) throw new Error('no public_page link returned');
+    return { eventId, token, publicPage };
   } catch (err) {
     await api(page, `/events/${eventId}`, { method: 'DELETE' });
     throw err;
@@ -184,7 +190,7 @@ test('door scanner offers a self-serve card QR', async (page) => {
     const src = await page.attr('#buy-qr', 'src');
     assert.ok(/\/assets\/qr\.png\?text=/.test(src || ''), 'QR renders through the app QR endpoint');
     assert.ok(
-      decodeURIComponent(src).includes(`event.html?id=${fixture.eventId}`),
+      decodeURIComponent(src).includes(fixture.publicPage),
       'QR encodes this event\'s public ticket page'
     );
     assert.ok(

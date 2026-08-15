@@ -3,38 +3,26 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use Panic\Events\PublicEventLookup;
+
 final class PublicEvents extends BaseEndpoint
 {
     public function handle(Request $request): Response
     {
-        // The path segment is the event id (current scheme — see
-        // Support::event_public_path()). Older links shared/printed/QR-coded
-        // before this change encoded the event's slug instead, so fall back
-        // to a slug lookup when the value isn't a bare id, keeping those
-        // links working indefinitely.
+        // The path segment is the event's permanent public_slug (current
+        // scheme — see Support::event_public_path() / the /e/{slug} pretty
+        // route). Older links shared/printed/QR-coded before that change
+        // encoded either the bare numeric id or the mutable `slug` instead;
+        // PublicEventLookup::resolve() tries all three, in that priority
+        // order, so every previously-issued link keeps working indefinitely.
         $idOrSlug = $this->params['idOrSlug'] ?? $request->query('id') ?? $request->query('slug');
         if (!$idOrSlug) {
             return $this->notFound('Event not found');
         }
-        $event = ctype_digit((string) $idOrSlug)
-            ? $this->db->one(
-                'SELECT e.*, v.name venue_name, v.address, v.city, v.state, v.phone venue_phone, v.website_url venue_website, r.address room_address
-                 FROM events e JOIN venues v ON v.id = e.venue_id LEFT JOIN resources r ON r.id = e.resource_id
-                 WHERE e.id = ? AND e.public_visibility = 1',
-                [(int) $idOrSlug]
-            )
-            : $this->db->one(
-                'SELECT e.*, v.name venue_name, v.address, v.city, v.state, v.phone venue_phone, v.website_url venue_website, r.address room_address
-                 FROM events e JOIN venues v ON v.id = e.venue_id LEFT JOIN resources r ON r.id = e.resource_id
-                 WHERE e.slug = ? AND e.public_visibility = 1',
-                [(string) $idOrSlug]
-            );
+        $event = PublicEventLookup::resolve($this->db, (string) $idOrSlug);
         if (!$event) {
             return $this->notFound('Event unavailable');
         }
-        // A room's own address (if set) takes priority over the venue's for
-        // the public page — e.g. an annex space at a different street number.
-        $event['address'] = Address::pick($event['room_address'] ?? null, $event['address'] ?? null);
         // Only surface tiers when we're actually selling them here (self-hosted
         // ticketing) and they're currently buyable — mirrors the filter
         // PublicTickets::listTypes() uses for the purchase widget itself, so the

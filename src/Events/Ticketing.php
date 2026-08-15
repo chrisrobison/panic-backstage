@@ -230,7 +230,7 @@ final class Ticketing extends BaseEndpoint
     private function dashboard(int $eventId): Response
     {
         $event = $this->db->one(
-            'SELECT id, title, ticketing_mode, ticket_url, ticket_system, capacity FROM events WHERE id = ?',
+            'SELECT id, title, ticketing_mode, ticket_url, ticket_system, capacity, public_slug FROM events WHERE id = ?',
             [$eventId]
         );
         if (!$event) {
