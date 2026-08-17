@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1012">
+  <meta name="description" content="Explore the documented performance history of Mabuhay Gardens.">
+  <title>Mabuhay Gardens Show Archive</title>
+  <link rel="icon" href="./assets/favicon/favicon.ico" sizes="any">
+  <link rel="stylesheet" href="./assets/vendor/fontawesome/all.min.css">
+  <link rel="stylesheet" href="./assets/archive/archive.css?v=1">
+</head>
+<body>
+  <a class="skip-link" href="#archive-main">Skip to archive explorer</a>
+  <mab-archive-app>
+    <div class="archive-boot" role="status">
+      <span class="archive-spinner" aria-hidden="true"></span>
+      <span>Loading Mabuhay Gardens archive…</span>
+    </div>
+  </mab-archive-app>
+  <script>window.panAutoload = { paths: [] };</script>
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@larcjs/core@3.0.1/pan.mjs"></script>
+  <script type="module" src="./assets/archive/archive-app.js?v=1"></script>
+  <script>
+    // The archive app registers itself from archive-app.js. Tell PAN where that
+    // definition lives so its optional autoloader never guesses a module path
+    // while the page's module graph is still evaluating.
+    var archiveScript = document.querySelector('script[src*="assets/archive/archive-app.js"]');
+    if (archiveScript) document.querySelector('mab-archive-app')?.setAttribute('data-module', archiveScript.src);
+  </script>
+</body>
+</html>

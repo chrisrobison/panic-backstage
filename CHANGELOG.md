@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** — [feat] Added historic show data explorer for Mabuhay Gardens
 - **Changed** — Removed file accidentally added.
 - **Documentation** `api` — Update the Feed url field's stale event.html?id= description
 - **Added** `events` — Add SEO-friendly /e/{slug} public event pages
