@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** — Removed file accidentally added.
 - **Documentation** `api` — Update the Feed url field's stale event.html?id= description
 - **Added** `events` — Add SEO-friendly /e/{slug} public event pages
 - **Documentation** `realtime` — Add implementation plan for a Rust connection broker
