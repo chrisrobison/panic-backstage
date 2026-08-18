@@ -22,7 +22,7 @@ function staffingTierFor(capacity) {
   for (const tier of STAFFING_TIERS) { if (cap <= tier.max) return tier.roles; }
   return STAFFING_TIERS[STAFFING_TIERS.length - 1].roles;
 }
-import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, getAppUser, publish, subscribe, api, apiUrl, getToken, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, openImageLightbox, $, $$ } from './core.js';
+import { setTokens, esc, titleCase, statuses, appUrl, assetUrl, assetPickerThumb, getAppUser, publish, subscribe, api, apiUrl, getToken, formData, broadcastEventData, refreshSection, eventDate, shortDate, isoDate, addDays, timeLabel, money, statusTone, statusLabel, badge, option, select, userSelect, ownerSelect, emptyState, helpLink, can, table, PanicElement, addToggle, bindAddToggle, openImageLightbox, openModal, $, $$ } from './core.js';
 
 // ---- Editable record lists: read-only review tables with hover-to-edit ----
 // These power the Tasks / Lineup / Run Sheet / Staffing / Guest / Open Items
@@ -715,35 +715,43 @@ class GuestListManager extends HTMLElement {
 }
 
 
+const ASSET_TYPES = ['flyer', 'poster', 'band_photo', 'logo', 'social_square', 'social_story', 'press_photo', 'qr_code', 'contract', 'other'];
+const assetTypeLabel = (type) => type === 'qr_code' ? 'QR Code' : titleCase(type);
+
+// One selectable row in the "attach an asset already uploaded elsewhere"
+// picker inside AssetManager.openCreateModal() — same shape as contracts.js's
+// contractAssetPickerRow, plus which event it currently lives on since this
+// list spans every event the caller can see (via GET /asset-library), not
+// just this one.
+function libraryAssetPickerRow(asset) {
+  return `<label class="checkbox-row contract-asset-row">
+    <input type="radio" name="source_asset_id" value="${esc(asset.id)}">
+    ${assetPickerThumb(asset)}
+    <span class="contract-asset-info"><strong>${esc(asset.title)}</strong><span class="muted small">${esc(assetTypeLabel(asset.asset_type))} · ${esc(asset.event_title || '')} · ${esc(String(asset.event_date || '').slice(0, 10))}</span></span>
+  </label>`;
+}
+
 class AssetManager extends HTMLElement {
   set data(data) {
     this.eventData = data;
     const assets = data.assets || [];
     const canManage = can(data, 'manage_assets');
     const canUpload = can(data, 'upload_assets');
-    const assetTypeLabel = (type) => type === 'qr_code' ? 'QR Code' : titleCase(type);
-    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets ${helpLink('assets', 'Assets &amp; Flyers')}</h2><div class="section-head-actions">${canUpload ? '<button class="secondary small" data-generate-flyer>✨ Generate flyer</button>' : ''}${canUpload ? '<button class="secondary small" data-generate-qr><i class="fa-solid fa-qrcode" aria-hidden="true"></i> Generate QR code</button>' : ''}${addToggle('Upload asset', canUpload)}</div></div>${canUpload ? `<form id="asset-form" class="row-form" data-add-form hidden><label>Title<input name="title" placeholder="Asset title"></label><label>Type${select('asset_type', ['flyer','poster','band_photo','logo','social_square','social_story','press_photo','qr_code','contract','other'], 'flyer')}</label><label>File<input type="file" name="asset" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.pdf" required></label><label>Notes<input name="notes" placeholder="Notes"></label><button>Upload asset</button><button type="button" class="secondary small" data-cancel-add>Cancel</button></form>` : ''}<div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img class="asset-image" src="${esc(assetUrl(asset.file_path))}" alt="${esc(asset.title)}" tabindex="0" role="button" aria-label="View ${esc(asset.title)} full size">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(assetTypeLabel(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div class="inline-actions"><a class="button small secondary" href="${esc(assetUrl(asset.file_path))}" download>Download</a>${canManage ? `<button class="small" data-approve="${esc(asset.id)}">Approve</button><button class="small secondary" data-reject="${esc(asset.id)}">Reject</button><button class="small danger" data-delete="${esc(asset.id)}">Delete</button>` : ''}</div></article>`).join('') || emptyState('No assets uploaded yet.')}</div></section>`;
+    this.innerHTML = `<section class="panel"><div class="section-head padded"><h2>Assets ${helpLink('assets', 'Assets &amp; Flyers')}</h2><div class="section-head-actions">${canUpload ? '<button class="secondary small" data-generate-flyer>✨ Generate flyer</button>' : ''}${canUpload ? '<button class="secondary small" data-generate-qr><i class="fa-solid fa-qrcode" aria-hidden="true"></i> Generate QR code</button>' : ''}${addToggle('Add asset', canUpload)}</div></div><div class="asset-grid">${assets.map((asset) => `<article class="asset-card">${/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename) ? `<img class="asset-image" src="${esc(assetUrl(asset.file_path))}" alt="${esc(asset.title)}" tabindex="0" role="button" aria-label="View ${esc(asset.title)} full size">` : '<span class="asset-thumb">PDF</span>'}<strong>${esc(asset.title)}</strong><span>${esc(assetTypeLabel(asset.asset_type))} - ${esc(titleCase(asset.approval_status))}</span><div class="inline-actions"><a class="button small secondary" href="${esc(assetUrl(asset.file_path))}" download>Download</a>${canManage ? `<button class="small" data-approve="${esc(asset.id)}">Approve</button><button class="small secondary" data-reject="${esc(asset.id)}">Reject</button><button class="small danger" data-delete="${esc(asset.id)}">Delete</button>` : ''}</div></article>`).join('') || emptyState('No assets uploaded yet.')}</div></section>`;
     this.bind();
   }
 
   bind() {
-    bindRecords(this);
+    bindRecords(this); // no-ops for the "+" toggle now that there's no [data-add-form] — the modal below owns that button's click.
+    if (can(this.eventData, 'upload_assets')) {
+      $('[data-add]', this)?.addEventListener('click', () => this.openCreateModal());
+    }
     $$('img.asset-image', this).forEach((img) => {
       const open = () => openImageLightbox(img.src, img.alt);
       img.addEventListener('click', open);
       img.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
       });
-    });
-    $('#asset-form', this)?.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      try {
-        await api(`/events/${this.eventData.event.id}/assets`, { method: 'POST', body: new FormData(event.target) });
-        publish('toast.show', { message: 'Asset uploaded.' });
-        await refreshSection(this);
-      } catch (err) {
-        publish('toast.show', { message: err.message || 'Upload failed.', tone: 'error' });
-      }
     });
     $$('[data-approve],[data-reject]', this).forEach((button) => button.addEventListener('click', async () => {
       const status = button.dataset.approve ? 'approved' : 'rejected';
@@ -852,6 +860,138 @@ class AssetManager extends HTMLElement {
         publish('toast.show', { message: err.message || 'QR code generation failed.', tone: 'error' });
         btn.disabled = false;
         btn.innerHTML = originalHtml;
+      }
+    });
+  }
+
+  // "Add asset" modal — per the site-wide convention, a table's add form
+  // always opens as a modal rather than an inline reveal. Two modes:
+  //   - upload new: the old inline form, now inside the modal, POSTing a
+  //     FormData with the file straight to POST /events/{id}/assets.
+  //   - use existing: browse GET /asset-library (every asset across every
+  //     event the caller can see) and attach a copy of one to this event —
+  //     built for recurring events that reuse the same flyer week after
+  //     week. Same POST endpoint, JSON body with source_asset_id instead of
+  //     a file; the server copies the file and inserts a fresh row (see
+  //     Events\Assets::attachExisting()).
+  openCreateModal() {
+    const eventId = this.eventData.event.id;
+    const { dialog, close } = openModal({
+      title: 'Add asset',
+      wide: true,
+      bodyHtml: `<form class="grid-form padded" data-form="new">
+        <div class="contract-mode-toggle wide" role="radiogroup" aria-label="How is this asset being added?">
+          <label class="contract-mode-option">
+            <input type="radio" name="_mode" value="upload" checked>
+            <span><strong>Upload new</strong><br><small>Upload a file from your device.</small></span>
+          </label>
+          <label class="contract-mode-option">
+            <input type="radio" name="_mode" value="library" data-library-toggle>
+            <span><strong>Use existing asset</strong><br><small>Reuse a flyer or file already uploaded to another event.</small></span>
+          </label>
+        </div>
+        <div data-upload-fields class="wide">
+          <label>Title <input name="title" placeholder="Asset title"></label>
+          <label>Type ${select('asset_type', ASSET_TYPES, 'flyer', assetTypeLabel)}</label>
+          <label class="wide">File <input type="file" name="asset" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.pdf" required></label>
+          <label class="wide">Notes <input name="notes" placeholder="Notes"></label>
+        </div>
+        <div data-library-fields class="wide" hidden>
+          <label class="wide">Search <input type="search" data-lib-q placeholder="Search by title, file name, or event…"></label>
+          <label>Type ${select('_lib_type', ['', ...ASSET_TYPES], '', (v) => v ? assetTypeLabel(v) : 'All types')}</label>
+          <div class="contract-asset-picker wide" data-lib-grid><p class="muted small">Loading…</p></div>
+          <div class="inline-actions wide" data-lib-pager></div>
+        </div>
+        <button data-save-btn>Save</button>
+      </form>`,
+    });
+
+    const form = $('[data-form="new"]', dialog);
+    const uploadFields = $('[data-upload-fields]', form);
+    const libraryFields = $('[data-library-fields]', form);
+    const libraryToggle = $('[data-library-toggle]', form);
+    const fileInput = $('input[name="asset"]', uploadFields);
+    const libGrid = $('[data-lib-grid]', form);
+    const libPager = $('[data-lib-pager]', form);
+
+    const libState = { q: '', asset_type: '', page: 1 };
+    let libraryLoaded = false;
+    let libRequestSeq = 0;
+
+    const loadLibrary = async () => {
+      // Guard against overlapping requests resolving out of order (rapid
+      // Prev/Next clicks, or the type filter's un-debounced 'change' racing
+      // a pending search) — only the response from the most recently issued
+      // request is allowed to paint the grid/pager.
+      const seq = ++libRequestSeq;
+      libGrid.innerHTML = '<p class="muted small">Loading…</p>';
+      try {
+        const params = new URLSearchParams({ page: String(libState.page), limit: '20' });
+        if (libState.q) params.set('q', libState.q);
+        if (libState.asset_type) params.set('asset_type', libState.asset_type);
+        const res = await api(`/asset-library?${params.toString()}`);
+        if (seq !== libRequestSeq) return;
+        const assets = res.assets || [];
+        const previouslyChecked = $('input[name="source_asset_id"]:checked', libGrid)?.value;
+        libGrid.innerHTML = assets.length ? assets.map(libraryAssetPickerRow).join('') : '<p class="muted small">No assets found.</p>';
+        if (previouslyChecked) {
+          const stillThere = $(`input[name="source_asset_id"][value="${CSS.escape(previouslyChecked)}"]`, libGrid);
+          if (stillThere) stillThere.checked = true;
+        }
+        libPager.innerHTML = res.pages > 1
+          ? `<button type="button" class="small secondary" data-lib-prev${libState.page <= 1 ? ' disabled' : ''}>&larr; Prev</button><span class="muted small">Page ${res.page} of ${res.pages}</span><button type="button" class="small secondary" data-lib-next${libState.page >= res.pages ? ' disabled' : ''}>Next &rarr;</button>`
+          : '';
+        $('[data-lib-prev]', libPager)?.addEventListener('click', () => { libState.page -= 1; loadLibrary(); });
+        $('[data-lib-next]', libPager)?.addEventListener('click', () => { libState.page += 1; loadLibrary(); });
+      } catch (error) {
+        if (seq !== libRequestSeq) return;
+        libGrid.innerHTML = `<p class="error-text small">${esc(error.message)}</p>`;
+      }
+    };
+
+    let debounceTimer;
+    $('[data-lib-q]', form).addEventListener('input', (event) => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => { libState.q = event.target.value.trim(); libState.page = 1; loadLibrary(); }, 250);
+    });
+    $('select[name="_lib_type"]', form).addEventListener('change', (event) => { libState.asset_type = event.target.value; libState.page = 1; loadLibrary(); });
+
+    $$('input[name="_mode"]', form).forEach((radio) => radio.addEventListener('change', () => {
+      const useLibrary = libraryToggle.checked;
+      uploadFields.hidden = useLibrary;
+      libraryFields.hidden = !useLibrary;
+      fileInput.required = !useLibrary;
+      // Disabled (not just hidden) fields are excluded from `new FormData(form)`
+      // — without this, a radio checked while browsing the library would still
+      // ride along as source_asset_id on an upload-mode submit and get routed
+      // to attachExisting() server-side instead of the file actually picked.
+      $$('input, select', libraryFields).forEach((el) => { el.disabled = !useLibrary; });
+      if (useLibrary && !libraryLoaded) { libraryLoaded = true; loadLibrary(); }
+    }));
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const btn = $('[data-save-btn]', form);
+      btn.disabled = true;
+      try {
+        if (libraryToggle.checked) {
+          const sourceId = $('input[name="source_asset_id"]:checked', form)?.value;
+          if (!sourceId) {
+            publish('toast.show', { message: 'Pick an asset to attach.', tone: 'error' });
+            btn.disabled = false;
+            return;
+          }
+          await api(`/events/${eventId}/assets`, { method: 'POST', body: JSON.stringify({ source_asset_id: sourceId }) });
+          publish('toast.show', { message: 'Asset attached.' });
+        } else {
+          await api(`/events/${eventId}/assets`, { method: 'POST', body: new FormData(form) });
+          publish('toast.show', { message: 'Asset uploaded.' });
+        }
+        close();
+        await refreshSection(this);
+      } catch (error) {
+        btn.disabled = false;
+        publish('toast.show', { message: error.message || 'Save failed.', tone: 'error' });
       }
     });
   }

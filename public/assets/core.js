@@ -74,6 +74,20 @@ function assetUrl(path = '') {
 }
 
 
+// Shared 44x44 thumbnail markup for a "which asset?" radio picker row — an
+// <img> for images, a small "PDF" placeholder tile otherwise. Pairs with the
+// `.contract-asset-row` / `.contract-asset-thumb` CSS (app.css). Used by both
+// contracts.js's contractAssetPickerRow() (pick a signed contract to attach)
+// and event-panels.js's libraryAssetPickerRow() (pick a library asset to
+// attach) so the two pickers can't visually drift apart.
+function assetPickerThumb(asset) {
+  const isImage = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(asset.filename || '');
+  return isImage
+    ? `<img class="contract-asset-thumb" src="${esc(assetUrl(asset.file_path))}" alt="">`
+    : '<span class="contract-asset-thumb asset-thumb">PDF</span>';
+}
+
+
 // Module-level cache of the signed-in user (incl. UI preferences from /me).
 // Set by AppShell once /me resolves; read by views that honor preferences
 // (e.g. EventsList default sort) without issuing another request.
@@ -857,4 +871,4 @@ function mdToHtml(text) {
   }).join('\n');
 }
 
-export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, _appUser, getAppUser, setAppUser, getAppCapabilities, setAppCapabilities, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox, openAssetFileViewer, openModal, timesOverlap, roomConflictIds, roomConflictDates, dataClient };
+export { TOKEN_KEY, REFRESH_KEY, getToken, getRefreshToken, setTokens, clearTokens, $, $$, esc, titleCase, scriptUrl, appBaseUrl, statuses, appUrl, apiUrl, assetUrl, assetPickerThumb, _appUser, getAppUser, setAppUser, getAppCapabilities, setAppCapabilities, publish, subscribe, api, tryRefresh, formData, broadcastEventData, refreshSection, eventDate, shortDate, longDate, eventDateRangeLabel, isoDate, addDays, timeLabel, money, statusTone, roomTone, STATUS_LABELS, statusLabel, badge, optedBadge, memberStatusBadge, option, select, userSelect, ownerSelect, venueSelectField, roomSelectField, emptyState, helpLink, can, eventRow, EVENT_COLUMNS, sortEvents, table, PanicElement, LoadingState, ToastStack, addToggle, bindAddToggle, mdToHtml, openImageLightbox, openAssetFileViewer, openModal, timesOverlap, roomConflictIds, roomConflictDates, dataClient };
