@@ -36,6 +36,11 @@ final class Assets extends BaseEndpoint
 
     private function create(Request $request, int $eventId): Response
     {
+        $sourceAssetId = (int) ($request->body('source_asset_id') ?? 0);
+        if ($sourceAssetId > 0) {
+            return $this->attachExisting($request, $eventId, $sourceAssetId);
+        }
+
         $file = $request->files()['asset'] ?? null;
         $uploadError = $file['error'] ?? UPLOAD_ERR_NO_FILE;
         if (!$file || $uploadError !== UPLOAD_ERR_OK) {
@@ -89,6 +94,76 @@ final class Assets extends BaseEndpoint
         ]);
         log_activity($this->db, $eventId, $this->userId(), 'asset uploaded', ['asset_id' => $id]);
         return $this->ok(['id' => $id, 'file_path' => $path]);
+    }
+
+    /**
+     * Attach a copy of an asset already uploaded to some OTHER event — the
+     * "browse existing assets" path from the Add Asset modal, mainly for
+     * recurring events that reuse the same flyer week after week.
+     *
+     * event_assets.event_id is NOT NULL and there is no join table, so one
+     * physical row can't belong to two events. We also can't have two rows
+     * share a single file on disk: delete() unlinks a row's file_path when
+     * that row is removed, which would silently break the other row. So this
+     * copies the file bytes into the target event's own storage dir under a
+     * fresh generated name and inserts a brand new event_assets row — same
+     * shape as a direct upload, just sourced from an existing file instead of
+     * $_FILES.
+     *
+     * $sourceAssetId is client-supplied, so it must be re-authorized here:
+     * requireEventCapability() above only confirmed the caller can upload
+     * INTO $eventId, not that they're allowed to SEE the source asset. We
+     * apply the exact same visibility rule as GET /asset-library
+     * (eventScopeSql) before touching the source row or its file.
+     */
+    private function attachExisting(Request $request, int $eventId, int $sourceAssetId): Response
+    {
+        [$scopeSql, $scopeParams] = $this->eventScopeSql('e');
+        $source = $this->db->one(
+            "SELECT a.* FROM event_assets a JOIN events e ON e.id = a.event_id WHERE a.id = ? AND $scopeSql",
+            array_merge([$sourceAssetId], $scopeParams)
+        );
+        if (!$source) {
+            return Response::json(['error' => 'Asset not found'], 404);
+        }
+        if ((int) $source['event_id'] === $eventId) {
+            return Response::json(['error' => 'That asset already belongs to this event'], 422);
+        }
+
+        $clientDir = TenantContext::clientDir($this->root);
+        $srcPath = (string) $source['file_path'];
+        if (!str_starts_with($srcPath, 'files/')) {
+            return Response::json(['error' => 'This asset uses a legacy storage path and cannot be reused — re-upload it instead'], 422);
+        }
+        $base = realpath($clientDir);
+        $srcFile = $base ? realpath($clientDir . '/' . substr($srcPath, 6)) : false;
+        if (!$srcFile || !$base || !str_starts_with($srcFile, $base . DIRECTORY_SEPARATOR) || !is_file($srcFile)) {
+            return Response::json(['error' => 'Source file is missing on disk'], 404);
+        }
+
+        $ext = strtolower(pathinfo($srcFile, PATHINFO_EXTENSION));
+        $base2 = slugify(pathinfo((string) $source['original_filename'], PATHINFO_FILENAME));
+        $filename = time() . '-' . bin2hex(random_bytes(4)) . '-' . $base2 . '.' . $ext;
+        $dir = $clientDir . '/assets/events/' . $eventId;
+        $newPath = 'files/assets/events/' . $eventId . '/' . $filename;
+
+        try {
+            ensure_dir($dir);
+        } catch (\RuntimeException $e) {
+            error_log('Assets::attachExisting could not prepare storage for event ' . $eventId . ': ' . $e->getMessage());
+            return Response::json(['error' => 'Could not store attached asset'], 500);
+        }
+        if (!copy($srcFile, $dir . '/' . $filename)) {
+            return Response::json(['error' => 'Could not copy asset'], 500);
+        }
+
+        $title = $request->body('title') ?: $source['title'];
+        $assetType = $request->body('asset_type') ?: $source['asset_type'];
+        $id = $this->db->insert('INSERT INTO event_assets (event_id, asset_type, title, filename, original_filename, file_path, uploaded_by_user_id, approval_status, notes, generation_source, generation_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $eventId, $assetType, $title, $filename, $source['original_filename'], $newPath, $this->userId(), 'needs_review', $source['notes'], $source['generation_source'], $source['generation_prompt'],
+        ]);
+        log_activity($this->db, $eventId, $this->userId(), 'asset attached from library', ['asset_id' => $id, 'source_asset_id' => $sourceAssetId]);
+        return $this->ok(['id' => $id, 'file_path' => $newPath]);
     }
 
     private function update(Request $request, int $eventId, int $assetId): Response
