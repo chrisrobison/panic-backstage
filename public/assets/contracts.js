@@ -451,7 +451,7 @@ class ContractEditor extends PanicElement {
     // every occurrence, not just the event named in forLabel above.
     const seriesNote = contract.series_id ? ' <span class="badge status-blue">Covers entire series</span>' : '';
     this.innerHTML = `<section class="event-top">
-      <div><a class="back-link" href="${backHref}">&lt;- Back</a><h1>${esc(contract.title)}</h1>
+      <div><a class="back-link" href="${backHref}">&lt;- Back</a><h1${this.manage ? ' class="contract-title-edit" contenteditable="true" spellcheck="false" data-title-edit title="Click to rename"' : ''}>${esc(contract.title)}</h1>
         <p class="subtle">${esc(titleCase(contract.contract_type))} · ${contractStatusBadge(contract.status)}${forLabel}${seriesNote}</p></div>
       <div class="event-actions">
         <button class="secondary" data-act="pdf">⬇ Download PDF</button>
@@ -716,6 +716,7 @@ class ContractEditor extends PanicElement {
       li.addEventListener('click', () => this.focusDealField(li.dataset.field));
     });
 
+    this.wireTitleEdit($('[data-title-edit]', this));
     this.wirePreview($('[data-preview]', this));
   }
 
@@ -752,6 +753,49 @@ class ContractEditor extends PanicElement {
         }
       });
     });
+  }
+
+  /**
+   * Wire the inline-editable contract title (the <h1>). Titles are normally
+   * auto-derived server-side from counterparty + show type (see
+   * ContractService::composeTitle()) and stay in sync as those change — but
+   * once someone hand-edits the title here, the server leaves it alone from
+   * then on (Contracts::update() only re-derives a title that still matches
+   * what auto-generation would have produced).
+   */
+  wireTitleEdit(h1) {
+    if (!h1) return;
+    h1.addEventListener('input', () => { h1.dataset.dirty = '1'; });
+    // Single-line field: Enter commits instead of inserting a line break.
+    h1.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); h1.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); h1.textContent = this.data.contract.title; delete h1.dataset.dirty; h1.blur(); }
+    });
+    h1.addEventListener('blur', () => {
+      if (!h1.dataset.dirty) return;
+      const value = h1.textContent.trim();
+      if (!value) {
+        h1.textContent = this.data.contract.title; // titles can't be blank — revert
+        delete h1.dataset.dirty;
+        publish('toast.show', { message: 'Title cannot be blank.', tone: 'error' });
+        return;
+      }
+      if (value === this.data.contract.title) { delete h1.dataset.dirty; return; }
+      this.saveTitle(value, h1);
+    });
+  }
+
+  async saveTitle(title, h1) {
+    try {
+      await api(`/contracts/${this.contractId}`, { method: 'PATCH', body: JSON.stringify({ title }) });
+      this.data.contract.title = title;
+      delete h1.dataset.dirty;
+      publish('toast.show', { message: 'Title updated.' });
+    } catch (error) {
+      h1.textContent = this.data.contract.title; // revert on failure
+      delete h1.dataset.dirty;
+      publish('toast.show', { message: error.message, tone: 'error' });
+    }
   }
 
   async action(fn, message) {

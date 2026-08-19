@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `contracts` — Make the contract title editable inline
 - **Fixed** `contracts` — Use the booked room's own name and address in contracts
 - **Fixed** `contracts` — Derive contract titles server-side, never "undefined"
 - **Fixed** `tests` — Root-cause and fix the room-conflict test's stale-cache race

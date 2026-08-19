@@ -233,6 +233,12 @@ final class Contracts extends BaseEndpoint
     private function update(Request $request, array $contract): Response
     {
         $b = $request->body();
+        if (array_key_exists('title', $b)) {
+            $b['title'] = trim((string) $b['title']);
+            if ($b['title'] === '') {
+                return Response::json(['error' => 'Title cannot be blank.'], 422);
+            }
+        }
         $fields = array_merge(
             ['title', 'contract_type', 'counterparty_name', 'counterparty_org', 'counterparty_email', 'internal_notes', 'venue_id'],
             ContractRenderer::DEAL_COLUMNS

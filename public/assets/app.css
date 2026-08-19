@@ -3626,6 +3626,15 @@ body.lightbox-open { overflow: hidden; }
   font-size: 10px;
   vertical-align: middle;
 }
+/* Inline-editable contract title */
+.contract-title-edit[contenteditable] { cursor: text; border-radius: 4px; display: inline-block; transition: outline .12s, background .12s; }
+.contract-title-edit[contenteditable]:hover { outline: 1px dashed #c8d5e8; }
+.contract-title-edit[contenteditable]:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  background: #fafcff;
+  padding: 0 4px;
+}
 /* Field flash highlight — triggered on focusDealField */
 @keyframes field-highlight {
   0%   { box-shadow: 0 0 0 0   rgba(66,133,244,.55); }
