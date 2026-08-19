@@ -21,6 +21,11 @@ namespace Panic;
  * `address` for display purposes (tickets, contracts, the public event page,
  * emails, etc. — see Address::pick()). Leaving it blank means the room
  * simply uses the venue's address, so existing rooms are unaffected.
+ *
+ * A room's `contract_name` is the same idea for the *name* shown on
+ * generated contracts — for a room that does business under a different
+ * name than the venue (e.g. an annex with its own address, see migration
+ * 106). Leaving it blank means contracts use the venue's own name.
  */
 final class Venues extends BaseEndpoint
 {
@@ -171,14 +176,15 @@ final class Venues extends BaseEndpoint
             )['n'] ?? 1);
 
         $id = $this->db->insert(
-            'INSERT INTO resources (venue_id, name, slug, description, address, capacity, zone, sort_order, active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)',
+            'INSERT INTO resources (venue_id, name, slug, description, address, contract_name, capacity, zone, sort_order, active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
             [
                 $venueId,
                 $name,
                 $this->uniqueSlug($venueId, $this->slugify($name)),
                 $this->cleanText($body['description'] ?? null),
                 $this->cleanText($body['address'] ?? null),
+                $this->cleanText($body['contract_name'] ?? null),
                 $this->cleanInt($body['capacity'] ?? null),
                 $this->cleanZone($body['zone'] ?? null),
                 $sortOrder,
@@ -224,6 +230,10 @@ final class Venues extends BaseEndpoint
         if (array_key_exists('address', $body)) {
             $set[]    = '`address` = ?';
             $params[] = $this->cleanText($body['address']);
+        }
+        if (array_key_exists('contract_name', $body)) {
+            $set[]    = '`contract_name` = ?';
+            $params[] = $this->cleanText($body['contract_name']);
         }
         if (array_key_exists('capacity', $body)) {
             $set[]    = '`capacity` = ?';

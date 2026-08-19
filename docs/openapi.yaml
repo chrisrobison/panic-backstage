@@ -4279,6 +4279,15 @@ components:
             address is shown (tickets, contracts, the public event page,
             emails, syndication feeds). Falls back to the venue's address
             when null/empty — see Address::pick() in src/Address.php.
+        contract_name:
+          type: string
+          nullable: true
+          description: >-
+            Public/legal name override for this room, used in place of the
+            parent venue's name on generated contracts (e.g. a room that
+            does business under its own name at its own address — see the
+            `address` field above). Falls back to the venue's name when
+            null/empty.
         capacity:
           type: integer
           nullable: true
@@ -4310,6 +4319,10 @@ components:
           type: string
           nullable: true
           description: Street address override; falls back to the venue's address when omitted.
+        contract_name:
+          type: string
+          nullable: true
+          description: Name override for generated contracts; falls back to the venue's name when omitted.
         capacity:
           type: integer
           nullable: true
@@ -4333,6 +4346,10 @@ components:
           type: string
           nullable: true
           description: Street address override; falls back to the venue's address when null/empty.
+        contract_name:
+          type: string
+          nullable: true
+          description: Name override for generated contracts; falls back to the venue's name when null/empty.
         capacity:
           type: integer
           nullable: true

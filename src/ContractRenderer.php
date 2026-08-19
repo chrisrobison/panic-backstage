@@ -111,9 +111,11 @@ final class ContractRenderer
             $cond[$k] = $v;
         }
 
-        $venueName    = $venue['name'] ?? ($event['venue_name'] ?? '');
-        // The room's own address (if set) overrides the venue's — see
-        // ContractService::eventVenueFor(), which stashes it as room_address.
+        // The room's own name/address (if set) override the venue's — see
+        // ContractService::eventVenueFor(), which stashes them as
+        // room_name/room_address (Address::pick() is a generic "prefer the
+        // room's value, fall back to the venue's" helper, not address-specific).
+        $venueName    = trim((string) (Address::pick($venue['room_name'] ?? null, $venue['name'] ?? null) ?? ($event['venue_name'] ?? '')));
         $venueAddress = trim((string) (Address::pick($venue['room_address'] ?? null, $venue['address'] ?? null) ?? ''));
         $venueCity    = $venue['city'] ?? '';
         $venueState   = $venue['state'] ?? '';
@@ -449,7 +451,7 @@ final class ContractRenderer
         return $startFmt . ' – ' . self::formatDate($end);
     }
 
-    private static function titleize(string $value): string
+    public static function titleize(string $value): string
     {
         return ucwords(str_replace(['_', '-'], ' ', $value));
     }

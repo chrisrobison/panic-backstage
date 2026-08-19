@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `contracts` — Use the booked room's own name and address in contracts
 - **Fixed** `contracts` — Derive contract titles server-side, never "undefined"
 - **Fixed** `tests` — Root-cause and fix the room-conflict test's stale-cache race
 - **Fixed** `ci` — Enable realtime in CI and fix two flaky UI test races
