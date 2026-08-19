@@ -75,7 +75,7 @@ final class Contracts extends BaseEndpoint
     private function create(Request $request, int $eventId): Response
     {
         $b = $request->body();
-        $event = $this->db->one('SELECT venue_id, title, series_id FROM events WHERE id = ?', [$eventId]);
+        $event = $this->db->one('SELECT venue_id, title, event_type, series_id FROM events WHERE id = ?', [$eventId]);
         // Only takes effect when this event is actually part of a series —
         // an apply_to_series flag on a standalone event is silently ignored
         // rather than erroring, since the UI checkbox that sends it is only
@@ -109,7 +109,12 @@ final class Contracts extends BaseEndpoint
             'venue_id'           => $event['venue_id'] ?? null,
             'template_id'        => $b['template_id'] ?? null,
             'contract_type'      => $b['contract_type'] ?? 'other',
-            'title'              => trim((string) ($b['title'] ?? '')) ?: (($event['title'] ?? 'Event') . ' — Contract'),
+            // No explicit title from the caller (the event wizard doesn't send
+            // one) means ContractService::create() derives it from the
+            // counterparty + show type below — see composeTitle().
+            'title'              => $b['title'] ?? null,
+            'event_type'         => $event['event_type'] ?? null,
+            'fallback_title'     => $event['title'] ?? null,
             'counterparty_name'  => $b['counterparty_name'] ?? null,
             'counterparty_org'   => $b['counterparty_org'] ?? null,
             'counterparty_email' => $b['counterparty_email'] ?? null,

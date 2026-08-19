@@ -154,11 +154,12 @@ final class Contracts extends BaseEndpoint
         $eventId = !empty($b['event_id']) ? (int) $b['event_id'] : null;
         $venueId = !empty($b['venue_id']) ? (int) $b['venue_id'] : null;
 
+        $event = null;
         if ($eventId) {
             if ($denied = $this->requireEventCapability($eventId, 'manage_contracts')) {
                 return $denied;
             }
-            $event = $this->db->one('SELECT venue_id, title FROM events WHERE id = ?', [$eventId]);
+            $event = $this->db->one('SELECT venue_id, title, event_type FROM events WHERE id = ?', [$eventId]);
             if ($event && !$venueId) {
                 $venueId = (int) $event['venue_id'];
             }
@@ -171,7 +172,12 @@ final class Contracts extends BaseEndpoint
             'venue_id'           => $venueId,
             'template_id'        => $b['template_id'] ?? null,
             'contract_type'      => $b['contract_type'] ?? 'other',
-            'title'              => $b['title'] ?? '',
+            // Explicit title (e.g. the standalone "New venue-level contract"
+            // form) wins; otherwise ContractService::create() derives one
+            // from the counterparty + show type — see composeTitle().
+            'title'              => $b['title'] ?? null,
+            'event_type'         => $event['event_type'] ?? null,
+            'fallback_title'     => $event['title'] ?? null,
             'counterparty_name'  => $b['counterparty_name'] ?? null,
             'counterparty_org'   => $b['counterparty_org'] ?? null,
             'counterparty_email' => $b['counterparty_email'] ?? null,
@@ -244,6 +250,35 @@ final class Contracts extends BaseEndpoint
             $set[] = 'variables_json = ?';
             $vals[] = is_array($v) ? json_encode($v) : (is_string($v) && $v !== '' ? $v : '{}');
         }
+
+        // Keep an auto-derived title ("Name — Org — Show Type") in sync when
+        // the counterparty changes and the caller didn't also send a new
+        // title of its own. A title someone deliberately typed (e.g. "Thursday
+        // Swing Residency", an automation's "Quote — Event Name") is left
+        // alone — detected by it no longer matching what composeTitle() would
+        // have produced from the pre-edit counterparty/show type, unless it's
+        // carrying the old "undefined — ..." bug, which always gets fixed.
+        if (!array_key_exists('title', $b) && (array_key_exists('counterparty_name', $b) || array_key_exists('counterparty_org', $b))) {
+            $eventType = null;
+            $eventTitle = null;
+            if (!empty($contract['event_id'])) {
+                $ev = $this->db->one('SELECT title, event_type FROM events WHERE id = ?', [(int) $contract['event_id']]);
+                $eventType = $ev['event_type'] ?? null;
+                $eventTitle = $ev['title'] ?? null;
+            }
+            $priorDerived = ContractService::composeTitle($contract['counterparty_name'] ?? null, $contract['counterparty_org'] ?? null, $eventType, $eventTitle);
+            $looksBroken = stripos(trim((string) ($contract['title'] ?? '')), 'undefined') === 0;
+            if ($looksBroken || (string) $contract['title'] === $priorDerived) {
+                $set[] = 'title = ?';
+                $vals[] = ContractService::composeTitle(
+                    array_key_exists('counterparty_name', $b) ? $b['counterparty_name'] : ($contract['counterparty_name'] ?? null),
+                    array_key_exists('counterparty_org', $b) ? $b['counterparty_org'] : ($contract['counterparty_org'] ?? null),
+                    $eventType,
+                    $eventTitle
+                );
+            }
+        }
+
         if ($set) {
             $vals[] = (int) $contract['id'];
             $this->db->run('UPDATE contracts SET ' . implode(', ', $set) . ' WHERE id = ?', $vals);

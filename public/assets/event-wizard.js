@@ -1507,7 +1507,7 @@ class EventContractWizard extends PanicElement {
     }
 
     // 3 ── Create the contract draft ───────────────────────────────────────
-    const contractPayload = this._buildContractPayload(createdEvent);
+    const contractPayload = this._buildContractPayload();
     const createdContract = await api(`/events/${createdEvent.id}/contracts`, {
       method: 'POST',
       body:   JSON.stringify(contractPayload),
@@ -1569,7 +1569,7 @@ class EventContractWizard extends PanicElement {
       savedContract = { ...this._sourceContract, ...patch };
     } else if (this.wizardData.deal_type) {
       // No existing contract on this event yet — create one, same as create mode.
-      const contractPayload = this._buildContractPayload(savedEvent);
+      const contractPayload = this._buildContractPayload();
       const createdContract = await api(`/events/${eventId}/contracts`, {
         method: 'POST',
         body:   JSON.stringify(contractPayload),
@@ -1623,11 +1623,15 @@ class EventContractWizard extends PanicElement {
     return payload;
   }
 
-  _buildContractPayload(event) {
-    const d        = this.wizardData;
-    const dealType = DEAL_TYPES.find((dt) => dt.value === d.deal_type);
-    const payload  = {
-      title:         `${event.title} — ${dealType?.label || 'Contract'}`,
+  _buildContractPayload() {
+    // No `title` here on purpose: the server derives it from the
+    // counterparty name/org + the event's show type (see
+    // ContractService::composeTitle()), which also keeps it correct after
+    // edits. Building the string here used to read the just-created event's
+    // API response for its title — but that response only ever contains
+    // `{id}`, so the title silently came out as "undefined — <deal type>".
+    const d       = this.wizardData;
+    const payload = {
       contract_type: d.deal_type || 'talent_buy',
     };
     if (d.counterparty_name)  payload.counterparty_name  = d.counterparty_name;

@@ -30,7 +30,7 @@ final class ContractService
                 $d['venue_id'] ?? null,
                 $templateId,
                 $type,
-                trim((string) ($d['title'] ?? '')) ?: 'Untitled Contract',
+                self::resolveTitle($d),
                 $d['counterparty_name'] ?? null,
                 $d['counterparty_org'] ?? null,
                 $d['counterparty_email'] ?? null,
@@ -41,6 +41,66 @@ final class ContractService
             self::buildSectionsFromTemplate($db, $id, $templateId);
         }
         return $id;
+    }
+
+    /**
+     * Resolve the title to store for a new contract: use the caller's own
+     * title if it gave one (e.g. an admin-typed venue-level contract name,
+     * or an automation's "Quote — Event Name"), otherwise derive one from
+     * the deal itself via composeTitle(). $d may carry `event_type` and
+     * `fallback_title` (the linked event's own title) as extra hints
+     * alongside `title`/`counterparty_name`/`counterparty_org` — callers
+     * that don't have an event (venue-level contracts) may omit them.
+     */
+    private static function resolveTitle(array $d): string
+    {
+        return self::cleanTitlePart($d['title'] ?? null)
+            ?? self::composeTitle(
+                $d['counterparty_name'] ?? null,
+                $d['counterparty_org'] ?? null,
+                $d['event_type'] ?? null,
+                $d['fallback_title'] ?? null
+            );
+    }
+
+    /**
+     * Build a contract's display title from the deal itself: counterparty
+     * name, counterparty organization, and the event's show type (falling
+     * back to the linked event's own title, then a generic default, so the
+     * NOT NULL `title` column always gets something sane). This is a pure
+     * function of those inputs so Contracts::update() can also call it to
+     * check whether a *stored* title still matches what would have been
+     * derived from the pre-edit values — i.e. whether it's safe to refresh
+     * automatically, versus one a person deliberately typed.
+     */
+    public static function composeTitle(?string $name, ?string $org, ?string $eventType, ?string $fallbackEventTitle = null): string
+    {
+        $parts = array_values(array_filter([
+            self::cleanTitlePart($name),
+            self::cleanTitlePart($org),
+            $eventType ? ContractRenderer::titleize($eventType) : null,
+        ], static fn ($p) => $p !== null));
+        if ($parts) {
+            return implode(' — ', $parts);
+        }
+        return self::cleanTitlePart($fallbackEventTitle) ?? 'Untitled Contract';
+    }
+
+    /**
+     * Trim a candidate title fragment, treating blank and the classic
+     * JS string-interpolation bug of a literal "undefined"/"null" as
+     * absent rather than storing them verbatim.
+     */
+    private static function cleanTitlePart(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        $value = trim($value);
+        if ($value === '' || strcasecmp($value, 'undefined') === 0 || strcasecmp($value, 'null') === 0) {
+            return null;
+        }
+        return $value;
     }
 
     /**
@@ -88,11 +148,16 @@ final class ContractService
             $venue = $db->one('SELECT * FROM venues WHERE id = ?', [(int) $event['venue_id']]);
         }
         // If the event is booked into a specific room and that room has its
-        // own address, stash it on $venue so ContractRenderer::context() can
-        // prefer it over the venue's address — the only place this is read.
+        // own address and/or contract name, stash them on $venue so
+        // ContractRenderer::context() can prefer them over the venue's own
+        // name/address — the only place these are read. Two rooms in the
+        // same venue can be genuinely different buildings/addresses (e.g.
+        // Mabuhay Gardens' upstairs room does business as "Broadway
+        // Studios" at its own address) — see migrations 088 and 106.
         if ($venue !== null && $event && !empty($event['resource_id'])) {
-            $room = $db->one('SELECT address FROM resources WHERE id = ?', [(int) $event['resource_id']]);
+            $room = $db->one('SELECT address, contract_name FROM resources WHERE id = ?', [(int) $event['resource_id']]);
             $venue['room_address'] = $room['address'] ?? null;
+            $venue['room_name'] = $room['contract_name'] ?? null;
         }
         return [$event, $venue];
     }
