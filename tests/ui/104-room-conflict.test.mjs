@@ -97,14 +97,21 @@ test('room double-booking is flagged red on the calendar, agenda, and dashboard'
 
   try {
     // --- Calendar grid view ---
-    // Force a real remount (not just a same-hash no-op — location.hash
-    // assignment to its current value doesn't fire 'hashchange', so a bare
-    // goto('#calendar') would reuse whatever pb-event-calendar instance an
-    // earlier test already mounted, with event data fetched *before* the two
-    // fixtures above existed) so the calendar's fetch is guaranteed to see them.
-    await page.goto('#dashboard');
-    await page.until(`document.querySelector('pb-events-upcoming .upcoming-page')`);
-    await page.goto('#calendar');
+    // A hard reload — not just a fresh component remount — is required here.
+    // A bare hash bounce (#dashboard -> #calendar) does remount a brand-new
+    // pb-event-calendar and does call api() fresh, but api() routes through
+    // data-worker.js's Worker, which is NOT torn down by a same-document
+    // hash change and caches GET responses for CACHE_MAX_AGE_MS (2s),
+    // keyed on the exact URL. This test's fixtures are created via a raw
+    // fetch() above (bypassing api() and its cache-invalidation-on-mutation
+    // entirely), so if an earlier test's calendar view happened to warm the
+    // cache entry for this same month's date-range query within the last
+    // 2s, the "fresh" remount's fetch would silently serve that stale,
+    // pre-fixture response — this is exactly what caused this test's
+    // intermittent failures. A real reload destroys the Worker (and its
+    // cache) along with everything else, guaranteeing the fetch below is
+    // genuinely fresh.
+    await page.hardReload('calendar');
     await page.until(`document.querySelector('.calendar-month-block')`);
     const [targetYear, targetMonth] = targetIso.split('-').map(Number);
     await page.eval(`document.querySelector('pb-event-calendar')._goToMonth(new Date(${targetYear}, ${targetMonth - 1}, 1))`);

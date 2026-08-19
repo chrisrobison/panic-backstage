@@ -9,20 +9,15 @@
 // cleanup still happens even if a UI assertion above it fails.
 import { test, assert } from './harness.mjs';
 
-// A hard, force-fresh reload — needed rather than page.navigate() here
-// because CDP's Page.navigate to a URL identical to the current one (as
-// happens when this test reloads to the same #dashboard hash the run.mjs
-// bootstrap already visited) is a same-document no-op in Chromium: it
-// resolves Page.loadEventFired without re-executing app.js, so the shell's
-// in-memory nav_items would silently stay whatever it was at first boot.
-// Page.reload with ignoreCache always re-fetches and re-runs everything,
-// which is exactly what's needed to prove the sidebar re-derives from a
-// change just made through the Navigation Manager.
-async function hardReload(page, hash) {
-  if (hash) await page.eval(`location.hash = ${JSON.stringify(hash)}`);
-  await page.cdp.send('Page.reload', { ignoreCache: true });
-  await page.cdp.onceEvent('Page.loadEventFired');
-}
+// page.hardReload() (browser.mjs) is needed here rather than page.navigate()
+// or page.goto(): CDP's Page.navigate to a URL identical to the current one
+// (as happens when this test reloads to the same #dashboard hash the
+// run.mjs bootstrap already visited) is a same-document no-op in Chromium —
+// it resolves Page.loadEventFired without re-executing app.js, so the
+// shell's in-memory nav_items would silently stay whatever it was at first
+// boot. A real reload (ignoreCache) always re-fetches and re-runs
+// everything, which is exactly what's needed to prove the sidebar
+// re-derives from a change just made through the Navigation Manager.
 
 async function apiFetch(page, path, opts = {}) {
   const token = page.accessToken;
@@ -83,7 +78,7 @@ test('Creating and hiding a nav item changes the real sidebar', async (page) => 
     // event fires right around when that fetch has just been kicked off, so
     // waiting merely for '.side-nav' to exist races ahead of renderNav() and
     // reads it back empty. Wait for the actual post-render content instead.
-    await hardReload(page, 'dashboard');
+    await page.hardReload('dashboard');
     await page.until(`document.querySelector('.side-nav')?.textContent.includes(${JSON.stringify(LABEL)})`, 8000);
     assert.includes(await page.text('.side-nav'), LABEL, 'new nav item renders in the real sidebar — the shell derives its nav from nav_items');
 
@@ -115,7 +110,7 @@ test('Creating and hiding a nav item changes the real sidebar', async (page) => 
     await page.click('[data-nav-edit-form] button[type="submit"]');
     await page.until(`document.querySelector('[name="visible"]') && document.querySelector('[name="visible"]').checked === false`);
 
-    await hardReload(page, 'dashboard');
+    await page.hardReload('dashboard');
     // Same race as above — wait for a stable, always-present nav link to
     // confirm renderNav() has actually run before reading '.side-nav' for
     // an absence, otherwise this assertion could pass vacuously against

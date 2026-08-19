@@ -241,6 +241,27 @@ export function makePage(cdp, base) {
     async goto(hash) { await cdp.eval(`location.hash=${JSON.stringify(hash)}`); await sleep(300); },
     async navigate(url) { await cdp.send('Page.navigate', { url }); await cdp.onceEvent('Page.loadEventFired'); },
 
+    // A REAL browser reload — not a same-document hash change. goto()'s
+    // location.hash assignment only remounts the SPA's own components; it
+    // never tears down data-client.js's Worker, so data-worker.js's GET
+    // response cache (CACHE_MAX_AGE_MS, currently 2000ms) survives across it
+    // untouched. That cache is only invalidated by a *mutation that goes
+    // through api()*; a fixture created via this file's own raw fetch()
+    // helpers (bypassing api()/the worker entirely, as most test fixtures
+    // here do) never triggers that invalidation. So a test that creates a
+    // fixture via raw fetch() and then needs the SPA to see it moments later
+    // can hit a real, intermittent stale-cache race via goto() alone —
+    // exactly what broke 104-room-conflict.test.mjs's calendar assertion.
+    // hardReload() sidesteps this by destroying the whole document (and with
+    // it the Worker and its cache), guaranteeing every fetch after this
+    // resolves is genuinely fresh. Session survives (cookies + localStorage
+    // persist across a reload); only in-memory state like the cache doesn't.
+    async hardReload(hash) {
+      if (hash) await cdp.eval(`location.hash = ${JSON.stringify(hash)}`);
+      await cdp.send('Page.reload', { ignoreCache: true });
+      await cdp.onceEvent('Page.loadEventFired');
+    },
+
     // Override the layout viewport (CSS media queries respond immediately, no
     // reload). Use for responsive tests; resetViewport() returns to desktop.
     async setViewport(width, height, mobile = true) {
