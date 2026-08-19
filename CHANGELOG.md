@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** `realtime` — Add a www-data-only FPM pool option for panicbooking.com
 - **Added** `contracts` — Make the contract title editable inline
 - **Fixed** `contracts` — Use the booked room's own name and address in contracts
 - **Fixed** `contracts` — Derive contract titles server-side, never "undefined"
