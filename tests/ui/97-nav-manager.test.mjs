@@ -77,8 +77,14 @@ test('Creating and hiding a nav item changes the real sidebar', async (page) => 
     assert.includes(await page.text('.nav-manager-list'), LABEL, 'new item appears in the Navigation Items list');
 
     // --- it shows up in the REAL app shell sidebar after a reload ---
+    // renderShell() writes an empty <nav class="side-nav"> synchronously,
+    // then renderNav() fills it in only after the async /me + /nav-items
+    // round trip resolves (see app.js's connect()) — hardReload()'s load
+    // event fires right around when that fetch has just been kicked off, so
+    // waiting merely for '.side-nav' to exist races ahead of renderNav() and
+    // reads it back empty. Wait for the actual post-render content instead.
     await hardReload(page, 'dashboard');
-    await page.until(`document.querySelector('.side-nav')`);
+    await page.until(`document.querySelector('.side-nav')?.textContent.includes(${JSON.stringify(LABEL)})`, 8000);
     assert.includes(await page.text('.side-nav'), LABEL, 'new nav item renders in the real sidebar — the shell derives its nav from nav_items');
 
     // --- add a child under it from the edit pane's "+ Add Child Item" ---
@@ -110,7 +116,11 @@ test('Creating and hiding a nav item changes the real sidebar', async (page) => 
     await page.until(`document.querySelector('[name="visible"]') && document.querySelector('[name="visible"]').checked === false`);
 
     await hardReload(page, 'dashboard');
-    await page.until(`document.querySelector('.side-nav')`);
+    // Same race as above — wait for a stable, always-present nav link to
+    // confirm renderNav() has actually run before reading '.side-nav' for
+    // an absence, otherwise this assertion could pass vacuously against
+    // the pre-render empty container.
+    await page.until(`document.querySelector('.side-nav a[data-nav="dashboard"]')`);
     const sidebarText = await page.text('.side-nav');
     assert.notOk(sidebarText.includes(LABEL), 'hidden nav item no longer renders in the real sidebar');
   } finally {

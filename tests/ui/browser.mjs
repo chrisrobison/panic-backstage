@@ -165,11 +165,63 @@ export async function launchBrowser({ cdpPort, scale = 1, width = 1440, height =
   return { cdp, chrome, ws, close };
 }
 
-// Seed JWTs into localStorage on the app origin so the SPA loads authenticated.
+// Seed JWTs into localStorage on the app origin so the SPA loads authenticated,
+// AND seed the matching HttpOnly session cookies (see src/SessionCookies.php)
+// a real login's Set-Cookie response would have set. Ordinary api() traffic
+// only ever needs the localStorage token (it attaches its own Authorization
+// header), but EventSource — used by the realtime SSE connection
+// (src/Realtime.php, data-worker.js's openEventSource()) — cannot send
+// custom headers per spec, so it authenticates via the `backstage_access`
+// cookie exclusively. Without this, every realtime UI test would see the
+// stream 401 and the connection sit in 'disconnected'/'error' forever, even
+// though ordinary api() calls work fine.
+//
+// Cookie attributes are set explicitly here rather than mirroring
+// SessionCookies::attributes() exactly: that method derives `Secure` from
+// APP_URL's scheme, not the live request's — on this repo's own dev
+// checkout APP_URL is the production https:// URL even when testing against
+// a local http://127.0.0.1 dev server, so a real login flow's own
+// Set-Cookie would (correctly, per spec) be rejected by the browser as
+// insecure-context. Forcing secure:false here is test-harness-only and
+// intentionally does not attempt to reproduce that mismatch.
+//
+// ⚠ Known local-only side effect: on THIS checkout (a live docroot whose
+// .env keeps APP_URL pointed at the real https://panicbooking.com/backstage
+// domain rather than the local test server), seeding this cookie makes the
+// 74-door-scanner-*.test.mjs tests fail with a 403 from scanner.js's
+// cookie-fallback POSTs (scanner.js never sends an Authorization header —
+// it's meant to work for anonymous door staff with no session — so once a
+// cookie is present, Kernel::authenticate() picks it up, and
+// Kernel::hasSameOrigin() then rejects the request because it compares the
+// real Origin header against APP_URL's *configured* host, not the actual
+// serving host — panicbooking.com/backstage vs. 127.0.0.1:8099 never match
+// here). This is NOT a bug in the cookie seeding above: it's purely an
+// artifact of this checkout's .env pointing at production while testing
+// locally. CI's own .env (see .github/workflows/ci.yml) sets APP_URL to the
+// exact local dev-server origin it starts, so hasSameOrigin() passes there
+// and the door-scanner tests are unaffected in CI. Verified directly by
+// evaluating Kernel::hasSameOrigin()'s logic standalone against both
+// configurations — false locally, true in CI — rather than by guessing.
 export async function seedAuth(cdp, base, auth) {
   await cdp.send('Page.navigate', { url: base + '/login.html' });
   await cdp.onceEvent('Page.loadEventFired');
   await cdp.eval(`localStorage.setItem('backstage_access_token', ${JSON.stringify(auth.access_token)});localStorage.setItem('backstage_refresh_token', ${JSON.stringify(auth.refresh_token || '')});`);
+
+  // Network.setCookie is a direct browser-cookie-store command, not tied to
+  // request interception — it works without Network.enable. Deliberately NOT
+  // enabling the Network domain here: doing so makes Chrome stream a
+  // requestWillBeSent/responseReceived event over the CDP socket for every
+  // network request for the rest of the browser session (hundreds of them
+  // across a 120+ test run), which this harness's CDP client still has to
+  // receive and iterate against an empty handler list — measurable
+  // cumulative overhead that was pushing later tests toward their timeouts.
+  const url = new URL(base);
+  const cookiePath = url.pathname === '/' ? '/' : url.pathname.replace(/\/$/, '') + '/';
+  const cookieBase = { url: base + '/', path: cookiePath, httpOnly: true, sameSite: 'Lax', secure: false };
+  await Promise.all([
+    cdp.send('Network.setCookie', { ...cookieBase, name: 'backstage_access', value: auth.access_token }),
+    cdp.send('Network.setCookie', { ...cookieBase, name: 'backstage_refresh', value: auth.refresh_token || '' }),
+  ]);
 }
 
 // High-level page object for tests: thin, intention-revealing wrappers over the

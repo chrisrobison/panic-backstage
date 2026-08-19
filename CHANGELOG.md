@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `ci` — Enable realtime in CI and fix two flaky UI test races
 - **Added** `assets` — Open Add Asset as a modal with a library picker
 - **Changed** — [feat] Added historic show data explorer for Mabuhay Gardens
 - **Changed** — Removed file accidentally added.

@@ -87,6 +87,11 @@ jobs:
             echo "SUPER_DB_NAME="
             echo "APP_BASE_PATH="
             echo "TRUST_PROXY=false"
+            # Realtime defaults off (.env.example) — 86-realtime-stream.sh
+            # exercises GET /api/realtime/stream directly, so CI must opt in
+            # explicitly. PHP_CLI_SERVER_WORKERS=8 below is what makes it
+            # safe to hold a stream open against php -S in the same job.
+            echo "REALTIME_ENABLED=true"
           } >> .env
 
       - name: Seed database (schema + demo data)
@@ -181,6 +186,13 @@ jobs:
             echo "SUPER_DB_NAME="
             echo "APP_BASE_PATH="
             echo "TRUST_PROXY=false"
+            # Realtime defaults off (.env.example) — the realtime-data-layer
+            # and booking-inbox-realtime UI tests need a live SSE connection
+            # to reach 'connected', so CI must opt in explicitly. The dev
+            # server this job starts already uses a small worker pool (see
+            # tests/ui/browser.mjs's PHP_CLI_SERVER_WORKERS default) so
+            # holding one stream open doesn't starve the rest of the suite.
+            echo "REALTIME_ENABLED=true"
           } >> .env
 
       - name: Seed database (schema + demo data)
