@@ -1064,6 +1064,64 @@ export { autofillEventTimes, TIME_OFFSETS };
 const PRIVATE_EVENT_STATUSES = ['empty', 'proposed', 'confirmed', 'booked', 'completed', 'settled', 'canceled'];
 
 class EventDetailsForm extends HTMLElement {
+  // Realtime (see docs/realtime-data.md): every other Events subscriber is a
+  // read-only card that can just blindly reapply a fresh payload. This is
+  // the one component that owns live editable form state, which is why the
+  // original implementation excluded it from event.changed entirely — see
+  // the "Events" section of the doc. This still never blindly overwrites
+  // what's on screen: a remote invalidation is only applied silently when
+  // nobody is actively in this form and no autosave is in flight; otherwise
+  // it shows a non-destructive "updated elsewhere" banner and waits for the
+  // user to opt in, so a field the user is mid-typing can never be clobbered.
+  connectedCallback() {
+    this._abort = new AbortController();
+    this._interacting = false;
+    this._saving = false;
+    this._lastLocalSaveAt = 0;
+    let invalidationDebounce = null;
+    subscribe('data.invalidated', (msg) => {
+      if (msg.entity !== 'event' || Number(msg.id) !== Number(this.eventData?.event?.id)) return;
+      clearTimeout(invalidationDebounce);
+      invalidationDebounce = setTimeout(() => this._onRemoteInvalidation(), 250);
+    }, this._abort.signal);
+    this._abort.signal.addEventListener('abort', () => clearTimeout(invalidationDebounce), { once: true });
+  }
+
+  disconnectedCallback() {
+    this._abort?.abort();
+  }
+
+  async _onRemoteInvalidation() {
+    if (!this.isConnected || !this.eventData?.event) return;
+    // This tab's own just-completed save will itself show up as an
+    // event:{id} invalidation a moment later (the PATCH that caused it went
+    // through the same db_history trigger as anyone else's write) — treat
+    // anything landing right after a local save as that echo rather than a
+    // genuinely remote change, so a tab never shows itself a "changed
+    // elsewhere" banner for its own edit.
+    if (Date.now() - this._lastLocalSaveAt < 3000) return;
+    if (this._interacting || this._saving) {
+      this._showStaleBanner();
+      return;
+    }
+    try {
+      this.data = await api(`/events/${this.eventData.event.id}`);
+    } catch { /* best-effort — a later invalidation or manual reload will retry */ }
+  }
+
+  _showStaleBanner() {
+    if ($('[data-realtime-stale]', this)) return; // already showing
+    const banner = document.createElement('p');
+    banner.className = 'info-note realtime-stale wide';
+    banner.dataset.realtimeStale = '';
+    banner.innerHTML = 'This event was updated in another window. <button type="button" class="small secondary" data-reload>Reload</button>';
+    banner.querySelector('[data-reload]').addEventListener('click', async () => {
+      try { this.data = await api(`/events/${this.eventData.event.id}`); }
+      catch (err) { publish('toast.show', { message: err.message || 'Reload failed.', tone: 'error' }); }
+    });
+    $('form', this)?.prepend(banner);
+  }
+
   set data(data) {
     this.eventData = data;
     const event    = data.event;
@@ -1192,17 +1250,30 @@ class EventDetailsForm extends HTMLElement {
       // native FormData.
       body.is_non_music      = form.is_non_music?.checked ? 1 : 0;
       setStatus('saving', 'Saving…');
+      this._saving = true;
       try {
         await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
         setStatus('saved', 'All changes saved');
+        // See connectedCallback()'s realtime handling — this write will come
+        // back around as our own event:{id} invalidation shortly, which
+        // should be ignored as an echo rather than shown as a remote change.
+        this._lastLocalSaveAt = Date.now();
         if (!changedName || summaryFields.has(changedName)) {
           broadcastEventData(await api(`/events/${event.id}`));
         }
       } catch (err) {
         setStatus('error', err.message || 'Save failed — change a field to retry');
         publish('toast.show', { message: err.message || 'Save failed.', tone: 'error' });
+      } finally {
+        this._saving = false;
       }
     };
+    // Realtime interaction guard (see connectedCallback()): any field
+    // focused anywhere in the form counts as "actively editing" for as long
+    // as focus stays inside it, so a remote invalidation arriving mid-edit
+    // shows the banner instead of silently re-rendering under the user.
+    form.addEventListener('focusin', () => { this._interacting = true; }, { signal: this._abort?.signal });
+    form.addEventListener('focusout', () => { this._interacting = false; }, { signal: this._abort?.signal });
     $$('input, select, textarea', form).forEach((field) => field.addEventListener('change', () => {
       // Setting any one show-time back-fills the empty others before we save,
       // so all three persist in the same PATCH.

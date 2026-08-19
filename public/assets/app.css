@@ -1435,6 +1435,18 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
 .save-status[data-state="saved"] { color: #2fa84f; }
 .save-status[data-state="saved"]::before { content: "\2713\00a0"; font-weight: 700; }
 .save-status[data-state="error"] { color: #ef4338; }
+/* Realtime (docs/realtime-data.md): shown by EventDetailsForm instead of
+   silently re-rendering over an active edit — see event-workspace.js's
+   _showStaleBanner(). */
+.info-note.realtime-stale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: color-mix(in srgb, var(--amber) 14%, #fff);
+  border-color: color-mix(in srgb, var(--amber) 50%, var(--line));
+  color: #7a5200;
+}
 .row-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
