@@ -20,12 +20,6 @@
 // failed assertion above it doesn't leave the live site's brand changed.
 import { test, assert } from './harness.mjs';
 
-async function hardReload(page, hash) {
-  if (hash) await page.eval(`location.hash = ${JSON.stringify(hash)}`);
-  await page.cdp.send('Page.reload', { ignoreCache: true });
-  await page.cdp.onceEvent('Page.loadEventFired');
-}
-
 async function apiFetch(page, path, opts = {}) {
   const token = page.accessToken;
   const res = await fetch(page.base + '/api' + path, {
@@ -60,7 +54,7 @@ test('Admin > App Settings shows real data and saves changes that survive a relo
     // and exercises the same applyBrand() code path the live-update
     // subscription uses, just via the reliable "fresh page load" trigger
     // instead of the racy pub/sub one (see file header).
-    await hardReload(page, '#admin-settings');
+    await page.hardReload('#admin-settings');
     await page.until(`document.querySelector('input[name="brand_name"]')`);
     assert.equal(await page.eval(`document.querySelector('input[name="brand_name"]').value`), throwaway, 'saved brand_name survives a full reload');
     assert.equal(await page.text('.brand span:last-child'), throwaway, 'sidebar brand reflects the persisted value after reload too');
