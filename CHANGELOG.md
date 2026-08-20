@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Documentation** — Add project-root CLAUDE.md orientation map
 - **Added** `ticketing` — Generate print-ready physical ticket batch PDFs
 - **Fixed** `ticketing` — Route register-ticket.html through the root .htaccess allowlist
 - **Added** `ticketing` — Register pre-printed physical tickets to a buyer
