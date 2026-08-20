@@ -893,8 +893,12 @@ final class TicketingService
         return $out;
     }
 
-    /** Short, human-facing reference (NOT the secret), e.g. "TKT-7F3K9Q2B". */
-    private function generateCode(): string
+    /**
+     * Short, human-facing reference (NOT the secret), e.g. "TKT-7F3K9Q2B".
+     * Public so other ticket-issuing services (e.g. PhysicalTicketBatchService)
+     * reuse this exact generator instead of duplicating it.
+     */
+    public function generateCode(): string
     {
         return 'TKT-' . $this->base32Encode(random_bytes(5));
     }

@@ -97,6 +97,22 @@ final class QrCode extends BaseEndpoint
         return self::renderPng($matrix, $size, 4);
     }
 
+    /**
+     * The raw QR module matrix (no quiet-zone margin) for arbitrary text —
+     * boolean grid as 0/1 ints, one row per module row. Used by callers that
+     * need to draw the QR as true vector shapes (e.g. PhysicalTicketRenderer
+     * drawing PDF `re f` rectangles per dark module) rather than a raster
+     * PNG/SVG. Thin public wrapper around the private encoder below.
+     *
+     * @return array<int,array<int,int>>
+     * @throws \RuntimeException if $text is too large for this encoder
+     *         (byte mode, ECC level M, versions 1–10 only — see encode()).
+     */
+    public static function matrix(string $text): array
+    {
+        return self::encode($text);
+    }
+
     /** 1×1 transparent PNG placeholder for error / empty-text cases. */
     private static function blankPng(): Response
     {

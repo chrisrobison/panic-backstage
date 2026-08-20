@@ -11,7 +11,7 @@
 // active payment provider. events.js mounts <pb-ticketing-admin> by assigning
 // `.data` (the event workspace payload).
 
-import { esc, titleCase, publish, api, formData, can, money, helpLink, PanicElement, $, $$ } from './core.js';
+import { esc, titleCase, publish, api, apiUrl, getToken, formData, can, money, helpLink, PanicElement, $, $$ } from './core.js';
 
 
 const moneyCents = (cents) => money(Number(cents || 0) / 100);
@@ -72,6 +72,26 @@ const TYPE_STATUSES = ['draft', 'on_sale', 'paused', 'sold_out', 'closed'];
 const qrSrc = (text, size = 160) =>
   `assets/qr.svg?size=${size}&text=${encodeURIComponent(text)}`;
 
+// Physical ticket batch PDFs are served by an authed GET endpoint (they carry
+// every ticket's live QR credential, so they're not a public/no-auth link) —
+// same fetch-as-blob-then-click-an-<a>-download pattern contracts.js uses for
+// contract PDFs, since a plain <a href> GET wouldn't carry the Authorization
+// bearer token.
+async function downloadAuthedPdf(path, filename) {
+  const resp = await fetch(apiUrl(path), { headers: { Authorization: `Bearer ${getToken()}` } });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || `Server error ${resp.status}`);
+  }
+  const blob = await resp.blob();
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 class TicketingAdmin extends PanicElement {
   set data(data) {
     this.eventData = data;
@@ -88,16 +108,18 @@ class TicketingAdmin extends PanicElement {
     if (!this.eventId) return;
     this.setLoading('Loading ticketing');
     try {
-      const [dash, links, tickets, discounts] = await Promise.all([
+      const [dash, links, tickets, discounts, printBatches] = await Promise.all([
         api(`/events/${this.eventId}/ticketing`),
         this.loadScannerLinks(),
         this.loadTickets(),
         this.loadDiscounts(),
+        this.loadPrintBatches(),
       ]);
       this.dash = dash;
       this.links = links;
       this.tickets = tickets;
       this.discounts = discounts;
+      this.printBatches = printBatches;
       this.render();
     } catch (error) {
       this.showError(error);
@@ -132,6 +154,17 @@ class TicketingAdmin extends PanicElement {
     try {
       const res = await api(`/events/${this.eventId}/ticketing/discounts`);
       return res?.discount_codes || [];
+    } catch {
+      return null;
+    }
+  }
+
+  // Physical ticket print batches for this event. Tolerate absence so
+  // ticketing still renders against a deployment that predates migration 108.
+  async loadPrintBatches() {
+    try {
+      const res = await api(`/events/${this.eventId}/ticketing/print-batches`);
+      return res?.batches || [];
     } catch {
       return null;
     }
@@ -211,6 +244,7 @@ class TicketingAdmin extends PanicElement {
 
       ${editable ? this.compSectionHtml() : ''}
       ${this.discountSectionHtml()}
+      ${this.printBatchSectionHtml()}
       ${this.issuedTicketsHtml()}
       ${this.scannerSectionHtml()}
 
@@ -533,6 +567,141 @@ class TicketingAdmin extends PanicElement {
     }
   }
 
+  // ── Physical ticket print batches ────────────────────────────────────────
+  // A batch is real `tickets` rows (unique number + unique QR token each),
+  // created up front, plus a print-ready PDF generated on demand from those
+  // same rows — "Download" and "Regenerate" are the exact same request, since
+  // generation never touches the database (see PhysicalTicketPdfGenerator's
+  // docblock). There is deliberately no separate "regenerate" button/action.
+  printBatchSectionHtml() {
+    const batches = this.printBatches;
+    const editable = this.editable;
+    if (batches === null) return ''; // endpoint unavailable — stay quiet, like discounts/links
+
+    const tiers = this.dash.tiers || [];
+    const rows = batches.map((b) => {
+      const range = `#${String(b.first_ticket_number).padStart(b.number_pad_width, '0')}–#${String(b.last_ticket_number).padStart(b.number_pad_width, '0')}`;
+      return `<tr data-print-batch="${esc(b.id)}">
+        <td data-label="Batch">${b.name ? `<strong>${esc(b.name)}</strong><br>` : ''}<span class="muted small">${range}</span></td>
+        <td data-label="Ticket type">${esc(b.ticket_type_name)}</td>
+        <td data-label="Issued">${esc(b.issued)}</td>
+        <td data-label="Sold">${esc(b.sold)}</td>
+        <td data-label="Remaining">${esc(b.remaining)}</td>
+        <td data-label="Checked in">${esc(b.checked_in)}</td>
+        <td data-label="Seller">${b.seller_label ? esc(b.seller_label) : '<span class="muted">—</span>'}</td>
+        <td class="row-actions">
+          <button type="button" class="small secondary" data-dl-batch="${esc(b.id)}" data-dl-mode="individual">Individual PDF</button>
+          <button type="button" class="small secondary" data-dl-batch="${esc(b.id)}" data-dl-mode="imposed">Imposed sheet</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    const table = batches.length
+      ? `<table class="data-table">
+          <thead><tr><th>Batch</th><th>Type</th><th>Issued</th><th>Sold</th><th>Remaining</th><th>Checked in</th><th>Seller</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`
+      : `<p class="ticket-note">No physical ticket batches yet.${editable && tiers.length ? ' Generate one to send pre-printed tickets to a print shop.' : ''}</p>`;
+
+    return `<div class="section-head padded sub-head"><h3>Physical ticket batches</h3>${editable && tiers.length ? `<button type="button" class="add-toggle" data-add-print-batch aria-label="Generate physical tickets" title="Generate physical tickets"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>` : ''}</div>
+      <div class="ticketing-print-batches padded">${table}</div>`;
+  }
+
+  openPrintBatchModal() {
+    const tiers = this.dash.tiers || [];
+    if (!tiers.length) return;
+    const { dialog } = this.openModal('Generate physical tickets', `
+      <form class="grid-form padded" data-form="print-batch">
+        <label>Ticket type <select name="ticket_type_id" required>${tiers.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
+        <label>Quantity <input name="quantity" type="number" min="1" max="5000" value="100" required></label>
+        <label>Starting number <input name="first_ticket_number" type="number" min="0" value="1" required></label>
+        <label>Number digits <input name="number_pad_width" type="number" min="1" max="10" value="6" required></label>
+        <label>Batch name <input name="name" placeholder="Optional, e.g. Amoeba-001"></label>
+        <label>Seller / allocation <input name="seller_label" placeholder="Optional, e.g. Amoeba Records"></label>
+        <label>Ticket width (in) <input name="ticket_width_in" type="number" step="0.01" min="0.5" value="2.0" required></label>
+        <label>Ticket height (in) <input name="ticket_height_in" type="number" step="0.01" min="0.5" value="5.5" required></label>
+        <label>Bleed (in) <input name="bleed_in" type="number" step="0.005" min="0" value="0.125" required></label>
+        <label class="checkbox"><input type="checkbox" name="crop_marks" value="1"> Include crop marks</label>
+        <p class="subtle wide">Creates real, unique ticket records (own number + own QR code each) up front — the PDF is generated from them on demand and can be re-downloaded any time with the exact same numbers and QR codes.</p>
+        <div class="wide form-actions"><button type="submit">Generate batch</button><button type="button" class="secondary" data-close>Cancel</button></div>
+        <div class="print-batch-result padded" hidden></div>
+        <p class="error-text wide" data-error></p>
+      </form>`);
+    $('select[name="ticket_type_id"]', dialog).focus();
+    $('[data-form="print-batch"]', dialog).addEventListener('submit', (e) => this.createPrintBatch(e));
+  }
+
+  async createPrintBatch(e) {
+    e.preventDefault();
+    const values = formData(e.target);
+    const tiers = this.dash.tiers || [];
+    const tier = tiers.find((t) => String(t.id) === String(values.ticket_type_id));
+    const quantity = Number(values.quantity || 0);
+
+    // The brief's required confirmation step: quantity + ticket type, before
+    // any ticket record is created.
+    if (!window.confirm(`Generate ${quantity} physical ticket${quantity === 1 ? '' : 's'} for "${tier ? tier.name : 'this ticket type'}"?`)) {
+      return;
+    }
+
+    const submit = $('button[type="submit"]', e.target);
+    if (submit) submit.disabled = true;
+
+    const body = {
+      ticket_type_id: Number(values.ticket_type_id),
+      quantity,
+      first_ticket_number: Number(values.first_ticket_number || 1),
+      number_pad_width: Number(values.number_pad_width || 6),
+      name: values.name || null,
+      seller_label: values.seller_label || null,
+      ticket_width_in: Number(values.ticket_width_in || 2.0),
+      ticket_height_in: Number(values.ticket_height_in || 5.5),
+      bleed_in: Number(values.bleed_in || 0.125),
+      crop_marks: Boolean(values.crop_marks),
+    };
+
+    try {
+      const res = await api(`/events/${this.eventId}/ticketing/print-batches`, { method: 'POST', body: JSON.stringify(body) });
+      const batch = res.batch;
+      const result = $('.print-batch-result', e.target);
+      if (result) {
+        result.hidden = false;
+        result.innerHTML = `<p><strong>${esc(batch.quantity)} tickets created</strong> — #${String(batch.first_ticket_number).padStart(batch.number_pad_width, '0')}–#${String(batch.last_ticket_number).padStart(batch.number_pad_width, '0')}</p>
+          <div class="form-actions">
+            <button type="button" class="small secondary" data-dl-batch="${esc(batch.id)}" data-dl-mode="individual">Download individual-ticket PDF</button>
+            <button type="button" class="small secondary" data-dl-batch="${esc(batch.id)}" data-dl-mode="imposed">Download imposed sheet PDF</button>
+          </div>
+          <p class="subtle">Re-download any time from the batch list below — it always produces the same ticket numbers and QR codes.</p>`;
+        $$('[data-dl-batch]', result).forEach((btn) => btn.addEventListener('click', () => this.downloadPrintBatchPdf(btn)));
+      }
+      publish('toast.show', { message: 'Physical ticket batch generated.' });
+      await this.load();
+    } catch (error) {
+      const err = $('[data-error]', e.target);
+      if (err) err.textContent = error.message || 'Could not generate the batch.';
+      if (submit) submit.disabled = false;
+    }
+  }
+
+  async downloadPrintBatchPdf(btn) {
+    const batchId = btn.dataset.dlBatch;
+    const mode = btn.dataset.dlMode || 'individual';
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+    try {
+      await downloadAuthedPdf(
+        `events/${this.eventId}/ticketing/print-batches/${batchId}?action=pdf&mode=${mode}&sheet=letter`,
+        `physical-tickets-batch-${batchId}-${mode}.pdf`
+      );
+    } catch (error) {
+      publish('toast.show', { tone: 'error', message: error.message || 'PDF download failed.' });
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+
   scannerSectionHtml() {
     const links = this.links;
     const editable = this.editable;
@@ -566,6 +735,10 @@ class TicketingAdmin extends PanicElement {
 
     // Comp: opens the issue-comps modal.
     $('[data-add-comp]', this)?.addEventListener('click', () => this.openCompModal());
+
+    // Physical ticket batches: generate (modal) + download from the batch list table.
+    $('[data-add-print-batch]', this)?.addEventListener('click', () => this.openPrintBatchModal());
+    $$('[data-dl-batch]', this).forEach((btn) => btn.addEventListener('click', () => this.downloadPrintBatchPdf(btn)));
 
     // Discount codes: add / edit / copy share link.
     $('[data-add-discount]', this)?.addEventListener('click', () => this.openDiscountModal(null));

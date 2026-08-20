@@ -7,6 +7,11 @@ use Panic\Address;
 use Panic\BaseEndpoint;
 use Panic\Env;
 use Panic\Mailer;
+use Panic\PhysicalTicketBatchService;
+use Panic\PhysicalTicketOversellException;
+use Panic\PhysicalTicketPdfGenerator;
+use Panic\PhysicalTicketRangeCollisionException;
+use Panic\PhysicalTicketValidationException;
 use Panic\Request;
 use Panic\Response;
 use Panic\TicketDiscounts;
@@ -63,6 +68,7 @@ final class Ticketing extends BaseEndpoint
             'comp'    => $request->method() === 'POST' ? $this->comp($request, $eventId) : Response::methodNotAllowed(),
             'refund'  => $request->method() === 'POST' ? $this->refundCancel($request, $eventId) : Response::methodNotAllowed(),
             'discounts' => $this->discounts($request, $eventId, $childId ? (int) $childId : null),
+            'print-batches' => $this->printBatches($request, $eventId, $childId ? (int) $childId : null),
             default   => $this->notFound(),
         };
     }
@@ -118,12 +124,23 @@ final class Ticketing extends BaseEndpoint
             return Response::json(['error' => 'This ticket is void and cannot be admitted.'], 422);
         }
 
+        // Same rule the door scanner enforces (see Scanner::isUnsoldPhysicalTicket()):
+        // a physical batch ticket that was printed/allocated but never sold
+        // must not be marked used here either, just because staff have the
+        // full admin app open instead of the scanner page.
+        if ((string) $ticket['delivery_method'] === 'physical'
+            && !in_array((string) ($ticket['physical_status'] ?? ''), ['sold', 'checked_in'], true)
+        ) {
+            return Response::json(['error' => 'This physical ticket has not been sold/activated yet.'], 422);
+        }
+
         // Same atomic guard the scanner uses: only a transition out of 'issued'
         // counts, so admitting twice (or racing the door) can't double-admit.
         $affected = $this->db->run(
             "UPDATE tickets
                 SET status = 'redeemed', redeemed_at = NOW(),
-                    redeemed_by_user_id = :uid, redeemed_via_scanner_id = NULL
+                    redeemed_by_user_id = :uid, redeemed_via_scanner_id = NULL,
+                    physical_status = IF(delivery_method = 'physical', 'checked_in', physical_status)
               WHERE id = :id AND event_id = :eid AND status = 'issued'",
             [':uid' => $this->userId(), ':id' => $ticketId, ':eid' => $eventId]
         );
@@ -988,6 +1005,216 @@ final class Ticketing extends BaseEndpoint
             $inline
         );
         return count($textLines);
+    }
+
+    // ─── /ticketing/print-batches — physical ticket batch printing ─────────────────
+    //
+    // Batch CREATION (real `tickets` rows, unique tokens/numbers) is fully
+    // separate from PDF RENDERING: PhysicalTicketBatchService does the
+    // former inside one transaction; PhysicalTicketPdfGenerator does the
+    // latter, purely by reading whatever rows already exist — it never
+    // writes to the database. That split is what makes "Regenerate PDF" and
+    // the original "Download PDF" the exact same request (mode/sheet query
+    // params only — no separate regenerate action) and what makes retrying
+    // PDF generation incapable of ever creating a duplicate ticket.
+    //
+    //   GET  /ticketing/print-batches                 list this event's batches (+ live counts)
+    //   POST /ticketing/print-batches                 create a batch (real ticket rows)
+    //   GET  /ticketing/print-batches/{id}             batch detail (+ live counts)
+    //   GET  /ticketing/print-batches/{id}?action=pdf&mode=individual|imposed&sheet=letter|11x17|12x18
+    //                                                  download/regenerate the print-ready PDF
+    //   GET  /ticketing/print-batches/{id}?action=manifest
+    //                                                  admin-only debug manifest ({ticket_number,token,url})
+
+    private function printBatches(Request $request, int $eventId, ?int $batchId): Response
+    {
+        if ($batchId === null) {
+            return match ($request->method()) {
+                'GET'   => $this->listPrintBatches($eventId),
+                'POST'  => $this->createPrintBatch($request, $eventId),
+                default => Response::methodNotAllowed(),
+            };
+        }
+        if ($request->method() !== 'GET') {
+            return Response::methodNotAllowed();
+        }
+        return match (strtolower(trim((string) $request->query('action', '')))) {
+            'pdf'      => $this->downloadPrintBatchPdf($request, $eventId, $batchId),
+            'manifest' => $this->printBatchManifest($eventId, $batchId),
+            default    => $this->printBatchDetail($eventId, $batchId),
+        };
+    }
+
+    private function listPrintBatches(int $eventId): Response
+    {
+        $rows = $this->db->all(
+            'SELECT b.*, tt.name AS ticket_type_name
+               FROM physical_ticket_batches b
+               JOIN ticket_types tt ON tt.id = b.ticket_type_id
+              WHERE b.event_id = ?
+              ORDER BY b.id DESC',
+            [$eventId]
+        );
+        return $this->ok(['batches' => array_map(fn(array $b) => $this->batchSummary($b), $rows)]);
+    }
+
+    private function printBatchDetail(int $eventId, int $batchId): Response
+    {
+        $row = $this->batchRow($eventId, $batchId);
+        if ($row === null) {
+            return $this->notFound('Physical ticket batch not found');
+        }
+        return $this->ok(['batch' => $this->batchSummary($row)]);
+    }
+
+    private function batchRow(int $eventId, int $batchId): ?array
+    {
+        return $this->db->one(
+            'SELECT b.*, tt.name AS ticket_type_name
+               FROM physical_ticket_batches b
+               JOIN ticket_types tt ON tt.id = b.ticket_type_id
+              WHERE b.id = ? AND b.event_id = ?',
+            [$batchId, $eventId]
+        );
+    }
+
+    /**
+     * Shape one batch row for the client, with live issued/sold/checked_in/
+     * remaining counts computed from `tickets` (not cached anywhere — a
+     * batch's counts change as tickets get sold/checked in over time).
+     */
+    private function batchSummary(array $b): array
+    {
+        $batchId = (int) $b['id'];
+        $counts = $this->db->one(
+            "SELECT COUNT(*) AS issued,
+                    COALESCE(SUM(physical_status IN ('sold', 'checked_in')), 0) AS sold,
+                    COALESCE(SUM(physical_status = 'checked_in'), 0) AS checked_in
+               FROM tickets WHERE physical_batch_id = ?",
+            [$batchId]
+        );
+        $issued = (int) ($counts['issued'] ?? 0);
+        $sold   = (int) ($counts['sold'] ?? 0);
+
+        return [
+            'id'                  => $batchId,
+            'name'                => $b['name'],
+            'ticket_type_id'      => (int) $b['ticket_type_id'],
+            'ticket_type_name'    => (string) $b['ticket_type_name'],
+            'quantity'            => (int) $b['quantity'],
+            'first_ticket_number' => (int) $b['first_ticket_number'],
+            'last_ticket_number'  => (int) $b['last_ticket_number'],
+            'number_pad_width'    => (int) $b['number_pad_width'],
+            'seller_label'        => $b['seller_label'],
+            'ticket_width_in'     => (float) $b['ticket_width_in'],
+            'ticket_height_in'    => (float) $b['ticket_height_in'],
+            'bleed_in'            => (float) $b['bleed_in'],
+            'crop_marks'          => (bool) (int) $b['crop_marks'],
+            'has_artwork'         => !empty($b['artwork_path']),
+            'created_at'          => $b['created_at'],
+            'status'              => (string) $b['status'],
+            'issued'              => $issued,
+            'sold'                => $sold,
+            'remaining'           => max(0, $issued - $sold),
+            'checked_in'          => (int) ($counts['checked_in'] ?? 0),
+        ];
+    }
+
+    private function createPrintBatch(Request $request, int $eventId): Response
+    {
+        $b = $request->body();
+        $typeId = (int) ($b['ticket_type_id'] ?? 0);
+        $type = $this->db->one('SELECT id FROM ticket_types WHERE id = ? AND event_id = ?', [$typeId, $eventId]);
+        if (!$type) {
+            return $this->notFound('Ticket type not found');
+        }
+
+        $service = new PhysicalTicketBatchService();
+        try {
+            $result = $service->createBatch($this->db, [
+                'ticket_type_id'      => $typeId,
+                'quantity'            => (int) ($b['quantity'] ?? 100),
+                'first_ticket_number' => (int) ($b['first_ticket_number'] ?? 1),
+                'number_pad_width'    => (int) ($b['number_pad_width'] ?? 6),
+                'name'                => $b['name'] ?? null,
+                'seller_label'        => $b['seller_label'] ?? null,
+                'ticket_width_in'     => isset($b['ticket_width_in']) ? (float) $b['ticket_width_in'] : 2.0,
+                'ticket_height_in'    => isset($b['ticket_height_in']) ? (float) $b['ticket_height_in'] : 5.5,
+                'bleed_in'            => isset($b['bleed_in']) ? (float) $b['bleed_in'] : 0.125,
+                'crop_marks'          => !empty($b['crop_marks']),
+            ], $this->userId());
+        } catch (PhysicalTicketRangeCollisionException | PhysicalTicketOversellException $e) {
+            return Response::json(['error' => $e->getMessage()], 409);
+        } catch (\InvalidArgumentException $e) {
+            return Response::json(['error' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            return Response::json(['error' => $e->getMessage()], 409);
+        }
+
+        log_activity($this->db, $eventId, $this->userId(), 'physical ticket batch created', [
+            'batch_id'            => $result['batch_id'],
+            'ticket_type_id'      => $typeId,
+            'quantity'            => $result['quantity'],
+            'first_ticket_number' => $result['first_ticket_number'],
+            'last_ticket_number'  => $result['last_ticket_number'],
+        ]);
+
+        $row = $this->batchRow($eventId, $result['batch_id']);
+        return $this->ok(['batch' => $row !== null ? $this->batchSummary($row) : null]);
+    }
+
+    private function downloadPrintBatchPdf(Request $request, int $eventId, int $batchId): Response
+    {
+        $mode  = strtolower(trim((string) $request->query('mode', 'individual')));
+        $sheet = strtolower(trim((string) $request->query('sheet', 'letter')));
+        $appUrl = (string) (getenv('APP_URL') ?: '');
+
+        $generator = new PhysicalTicketPdfGenerator();
+        try {
+            $out = $generator->generate($this->db, $eventId, $batchId, $mode, $sheet, $appUrl);
+        } catch (PhysicalTicketValidationException $e) {
+            // A print-safety assertion failed (see the generator's validate())
+            // — never hand out a PDF that didn't pass. Logged for follow-up;
+            // this should not normally happen for a batch this endpoint itself
+            // created, since layout is deterministic from fixed ticket dims.
+            error_log("Physical ticket batch {$batchId} PDF failed print validation: " . $e->getMessage());
+            return Response::json(['error' => 'Could not generate a print-safe PDF: ' . $e->getMessage()], 500);
+        } catch (\RuntimeException $e) {
+            return $this->notFound($e->getMessage());
+        }
+
+        log_activity($this->db, $eventId, $this->userId(), 'physical ticket batch pdf downloaded', [
+            'batch_id' => $batchId,
+            'mode'     => $mode,
+            'sheet'    => $sheet,
+        ]);
+
+        // A batch PDF carries every ticket's live QR credential — same
+        // no-store/no-referrer treatment as the payment-receipt PDF download.
+        return Response::download($out['bytes'], $out['filename'], 'application/pdf')
+            ->withHeader('Cache-Control', 'no-store')
+            ->withHeader('Referrer-Policy', 'no-referrer');
+    }
+
+    /**
+     * Admin-only debug manifest ({ticket_number, token, url} per ticket).
+     * Gated by the same manage_ticketing capability as every other action on
+     * this endpoint — this app has no separate APP_DEBUG/env-flag convention
+     * to additionally gate behind (see PhysicalTicketPdfGenerator::manifest()'s
+     * docblock), and admin auth is already sufficient: the plaintext token is
+     * equally visible to this same role via the existing ticket list/resend
+     * surfaces above. Never bundled into the print PDF itself.
+     */
+    private function printBatchManifest(int $eventId, int $batchId): Response
+    {
+        $appUrl = (string) (getenv('APP_URL') ?: '');
+        $generator = new PhysicalTicketPdfGenerator();
+        try {
+            $manifest = $generator->manifest($this->db, $eventId, $batchId, $appUrl);
+        } catch (\RuntimeException $e) {
+            return $this->notFound($e->getMessage());
+        }
+        return $this->ok(['manifest' => $manifest]);
     }
 
     // ─── /ticketing/refund (cancel-event refund) ───────────────────────────────────

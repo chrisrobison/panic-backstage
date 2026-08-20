@@ -294,7 +294,8 @@ final class Scanner extends BaseEndpoint
     private function performRedeem(Request $request, int $eventId, int $scannerId, string $tokenHash): Response
     {
         $ticket = $this->db->one(
-            'SELECT id, event_id, ticket_type_id, status, holder_name FROM tickets WHERE token_hash = ?',
+            'SELECT id, event_id, ticket_type_id, status, holder_name, delivery_method, physical_status
+               FROM tickets WHERE token_hash = ?',
             [$tokenHash]
         );
 
@@ -310,12 +311,25 @@ final class Scanner extends BaseEndpoint
 
             if ((int) $ticket['event_id'] !== $eventId) {
                 $result = 'wrong_event';
+            } elseif (self::isUnsoldPhysicalTicket($ticket)) {
+                // A physical batch ticket that has been PRINTED/ALLOCATED but
+                // never actually sold to anyone must not admit — see migration
+                // 108's docblock. Deliberately checked before the atomic flip
+                // below (not as a WHERE clause on it) so this is an explicit,
+                // auditable rejection rather than a silent no-op.
+                $result = 'not_activated';
+                $type = $this->db->one('SELECT name FROM ticket_types WHERE id = ?', [(int) $ticket['ticket_type_id']]);
+                $tier = $type !== null ? (string) $type['name'] : null;
             } else {
                 // Single atomic flip scoped to this event; affected==1 => we won.
+                // physical_status is stamped to 'checked_in' in the same UPDATE
+                // for a physical ticket (harmless no-op for a digital one, whose
+                // physical_status is always NULL).
                 $affected = $this->db->run(
                     "UPDATE tickets
                         SET status = 'redeemed', redeemed_at = NOW(),
-                            redeemed_by_user_id = NULL, redeemed_via_scanner_id = :sid
+                            redeemed_by_user_id = NULL, redeemed_via_scanner_id = :sid,
+                            physical_status = IF(delivery_method = 'physical', 'checked_in', physical_status)
                       WHERE token_hash = :h AND event_id = :eid AND status = 'issued'",
                     [':sid' => $scannerId, ':h' => $tokenHash, ':eid' => $eventId]
                 );
@@ -702,7 +716,7 @@ final class Scanner extends BaseEndpoint
         // Scoped to this link's event — a scanner link must never admit a
         // ticket belonging to some other show, even if it learns the id.
         $ticket = $this->db->one(
-            'SELECT t.id, t.code, t.status, t.holder_name, tt.name AS tier_name
+            'SELECT t.id, t.code, t.status, t.holder_name, t.delivery_method, t.physical_status, tt.name AS tier_name
                FROM tickets t
                JOIN ticket_types tt ON tt.id = t.ticket_type_id
               WHERE t.id = ? AND t.event_id = ?',
@@ -719,10 +733,27 @@ final class Scanner extends BaseEndpoint
             ]);
         }
 
+        // Same gate as performRedeem(): a printed-but-unsold physical ticket
+        // must not be waved through by hand either.
+        if (self::isUnsoldPhysicalTicket($ticket)) {
+            $this->auditScan($request, $ticketId, $eventId, 'not_activated', $scannerId);
+            return $this->ok([
+                'result'      => 'not_activated',
+                'admitted'    => false,
+                'manual'      => true,
+                'holder_name' => $ticket['holder_name'] !== null ? (string) $ticket['holder_name'] : null,
+                'tier'        => (string) $ticket['tier_name'],
+                'ticket_code' => (string) $ticket['code'],
+                'event_id'    => $eventId,
+                'message'     => 'This physical ticket has not been sold/activated yet.',
+            ]);
+        }
+
         $affected = $this->db->run(
             "UPDATE tickets
                 SET status = 'redeemed', redeemed_at = NOW(),
-                    redeemed_by_user_id = NULL, redeemed_via_scanner_id = :sid
+                    redeemed_by_user_id = NULL, redeemed_via_scanner_id = :sid,
+                    physical_status = IF(delivery_method = 'physical', 'checked_in', physical_status)
               WHERE id = :id AND event_id = :eid AND status = 'issued'",
             [':sid' => $scannerId, ':id' => $ticketId, ':eid' => $eventId]
         );
@@ -888,6 +919,24 @@ final class Scanner extends BaseEndpoint
             $base .= $basePath;
         }
         return $base . '/scanner.html?token=' . rawurlencode($token);
+    }
+
+    /**
+     * True when this ticket is a physical batch ticket that has been
+     * printed/allocated but never actually sold — the state that must NOT be
+     * allowed to admit at the door (see migration 108's docblock and
+     * PhysicalTicketBatchService's inventory-accounting docblock). Only
+     * meaningful while status is still 'issued': a ticket already 'void' or
+     * 'redeemed' is resolved through the existing status-based paths in
+     * performRedeem()/admit() exactly as before, so this never changes
+     * behavior for a digital ticket (delivery_method is always 'digital'
+     * there) or for a physical ticket past this gate.
+     */
+    private static function isUnsoldPhysicalTicket(array $ticket): bool
+    {
+        return (string) $ticket['status'] === 'issued'
+            && (string) $ticket['delivery_method'] === 'physical'
+            && !in_array((string) ($ticket['physical_status'] ?? ''), ['sold', 'checked_in'], true);
     }
 
     /** Best-effort client IP for the audit row. */

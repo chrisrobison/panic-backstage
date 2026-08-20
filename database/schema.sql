@@ -1631,6 +1631,35 @@ CREATE TABLE `payment_settings` (
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
+DROP TABLE IF EXISTS `physical_ticket_batches`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `physical_ticket_batches` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `event_id` int(11) NOT NULL,
+  `ticket_type_id` int(11) NOT NULL,
+  `name` varchar(200) DEFAULT NULL,
+  `quantity` int(11) NOT NULL,
+  `first_ticket_number` int(11) NOT NULL,
+  `last_ticket_number` int(11) NOT NULL,
+  `number_pad_width` tinyint(3) unsigned NOT NULL DEFAULT 6,
+  `seller_label` varchar(200) DEFAULT NULL,
+  `ticket_width_in` decimal(6,3) NOT NULL DEFAULT 2.000,
+  `ticket_height_in` decimal(6,3) NOT NULL DEFAULT 5.500,
+  `bleed_in` decimal(6,3) NOT NULL DEFAULT 0.125,
+  `crop_marks` tinyint(1) NOT NULL DEFAULT 0,
+  `artwork_path` varchar(255) DEFAULT NULL,
+  `created_by_user_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `status` enum('active','void') NOT NULL DEFAULT 'active',
+  PRIMARY KEY (`id`),
+  KEY `idx_physical_ticket_batches_event` (`event_id`),
+  KEY `idx_physical_ticket_batches_type` (`ticket_type_id`),
+  CONSTRAINT `physical_ticket_batches_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `physical_ticket_batches_ibfk_2` FOREIGN KEY (`ticket_type_id`) REFERENCES `ticket_types` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
 DROP TABLE IF EXISTS `portal_tokens`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
@@ -2341,7 +2370,7 @@ CREATE TABLE `ticket_scans` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `ticket_id` int(11) DEFAULT NULL,
   `event_id` int(11) NOT NULL,
-  `result` enum('admitted','already_redeemed','void','not_found','wrong_event','expired_link','manual_admit') NOT NULL,
+  `result` enum('admitted','already_redeemed','void','not_found','wrong_event','expired_link','manual_admit','not_activated') NOT NULL,
   `scanner_link_id` int(11) DEFAULT NULL,
   `scanned_by_user_id` int(11) DEFAULT NULL,
   `ip` varchar(45) DEFAULT NULL,
@@ -2387,6 +2416,9 @@ CREATE TABLE `tickets` (
   `event_id` int(11) NOT NULL,
   `ticket_type_id` int(11) NOT NULL,
   `order_id` int(11) DEFAULT NULL,
+  `physical_batch_id` int(11) DEFAULT NULL COMMENT 'Set only for tickets born from a physical print batch; see physical_ticket_batches.',
+  `delivery_method` enum('digital','physical') NOT NULL DEFAULT 'digital',
+  `physical_status` enum('printed','allocated','sold','checked_in','returned','void','lost','refunded') DEFAULT NULL,
   `code` varchar(40) NOT NULL,
   `printed_number` varchar(40) DEFAULT NULL COMMENT 'Ticket number as printed on a pre-sold physical ticket stub; NULL for system-issued tickets.',
   `token_hash` char(64) NOT NULL,
@@ -2407,9 +2439,11 @@ CREATE TABLE `tickets` (
   KEY `ticket_type_id` (`ticket_type_id`),
   KEY `order_id` (`order_id`),
   KEY `idx_tickets_event` (`event_id`),
+  KEY `idx_tickets_physical_batch` (`physical_batch_id`),
   CONSTRAINT `tickets_ibfk_1` FOREIGN KEY (`event_id`) REFERENCES `events` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tickets_ibfk_2` FOREIGN KEY (`ticket_type_id`) REFERENCES `ticket_types` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `tickets_ibfk_3` FOREIGN KEY (`order_id`) REFERENCES `ticket_orders` (`id`) ON DELETE SET NULL
+  CONSTRAINT `tickets_ibfk_3` FOREIGN KEY (`order_id`) REFERENCES `ticket_orders` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_tickets_physical_batch` FOREIGN KEY (`physical_batch_id`) REFERENCES `physical_ticket_batches` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=128 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
