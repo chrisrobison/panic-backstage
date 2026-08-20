@@ -1835,6 +1835,13 @@ components:
             - completed
             - settled
             - canceled
+        owner_user_id:
+          type: integer
+          nullable: true
+          description: >-
+            Omit to leave ownership unchanged. Send a user id (or null to clear) to reassign — 422 if
+            the caller lacks the `reassign_owner` event capability (venue admins only) and the value
+            actually differs from the current owner.
     EventIndexResponse:
       type: object
       properties:
@@ -12733,7 +12740,9 @@ paths:
         `event_type` are required (422 if missing). Booker fields default to the authenticated user
         when omitted. Private events (`event_type=private_event`) are forced non-public and
         assigned automatically (the caller for ordinary events, or the configured private-event
-        handler for private events); callers cannot select or later edit `owner_user_id`. If
+        handler for private events); callers cannot select `owner_user_id` at creation. It can be
+        reassigned afterward via PATCH, but only by a caller with the `reassign_owner` event
+        capability (venue admins) — see the PATCH operation. If
         `status` is set to a booking-confirmed status
         (confirmed/booked/needs_assets/assets_approved/ready_to_announce/published/advanced/completed/settled), a
         409 room-conflict check runs against the venue/date/time window. A sequential `EVT-N`
@@ -12933,7 +12942,10 @@ paths:
         av_requirements, catering_notes, contract_details, client_org) — updates just that column; (3) otherwise, a
         full-row update requiring the same field set as create (title, date, venue_id, event_type,
         status, ...). Slug is regenerated if title or date changed. A room-conflict check (409) runs
-        when the resulting status is booking-confirmed.
+        when the resulting status is booking-confirmed. `owner_user_id` in shape (3) is left alone
+        when omitted; an included value that actually changes ownership requires the `reassign_owner`
+        event capability (venue admins only — issue #32) and is rejected with 422 otherwise, even if
+        the rest of the body is a caller who otherwise has `edit_event`.
       tags:
         - Events
       parameters:

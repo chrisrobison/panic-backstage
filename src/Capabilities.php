@@ -40,6 +40,9 @@ final class Capabilities
             'manage_ledger', 'finalize_closeout',
             'view_execution', 'manage_execution',
             'view_incidents', 'manage_incidents',
+            // Owner reassignment (issue #32 follow-up): venue admins only —
+            // "we don't want that to be a feature a booker/anyone can edit".
+            'reassign_owner',
         ],
         'event_owner' => [
             'read_event', 'edit_event', 'publish_event', 'delete_event',
@@ -88,6 +91,7 @@ final class Capabilities
         'manage_ledger', 'finalize_closeout',
         'view_execution', 'manage_execution',
         'view_incidents', 'manage_incidents',
+        'reassign_owner',
     ];
 
     public const GLOBAL_CAPABILITIES = [

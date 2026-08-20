@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Let venue admins reassign the event Owner (#32 follow-up)
 - **Added** `realtime` — Live-refresh the Event Details tab, protecting active edits
 - **Documentation** `realtime` — Add a www-data-only FPM pool option for panicbooking.com
 - **Added** `contracts` — Make the contract title editable inline

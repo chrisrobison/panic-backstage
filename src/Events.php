@@ -750,13 +750,19 @@ final class Events extends BaseEndpoint
         $updateDate        = $body['date'] ?? $old['date'];
         $updateWalkthrough = boolish($body['walkthrough_done'] ?? $old['walkthrough_done']) ? 1 : 0;
         $updateIsNonMusic  = boolish($body['is_non_music'] ?? $old['is_non_music'] ?? false) ? 1 : 0;
-        // Ownership is assigned by the creation/onboarding workflow and is
-        // read-only afterward. Reject an actual reassignment even if a caller
-        // crafts a PATCH now that the UI selector is gone (issue #32).
+        // Ownership is assigned automatically by the creation/onboarding
+        // workflow and stays read-only for everyone except a venue admin
+        // (issue #32, and its follow-up: admins may reassign from the
+        // Details tab's Owner dropdown). Reject an actual reassignment
+        // attempted by anyone without the reassign_owner capability, even if
+        // a caller crafts a PATCH the UI would never send.
         $updateOwnerUserId = self::nullableInt($old['owner_user_id'] ?? null);
         if (array_key_exists('owner_user_id', $body)
             && self::nullableInt($body['owner_user_id']) !== $updateOwnerUserId) {
-            return Response::json(['error' => 'Event ownership is assigned automatically and cannot be edited.'], 422);
+            if (!$this->hasEventCapability($id, 'reassign_owner')) {
+                return Response::json(['error' => 'Only a venue admin can reassign event ownership.'], 422);
+            }
+            $updateOwnerUserId = self::nullableInt($body['owner_user_id']);
         }
         // Validate status transition when the status is being changed
         if (isset($body['status']) && $body['status'] !== ($old['status'] ?? '')) {

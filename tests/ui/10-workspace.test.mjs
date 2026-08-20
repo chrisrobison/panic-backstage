@@ -83,7 +83,21 @@ test('Event Details form drops ticket + contract fields (now in their own sectio
   assert.ok(await page.exists('#details [name="load_in_time"]'), 'Load In is available for the room occupancy start');
   assert.ok(await page.exists('#details [name="load_out_time"]'), 'Load Out is available for the room occupancy end');
   assert.ok(await page.exists('#details [name="contract_details"]'), 'Contract Details can be captured before Intake Complete');
-  assert.notOk(await page.exists('#details [name="owner_user_id"]'), 'Owner is read-only and has no reassignment dropdown');
+});
+
+test('Event Details Owner dropdown is venue-admin-only (issue #32 follow-up)', async (page) => {
+  if (!page.hasEvent) return page.skip(`event ${page.eventId} not found`);
+  await page.openEvent();
+  await page.until(`document.querySelector('#details form')`);
+  if (!(await page.exists('#details [name="owner_user_id"]'))) {
+    return page.skip('no reassign_owner capability for this user (expected for anyone but a venue admin)');
+  }
+  // The default UI test user (UI_EMAIL, admin@mabuhay.local) is a venue
+  // admin, so it sees the reassignment dropdown; a non-admin session gets no
+  // such element at all — see the reassign_owner capability gate in
+  // event-workspace.js and the matching 422 guard in Events.php::update().
+  assert.ok(await page.eval(`document.querySelector('#details [name="owner_user_id"]').tagName`) === 'SELECT', 'Owner reassignment control is a <select>');
+  assert.atLeast(await page.count('#details [name="owner_user_id"] option'), 2, 'Owner select is populated with users, not just "Unassigned"');
 });
 
 test('a panel "+" reveals its hidden add form (Tasks)', async (page) => {

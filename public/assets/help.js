@@ -569,7 +569,7 @@ const HELP_CONTENT = {
     <h3>Working through the event workspace</h3>
     <p>After creation, the event workspace opens with a set of tabs. Work through them roughly in this order:</p>
     <ol>
-      <li><a href="#help-details">Event details</a> — set venue, type, status, ticket price, capacity, and age restriction; review the automatically assigned read-only owner.</li>
+      <li><a href="#help-details">Event details</a> — set venue, type, status, ticket price, capacity, and age restriction; review the automatically assigned owner (venue admins can reassign it here).</li>
       <li><a href="#help-lineup">Lineup</a> — add the bands or performers, capture payout terms, and confirm them.</li>
       <li><a href="#help-contracts">Contracts</a> — capture the deal as structured terms, generate the agreement, and walk it through approval to signed. (The wizard pre-creates a contract draft for you.)</li>
       <li><a href="#help-ticketing">Ticketing &amp; door</a> — link an external ticket URL, or sell in-house: set up tiers, comps, and door-scanner links.</li>
@@ -795,7 +795,7 @@ const HELP_CONTENT = {
       <li><strong>Room</strong> — which space within that venue, if any are defined (see <a href="#help-admin-venue">Venue &amp; rooms</a>). Drives the calendar's room colour-coding and room-conflict checks.</li>
       <li><strong>Type</strong> — live music, karaoke, open mic, promoter night, DJ night, comedy, private event, or special event. Changing to or from <em>private event</em> changes the entire form layout.</li>
       <li><strong>Status</strong> — see <a href="#help-statuses">Event status reference</a>. Private events show a filtered dropdown.</li>
-      <li><strong>Owner</strong> — shown read-only in the workspace summary. Backstage assigns it automatically when the event is created or onboarded; bookers cannot reassign it from Event Details.</li>
+      <li><strong>Owner</strong> — shown read-only in the workspace summary. Backstage assigns it automatically when the event is created or onboarded; bookers cannot reassign it from Event Details. A venue admin sees an editable Owner dropdown here instead and can reassign the event to any user.</li>
       <li><strong>Load In / Access</strong> — when the event first needs access to the room. This starts the room-occupancy window and is the time shown on calendar chips.</li>
       <li><strong>Load Out / Clear</strong> — when people, gear, and breakdown are completely out of the room. This ends the room-occupancy window.</li>
       <li><strong>Doors / Show / End</strong> — the public-facing show times. Setting one will auto-fill reasonable defaults for the others if they're empty.</li>
