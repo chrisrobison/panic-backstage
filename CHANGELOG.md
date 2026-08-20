@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `ticketing` — Route register-ticket.html through the root .htaccess allowlist
 - **Added** `ticketing` — Register pre-printed physical tickets to a buyer
 - **Added** `ticketing` — Register pre-printed physical tickets to a buyer
 - **Added** `events` — Let venue admins reassign the event Owner (#32 follow-up)

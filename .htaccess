@@ -81,7 +81,7 @@ RewriteRule ^t(?:/(.*))?$ public/api/index.php [L,QSA]
 # Server-rendered by PublicEventPage (see src/Kernel.php) with real
 # title/meta/Open-Graph/JSON-LD tags for search + social-share crawlers.
 RewriteRule ^e(?:/(.*))?$ public/api/index.php [L,QSA]
-RewriteRule ^(login|event|upcoming|invite|scanner|sign|payee-request)\.html$ public/$1.html [L]
+RewriteRule ^(login|event|upcoming|invite|scanner|sign|payee-request|register-ticket)\.html$ public/$1.html [L]
 
 # Friendly public calendar-feed alias — see the matching rule in
 # public/.htaccess and the routing comment in src/Kernel.php.

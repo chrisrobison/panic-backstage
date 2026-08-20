@@ -43,7 +43,7 @@ RewriteRule ^assets/qr\.png$ api/index.php [L]
 # string. We don't want caches, archives, or search crawlers to retain those
 # URLs.
 <IfModule mod_headers.c>
-  <FilesMatch "^(login|invite|scanner|sign|payee-request)\.html$">
+  <FilesMatch "^(login|invite|scanner|sign|payee-request|register-ticket)\.html$">
     Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
     Header set Pragma "no-cache"
     Header set Expires "0"
