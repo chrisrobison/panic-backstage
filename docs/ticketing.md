@@ -52,7 +52,10 @@ The baseline `database/schema.sql` creates the ticketing tables and adds
   `unit_price_cents`.
 - `tickets` — issued units: `code`, `token_hash` (sha256 of the secret, **never**
   the plaintext), `holder_*`, `status`, `redeemed_at`, `redeemed_by_user_id`,
-  `redeemed_via_scanner_id`, `voided_at`.
+  `redeemed_via_scanner_id`, `voided_at`, `printed_number` (a pre-printed
+  physical stub's own number, distinct from `code`; `NULL` for every
+  normally-issued ticket; unique per event — see *Physical / pre-printed
+  tickets* below).
 - `ticket_scans` — door audit: `result`
   (`admitted | already_redeemed | void | not_found | wrong_event | expired_link |
   manual_admit`), `scanner_link_id`, `scanned_by_user_id`, `ip`, `user_agent`.
@@ -101,6 +104,10 @@ PHP, no framework, PSR-4 autoload (`Panic\Foo` → `src/Foo.php`).
 - Global: **`manage_users`** gates `/api/payment-settings` (provider config).
 - Public routes (`/api/public/tickets/*`, `/t/{token}`, `/assets/qr.svg`) need no
   auth. Webhook routes are authenticated by **signature**, not JWT.
+  `/api/public/tickets/{eventId}/register` uses a looser event gate than its
+  siblings: only `ticketing_mode = 'internal'`, not `public_visibility = 1` —
+  the registration link is handed directly to sellers/box offices rather than
+  discovered on a public page, and the event may deliberately stay unlisted.
 - Redemption (`/api/scan/redeem`) is authenticated by a **scanner-link token**
   (+ PIN if set), not a JWT — door staff need no accounts. The same token
   authenticates `/api/scan/{context,sell,tickets,admit}`; `sell` additionally
@@ -132,8 +139,11 @@ DELETE /api/events/{id}/scanner-links/{linkId}    revoke
 GET    /api/public/tickets/{eventId}              on-sale tiers + live availability
 POST   /api/public/tickets/{eventId}/checkout     create held order + hosted-checkout URL
 GET    /api/public/tickets/{eventId}/orders/{id}  poll a just-completed checkout (?receipt=<token> required)
+GET    /api/public/tickets/{eventId}/register     ticket types for the printed-ticket registration form
+POST   /api/public/tickets/{eventId}/register     register a pre-printed physical ticket to a buyer
 GET    /t/{token}                                 holder ticket page (HTML)
 GET    /assets/qr.svg?text=<token>&size=<240-1024> scannable QR (SVG, same-origin)
+GET    /register-ticket.html?event={eventId}      static physical-ticket registration form
 
 # Door scanner (scanner-link token, no JWT)
 POST   /api/scan/redeem                           atomic redeem + ticket_scans audit row
@@ -246,6 +256,60 @@ still-issuing message.
 
 Scanner links can be labeled, PIN-protected, expired, and revoked — revoking a
 link instantly stops redemption from that device without touching tickets.
+
+---
+
+## Physical / pre-printed tickets
+
+For stock that's already printed with a ticket number before the app ever
+sees it (e.g. a run of numbered stubs sold for cash at a table, or handed to
+an external box office) — the app can't generate the number, but it can still
+own the buyer record, the CRM sync, and door lookup for it.
+
+**Operator setup:**
+
+1. Turn the event's ticketing mode to `internal` (`PATCH /api/events/{id}/ticketing`).
+2. Create a tier for the printed stock (`POST /api/events/{id}/ticketing`,
+   the Ticketing tab's "+"). Leave its status at the `draft` default (or set
+   it to `paused`) — anything other than `on_sale` keeps it off the public
+   `<pb-ticket-purchase>` storefront, since these units aren't for sale
+   through the app. Set `quantity_total` generously; the physical print run,
+   not this counter, is the real cap.
+3. Send sellers/box offices to `public/register-ticket.html?event={id}` (a
+   static page, needs no login) or a QR code pointing at that URL — `GET
+   /assets/qr.svg?text=<url-encoded registration URL>` generates one with the
+   same from-scratch encoder used for ticket QR codes, suitable for printing
+   and handing out.
+
+**What registration does** (`TicketingService::registerPrintedTicket()`,
+called from `PublicTickets::registerPrinted()`): for each stub, the seller
+enters the printed number plus the buyer's name/email/phone. This writes a
+real `ticket_orders` + `tickets` row — `provider = 'printed'`,
+`payment_method = 'cash'`, `amount_cents` = the tier's price — so the sale
+appears in standard revenue reporting exactly like a door sale, and the
+buyer is fed into the same `syncAudienceContact()` CRM path an online order
+uses, honoring the same `marketing_opt_in` checkbox. The ticket is born
+`issued`, not `redeemed`: the physical stub is itself proof of purchase, and
+registration can happen any time before the show, independent of who's
+working the door that night.
+
+**`tickets.printed_number`** (migration 107) holds exactly what's on the
+stub, separate from the normal system-generated `code`/token/QR fields
+(which stay populated as usual — a printed ticket still gets a token, in
+case the venue ever wants to email a QR for it too). It's `UNIQUE` per
+`(event_id, printed_number)`, not globally — the same printed number can be
+reused across different shows' print runs without colliding. A second
+registration attempt for a number already on file for that event is
+rejected (`DuplicatePrintedTicketException`, HTTP 409) with a neutral
+message — never the first registrant's name/email, which would otherwise
+turn the open, unauthenticated registration endpoint into a way to enumerate
+who holds any given ticket number.
+
+**At the door**, staff need no new tooling: `Scanner::lookup()` (the
+`can_lookup` no-QR search behind `POST /api/scan/tickets`) matches
+`printed_number` the same way it matches `holder_name`/`holder_email`/`code`,
+so typing the number off the stub finds the ticket and `POST /api/scan/admit`
+admits it exactly like any other manually-admitted ticket.
 
 ---
 

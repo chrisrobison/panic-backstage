@@ -617,7 +617,7 @@ final class Scanner extends BaseEndpoint
         // a query keeps the payload sane for a big show on a phone connection.
         $q = trim((string) $request->body('q', ''));
 
-        $sql = "SELECT t.id, t.code, t.holder_name, t.holder_email, t.status, t.redeemed_at,
+        $sql = "SELECT t.id, t.code, t.printed_number, t.holder_name, t.holder_email, t.status, t.redeemed_at,
                        tt.name AS tier_name, COALESCE(o.is_comp, 0) AS is_comp
                   FROM tickets t
                   JOIN ticket_types tt ON tt.id = t.ticket_type_id
@@ -625,9 +625,12 @@ final class Scanner extends BaseEndpoint
                  WHERE t.event_id = ?";
         $args = [$eventId];
         if ($q !== '') {
-            $sql .= " AND (t.holder_name LIKE ? OR t.holder_email LIKE ? OR t.code LIKE ?)";
+            // printed_number too: a pre-printed physical ticket's code is an
+            // internal random string the holder never sees, so door staff
+            // searching by what's actually written on the stub need this.
+            $sql .= " AND (t.holder_name LIKE ? OR t.holder_email LIKE ? OR t.code LIKE ? OR t.printed_number LIKE ?)";
             $like = '%' . $q . '%';
-            array_push($args, $like, $like, $like);
+            array_push($args, $like, $like, $like, $like);
         }
         // Unredeemed first — those are the ones the door still has to act on —
         // then alphabetically, which is how you scan a list for a name.
@@ -637,14 +640,15 @@ final class Scanner extends BaseEndpoint
         $rows = $this->db->all($sql, $args);
 
         $tickets = array_map(fn (array $r): array => [
-            'id'           => (int) $r['id'],
-            'code'         => (string) $r['code'],
-            'tier'         => (string) $r['tier_name'],
-            'holder_name'  => $r['holder_name'] !== null ? (string) $r['holder_name'] : null,
-            'holder_email' => self::maskEmail($r['holder_email'] !== null ? (string) $r['holder_email'] : null),
-            'status'       => (string) $r['status'],
-            'is_comp'      => (bool) (int) $r['is_comp'],
-            'redeemed_at'  => $r['redeemed_at'],
+            'id'             => (int) $r['id'],
+            'code'           => (string) $r['code'],
+            'printed_number' => $r['printed_number'] !== null ? (string) $r['printed_number'] : null,
+            'tier'           => (string) $r['tier_name'],
+            'holder_name'    => $r['holder_name'] !== null ? (string) $r['holder_name'] : null,
+            'holder_email'   => self::maskEmail($r['holder_email'] !== null ? (string) $r['holder_email'] : null),
+            'status'         => (string) $r['status'],
+            'is_comp'        => (bool) (int) $r['is_comp'],
+            'redeemed_at'    => $r['redeemed_at'],
         ], $rows);
 
         return $this->ok([

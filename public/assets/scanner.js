@@ -367,7 +367,8 @@
     return guests.filter(function (g) {
       return (g.holder_name || '').toLowerCase().indexOf(q) >= 0 ||
              (g.holder_email || '').toLowerCase().indexOf(q) >= 0 ||
-             (g.code || '').toLowerCase().indexOf(q) >= 0;
+             (g.code || '').toLowerCase().indexOf(q) >= 0 ||
+             (g.printed_number || '').toLowerCase().indexOf(q) >= 0;
     });
   }
 
@@ -398,7 +399,7 @@
       var bits = [g.tier];
       if (g.is_comp) bits.push('comp');
       if (g.holder_email) bits.push(g.holder_email);
-      bits.push(g.code);
+      bits.push(g.printed_number ? ('#' + g.printed_number) : g.code);
       sub.textContent = bits.join(' · ');
       who.appendChild(nm);
       who.appendChild(sub);

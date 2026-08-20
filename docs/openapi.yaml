@@ -8352,6 +8352,72 @@ components:
           description: Cart total after the discount.
         currency:
           type: string
+    PublicTicketRegisterFormResponse:
+      type: object
+      description: >-
+        Form data for public/register-ticket.html. Unlike GET /api/public/tickets/{eventId}, this
+        lists every ticket type on the event regardless of status/sales window — a venue's
+        "Printed / Door" type is typically kept off the online storefront on purpose (status !=
+        on_sale) but must still appear here.
+      properties:
+        event:
+          type: object
+          properties:
+            id:
+              type: integer
+            title:
+              type: string
+            date:
+              type: string
+              format: date
+              nullable: true
+        ticket_types:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+              price_cents:
+                type: integer
+              currency:
+                type: string
+    PublicTicketRegisterRequest:
+      type: object
+      required:
+        - ticket_type_id
+        - printed_number
+        - buyer_name
+        - buyer_email
+      properties:
+        ticket_type_id:
+          type: integer
+          description: Must belong to this event.
+        printed_number:
+          type: string
+          maxLength: 40
+          description: The ticket number exactly as printed on the physical stub.
+        buyer_name:
+          type: string
+        buyer_email:
+          type: string
+          format: email
+        buyer_phone:
+          type: string
+          nullable: true
+        marketing_opt_in:
+          type: boolean
+          default: false
+          description: Explicit consent to receive future event marketing; unchecked by default.
+    PublicTicketRegisterResponse:
+      type: object
+      properties:
+        printed_number:
+          type: string
+        holder_name:
+          type: string
     TicketDiscountCode:
       type: object
       properties:
@@ -23263,6 +23329,104 @@ paths:
                 $ref: '#/components/schemas/Error'
         '429':
           description: Too many code attempts from this IP.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/public/tickets/{eventId}/register:
+    get:
+      operationId: publicTickets_registerForm
+      summary: Get form data for registering a pre-printed physical ticket
+      description: >-
+        Backs public/register-ticket.html — a link/QR handed directly to sellers or external box
+        offices selling pre-printed, pre-numbered physical ticket stock outside the app. Uses a
+        looser event gate than every other action on this resource: only requires ticketing_mode
+        = 'internal', NOT public_visibility = 1, since the event may intentionally stay off the
+        online storefront while its physical stock still needs registering.
+      tags:
+        - Public Ticketing
+      security: []
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Event display info plus every ticket type on the event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicTicketRegisterFormResponse'
+        '404':
+          description: Event not found or not using in-house ticketing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: publicTickets_registerPrinted
+      summary: Register a pre-printed physical ticket to a buyer
+      description: >-
+        Binds a buyer's name/email/phone to a ticket number already printed and sold outside the
+        app (cash/card at a table, or via an external box office) — see
+        TicketingService::registerPrintedTicket(). Creates a real ticket_orders + tickets row (born
+        'issued', not 'redeemed' — the physical stub is proof of purchase; door staff can still look
+        the printed number up via the scanner's lookup surface and admit it manually) and feeds the
+        same audience-CRM sync as an online order, gated by marketing_opt_in. printed_number is
+        unique per event: a second registration for the same stub is rejected with a neutral message
+        that never reveals the prior registrant's details (avoids turning this open, unauthenticated
+        endpoint into a PII-enumeration oracle). Rate limited per IP (60 attempts / 15 min) since a
+        seller may legitimately register many tickets back to back at a table.
+      tags:
+        - Public Ticketing
+      security: []
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicTicketRegisterRequest'
+      responses:
+        '200':
+          description: Ticket registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicTicketRegisterResponse'
+        '404':
+          description: Event not found or not using in-house ticketing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: This event already has a ticket registered under this printed number.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing/invalid ticket_type_id, printed_number, buyer_name, or buyer_email.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many registrations from this IP.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Ticket could not be registered.
           content:
             application/json:
               schema:

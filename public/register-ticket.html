@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Register a Ticket</title>
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --font-sans:   -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --font-serif:  Georgia, 'Times New Roman', serif;
+      --color-ink:   #111;
+      --color-mid:   #555;
+      --color-muted: #888;
+      --color-bg:    #f8f7f4;
+      --color-card:  #fff;
+      --color-border:#d0cfc8;
+      --color-accent:#1a56c4;
+      --color-danger:#b91c1c;
+      --color-ok:    #15803d;
+      --radius:      6px;
+      --shadow:      0 1px 4px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-bg);
+      color: var(--color-ink);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 48px;
+    }
+
+    header { width: 100%; max-width: 480px; margin-bottom: 28px; text-align: center; }
+    header h1 { font-family: var(--font-serif); font-size: 1.4rem; }
+    header p  { font-size: .875rem; color: var(--color-mid); margin-top: 4px; }
+
+    .card {
+      background: var(--color-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 28px 32px;
+      width: 100%;
+      max-width: 480px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-family: var(--font-serif);
+      font-size: 1.1rem;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .field { margin-bottom: 16px; }
+    label { display: block; font-size: .875rem; font-weight: 600; margin-bottom: 5px; color: var(--color-ink); }
+    .hint { font-size: .78rem; color: var(--color-mid); margin-top: 4px; }
+
+    input[type="text"], input[type="email"], input[type="tel"], select {
+      width: 100%;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-size: 1.05rem;
+      font-family: var(--font-sans);
+      outline: none;
+      transition: border-color .15s;
+      background: #fff;
+    }
+    input:focus, select:focus { border-color: var(--color-accent); }
+
+    .type-note {
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: .85rem;
+      color: #075985;
+      margin-bottom: 16px;
+    }
+
+    .checkbox-field { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 20px; }
+    .checkbox-field input { width: auto; margin-top: 3px; }
+    .checkbox-field label { font-weight: 400; margin-bottom: 0; font-size: .85rem; color: var(--color-mid); }
+
+    .btn-submit {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      background: var(--color-accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 1.05rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background .15s, opacity .15s;
+    }
+    .btn-submit:hover { background: #1546a0; }
+    .btn-submit:disabled { opacity: .5; cursor: not-allowed; }
+
+    .btn-secondary {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      background: #fff;
+      color: var(--color-accent);
+      border: 1px solid var(--color-accent);
+      border-radius: var(--radius);
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    .error-banner {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      font-size: .9rem;
+      color: var(--color-danger);
+      margin-bottom: 18px;
+      display: none;
+    }
+
+    .status-screen { text-align: center; padding: 32px 24px; }
+    .status-icon { font-size: 3rem; margin-bottom: 16px; }
+    .status-screen h2 { font-family: var(--font-serif); font-size: 1.4rem; margin-bottom: 10px; }
+    .status-screen p  { color: var(--color-mid); font-size: .95rem; line-height: 1.6; }
+
+    .loading { text-align: center; padding: 60px 24px; color: var(--color-mid); }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--color-border);
+      border-top-color: var(--color-accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 480px) { .card { padding: 22px 18px; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Register a Ticket</h1>
+  <p id="eventTitle"></p>
+</header>
+
+<div id="loadingScreen" class="card">
+  <div class="loading"><div class="spinner"></div>Loading…</div>
+</div>
+
+<div id="errorScreen" class="card" style="display:none">
+  <div class="status-screen">
+    <div class="status-icon">⚠️</div>
+    <h2>Registration Unavailable</h2>
+    <p id="errorMsg">This link isn't set up for ticket registration. Please check the link or contact the venue.</p>
+  </div>
+</div>
+
+<div id="formScreen" style="display:none">
+  <div class="card">
+    <div class="card-title">Ticket details</div>
+    <div id="errorBanner" class="error-banner"></div>
+
+    <form id="regForm" autocomplete="off">
+      <div class="field" id="typeField">
+        <label for="fType">Ticket type</label>
+        <select id="fType" name="ticket_type_id"></select>
+      </div>
+      <div id="typeNote" class="type-note" style="display:none"></div>
+
+      <div class="field">
+        <label for="fNumber">Ticket number <span class="hint" style="display:inline">(printed on the stub)</span></label>
+        <input type="text" id="fNumber" name="printed_number" required inputmode="text" autocomplete="off" placeholder="e.g. 0142">
+      </div>
+
+      <div class="field">
+        <label for="fName">Buyer's name</label>
+        <input type="text" id="fName" name="buyer_name" required autocomplete="name">
+      </div>
+
+      <div class="field">
+        <label for="fEmail">Buyer's email</label>
+        <input type="email" id="fEmail" name="buyer_email" required autocomplete="email">
+      </div>
+
+      <div class="field">
+        <label for="fPhone">Buyer's phone <span class="hint" style="display:inline">(optional)</span></label>
+        <input type="tel" id="fPhone" name="buyer_phone" autocomplete="tel">
+      </div>
+
+      <div class="checkbox-field">
+        <input type="checkbox" id="fOptIn" name="marketing_opt_in">
+        <label for="fOptIn">Send updates about future shows to this email</label>
+      </div>
+
+      <button type="submit" class="btn-submit" id="submitBtn">Register Ticket</button>
+    </form>
+  </div>
+</div>
+
+<div id="successScreen" class="card" style="display:none">
+  <div class="status-screen">
+    <div class="status-icon">✅</div>
+    <h2>Registered</h2>
+    <p id="successMsg"></p>
+  </div>
+  <button type="button" class="btn-secondary" id="anotherBtn">Register another ticket</button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  let eventId = '';
+  let ticketTypes = [];
+
+  const apiBase = window.location.pathname.replace(/\/[^/]*$/, '') + '/api';
+
+  window.addEventListener('DOMContentLoaded', function () {
+    const params = new URLSearchParams(window.location.search);
+    eventId = params.get('event') || '';
+    if (!eventId) {
+      showError('No event specified. Use the exact link or QR code given to you by the venue.');
+      return;
+    }
+    load();
+    document.getElementById('regForm').addEventListener('submit', onSubmit);
+    document.getElementById('anotherBtn').addEventListener('click', registerAnother);
+  });
+
+  async function load() {
+    try {
+      const res  = await fetch(apiBase + '/public/tickets/' + encodeURIComponent(eventId) + '/register');
+      const data = await res.json();
+      if (!res.ok) {
+        showError(data.error || 'This event is not set up for ticket registration.');
+        return;
+      }
+
+      document.getElementById('eventTitle').textContent = data.event && data.event.title
+        ? data.event.title + (data.event.date ? ' — ' + formatDate(data.event.date) : '')
+        : '';
+      document.title = 'Register a Ticket: ' + ((data.event && data.event.title) || '');
+
+      ticketTypes = data.ticket_types || [];
+      if (ticketTypes.length === 0) {
+        showError('This event has no ticket types set up yet. Ask the venue to create one before registering tickets.');
+        return;
+      }
+
+      const select = document.getElementById('fType');
+      select.innerHTML = '';
+      ticketTypes.forEach(function (t) {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name + (t.price_cents > 0 ? ' — ' + formatMoney(t.price_cents, t.currency) : '');
+        select.appendChild(opt);
+      });
+
+      if (ticketTypes.length === 1) {
+        document.getElementById('typeField').style.display = 'none';
+        const note = document.getElementById('typeNote');
+        note.style.display = '';
+        note.textContent = 'Ticket type: ' + ticketTypes[0].name
+          + (ticketTypes[0].price_cents > 0 ? ' — ' + formatMoney(ticketTypes[0].price_cents, ticketTypes[0].currency) : '');
+      }
+
+      show('formScreen');
+      hide('loadingScreen');
+      document.getElementById('fNumber').focus();
+    } catch (err) {
+      showError('Network error loading this link. Please refresh and try again.');
+    }
+  }
+
+  async function onSubmit(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Registering…';
+    clearError();
+
+    const body = {
+      ticket_type_id: parseInt(document.getElementById('fType').value, 10),
+      printed_number: document.getElementById('fNumber').value.trim(),
+      buyer_name: document.getElementById('fName').value.trim(),
+      buyer_email: document.getElementById('fEmail').value.trim(),
+      buyer_phone: document.getElementById('fPhone').value.trim(),
+      marketing_opt_in: document.getElementById('fOptIn').checked,
+    };
+
+    try {
+      const res  = await fetch(apiBase + '/public/tickets/' + encodeURIComponent(eventId) + '/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showFormError(data.error || 'Could not register that ticket. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Register Ticket';
+        return;
+      }
+      document.getElementById('successMsg').textContent =
+        'Ticket #' + data.printed_number + ' is registered to ' + data.holder_name + '.';
+      hide('formScreen');
+      show('successScreen');
+    } catch (err) {
+      showFormError('Network error. Please check your connection and try again.');
+      btn.disabled = false;
+      btn.textContent = 'Register Ticket';
+    }
+  }
+
+  // A seller working a table registers many tickets back to back — clear
+  // just the per-ticket fields and jump back into the form rather than
+  // reloading the page (which would re-fetch ticket types for nothing).
+  function registerAnother() {
+    document.getElementById('regForm').reset();
+    if (ticketTypes.length === 1) {
+      document.getElementById('fType').value = ticketTypes[0].id;
+    }
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = false;
+    btn.textContent = 'Register Ticket';
+    hide('successScreen');
+    show('formScreen');
+    document.getElementById('fNumber').focus();
+  }
+
+  function show(id) { document.getElementById(id).style.display = ''; }
+  function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+  function showError(msg) {
+    document.getElementById('errorMsg').textContent = msg;
+    hide('loadingScreen');
+    show('errorScreen');
+  }
+  function showFormError(msg) {
+    const el = document.getElementById('errorBanner');
+    el.textContent = msg;
+    el.style.display = '';
+  }
+  function clearError() { document.getElementById('errorBanner').style.display = 'none'; }
+
+  function formatMoney(cents, currency) {
+    const amt = (cents / 100).toFixed(2);
+    return (currency && currency !== 'USD') ? (currency + ' ' + amt) : ('$' + amt);
+  }
+  function formatDate(dateStr) {
+    try {
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch (e) {
+      return dateStr;
+    }
+  }
+}());
+</script>
+</body>
+</html>

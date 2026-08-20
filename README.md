@@ -1023,6 +1023,12 @@ dependencies.
   buyer to the provider's hosted checkout.
   - `GET  /api/public/tickets/{eventId}` — on-sale tiers + live availability
   - `POST /api/public/tickets/{eventId}/checkout` — create a checkout session
+- **Physical / pre-printed tickets:** `public/register-ticket.html?event={id}` is
+  a standalone, no-login form for stock that's already printed with a ticket
+  number and sold outside the app (a table, an external box office). A seller
+  types the printed number + buyer name/email/phone; it's stored on the same
+  `tickets`/`ticket_orders` tables (so it shows up in reports, the CRM sync, and
+  door-scanner lookup by that number) via `TicketingService::registerPrintedTicket()`.
 - **Webhooks:** providers confirm payment via signed webhooks
   (`POST /api/webhooks/stripe`, `POST /api/webhooks/square`). These are public
   routes authenticated by signature verification (HMAC), not JWT; fulfillment is

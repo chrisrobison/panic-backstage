@@ -484,6 +484,130 @@ final class TicketingService
     }
 
     /**
+     * Register a pre-printed physical ticket: bind a buyer's contact info to
+     * a ticket number that was already printed and sold outside the app
+     * (cash/card at a table, or through an external box office) — see
+     * PublicTickets::registerPrinted() for the unauthenticated form endpoint
+     * this backs. Unlike recordDoorSale(), this never invents the ticket number;
+     * the caller supplies exactly what's printed on the stub, and the
+     * per-event UNIQUE constraint on tickets.printed_number (migration 107)
+     * rejects a second registration for the same stub outright.
+     *
+     * Tickets are born 'issued', not 'redeemed' — registration can happen any
+     * time before the show (at a merch table, days in advance), independent
+     * of door admission. The physical stub is itself the proof of purchase;
+     * if the venue also wants a door check-in, staff can look the printed
+     * number up like any other ticket (Scanner::lookup() matches
+     * printed_number) and admit it manually.
+     *
+     * Feeds the same audience-CRM sync as an online order
+     * (syncAudienceContact()), gated by the same marketing_opt_in flag the
+     * form collects, so a printed-ticket buyer's email reaches the mailing
+     * list exactly like an online buyer's — never unconditionally.
+     *
+     * @return array{id:int,code:string,printed_number:?string,order_id:int}
+     * @throws DuplicatePrintedTicketException if this event already has a
+     *         ticket registered under this printed number.
+     * @throws \InvalidArgumentException if $printedNumber is blank.
+     * @throws \RuntimeException on unknown ticket type or exhausted allocation.
+     */
+    public function registerPrintedTicket(
+        Database $db,
+        int $ticketTypeId,
+        string $printedNumber,
+        string $holderName,
+        string $holderEmail,
+        ?string $holderPhone,
+        bool $marketingOptIn
+    ): array {
+        $printedNumber = trim($printedNumber);
+        if ($printedNumber === '') {
+            throw new \InvalidArgumentException('Ticket number is required.');
+        }
+
+        $type = $db->one(
+            'SELECT id, event_id, currency, price_cents FROM ticket_types WHERE id = ?',
+            [$ticketTypeId]
+        );
+        if ($type === null) {
+            throw new \RuntimeException("Ticket type {$ticketTypeId} not found.");
+        }
+        $eventId   = (int) $type['event_id'];
+        $currency  = (string) ($type['currency'] ?? 'USD');
+        $unitPrice = (int) $type['price_cents'];
+
+        $pdo = $db->pdo();
+        $pdo->beginTransaction();
+        try {
+            // Fail fast on an obvious duplicate before touching inventory, so
+            // a re-submitted stub gets a clean rejection instead of a
+            // half-applied oversell increment. createTicket()'s own UNIQUE
+            // constraint below is still the authority under a race; this is
+            // just the common case's cheap early exit.
+            $existing = $db->one(
+                'SELECT id FROM tickets WHERE event_id = ? AND printed_number = ? FOR UPDATE',
+                [$eventId, $printedNumber]
+            );
+            if ($existing !== null) {
+                $pdo->rollBack();
+                throw new DuplicatePrintedTicketException(
+                    "Ticket #{$printedNumber} is already registered for this event."
+                );
+            }
+
+            // Same oversell guard as recordDoorSale(); the venue is expected
+            // to set quantity_total generously on its "Printed / Door" ticket
+            // type since the physical print run, not this counter, is the
+            // real cap on how many can ever be registered.
+            $affected = $db->run(
+                'UPDATE ticket_types
+                    SET quantity_sold = quantity_sold + 1
+                  WHERE id = :id AND quantity_sold + 1 <= quantity_total',
+                [':id' => $ticketTypeId]
+            );
+            if ($affected !== 1) {
+                $pdo->rollBack();
+                throw new \RuntimeException("Ticket type {$ticketTypeId} has no remaining allocation.");
+            }
+
+            $orderId = $db->insert(
+                "INSERT INTO ticket_orders
+                    (event_id, buyer_name, buyer_email, buyer_phone, marketing_opt_in,
+                     provider, payment_method, amount_cents, currency, status, is_comp, paid_at)
+                 VALUES (?, ?, ?, ?, ?, 'printed', 'cash', ?, ?, 'fulfilled', 0, NOW())",
+                [
+                    $eventId, $holderName, $holderEmail, ($holderPhone !== null && $holderPhone !== '') ? $holderPhone : null,
+                    $marketingOptIn ? 1 : 0, $unitPrice, $currency,
+                ]
+            );
+
+            $db->run(
+                'INSERT INTO ticket_order_items (order_id, ticket_type_id, quantity, unit_price_cents)
+                 VALUES (?, ?, 1, ?)',
+                [$orderId, $ticketTypeId, $unitPrice]
+            );
+
+            $ticket = $this->createTicket(
+                $db, $eventId, $ticketTypeId, $orderId, $holderName, $holderEmail,
+                'issued', null, $printedNumber
+            );
+
+            $order = $db->one('SELECT * FROM ticket_orders WHERE id = ?', [$orderId]);
+            if ($order !== null) {
+                $this->syncAudienceContact($db, $order, 1);
+            }
+
+            $pdo->commit();
+            return $ticket + ['order_id' => $orderId];
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /**
      * Void an issued ticket and return its unit to inventory (decrement
      * quantity_sold, floored at zero). Idempotent: voiding an already-void
      * ticket is a no-op that returns true. Returns false if the ticket does
@@ -678,7 +802,7 @@ final class TicketingService
      *
      * @param 'issued'|'redeemed' $status
      *
-     * @return array{id:int,code:string,token:?string,ticket_type_id:int,holder_email:?string,holder_name:?string}
+     * @return array{id:int,code:string,printed_number:?string,token:?string,ticket_type_id:int,holder_email:?string,holder_name:?string}
      */
     private function createTicket(
         Database $db,
@@ -688,7 +812,8 @@ final class TicketingService
         ?string $holderName,
         ?string $holderEmail,
         string $status = 'issued',
-        ?int $scannerLinkId = null
+        ?int $scannerLinkId = null,
+        ?string $printedNumber = null
     ): array {
         $redeemed = $status === 'redeemed';
 
@@ -698,19 +823,29 @@ final class TicketingService
             try {
                 $id = $db->insert(
                     "INSERT INTO tickets
-                        (event_id, ticket_type_id, order_id, code, token_hash, token,
+                        (event_id, ticket_type_id, order_id, code, printed_number, token_hash, token,
                          holder_name, holder_email, status, redeemed_at, redeemed_via_scanner_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, " . ($redeemed ? 'NOW()' : 'NULL') . ", ?)",
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " . ($redeemed ? 'NOW()' : 'NULL') . ", ?)",
                     [
-                        $eventId, $ticketTypeId, $orderId, $code, $secret['hash'], $secret['token'],
+                        $eventId, $ticketTypeId, $orderId, $code, $printedNumber, $secret['hash'], $secret['token'],
                         $holderName, $holderEmail,
                         $redeemed ? 'redeemed' : 'issued',
                         $redeemed ? $scannerLinkId : null,
                     ]
                 );
             } catch (Throwable $e) {
-                // Unique collision on code/token_hash — regenerate and retry.
-                if (str_contains($e->getMessage(), '1062') || stripos($e->getMessage(), 'duplicate') !== false) {
+                $isDuplicate = str_contains($e->getMessage(), '1062') || stripos($e->getMessage(), 'duplicate') !== false;
+                if ($isDuplicate && $printedNumber !== null && str_contains($e->getMessage(), 'uq_tickets_event_printed_number')) {
+                    // Not a code/token collision (those are vanishingly rare
+                    // random values) — this event already has a ticket under
+                    // this printed number. Regenerating code/token can never
+                    // fix that, so surface it distinctly instead of retrying.
+                    throw new DuplicatePrintedTicketException(
+                        "Ticket #{$printedNumber} is already registered for this event."
+                    );
+                }
+                if ($isDuplicate) {
+                    // Unique collision on code/token_hash — regenerate and retry.
                     continue;
                 }
                 throw $e;
@@ -719,6 +854,7 @@ final class TicketingService
             return [
                 'id'             => $id,
                 'code'           => $code,
+                'printed_number' => $printedNumber,
                 'token'          => $secret['token'],
                 'ticket_type_id' => $ticketTypeId,
                 'holder_email'   => $holderEmail,
@@ -778,4 +914,15 @@ final class TicketingService
         }
         return $out;
     }
+}
+
+/**
+ * A printed-ticket registration named a printed_number that this event
+ * already has on file. Caught by callers (PublicTickets::register()) to
+ * return a neutral "already registered" response — never the prior
+ * registration's name/email, which would turn the endpoint into a PII
+ * enumeration oracle for anyone guessing ticket numbers.
+ */
+final class DuplicatePrintedTicketException extends \RuntimeException
+{
 }

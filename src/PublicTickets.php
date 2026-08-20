@@ -74,6 +74,26 @@ final class PublicTickets extends BaseEndpoint
             return $this->notFound('Event not found');
         }
 
+        // Physical-ticket registration deliberately uses a looser event gate
+        // than every other action below: saleableEvent() also requires
+        // public_visibility=1 because it's the online storefront, but the
+        // registration link is handed directly to sellers/box offices (often
+        // via a printed QR code) rather than discovered on a public page, and
+        // the event itself may intentionally stay unlisted. ticketing_mode
+        // still must be 'internal' — this venue's own ticket rows are what
+        // registration writes into.
+        if (($this->params['action'] ?? null) === 'register') {
+            $event = $this->registrableEvent($eventId);
+            if ($event === null) {
+                return $this->notFound('Ticket registration is not available for this event');
+            }
+            return match ($request->method()) {
+                'GET'  => $this->registerForm($event),
+                'POST' => $this->registerPrinted($request, $event),
+                default => Response::methodNotAllowed(),
+            };
+        }
+
         $event = $this->saleableEvent($eventId);
         if ($event === null) {
             return $this->notFound('Tickets are not available for this event');
@@ -590,6 +610,127 @@ final class PublicTickets extends BaseEndpoint
             $out[$id] = min($qty, self::MAX_PER_TYPE);
         }
         return $out;
+    }
+
+    /**
+     * GET /api/public/tickets/{eventId}/register — form data for
+     * public/register-ticket.html: event display info plus every ticket
+     * type on the event (deliberately not filtered to status='on_sale' like
+     * listTypes() — a venue typically keeps its "Printed / Door" type off
+     * the online storefront on purpose, but it must still appear here).
+     */
+    private function registerForm(array $event): Response
+    {
+        $rows = $this->db->all(
+            'SELECT id, name, price_cents, currency
+               FROM ticket_types
+              WHERE event_id = ?
+              ORDER BY sort_order ASC, id ASC',
+            [(int) $event['id']]
+        );
+
+        return $this->ok([
+            'event' => [
+                'id'    => (int) $event['id'],
+                'title' => (string) $event['title'],
+                'date'  => $event['date'] ?? null,
+            ],
+            'ticket_types' => array_map(static fn(array $r): array => [
+                'id'          => (int) $r['id'],
+                'name'        => (string) $r['name'],
+                'price_cents' => (int) $r['price_cents'],
+                'currency'    => (string) $r['currency'],
+            ], $rows),
+        ]);
+    }
+
+    /**
+     * POST /api/public/tickets/{eventId}/register — bind a buyer's contact
+     * info to a ticket number already printed and sold outside the app.
+     * See TicketingService::registerPrintedTicket() for the write path.
+     *
+     * body: { ticket_type_id, printed_number, buyer_name, buyer_email,
+     *         buyer_phone?, marketing_opt_in? }
+     *
+     * No JWT — this link is handed to sellers/external box offices — so it's
+     * rate-limited per IP like the discount-code surface above, and a
+     * duplicate printed_number returns a neutral message rather than the
+     * prior registration's holder info (that would let a stranger enumerate
+     * who holds any given ticket number just by re-submitting it).
+     */
+    private function registerPrinted(Request $request, array $event): Response
+    {
+        $ip = Request::clientIp() ?? 'unknown';
+        if (RateLimiter::tooMany($this->db, 'ticket-register:ip:' . $ip, 60, 900)) {
+            return Response::json(['error' => 'Too many registrations from this connection. Please try again shortly.'], 429);
+        }
+
+        $typeId = (int) ($request->body('ticket_type_id', 0) ?? 0);
+        $printedNumber = trim((string) $request->body('printed_number', ''));
+        $name  = trim((string) $request->body('buyer_name', ''));
+        $email = strtolower(trim((string) $request->body('buyer_email', '')));
+        $phone = trim((string) $request->body('buyer_phone', ''));
+        $marketingOptIn = boolish($request->body('marketing_opt_in', 0));
+
+        if ($typeId < 1) {
+            return Response::json(['error' => 'Select a ticket type.'], 422);
+        }
+        if ($printedNumber === '') {
+            return Response::json(['error' => 'Enter the ticket number printed on the stub.'], 422);
+        }
+        if ($name === '') {
+            return Response::json(['error' => 'Buyer name is required.'], 422);
+        }
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return Response::json(['error' => 'A valid email address is required.'], 422);
+        }
+
+        $type = $this->db->one(
+            'SELECT id FROM ticket_types WHERE id = ? AND event_id = ?',
+            [$typeId, (int) $event['id']]
+        );
+        if ($type === null) {
+            return Response::json(['error' => 'That ticket type is not on this event.'], 422);
+        }
+
+        $ticketing = new TicketingService();
+        try {
+            $ticket = $ticketing->registerPrintedTicket(
+                $this->db,
+                $typeId,
+                $printedNumber,
+                $name,
+                $email,
+                $phone !== '' ? $phone : null,
+                (bool) $marketingOptIn
+            );
+        } catch (DuplicatePrintedTicketException) {
+            return Response::json([
+                'error' => "Ticket #{$printedNumber} is already registered. If that's a mistake, contact the box office.",
+            ], 409);
+        } catch (\Throwable $e) {
+            error_log('PublicTickets registerPrinted failed: ' . $e->getMessage());
+            return Response::json(['error' => 'Could not register that ticket. Please try again.'], 500);
+        }
+
+        return $this->ok([
+            'printed_number' => $ticket['printed_number'],
+            'holder_name'    => $name,
+        ]);
+    }
+
+    /**
+     * Fetch the event only if it uses internal ticketing. Looser than
+     * saleableEvent() on purpose — see the comment in handle() above.
+     */
+    private function registrableEvent(int $eventId): ?array
+    {
+        return $this->db->one(
+            "SELECT id, title, slug, public_slug, date
+               FROM events
+              WHERE id = ? AND ticketing_mode = 'internal'",
+            [$eventId]
+        );
     }
 
     /**
