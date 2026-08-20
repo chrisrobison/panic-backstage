@@ -211,6 +211,7 @@ const HELP_CONTENT = {
       <figcaption>The dashboard — the left sidebar navigates the app; the cards summarize the next two weeks of shows.</figcaption>
     </figure>
     <p>If this is your first visit, start with <a href="#help-sign-in">Signing in</a>, then <a href="#help-navigation">Main navigation</a>, then <a href="#help-event-create">Creating an event</a>. Section "?" icons inside each event open the relevant help page in a new tab so you do not lose your place.</p>
+    <p class="help-tip">💡 Looking for Mabuhay Gardens' documented performance history rather than a current booking? <code>archive.html</code> is a separate, public show-archive explorer — no Backstage login needed — for browsing past shows, performers, and timelines. It's a standalone reference tool, not part of the day-to-day booking workflow in the rest of this app.</p>
   `,
 
   'august-2026-update': `
@@ -588,7 +589,7 @@ const HELP_CONTENT = {
 
   'event-clone': `
     <h2>Cloning an event</h2>
-    <p>Use <strong>Clone</strong> in an event workspace when a similar show needs a separate date and editable times, but should not become a recurring series. The dialog starts with the original title, the next date, and the original Load In, Doors/Start, Show, End, and Load Out times. Review every value before creating the copy.</p>
+    <p>Use <strong>Clone</strong> (in the event workspace header's <i class="fa-solid fa-ellipsis" aria-hidden="true"></i> <strong>More actions</strong> menu) when a similar show needs a separate date and editable times, but should not become a recurring series. The dialog starts with the original title, the next date, and the original Load In, Doors/Start, Show, End, and Load Out times. Review every value before creating the copy.</p>
     <h3>What the clone copies</h3>
     <ul>
       <li>Reusable event facts such as venue, room, type, age restriction, capacity, public description, and operational notes.</li>
@@ -773,6 +774,8 @@ const HELP_CONTENT = {
       <li><strong>Open Items</strong> count — blockers that are still <em>open</em> or <em>waiting</em>.</li>
       <li><strong>Tasks Left</strong> count — tasks not yet marked <em>done</em> or <em>canceled</em>.</li>
     </ul>
+    <p>The header's action row keeps only what's used every time — <em>Ask AI</em>, <em>Public Page</em>, undo, section visibility, <em>Print</em>, <em>Publish/Hide Public Page</em>, and <em>Share</em>. Less-frequent actions (<strong>QR Code</strong>, <strong>Wizard</strong>, <strong>Clone</strong>, and <strong>Promote</strong>) live one click deeper, under the <i class="fa-solid fa-ellipsis" aria-hidden="true"></i> <strong>More actions</strong> menu at the end of the row.</p>
+    <p class="help-tip">💡 If a teammate edits this same event elsewhere, an open Details tab updates itself automatically the next time nothing is focused and no autosave is in flight. If you're actively mid-edit when that happens, Backstage never overwrites what you typed — instead a dismissible "updated elsewhere" banner appears so you know to reload when you're ready.</p>
     <p>Below the header sits a <strong>Next Recommended Action</strong> banner suggesting the most important next step (sign the artist, approve the flyer, build the run sheet, etc.). It refreshes when you click <em>Refresh</em> or save something anywhere in the event. The <strong>&times;</strong> button collapses it to a slim "dismissed for now" strip (click <em>Show</em> to bring it back) — this is per-visit, not permanent: reopening the event shows it again, and if the recommendation itself changes (a new, different next step) it reappears automatically even while collapsed, so dismissing today's task can't accidentally hide tomorrow's.</p>
     <p>The <strong>Overview</strong> tab itself is a read-only, at-a-glance dashboard: a grid of cards for Schedule/Timeline, Promoter/Contacts, Performer Lineup, Venue Ops/Logistics, Financial/Ticketing, Notes/Tasks, and Documents/Attachments. Each card summarizes that part of the event and links out (e.g. "Full Run Sheet", "Manage Lineup") to the matching tab for the full editable view.</p>
     <ul>
@@ -903,6 +906,8 @@ const HELP_CONTENT = {
 
     <h3>Managing an existing series</h3>
     <p>Open any occurrence's <a href="#help-scheduling">Scheduling</a> tab — the Recurrence panel lists every sibling in the series with its date and status, and links to jump straight to any of them. If one occurrence needs to drop out of the series (it was cancelled, moved to a different venue, whatever), use <strong>Remove this event from the series</strong> on that occurrence — it becomes a fully standalone event again and the rest of the series is unaffected.</p>
+    <h3>Extending a series</h3>
+    <p>Running out of scheduled dates on an ongoing series (a weekly night that only had 8 weeks generated)? Use <strong>Add more dates</strong> in the Recurrence panel instead of starting a second, disconnected series. It appends new occurrences to the same series — cloning template fields from whichever occurrence you opened it from — and goes through the same conflict check and <strong>Resolve recurring-event conflicts</strong> dialog as creating a series from scratch, so a colliding date can be skipped or moved to a free room without blocking the rest of the extension.</p>
     <p class="help-tip">💡 The panel includes one <strong>Reusable public link</strong> for the whole series. Put that URL on the venue website once; it automatically opens today's or the next public occurrence as dates pass.</p>
     <p class="help-tip">💡 There's no bulk edit across a series (no "change this and all future occurrences"). Each occurrence is a completely normal event once created — update its time, venue, staffing, or anything else the same way you would for any other show.</p>
     <p class="help-tip">💡 Venue admins can also ask the <a href="#help-ai-assistant">AI Assistant</a> to set one up conversationally (e.g. "turn this into a weekly series for the next 8 weeks") — it runs through the exact same 52-occurrence/90-day checks as doing it by hand here, and proposes the series for you to review. If a proposed date conflicts with an existing booking, the proposal card says so up front, but nothing is finalized until you click Apply — that's when the same conflict-resolution dialog opens if it's still needed (bookings can change in the meantime).</p>
@@ -1040,7 +1045,7 @@ const HELP_CONTENT = {
     <h3>Bands uploading their own assets</h3>
     <p>Bands with a backstage account and a band/artist invite on this event can upload their own press photos and stage plot PDFs without round-tripping through the booker.</p>
     <h3>QR code</h3>
-    <p>Every public event automatically shows a scannable QR code in its own header (click <em>QR Code</em> next to <em>Public Page</em>) and directly on the public page itself, so a printed flyer or a phone held up at the door can hand off straight to the event listing. Click <em>Generate QR code</em> in this panel — or <em>Save to Assets</em> in the header's QR panel — to save it as a downloadable PNG asset for flyers and print. Regenerating replaces the existing QR asset rather than piling up duplicates.</p>
+    <p>Every public event automatically shows a scannable QR code in its own header (open the <i class="fa-solid fa-ellipsis" aria-hidden="true"></i> <strong>More actions</strong> menu and click <em>QR Code</em>) and directly on the public page itself, so a printed flyer or a phone held up at the door can hand off straight to the event listing. Click <em>Generate QR code</em> in this panel — or <em>Save to Assets</em> in the header's QR panel — to save it as a downloadable PNG asset for flyers and print. Regenerating replaces the existing QR asset rather than piling up duplicates.</p>
   `,
 
   invites: `
@@ -1079,10 +1084,12 @@ const HELP_CONTENT = {
     <h3>Creating a contract</h3>
     <p>Click <strong>+ New contract</strong> on an event's <em>Contracts</em> tab to open the create-contract dialog, which offers two ways to get a contract attached to the show:</p>
     <ul>
-      <li><strong>Generate contract</strong> — pick a <strong>deal type</strong> (template): Private Event Rental, Promoter / Production Show, Artist / Band Performance, Recurring Night, Famous / High-Draw Artist, Fundraiser, or House-Produced Show. Optionally enter the counterparty (artist, promoter, or client), then <em>Create contract</em> to land in the contract builder described below.</li>
+      <li><strong>Generate contract</strong> — pick a <strong>deal type</strong> (template): Private Event Rental, Promoter / Production Show, Artist / Band Performance, Recurring Night, Famous / High-Draw Artist, Fundraiser, or House-Produced Show. Optionally enter the counterparty (artist, promoter, or client), then <em>Create contract</em> to land in the contract builder described below. If the event is part of a <a href="#help-recurring-events">recurring series</a>, an <strong>Apply to entire series</strong> checkbox (on by default) lets one contract cover every occurrence instead of just this date — every sibling shows a <span class="badge status-blue">Covers entire series</span> badge and satisfies its own "contract on file" checks (readiness, the Booked-status gate, the client portal) through that one shared document.</li>
       <li><strong>Upload contract</strong> — for a deal that was already signed on paper or handled outside Backstage. Choose a file (PDF or image); it uploads immediately, is tagged as a contract asset, and is attached to the event as a <em>signed</em> contract. No deal-terms form, clause library, or e-sign workflow applies to an uploaded contract — it's a record of a deal made elsewhere. This option only appears for roles with permission to upload assets.</li>
     </ul>
     <p>Both kinds show up together in the event's Contracts list. Click a generated contract's row to open the builder; click an uploaded contract's row to view the file in place — images open in a lightbox, PDFs open in an embedded viewer.</p>
+
+    <p>The contract's title (the heading at the top of the builder) is click-to-rename: it stays auto-derived from the counterparty and show type until you edit it by hand, at which point Backstage leaves your custom title alone through future counterparty edits. Click the title, type, and press Enter to save (or Escape to revert); it can't be left blank.</p>
 
     <h3>The builder, left to right</h3>
     <ul>
@@ -1312,6 +1319,28 @@ const HELP_CONTENT = {
     <p>Door sales use the same inventory and the same books as online sales: a tier can never be oversold (a sale that would exceed capacity is refused outright rather than partially recorded), and door revenue shows up in tier revenue, gross ticket sales, and the settlement report automatically. Because the payment method is stored, cash and card totals reconcile separately at the end of the night.</p>
     <p class="muted small">Sales are off by default on every scanner link, and can't be switched on afterwards — a link's powers are fixed when you create it. Give a selling link only to whoever is running the box, and put a PIN on it; if it ever leaks, revoke it and make a new one. Links created before this feature stay scan-only.</p>
 
+    <h3>Registering pre-printed tickets</h3>
+    <p>Some stock is numbered and printed <em>before</em> Backstage ever sees it — a run of stubs sold for cash at a merch table, or handed to an external box office. Backstage can't invent that number, but it can still own the buyer record, the CRM sync, and door lookup for it:</p>
+    <ol>
+      <li>Create a ticket type for the printed stock and leave it off-sale (<em>draft</em> or <em>paused</em>) — it never appears on the public storefront. Set its quantity generously; the physical print run is the real cap, not this counter.</li>
+      <li>Send sellers or the box office to <code>register-ticket.html?event={id}</code> — a standalone page that needs no Backstage login. A QR code pointing at that URL works too, for handing out at a table.</li>
+      <li>For each stub sold, the seller types the printed number plus the buyer's name, email, and phone into that page. Backstage records a real sale (cash, at that ticket type's price) exactly like a door sale, so it shows up in normal revenue reporting, and feeds the buyer into Contacts through the same marketing-opt-in checkbox as an online order.</li>
+    </ol>
+    <p>The ticket is born <em>issued</em>, not <em>redeemed</em> — the physical stub is itself proof of purchase, and registration can happen any time before the show, independent of who's working the door that night. A printed number is unique <strong>per event</strong> (the same numbering can be reused across different shows' print runs); registering the same number twice for one event is rejected with a neutral "already registered" message rather than the first registrant's name or email, since the form needs no login.</p>
+    <p>At the door, staff need no extra tooling — typing the number off the stub into <em>Look up</em> (or the Ticketing tab's <em>Issued tickets</em> search) finds it exactly like searching by name or email, and <em>Mark used</em>/<em>Admit</em> checks it in the same way as any other manually-admitted ticket.</p>
+
+    <h3>Physical ticket batch PDFs</h3>
+    <p>The opposite direction: instead of registering stock someone else already printed, generate your own pre-printed run straight from Backstage, with a working QR code on every ticket. In the <em>Physical ticket batches</em> section, click <strong>+</strong> to open <strong>Generate physical tickets</strong>:</p>
+    <ul>
+      <li><strong>Ticket type</strong> — which tier the batch draws from.</li>
+      <li><strong>Quantity</strong>, <strong>Starting number</strong>, and <strong>Number digits</strong> — how many tickets, and the numbering scheme printed on each (e.g. 6 digits gives <code>#000001</code>).</li>
+      <li><strong>Batch name</strong> and <strong>Seller / allocation</strong> — optional labels, e.g. a batch named "Amoeba-001" allocated to "Amoeba Records" for a consignment run.</li>
+      <li><strong>Ticket width/height, bleed, and crop marks</strong> — print-shop layout controls for the physical stub size.</li>
+    </ul>
+    <p>Confirming creates real, unique ticket records up front — each with its own number and its own QR code — before any PDF exists. <strong>Download</strong> then renders a print-ready PDF straight from those same records: <em>Individual PDF</em> (one ticket per page/cutout) or <em>Imposed sheet</em> (multiple tickets laid out on a US Letter sheet for a print shop). Because the PDF is generated fresh from the ticket rows every time rather than saved anywhere, downloading again — from the batch list, any time later — reproduces the exact same numbers and QR codes; there's no separate "regenerate" step to worry about going out of sync.</p>
+    <p>The batch list shows live <strong>Issued</strong>, <strong>Sold</strong>, <strong>Remaining</strong>, and <strong>Checked in</strong> counts for each batch.</p>
+    <p class="muted small">A ticket from a batch cannot be scanned or admitted at the door until it has actually been marked sold — this stops a stack of printed-but-unsold stubs from being usable as free admission. As of this writing there is no admin action yet to flip a batch ticket to sold, so treat batch generation as a way to get print-ready stock into hand; ask your Backstage administrator about the status of seller-activation before relying on door scanning for a given batch.</p>
+
     <h3>Someone who lost their ticket</h3>
     <p>The third person at every door bought a ticket but can't show it — dead phone, buried email, ticket printed and left at home. Rather than turning away a paying customer or waving them through untracked, look them up:</p>
     <ol>
@@ -1345,11 +1374,13 @@ const HELP_CONTENT = {
 
   publish: `
     <h2>Publishing the public page</h2>
-    <p>Every event has a public-facing page at a short, SEO-friendly address like <code>/e/&lt;event-title-slug&gt;</code> — click <em>QR Code</em> at the top of the event workspace to see and copy this event's exact link. That address is assigned once when the event is created and never changes, so it keeps working even after the event is renamed or rescheduled. (Events created before this existed still resolve at the older <code>/event.html?id=&lt;event id&gt;</code> form.)</p>
+    <p>Every event has a public-facing page at a short, SEO-friendly address like <code>/e/&lt;event-title-slug&gt;</code> — open the event header's <i class="fa-solid fa-ellipsis" aria-hidden="true"></i> <strong>More actions</strong> menu and click <em>QR Code</em> to see and copy this event's exact link. That address is assigned once when the event is created and never changes, so it keeps working even after the event is renamed or rescheduled. (Events created before this existed still resolve at the older <code>/event.html?id=&lt;event id&gt;</code> form.)</p>
     <h3>Toggling publish</h3>
     <p>Click <em>Publish Public Page</em> at the top of the event workspace to make it live, or <em>Hide Public Page</em> to take it offline. The same toggle exists as a checkbox in <a href="#help-details">Event details</a>.</p>
     <h3>Previewing</h3>
     <p>Click <em>Public Page</em> in the event header to open the public page in a new tab. It is fetched anonymously from <code>/api/public/events/&lt;id&gt;</code> (old <code>&lt;slug&gt;</code> links still resolve too); if the event is hidden the API returns an error.</p>
+    <h3>Add to Google Calendar</h3>
+    <p>The public upcoming-events page includes a one-click <em>Add to Google Calendar</em> link that drops a visitor straight into Google Calendar's own "subscribe to a URL" prompt — no copying/pasting an ICS link into Settings by hand. It subscribes them to the venue's live public-events feed, so anything published here keeps their calendar current automatically. Only published, public events are ever included.</p>
   `,
 
   print: `
@@ -2424,7 +2455,7 @@ const HELP_CONTENT = {
     <h2>Campaigns</h2>
     <p>Every promoted event has exactly one campaign, created the first time you click <em>Promote</em> from the event workspace.</p>
     <h3>Opening a campaign</h3>
-    <p>From any event, click the pink <em>Promote</em> button in the event action bar. If no campaign exists yet, Backstage creates one automatically. You can also browse all campaigns via the <strong>Promote</strong> nav item — it shows a card grid of upcoming events sorted by date with a health badge on each.</p>
+    <p>From any event, open the header's <i class="fa-solid fa-ellipsis" aria-hidden="true"></i> <strong>More actions</strong> menu and click <em>Promote</em>. If no campaign exists yet, Backstage creates one automatically. You can also browse all campaigns via the <strong>Promote</strong> nav item — it shows a card grid of upcoming events sorted by date with a health badge on each.</p>
     <h3>Campaign overview layout</h3>
     <ul>
       <li><strong>Main column</strong> — event hero (flyer, date, venue), metric tiles, and the posts list.</li>

@@ -376,6 +376,8 @@ provider and currency in **Admin → Payments** (`#admin-payments`, gated by
 
 ## Not yet built (future)
 
-In-app **Help** section for ticketing, partial/line-item refunds (today's refund
-is the cancel-event path), waitlists/queueing for sold-out tiers, and flowing
-ticket revenue into `event_settlements`.
+A seller-activation action to flip a physical batch ticket's `physical_status`
+to `sold` (see *Physical / pre-printed tickets* above — until this exists, a
+batch-printed ticket cannot be scanned or manually admitted), partial/line-item
+refunds (today's refund is the cancel-event path), waitlists/queueing for
+sold-out tiers, and flowing ticket revenue into `event_settlements`.
