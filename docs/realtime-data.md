@@ -385,6 +385,20 @@ Components subscribe to `data.invalidated` exactly like any other bus topic
 global DOM-mutation engine, no component ever instantiates `EventSource` or
 talks to the worker directly.
 
+### Connection indicator
+
+A small dot in the topbar (`app.js`'s `setupRealtimeIndicator()`, next to the
+session pill) reflects `realtime.status` at a glance: green = connected,
+amber (pulsing) = connecting/reconnecting, red = disconnected-and-retrying,
+dim/neutral = the worker itself is unavailable in this browser (unsupported,
+or the `backstage_worker_disabled` debug flag) so retrying wouldn't help.
+It's purely informational — `title`/`aria-label` carry the actual sentence,
+nothing in the app reads its state, and it never blocks or gates anything.
+Added so staff who've come to expect the live behaviors above (the Details
+form's field flash, Booking Inbox auto-refresh) have a quick way to tell
+*why* something isn't updating instantly, rather than wondering if the app
+is broken.
+
 ---
 
 ## Booking Inbox
@@ -423,6 +437,38 @@ wired to react to this bus topic in the first place. Same for every other
 section panel (Tasks, Blockers, Lineup, Schedule, …) — none of them
 subscribe to `event.changed`; each owns and refreshes its own data
 independently, unaffected by this feature.
+
+`EventDetailsForm` does have its own separate `data.invalidated` subscription
+(`connectedCallback()`/`_onRemoteInvalidation()`), since it's the one
+component that needs to know when *its own* event changed remotely so it can
+pull the fresh row in. Two things make this safe and unobtrusive rather than
+disruptive, after an earlier version of this (which showed a blocking
+"updated in another window" banner, including — due to a timing/diff gap —
+sometimes for the tab's own writes) was reworked in response to user
+feedback:
+
+- **Diffed, not blind.** `_applyRemoteData()` compares the incoming row
+  against what's currently rendered, field by field
+  (`diffEventFields()`/`DETAIL_FORM_FIELDS`), *before* re-rendering. A revision
+  that changed nothing this form displays (this tab's own echo arriving
+  outside the 3s fast-path window below, or a write to a field the form
+  doesn't render) re-renders with nothing to show for it — no banner, no
+  flash, nothing for the user to puzzle over. A revision that changed
+  something re-renders and then briefly flashes (the same `.field-highlight`
+  CSS animation `contracts.js` uses for `focusDealField`) just the fields
+  that actually differ, so the user sees *what* changed instead of a generic
+  "something changed, go find out what" prompt.
+- **Deferred, not blocking.** If the user is actively in this form
+  (`_interacting`) or an autosave is in flight (`_saving`) when a remote
+  invalidation resolves, it's held in `_pendingRemoteData` rather than shown
+  as an interrupt. `_flushPendingRemoteData()` applies it automatically —
+  diff, re-render, flash — the moment focus leaves the form (wired to the
+  form's `focusout`) or the in-flight autosave finishes, whichever is later.
+  No manual "reload" click is involved.
+- A cheap time-based fast path (`Date.now() - _lastLocalSaveAt < 3000`) still
+  skips the extra `GET` entirely for the common case of a tab seeing its own
+  write echo back — an optimization now, not a correctness requirement, since
+  the diff above would no-op on a true echo regardless.
 
 ---
 

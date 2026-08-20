@@ -65,6 +65,7 @@ class AppShell extends PanicElement {
       // when the worker itself failed to start (see data-client.js's
       // isAvailable() guard inside startRealtime()). See docs/realtime-data.md.
       dataClient.startRealtime();
+      this.setupRealtimeIndicator();
       this.renderNav();
       this.applyCapabilities();
       this.applyUserPrefs();
@@ -83,6 +84,44 @@ class AppShell extends PanicElement {
     } catch {
       location.href = appUrl('login.html');
     }
+  }
+
+  /**
+   * Small red/green dot in the topbar reflecting whether the realtime
+   * invalidation stream (docs/realtime-data.md) is actually connected right
+   * now — the app works fine either way (HTTP is always the source of
+   * truth), but staff who've come to expect live updates (e.g. the Details
+   * form's field flash, Booking Inbox auto-refresh) have asked to be able
+   * to tell at a glance why a change isn't showing up instantly. Purely
+   * informational: nothing reads this element's state, and it never blocks
+   * anything.
+   */
+  setupRealtimeIndicator() {
+    const el = $('[data-realtime-indicator]', this);
+    if (!el) return;
+    const describe = (state) => {
+      // The worker can be entirely out of the picture (unsupported browser,
+      // the `backstage_worker_disabled` debug flag) — distinct from merely
+      // being connected/disconnected, since retrying will never help here.
+      if (!dataClient.isAvailable()) {
+        return ['unavailable', 'Live updates unavailable in this browser — the app still works normally, just reload the page to see other windows’ changes.'];
+      }
+      if (state === 'connected') {
+        return ['connected', 'Live updates connected — changes made in other windows appear here automatically.'];
+      }
+      if (state === 'connecting') {
+        return ['connecting', 'Reconnecting to live updates…'];
+      }
+      return ['disconnected', 'Live updates disconnected — retrying automatically. The app still works normally; reload to see other windows’ changes sooner.'];
+    };
+    const apply = ({ state } = {}) => {
+      const [visualState, text] = describe(state);
+      el.dataset.state = visualState;
+      el.title = text;
+      el.setAttribute('aria-label', text);
+    };
+    apply(dataClient.getRealtimeState());
+    subscribe('realtime.status', apply, this.abort.signal);
   }
 
   /** Fetch the primary venue name from the API and update the sidebar label. */
@@ -157,6 +196,7 @@ class AppShell extends PanicElement {
       <label class="search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input data-search placeholder="Search events, IDs, notes…" aria-label="Search events"></label>
       <button class="topbar-create" data-action="new-event" type="button" title="Create event" aria-label="Create event"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>New event</span></button>
       <button class="topbar-ai" data-action="ai-drawer-toggle" type="button" title="AI Assistant" aria-label="Open AI Assistant" hidden><i class="fa-solid fa-sparkles" aria-hidden="true"></i><span>AI Assistant</span></button>
+      <span class="realtime-indicator" data-realtime-indicator data-state="unavailable" role="status" tabindex="0"><span class="realtime-dot" aria-hidden="true"></span></span>
       <span class="session-pill" data-user-pill>…</span>
       <a href="#account" class="logout" style="text-decoration:none">Account</a>
       <button id="logout" class="logout">Logout</button>

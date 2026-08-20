@@ -54,17 +54,17 @@ test('an invalidation for a different event does not trigger a refresh or remoun
   assert.ok(result.markerSurvived, 'the workspace element was not torn down and remounted (same DOM node instance)');
 });
 
-// The three tests below exercise EventDetailsForm's OWN realtime subscription
+// The four tests below exercise EventDetailsForm's OWN realtime subscription
 // (event-workspace.js's connectedCallback()/_onRemoteInvalidation()) — the
 // one component excluded from the blanket "just reapply the fresh payload"
 // pattern every other Events subscriber uses, because it owns live editable
-// form state. Each test defensively resets interaction/banner state at the
-// top rather than assuming a clean slate: page.openEvent() re-navigates to
-// the same hash the whole file shares (UI_EVENT_ID), which per the test
-// above does NOT remount the workspace, so `pb-event-details-form` is the
-// same persisted DOM node — and therefore the same JS instance — across
-// every test in this file.
-test('a focused, unsaved Details field survives a realtime refresh and shows an "updated elsewhere" banner instead', async (page) => {
+// form state. Each test defensively resets interaction state at the top
+// rather than assuming a clean slate: page.openEvent() re-navigates to the
+// same hash the whole file shares (UI_EVENT_ID), which per the test above
+// does NOT remount the workspace, so `pb-event-details-form` is the same
+// persisted DOM node — and therefore the same JS instance — across every
+// test in this file.
+test('a focused, unsaved Details field survives a realtime refresh, then applies automatically once editing ends', async (page) => {
   if (!page.hasEvent) page.skip('UI_EVENT_ID not found');
   await page.openEvent();
   await page.until(`document.querySelector('[name="title"]')`);
@@ -77,7 +77,6 @@ test('a focused, unsaved Details field survives a realtime refresh and shows an 
   // before touching state so a stray late refresh can't land mid-test and
   // wipe the focus/marker this test is about to set.
   await new Promise((r) => setTimeout(r, 800));
-  await page.eval(`document.querySelector('[data-realtime-stale]')?.remove()`);
 
   const marker = 'REALTIME TEST — unsaved edit';
   // Confirmed by hand (see the diagnostic run that motivated this comment):
@@ -88,9 +87,10 @@ test('a focused, unsaved Details field survives a realtime refresh and shows an 
   // focus) exhibits. EventDetailsForm's guard is driven by real
   // focusin/focusout events, which this harness can't reliably synthesize,
   // so — like the own-echo test below, which sets _lastLocalSaveAt directly
-  // — this drives the internal _interacting flag directly rather than via a
-  // simulated interaction. Setting .value without dispatching 'change'
-  // still avoids a genuine PATCH/persisted write either way, keeping this
+  // — this drives the internal _interacting flag (and, further down,
+  // _flushPendingRemoteData()) directly rather than via a simulated
+  // interaction/blur. Setting .value without dispatching 'change' still
+  // avoids a genuine PATCH/persisted write either way, keeping this
   // non-destructive per tests/ui/README.md.
   await page.eval(`document.querySelector('pb-event-details-form')._interacting = true`);
   await page.eval(`document.querySelector('[name="title"]').value = ${JSON.stringify(marker)}`);
@@ -100,18 +100,55 @@ test('a focused, unsaved Details field survives a realtime refresh and shows an 
     window.pan.bus.publish('data.invalidated', { entity: 'event', id: ws.eventId, revision: 910020 });
     await new Promise((r) => setTimeout(r, 500));
   })()`);
-  await new Promise((r) => setTimeout(r, 200));
 
-  const stillThere = await page.eval(`document.querySelector('[name="title"]')?.value`);
-  assert.equal(stillThere, marker, 'the actively-edited Details form field survives a realtime-triggered invalidation untouched');
+  const stillThereMidEdit = await page.eval(`document.querySelector('[name="title"]')?.value`);
+  assert.equal(stillThereMidEdit, marker, 'the actively-edited Details form field survives a realtime-triggered invalidation untouched while interacting');
 
-  const bannerShown = await page.until(`document.querySelector('[data-realtime-stale]')`, 2000);
-  assert.ok(bannerShown, 'an "updated elsewhere" banner appears instead of silently overwriting the active edit');
+  const queued = await page.eval(`!!document.querySelector('pb-event-details-form')._pendingRemoteData`);
+  assert.ok(queued, 'the remote change is held instead of applied while the user is mid-edit, rather than shown as an interrupt');
 
-  // _interacting was set directly above (see the comment on that line), not
-  // via a real, self-clearing focus/blur pair — reset it explicitly so it
-  // doesn't leak into the next test sharing this same persisted instance.
+  // "Done editing": clear the interacting flag and flush, the same way a
+  // real focusout on the form triggers _flushPendingRemoteData().
+  await page.eval(`(async () => {
+    const form = document.querySelector('pb-event-details-form');
+    form._interacting = false;
+    form._flushPendingRemoteData();
+  })()`);
+
+  const marker2 = await page.eval(`document.querySelector('[name="title"]')?.value`);
+  assert.ok(marker2 !== marker, 'the queued update is applied automatically once editing ends, without a manual reload click');
+
   await page.eval(`document.querySelector('pb-event-details-form')._interacting = false`);
+});
+
+test('applying a remote change that actually differs flashes just the field(s) that changed', async (page) => {
+  if (!page.hasEvent) page.skip('UI_EVENT_ID not found');
+  await page.openEvent();
+  await page.until(`document.querySelector('[name="title"]')`);
+  await new Promise((r) => setTimeout(r, 800));
+  await page.eval(`document.activeElement?.blur(); document.querySelector('pb-event-details-form') && (document.querySelector('pb-event-details-form')._interacting = false);`);
+
+  // Drives _applyRemoteData() directly with a synthetic payload that differs
+  // from what's on screen in exactly one field — deterministic, rather than
+  // depending on a real second write landing through db_history.
+  const result = await page.eval(`(async () => {
+    const form = document.querySelector('pb-event-details-form');
+    const fresh = JSON.parse(JSON.stringify(form.eventData));
+    const current = fresh.event.age_restriction || '';
+    fresh.event.age_restriction = current === 'REALTIME FLASH TEST' ? 'REALTIME FLASH TEST 2' : 'REALTIME FLASH TEST';
+    form._applyRemoteData(fresh);
+    const changedField = document.querySelector('[name="age_restriction"]');
+    const unchangedField = document.querySelector('[name="title"]');
+    return {
+      changedFlashed: changedField?.classList.contains('field-highlight'),
+      unchangedFlashed: unchangedField?.classList.contains('field-highlight'),
+      value: changedField?.value,
+    };
+  })()`);
+
+  assert.ok(result.changedFlashed, 'the field whose value actually changed gets the field-highlight flash class');
+  assert.ok(!result.unchangedFlashed, 'a field whose value did not change is not flashed');
+  assert.ok(result.value?.startsWith('REALTIME FLASH TEST'), 'the changed field shows the new value after the re-render');
 });
 
 test('a realtime invalidation silently refreshes the Details form when no field is focused', async (page) => {
@@ -122,7 +159,7 @@ test('a realtime invalidation silently refreshes the Details form when no field 
   // No top-level const/let here — Runtime.evaluate shares one global lexical
   // scope across separate eval() calls, so redeclaring the same identifier
   // in more than one of these template strings throws a SyntaxError.
-  await page.eval(`document.activeElement?.blur(); document.querySelector('[data-realtime-stale]')?.remove(); document.querySelector('pb-event-details-form') && (document.querySelector('pb-event-details-form')._interacting = false);`);
+  await page.eval(`document.activeElement?.blur(); document.querySelector('pb-event-details-form') && (document.querySelector('pb-event-details-form')._interacting = false);`);
 
   const result = await page.eval(`(async () => {
     const detailsForm = document.querySelector('pb-event-details-form');
@@ -139,7 +176,7 @@ test('a realtime invalidation silently refreshes the Details form when no field 
   assert.ok(result.rerendered, 'the idle Details form re-rendered from a fresh fetch (the old <form> node was replaced)');
 });
 
-test('a Details form autosave does not show itself an "updated elsewhere" banner (own-write echo suppression)', async (page) => {
+test('a Details form autosave does not treat itself as a remote change (own-write echo suppression)', async (page) => {
   if (!page.hasEvent) page.skip('UI_EVENT_ID not found');
   await page.openEvent();
   await page.until(`document.querySelector('[name="title"]')`);
@@ -147,7 +184,7 @@ test('a Details form autosave does not show itself an "updated elsewhere" banner
   // No top-level const/let here — Runtime.evaluate shares one global lexical
   // scope across separate eval() calls, so redeclaring the same identifier
   // in more than one of these template strings throws a SyntaxError.
-  await page.eval(`document.activeElement?.blur(); document.querySelector('[data-realtime-stale]')?.remove(); document.querySelector('pb-event-details-form') && (document.querySelector('pb-event-details-form')._interacting = false);`);
+  await page.eval(`document.activeElement?.blur(); document.querySelector('pb-event-details-form') && (document.querySelector('pb-event-details-form')._interacting = false);`);
 
   const result = await page.eval(`(async () => {
     const detailsForm = document.querySelector('pb-event-details-form');
@@ -158,12 +195,8 @@ test('a Details form autosave does not show itself an "updated elsewhere" banner
     window.pan.bus.publish('data.invalidated', { entity: 'event', id: ws.eventId, revision: 910040 });
     await new Promise((r) => setTimeout(r, 500));
     const currentFormNode = document.querySelector('pb-event-details-form form');
-    return {
-      bannerShown: !!document.querySelector('[data-realtime-stale]'),
-      rerendered: currentFormNode?.dataset.preRefreshMarker !== '1',
-    };
+    return { rerendered: currentFormNode?.dataset.preRefreshMarker !== '1' };
   })()`);
 
-  assert.ok(!result.bannerShown, "an invalidation landing right after a local save is treated as this tab's own echo, not shown as a remote change");
-  assert.ok(!result.rerendered, 'the echoed invalidation triggers no refetch/re-render at all');
+  assert.ok(!result.rerendered, "an invalidation landing right after a local save is treated as this tab's own echo — no refetch/re-render at all");
 });

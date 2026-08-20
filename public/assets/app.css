@@ -345,6 +345,22 @@ h3 { margin-bottom: 8px; font-size: 15px; }
   white-space: nowrap;
 }
 
+/* Realtime connection dot (docs/realtime-data.md) — see app.js's
+   setupRealtimeIndicator(). Purely informational; title/aria-label carry the
+   actual explanation, set from JS per state. */
+.realtime-indicator { display: inline-flex; align-items: center; cursor: default; }
+.realtime-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .3);
+  transition: background-color .3s ease;
+}
+.realtime-indicator[data-state="connected"] .realtime-dot { background: var(--green); }
+.realtime-indicator[data-state="connecting"] .realtime-dot { background: var(--amber); animation: realtime-pulse 1.1s ease-in-out infinite; }
+.realtime-indicator[data-state="disconnected"] .realtime-dot { background: var(--red); }
+@keyframes realtime-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
 /* pb-page-header — page title + blurb shown in the topbar on desktop */
 pb-page-header { display: none; }
 .ph-title {
@@ -1435,18 +1451,6 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
 .save-status[data-state="saved"] { color: #2fa84f; }
 .save-status[data-state="saved"]::before { content: "\2713\00a0"; font-weight: 700; }
 .save-status[data-state="error"] { color: #ef4338; }
-/* Realtime (docs/realtime-data.md): shown by EventDetailsForm instead of
-   silently re-rendering over an active edit — see event-workspace.js's
-   _showStaleBanner(). */
-.info-note.realtime-stale {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  background: color-mix(in srgb, var(--amber) 14%, #fff);
-  border-color: color-mix(in srgb, var(--amber) 50%, var(--line));
-  color: #7a5200;
-}
 .row-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -3647,7 +3651,9 @@ body.lightbox-open { overflow: hidden; }
   background: #fafcff;
   padding: 0 4px;
 }
-/* Field flash highlight — triggered on focusDealField */
+/* Field flash highlight — triggered on focusDealField (contracts.js) and on
+   fields a realtime invalidation just updated in place (event-workspace.js's
+   EventDetailsForm._applyRemoteData(), see docs/realtime-data.md). */
 @keyframes field-highlight {
   0%   { box-shadow: 0 0 0 0   rgba(66,133,244,.55); }
   50%  { box-shadow: 0 0 0 6px rgba(66,133,244,.22); }

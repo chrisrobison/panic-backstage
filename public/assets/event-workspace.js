@@ -1063,21 +1063,49 @@ export { autofillEventTimes, TIME_OFFSETS };
 // Statuses available to private events — skips all public-promo stages.
 const PRIVATE_EVENT_STATUSES = ['empty', 'proposed', 'confirmed', 'booked', 'completed', 'settled', 'canceled'];
 
+// Every field name EventDetailsForm can render as an <input>/<select>/
+// <textarea>, across both the private and public variants of the form (a
+// name absent from whichever variant is currently rendered is simply
+// skipped when looked up — see _applyRemoteData()). Used only to decide
+// which fields deserve the "just changed remotely" flash; diffing every raw
+// key on the event row would also flash on server-only bookkeeping fields
+// (e.g. updated_at) nobody sees rendered as a field.
+const DETAIL_FORM_FIELDS = [
+  'title', 'date', 'end_date', 'venue_id', 'resource_id', 'event_type', 'status', 'owner_user_id',
+  'is_non_music', 'load_in_time', 'doors_time', 'show_time', 'end_time', 'load_out_time',
+  'age_restriction', 'ticket_price', 'deposit_amount', 'potential_revenue', 'estimated_guests', 'capacity',
+  'walkthrough_done', 'promoter_name', 'promoter_email', 'promoter_phone', 'client_org',
+  'booker_name', 'booker_email', 'booker_phone', 'av_requirements', 'catering_notes',
+  'contract_details', 'description_public', 'public_subtitle', 'public_tags', 'description_internal',
+  'public_visibility',
+];
+
+/** Field names whose value actually differs between two event rows (string comparison — good enough for display fields, and avoids false positives from e.g. `0` vs `'0'`). */
+function diffEventFields(oldEvent, newEvent) {
+  if (!oldEvent || !newEvent) return [];
+  return DETAIL_FORM_FIELDS.filter((name) => String(oldEvent[name] ?? '') !== String(newEvent[name] ?? ''));
+}
+
 class EventDetailsForm extends HTMLElement {
   // Realtime (see docs/realtime-data.md): every other Events subscriber is a
   // read-only card that can just blindly reapply a fresh payload. This is
   // the one component that owns live editable form state, which is why the
   // original implementation excluded it from event.changed entirely — see
   // the "Events" section of the doc. This still never blindly overwrites
-  // what's on screen: a remote invalidation is only applied silently when
-  // nobody is actively in this form and no autosave is in flight; otherwise
-  // it shows a non-destructive "updated elsewhere" banner and waits for the
-  // user to opt in, so a field the user is mid-typing can never be clobbered.
+  // what's on screen: a remote invalidation is only applied when nobody is
+  // actively in this form and no autosave is in flight; otherwise it's held
+  // and applied automatically the moment the user leaves the form (see
+  // _flushPendingRemoteData()) rather than interrupting them. Applying is
+  // itself diffed field-by-field against what's currently on screen — see
+  // _applyRemoteData() — so an invalidation that turns out to carry no
+  // actual change (this tab's own echo, or an unrelated no-op write) is
+  // silently a no-op instead of a distracting "something changed" signal.
   connectedCallback() {
     this._abort = new AbortController();
     this._interacting = false;
     this._saving = false;
     this._lastLocalSaveAt = 0;
+    this._pendingRemoteData = null;
     let invalidationDebounce = null;
     subscribe('data.invalidated', (msg) => {
       if (msg.entity !== 'event' || Number(msg.id) !== Number(this.eventData?.event?.id)) return;
@@ -1093,33 +1121,48 @@ class EventDetailsForm extends HTMLElement {
 
   async _onRemoteInvalidation() {
     if (!this.isConnected || !this.eventData?.event) return;
-    // This tab's own just-completed save will itself show up as an
-    // event:{id} invalidation a moment later (the PATCH that caused it went
-    // through the same db_history trigger as anyone else's write) — treat
-    // anything landing right after a local save as that echo rather than a
-    // genuinely remote change, so a tab never shows itself a "changed
-    // elsewhere" banner for its own edit.
+    // Fast path: this tab's own just-completed save will itself show up as
+    // an event:{id} invalidation a moment later (the PATCH that caused it
+    // went through the same db_history trigger as anyone else's write).
+    // Not load-bearing for correctness — _applyRemoteData()'s diff below
+    // would no-op on a true echo regardless — just avoids a pointless extra
+    // GET for the overwhelming majority of invalidations this tab sees.
     if (Date.now() - this._lastLocalSaveAt < 3000) return;
-    if (this._interacting || this._saving) {
-      this._showStaleBanner();
-      return;
-    }
     try {
-      this.data = await api(`/events/${this.eventData.event.id}`);
+      const fresh = await api(`/events/${this.eventData.event.id}`);
+      if (this._interacting || this._saving) {
+        // Can't safely apply mid-edit/mid-autosave without risking clobbering
+        // what the user is doing right now — hold onto it. _flushPendingRemoteData()
+        // (wired to the form's focusout below) applies it the moment focus
+        // leaves the form, no manual "reload" click required.
+        this._pendingRemoteData = fresh;
+        return;
+      }
+      this._applyRemoteData(fresh);
     } catch { /* best-effort — a later invalidation or manual reload will retry */ }
   }
 
-  _showStaleBanner() {
-    if ($('[data-realtime-stale]', this)) return; // already showing
-    const banner = document.createElement('p');
-    banner.className = 'info-note realtime-stale wide';
-    banner.dataset.realtimeStale = '';
-    banner.innerHTML = 'This event was updated in another window. <button type="button" class="small secondary" data-reload>Reload</button>';
-    banner.querySelector('[data-reload]').addEventListener('click', async () => {
-      try { this.data = await api(`/events/${this.eventData.event.id}`); }
-      catch (err) { publish('toast.show', { message: err.message || 'Reload failed.', tone: 'error' }); }
+  /** Applies a remote invalidation once it's safe to (see callers) — diffs it against what's currently rendered, re-renders, then briefly flashes just the fields that actually changed. A no-op diff (this tab's own echo, or a write that didn't touch anything this form shows) re-renders nothing visible. */
+  _applyRemoteData(fresh) {
+    const changedFields = diffEventFields(this.eventData?.event, fresh.event);
+    this.data = fresh;
+    if (!changedFields.length) return;
+    const form = $('form', this);
+    if (!form) return;
+    changedFields.forEach((name) => {
+      const field = form.elements.namedItem(name);
+      if (!field) return;
+      field.classList.add('field-highlight');
+      setTimeout(() => field.classList.remove('field-highlight'), 1400);
     });
-    $('form', this)?.prepend(banner);
+  }
+
+  /** Applies a remote update that arrived mid-edit/mid-autosave and had to wait — called once focus leaves the form (see the focusout listener below). A no-op if the user is still interacting/saving (e.g. tabbed to another field in the same form) or nothing is actually pending. */
+  _flushPendingRemoteData() {
+    if (this._interacting || this._saving || !this._pendingRemoteData) return;
+    const pending = this._pendingRemoteData;
+    this._pendingRemoteData = null;
+    this._applyRemoteData(pending);
   }
 
   set data(data) {
@@ -1274,14 +1317,27 @@ class EventDetailsForm extends HTMLElement {
         publish('toast.show', { message: err.message || 'Save failed.', tone: 'error' });
       } finally {
         this._saving = false;
+        // A remote invalidation may have arrived and queued itself while this
+        // save was in flight (see _onRemoteInvalidation) — if the user has
+        // also already left the form by now (e.g. a checkbox/select saves
+        // without blurring, but focus moved on before this PATCH returned),
+        // no focusout is coming to trigger the flush, so do it here too.
+        this._flushPendingRemoteData();
       }
     };
     // Realtime interaction guard (see connectedCallback()): any field
     // focused anywhere in the form counts as "actively editing" for as long
-    // as focus stays inside it, so a remote invalidation arriving mid-edit
-    // shows the banner instead of silently re-rendering under the user.
+    // as focus stays inside it, so a remote invalidation arriving mid-edit is
+    // queued (_pendingRemoteData) instead of re-rendering under the user.
     form.addEventListener('focusin', () => { this._interacting = true; }, { signal: this._abort?.signal });
-    form.addEventListener('focusout', () => { this._interacting = false; }, { signal: this._abort?.signal });
+    form.addEventListener('focusout', () => {
+      this._interacting = false;
+      // A remote change may have arrived while a field here had focus and
+      // been queued instead of applied (see _onRemoteInvalidation). Defer
+      // one tick so a Tab between two fields in this same form (focusout
+      // immediately followed by focusin) doesn't apply it prematurely.
+      setTimeout(() => this._flushPendingRemoteData(), 0);
+    }, { signal: this._abort?.signal });
     $$('input, select, textarea', form).forEach((field) => field.addEventListener('change', () => {
       // Setting any one show-time back-fills the empty others before we save,
       // so all three persist in the same PATCH.
