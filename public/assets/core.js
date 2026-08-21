@@ -31,6 +31,7 @@ const setTokens = (access, refresh) => {
   else localStorage.removeItem(TOKEN_KEY);
   // Deliberately ignore newly-issued refresh tokens. The server placed the
   // authoritative copy in an HttpOnly cookie.
+  scheduleProactiveRefresh();
 };
 
 const clearTokens = () => {
@@ -40,7 +41,56 @@ const clearTokens = () => {
   localStorage.removeItem(REFRESH_KEY);
   sessionStorage.removeItem(TOKEN_KEY); // clean up any leftover tab-scoped copy
   sessionStorage.removeItem(REFRESH_KEY);
+  clearTimeout(_proactiveRefreshTimer);
 };
+
+// Plain browser requests — <img src>, <a href download>, and the realtime
+// EventSource stream (see data-worker.js) — authenticate only via the
+// HttpOnly `backstage_access` cookie; they can't send an Authorization
+// header, so unlike api() calls they have no way to catch a 401 and retry
+// after a silent refresh. Once the access token's ~7-day TTL lapses in a
+// long-open tab, every asset image/download link and the realtime stream
+// start hard-failing with 401 until *some* api() call happens to trigger
+// tryRefresh() — and anything already rendered with a now-stale src stays
+// broken even after that. Proactively refreshing well ahead of expiry keeps
+// the cookie perpetually fresh so those requests never see a stale token.
+let _proactiveRefreshTimer = null;
+
+function _tokenExpiryMs(token) {
+  try {
+    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)));
+    return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function scheduleProactiveRefresh() {
+  clearTimeout(_proactiveRefreshTimer);
+  const token = getToken();
+  if (!token) return;
+  const expiresAt = _tokenExpiryMs(token);
+  if (!expiresAt) return;
+  // Refresh at 80% of the token's remaining life so a long-open tab renews
+  // well ahead of expiry instead of racing it; clamp to a sane ceiling so a
+  // freshly-issued 7-day token doesn't set a week-long timer (backgrounded
+  // tabs can throttle/miss those — visibilitychange below is the backstop).
+  const delay = Math.min(Math.max((expiresAt - Date.now()) * 0.8, 0), 6 * 3600_000);
+  _proactiveRefreshTimer = setTimeout(async () => {
+    if (await tryRefresh()) scheduleProactiveRefresh();
+  }, delay);
+}
+
+if (getToken()) scheduleProactiveRefresh();
+
+// A backgrounded tab throttles/pauses setTimeout, so a session left hidden
+// past its access token's expiry won't have proactively refreshed. Catch up
+// the moment it's visible again instead of waiting for an api() call to
+// notice via a 401.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && getToken()) scheduleProactiveRefresh();
+});
 
 
 const $ = (selector, root = document) => root.querySelector(selector);

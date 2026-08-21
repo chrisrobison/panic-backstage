@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `auth` — Proactively refresh session cookie to stop asset 401s
 - **Fixed** `realtime` — Stop false "updated elsewhere" banners, flash changed fields, add connection dot
 - **Documentation** `ticketing` — Document physical ticket workflow and recent Aug updates
 - **Documentation** — Add project-root CLAUDE.md orientation map
