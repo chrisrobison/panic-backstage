@@ -546,6 +546,11 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
   grid-template-columns: minmax(0, 1.55fr) minmax(330px, .9fr);
   gap: 24px;
 }
+/* Was a marker class several panels already wrapped tables in with no
+   behavior behind it (see the tk-list-scroll comment further down) — giving
+   it real overflow makes every one of those panels' tables actually scroll
+   on narrow viewports instead of silently clipping/wrapping. */
+.table-scroll { overflow-x: auto; }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th, .data-table td {
   border-top: 1px solid var(--line);
@@ -2674,7 +2679,7 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   .workspace { padding: 26px 24px 34px; }
   .topbar { padding: 0 24px; }
   .search { width: min(420px, 52vw); }
-  .dashboard-grid, .overview-grid { grid-template-columns: 1fr; }
+  .dashboard-grid, .overview-grid, .opp-panel-row-3 { grid-template-columns: 1fr; }
   .health-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .calendar-grid {
     overflow-x: auto;
@@ -2801,7 +2806,7 @@ pb-recurrence-fields .recurrence-body > p { grid-column: 1 / -1; }
   .metric-card h3 { font-size: 16px; overflow-wrap: anywhere; }
   .metric-card p { font-size: 14px; }
   .icon-bubble { width: 46px; height: 46px; }
-  .dashboard-grid, .overview-grid { grid-template-columns: 1fr; gap: 16px; }
+  .dashboard-grid, .overview-grid, .opp-panel-row-3 { grid-template-columns: 1fr; gap: 16px; }
   .calendar-page .filters { grid-template-columns: 1fr 1fr; gap: 10px; }
   .filter { min-height: 46px; padding: 0 12px; font-size: 14px; }
   .calendar-toolbar {
@@ -8222,3 +8227,43 @@ pb-inbox-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direc
   .ib-back-to-list { display: inline-flex !important; margin-left: 16px; }
 }
 .ib-back-to-list { display: none; background: none; border: none; color: var(--blue); font-weight: 700; cursor: pointer; padding: 4px 0 10px; align-items: center; gap: 6px; }
+
+/* ── Opportunities (prospecting/sales-pipeline CRM) ──────────────────────── */
+/* KPI row reuses .kpi-card/.kpi-icon/.kpi-label/.kpi-value from Contacts —
+   only the grid wrapper and the small delta-subtext line are new here. */
+.opp-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.kpi-sub { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.kpi-card.kpi-warn .kpi-icon { background: #ffedc2; color: #a06400; }
+
+/* Second dashboard row: Venue Availability Match / Suggestions / Recent
+   Notes, three panels wide on desktop, stacking under the same breakpoints
+   .dashboard-grid already collapses at (see the two media-query edits
+   above) rather than inventing a third responsive rule. */
+.opp-panel-row-3 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+}
+
+.opp-score-high { color: var(--green); font-weight: 800; }
+.opp-score-mid  { color: var(--amber); font-weight: 800; }
+.opp-score-low  { color: var(--red); font-weight: 800; }
+
+.opp-suggestion-list, .opp-note-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.opp-suggestion { display: flex; align-items: flex-start; gap: 10px; font-size: 13.5px; line-height: 1.4; }
+.opp-suggestion i { color: var(--amber); margin-top: 2px; flex: none; }
+.opp-suggestion-high i { color: var(--red); }
+
+.opp-note-item { border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.opp-note-item:last-child { border-bottom: none; padding-bottom: 0; }
+.opp-note-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.opp-note-item p { margin: 0 0 4px; font-size: 13.5px; line-height: 1.4; color: var(--ink); }
+
+@media (max-width: 760px) {
+  .opp-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+}

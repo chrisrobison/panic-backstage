@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Panic;
 
+use Panic\Opportunities\Availability;
+
 use function Panic\boolish;
 use function Panic\date_or_null;
 use function Panic\log_opportunity_activity;
@@ -12,8 +14,14 @@ use function Panic\log_opportunity_activity;
  * Opportunities module (prospecting CRM prepended to the existing
  * inquiry->event spine; see docs/OPPORTUNITIES-IMPLEMENTATION.md).
  *
- *   GET    /api/opportunities/dashboard      pipeline summary (stage totals,
- *                                             upcoming next actions/conferences)
+ *   GET    /api/opportunities/dashboard      Discover-page aggregates: KPI
+ *                                             cards, best opportunities,
+ *                                             upcoming conferences, venue
+ *                                             availability matches (see
+ *                                             Opportunities/Availability.php),
+ *                                             recent notes, and deterministic
+ *                                             data-derived suggestions.
+ *                                             `?window_days=N` (default 30).
  *   GET    /api/opportunities                list (filterable by stage,
  *                                             company_id, conference_id,
  *                                             owner_id, mine)
@@ -49,7 +57,7 @@ final class Opportunities extends BaseEndpoint
     public function handle(Request $request): Response
     {
         if (($this->params['action'] ?? null) === 'dashboard') {
-            return $this->dashboard();
+            return $this->dashboard($request);
         }
 
         $id    = $this->params['opportunityId'] ?? null;
@@ -68,45 +76,259 @@ final class Opportunities extends BaseEndpoint
         };
     }
 
-    // ── Dashboard ────────────────────────────────────────────────────────────
+    // ── Dashboard (Discover page) ───────────────────────────────────────────
+    //
+    // One aggregate-heavy endpoint rather than 6 small ones — the Discover
+    // page mockup needs 5 KPI cards + 4 panels' worth of data, and the Phase
+    // 2 spec explicitly asks for "dashboard-ready aggregates rather than
+    // forcing the browser to fetch dozens of records". Every number here is
+    // a real query result; nothing is fabricated for display purposes (the
+    // "AI Suggestions" panel is a deterministic, data-derived rule set —
+    // real AI research arrives in Phase 7).
 
-    private function dashboard(): Response
+    private function dashboard(Request $request): Response
     {
         if ($denied = $this->requireGlobalCapability('view_opportunities')) {
             return $denied;
         }
 
-        $stageCounts = $this->db->all(
-            'SELECT stage, COUNT(*) AS count, COALESCE(SUM(estimated_value), 0) AS total_value
-             FROM opportunities GROUP BY stage'
-        );
+        $windowDays = (int) ($request->query('window_days') ?: 30);
+        $windowDays = max(7, min(365, $windowDays));
 
-        $upcomingActions = $this->db->all(
-            "SELECT o.id, o.name, o.stage, o.next_action, o.next_action_at,
+        $openCount = (int) ($this->db->one(
+            "SELECT COUNT(*) c FROM opportunities WHERE stage NOT IN ('won','lost')"
+        )['c'] ?? 0);
+        $openCreatedRecently = (int) ($this->db->one(
+            "SELECT COUNT(*) c FROM opportunities WHERE stage NOT IN ('won','lost') AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
+        )['c'] ?? 0);
+
+        $revenue = (float) ($this->db->one(
+            "SELECT COALESCE(SUM(estimated_value), 0) v FROM opportunities WHERE stage NOT IN ('won','lost')"
+        )['v'] ?? 0);
+        $revenueCreatedRecently = (float) ($this->db->one(
+            "SELECT COALESCE(SUM(estimated_value), 0) v FROM opportunities WHERE stage NOT IN ('won','lost') AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
+        )['v'] ?? 0);
+
+        $conferenceRange = $this->db->one(
+            'SELECT COUNT(*) c, MIN(starts_at) start_date, MAX(COALESCE(ends_at, starts_at)) end_date
+             FROM opportunity_conferences
+             WHERE starts_at IS NOT NULL
+               AND starts_at <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
+               AND COALESCE(ends_at, starts_at) >= CURDATE()',
+            [$windowDays]
+        ) ?? ['c' => 0, 'start_date' => null, 'end_date' => null];
+
+        $followups = $this->db->one(
+            "SELECT
+                SUM(CASE WHEN next_action_at IS NOT NULL AND next_action_at <= DATE_ADD(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) due,
+                SUM(CASE WHEN next_action_at IS NOT NULL AND next_action_at < NOW() THEN 1 ELSE 0 END) overdue
+             FROM opportunities WHERE stage NOT IN ('won','lost')"
+        ) ?? ['due' => 0, 'overdue' => 0];
+
+        $matches = Availability::emptyNightMatches($this->db, $windowDays);
+        $matchedConferenceIds = array_values(array_unique(array_map(
+            static fn (array $m) => (int) $m['conference']['id'],
+            $matches
+        )));
+        $emptyNightPotential = 0.0;
+        if ($matchedConferenceIds) {
+            $placeholders = implode(',', array_fill(0, count($matchedConferenceIds), '?'));
+            $emptyNightPotential = (float) ($this->db->one(
+                "SELECT COALESCE(SUM(estimated_value), 0) v FROM opportunities
+                 WHERE stage NOT IN ('won','lost') AND conference_id IN ($placeholders)",
+                $matchedConferenceIds
+            )['v'] ?? 0);
+        }
+
+        $bestOpportunities = $this->db->all(
+            "SELECT o.id, o.name, o.estimated_value, o.probability, o.next_action, o.next_action_at,
                     c.name AS company_name, conf.name AS conference_name
              FROM opportunities o
              JOIN opportunity_companies c ON c.id = o.company_id
              LEFT JOIN opportunity_conferences conf ON conf.id = o.conference_id
-             WHERE o.stage NOT IN ('won', 'lost') AND o.next_action_at IS NOT NULL
-             ORDER BY o.next_action_at ASC
+             WHERE o.stage NOT IN ('won', 'lost')
+             ORDER BY o.probability IS NULL, o.probability DESC, o.estimated_value IS NULL, o.estimated_value DESC
              LIMIT 10"
         );
 
         $upcomingConferences = $this->db->all(
-            "SELECT id, name, slug, city, state, starts_at, ends_at, opportunity_score
+            'SELECT id, name, slug, city, state, starts_at, ends_at,
+                    estimated_attendance, estimated_exhibitors, estimated_sponsors, opportunity_score
              FROM opportunity_conferences
-             WHERE starts_at IS NULL OR starts_at >= CURDATE()
-             ORDER BY starts_at IS NULL, starts_at ASC
-             LIMIT 10"
+             WHERE starts_at IS NOT NULL
+               AND starts_at <= DATE_ADD(CURDATE(), INTERVAL ? DAY)
+               AND COALESCE(ends_at, starts_at) >= CURDATE()
+             ORDER BY starts_at ASC
+             LIMIT 20',
+            [$windowDays]
         );
 
         return $this->ok([
-            'stage_counts'         => $stageCounts,
-            'stages'               => self::STAGES,
-            'upcoming_actions'     => $upcomingActions,
+            'window_days' => $windowDays,
+            'kpis' => [
+                'open_opportunities' => ['value' => $openCount, 'new_last_30_days' => $openCreatedRecently],
+                'projected_revenue'  => ['value' => $revenue, 'new_last_30_days' => $revenueCreatedRecently],
+                'upcoming_conferences' => [
+                    'value' => (int) $conferenceRange['c'],
+                    'range_start' => $conferenceRange['start_date'],
+                    'range_end'   => $conferenceRange['end_date'],
+                ],
+                'empty_nights' => ['value' => count($matches), 'potential_value' => $emptyNightPotential],
+                'followups_due' => ['value' => (int) $followups['due'], 'overdue' => (int) $followups['overdue']],
+            ],
+            'best_opportunities'   => $bestOpportunities,
             'upcoming_conferences' => $upcomingConferences,
-            'capabilities'         => $this->globalCapabilities(),
+            'availability_matches' => array_map(static fn (array $m) => [
+                'date'       => $m['date'],
+                'conference' => $m['conference'],
+            ], $matches),
+            'recent_notes' => $this->recentNotes(8),
+            'suggestions'  => $this->dashboardSuggestions($followups, $matches),
+            // Kept for continuity with any Phase 1 caller — same pipeline
+            // breakdown, now alongside the richer Phase 2 payload above.
+            'stage_counts' => $this->db->all(
+                'SELECT stage, COUNT(*) AS count, COALESCE(SUM(estimated_value), 0) AS total_value
+                 FROM opportunities GROUP BY stage'
+            ),
+            'stages'       => self::STAGES,
+            'capabilities' => $this->globalCapabilities(),
         ]);
+    }
+
+    /**
+     * Latest notes across every linked record type, each with a short
+     * "context" label (e.g. "NVIDIA — GTC DC") resolved from its links.
+     * Two follow-up queries total (links, then one name lookup per linked
+     * type actually present) — never one query per note.
+     */
+    private function recentNotes(int $limit): array
+    {
+        $notes = $this->db->all(
+            'SELECT n.id, n.body, n.note_type, n.is_pinned, n.is_ai_generated, n.created_at,
+                    u.name AS created_by_name
+             FROM opportunity_notes n
+             LEFT JOIN users u ON u.id = n.created_by
+             ORDER BY n.created_at DESC
+             LIMIT ?',
+            [$limit]
+        );
+        if (!$notes) {
+            return [];
+        }
+
+        $noteIds = array_column($notes, 'id');
+        $placeholders = implode(',', array_fill(0, count($noteIds), '?'));
+        $links = $this->db->all(
+            "SELECT * FROM opportunity_note_links WHERE note_id IN ($placeholders)",
+            $noteIds
+        );
+
+        $linksByNote = [];
+        $idsByType   = [];
+        foreach ($links as $link) {
+            $linksByNote[$link['note_id']][] = $link;
+            $idsByType[$link['linked_type']][] = (int) $link['linked_id'];
+        }
+
+        $names = ['company' => [], 'conference' => [], 'opportunity' => []];
+        if (!empty($idsByType['company'])) {
+            $names['company'] = $this->nameMap('opportunity_companies', array_unique($idsByType['company']));
+        }
+        if (!empty($idsByType['conference'])) {
+            $names['conference'] = $this->nameMap('opportunity_conferences', array_unique($idsByType['conference']));
+        }
+        if (!empty($idsByType['opportunity'])) {
+            $names['opportunity'] = $this->nameMap('opportunities', array_unique($idsByType['opportunity']));
+        }
+
+        foreach ($notes as &$note) {
+            $noteLinks = $linksByNote[$note['id']] ?? [];
+            $companyName = null;
+            $secondaryName = null;
+            foreach ($noteLinks as $link) {
+                $label = $names[$link['linked_type']][$link['linked_id']] ?? null;
+                if (!$label) {
+                    continue;
+                }
+                if ($link['linked_type'] === 'company' && !$companyName) {
+                    $companyName = $label;
+                } elseif (in_array($link['linked_type'], ['conference', 'opportunity'], true) && !$secondaryName) {
+                    $secondaryName = $label;
+                }
+            }
+            $note['context'] = $companyName && $secondaryName
+                ? "$companyName — $secondaryName"
+                : ($companyName ?? $secondaryName);
+        }
+
+        return $notes;
+    }
+
+    private function nameMap(string $table, array $ids): array
+    {
+        if (!$ids) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $rows = $this->db->all("SELECT id, name FROM `$table` WHERE id IN ($placeholders)", $ids);
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int) $row['id']] = $row['name'];
+        }
+        return $map;
+    }
+
+    /**
+     * Deterministic, data-derived suggestions (Phase 2 spec: "these may be
+     * deterministic/non-AI suggestions generated from data" — real AI
+     * research is Phase 7). Every entry is backed by a real count computed
+     * above or here; nothing is invented copy.
+     */
+    private function dashboardSuggestions(array $followups, array $matches): array
+    {
+        $suggestions = [];
+
+        if ((int) $followups['overdue'] > 0) {
+            $suggestions[] = [
+                'tone' => 'high',
+                'text' => (int) $followups['overdue'] . ' follow-up(s) are overdue.',
+            ];
+        }
+
+        $noNextAction = (int) ($this->db->one(
+            "SELECT COUNT(*) c FROM opportunities WHERE stage NOT IN ('won','lost') AND (next_action IS NULL OR next_action = '')"
+        )['c'] ?? 0);
+        if ($noNextAction > 0) {
+            $suggestions[] = [
+                'tone' => 'medium',
+                'text' => "$noNextAction open opportunity(ies) have no next action set.",
+            ];
+        }
+
+        $matchedConferenceCount = count(array_unique(array_map(
+            static fn (array $m) => (int) $m['conference']['id'],
+            $matches
+        )));
+        if ($matchedConferenceCount > 0) {
+            $suggestions[] = [
+                'tone' => 'high',
+                'text' => "$matchedConferenceCount upcoming conference(s) have at least one open night at the venue.",
+            ];
+        }
+
+        $unresearchedConferences = (int) ($this->db->one(
+            "SELECT COUNT(*) c FROM opportunity_conferences conf
+             WHERE conf.starts_at >= CURDATE()
+               AND NOT EXISTS (SELECT 1 FROM opportunity_conference_companies cc WHERE cc.conference_id = conf.id)"
+        )['c'] ?? 0);
+        if ($unresearchedConferences > 0) {
+            $suggestions[] = [
+                'tone' => 'medium',
+                'text' => "$unresearchedConferences upcoming conference(s) have no target companies linked yet.",
+            ];
+        }
+
+        return array_slice($suggestions, 0, 5);
     }
 
     // ── List ─────────────────────────────────────────────────────────────────

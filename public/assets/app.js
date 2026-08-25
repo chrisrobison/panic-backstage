@@ -35,6 +35,7 @@ import './processes/process-designer.js';
 import './processes/process-tasks-list.js';
 import './processes/automation-placeholder.js';
 import './tasks/tasks-shell.js';
+import './opportunities/opportunities-shell.js';
 import { initPushBridge } from './push.js';
 
 
@@ -407,6 +408,14 @@ class AppShell extends PanicElement {
     if (route === 'new-event') return 'events';
     if (route.startsWith('automation-process-')) return 'automation-processes';
     if (route === 'tasks' || route.startsWith('tasks-')) return 'tasks';
+    // Opportunities detail routes highlight their owning list's nav leaf
+    // (nav_items rows seeded in migration 110 use `link` values that equal
+    // the route string exactly for the 5 top-level pages, so those fall
+    // through to the `return route` default below unchanged).
+    if (route.startsWith('opportunities-conference')) return 'opportunities-conferences';
+    if (route.startsWith('opportunities-company')) return 'opportunities-companies';
+    if (route.startsWith('opportunities-note')) return 'opportunities-notes';
+    if (/^opportunities-\d+$/.test(route)) return 'opportunities-pipeline';
     return route;
   }
 
@@ -513,6 +522,23 @@ class AppShell extends PanicElement {
       const documentId = route.startsWith('tasks-') ? Number(route.slice(6)) : null;
       return this.mount(outlet, 'pb-tasks-app', { documentId: documentId || null });
     }
+    // Opportunities module (docs/OPPORTUNITIES-IMPLEMENTATION.md). Only
+    // Discover (Phase 2) is a real page; every other destination — including
+    // detail routes for a given company/conference/opportunity/note — mounts
+    // the honest "not built yet" placeholder (see opportunities-shell.js).
+    if (route === 'opportunities') return this.mount(outlet, 'pb-opportunities-discover');
+    const oppConferenceDetail = route.match(/^opportunities-conference-(\d+)$/);
+    if (oppConferenceDetail) return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'conference-detail', id: Number(oppConferenceDetail[1]) });
+    if (route === 'opportunities-conferences') return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'conferences' });
+    const oppCompanyDetail = route.match(/^opportunities-company-(\d+)$/);
+    if (oppCompanyDetail) return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'company-detail', id: Number(oppCompanyDetail[1]) });
+    if (route === 'opportunities-companies') return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'companies' });
+    if (route === 'opportunities-pipeline') return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'pipeline' });
+    const oppNoteDetail = route.match(/^opportunities-note-(\d+)$/);
+    if (oppNoteDetail) return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'notes', noteId: Number(oppNoteDetail[1]) });
+    if (route === 'opportunities-notes') return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'notes' });
+    const oppDetail = route.match(/^opportunities-(\d+)$/);
+    if (oppDetail) return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'opportunity-detail', id: Number(oppDetail[1]) });
     return this.mount(outlet, 'pb-dashboard');
   }
 

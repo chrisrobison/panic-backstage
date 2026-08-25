@@ -29861,10 +29861,27 @@ paths:
   /api/opportunities/dashboard:
     get:
       operationId: opportunities_dashboard
-      summary: Opportunities pipeline dashboard
-      description: Requires view_opportunities. Stage totals/values, upcoming next actions, and upcoming conferences.
+      summary: Opportunities Discover-page dashboard
+      description: >-
+        Requires view_opportunities. One aggregate-heavy response backing the whole Discover page
+        (opportunity-1.png) — KPI cards, a best-opportunities list, upcoming conferences, venue
+        availability matches (see src/Opportunities/Availability.php — dates in an upcoming
+        conference's own span with no active Backstage booking anywhere in this tenant's venue),
+        recent notes, and deterministic data-derived suggestions (no AI yet — that's Phase 7).
+        Every figure is a real query result, never fabricated for display.
       tags:
         - Opportunities
+      parameters:
+        - name: window_days
+          in: query
+          description: >-
+            How far ahead "upcoming" reaches for conferences/availability matches. Clamped to
+            [7, 365]; defaults to 30.
+          schema:
+            type: integer
+            minimum: 7
+            maximum: 365
+            default: 30
       responses:
         '200':
           description: Dashboard summary.
@@ -29873,6 +29890,101 @@ paths:
               schema:
                 type: object
                 properties:
+                  window_days:
+                    type: integer
+                  kpis:
+                    type: object
+                    properties:
+                      open_opportunities:
+                        type: object
+                        properties:
+                          value:
+                            type: integer
+                          new_last_30_days:
+                            type: integer
+                            description: Open opportunities created in the last 30 days.
+                      projected_revenue:
+                        type: object
+                        properties:
+                          value:
+                            type: number
+                            description: SUM(estimated_value) over every open (not won/lost) opportunity.
+                          new_last_30_days:
+                            type: number
+                      upcoming_conferences:
+                        type: object
+                        properties:
+                          value:
+                            type: integer
+                          range_start:
+                            type: string
+                            format: date
+                            nullable: true
+                          range_end:
+                            type: string
+                            format: date
+                            nullable: true
+                      empty_nights:
+                        type: object
+                        properties:
+                          value:
+                            type: integer
+                            description: Count of (conference, date) empty-night matches in window_days.
+                          potential_value:
+                            type: number
+                            description: SUM(estimated_value) of open opportunities tied to a matched conference.
+                      followups_due:
+                        type: object
+                        properties:
+                          value:
+                            type: integer
+                            description: Open opportunities with next_action_at within the next 7 days.
+                          overdue:
+                            type: integer
+                  best_opportunities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Opportunity'
+                  upcoming_conferences:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityConference'
+                  availability_matches:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        conference:
+                          $ref: '#/components/schemas/OpportunityConference'
+                  recent_notes:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/OpportunityNote'
+                        - type: object
+                          properties:
+                            context:
+                              type: string
+                              nullable: true
+                              description: >-
+                                Short label resolved from the note's links, e.g. "NVIDIA — GTC DC"
+                                (company name, then conference/opportunity name); null if the note
+                                has no resolvable links.
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        tone:
+                          type: string
+                          enum:
+                            - high
+                            - medium
+                        text:
+                          type: string
                   stage_counts:
                     type: array
                     items:
@@ -29888,14 +30000,6 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/OpportunityStage'
-                  upcoming_actions:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Opportunity'
-                  upcoming_conferences:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/OpportunityConference'
                   capabilities:
                     type: object
                     additionalProperties:

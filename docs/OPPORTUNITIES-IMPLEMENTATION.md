@@ -1,8 +1,8 @@
 # Opportunities Module — Implementation Handoff
 
-**Status:** Phase 1 complete — durable backend model (migration 109, 6 PHP
-endpoint classes, 4 Kernel route families, capabilities, OpenAPI) shipped, no
-UI yet (Phase 2+). See §4.1 for exactly what landed.
+**Status:** Phase 2 complete — nav + the Discover dashboard (first visible
+UI) shipped on top of Phase 1's backend. See §4.1 (Phase 1) and §4.2
+(Phase 2) for exactly what landed.
 **Branch:** `opportunities-module` (long-lived feature branch; not merged to `main`
 until the module is stable — see "Branch strategy" below). Do not squash/delete
 mid-project; each phase adds commits here.
@@ -603,7 +603,7 @@ before the generic `match`, keyed on a non-numeric segment).
 |---|---|---|
 | 0 — Recon & plan | **Done** (this doc) | |
 | 1 — DB/capabilities/API skeleton | **Done** | See §4.1 below |
-| 2 — Nav + Discover dashboard | Not started | |
+| 2 — Nav + Discover dashboard | **Done** | See §4.2 below |
 | 3 — Conference list/detail | Not started | |
 | 4 — Company list/detail + buyer contacts | Not started | |
 | 5 — Pipeline + Opportunity detail + conversion | Not started | |
@@ -705,6 +705,124 @@ phase is backend-only per its own spec.
 
 ---
 
+### 4.2 Phase 2 — what actually shipped
+
+**Nav:** `database/migrations/110_add_opportunities_nav.sql` seeds the
+left-nav "Opportunities" group (Discover/Conferences/Companies/Pipeline/
+Notes), all gated on `view_opportunities`, same NOT-EXISTS-guarded-INSERT
+shape as `077_add_booking_inbox_tasks_link_and_nav.sql`. Applied to the live
+DB. **Correction to Phase 1's §1.3/§4.1 note that `nav-manager.js` needs a
+capability-list edit for the picker to show the new capabilities**: already
+verified false in Phase 1 (dynamic, sourced from `NavItems::index()`) — no
+further action needed here either.
+
+**Backend — Discover dashboard aggregates:** `GET /api/opportunities/dashboard`
+(`src/Opportunities.php::dashboard()`) was rewritten (not a new endpoint —
+Phase 1 already reserved this route) into one aggregate-heavy response
+backing every KPI card and panel the mockup (`opportunity-1.png`) needs:
+`kpis` (open_opportunities, projected_revenue, upcoming_conferences,
+empty_nights, followups_due — every delta/potential figure is a real query
+result), `best_opportunities`, `upcoming_conferences`, `availability_matches`,
+`recent_notes` (each note gets a resolved `context` label like "NVIDIA — GTC
+DC" from its links, batch-resolved in O(1) extra queries per linked type —
+never per note), and `suggestions` (deterministic, data-derived — see below).
+Accepts `?window_days=N` (7–365, default 30) matching the mockup's date-range
+selector. Old Phase 1 keys (`stage_counts`, `stages`, `capabilities`) are
+kept alongside the new ones for continuity.
+
+**Backend — venue availability matching:** new `src/Opportunities/Availability.php`,
+`Availability::emptyNightMatches(Database, windowDays)` — for every
+upcoming conference in the window, which of its own calendar dates have no
+active event booked anywhere in this tenant's venue(s). Exactly 2 SQL
+queries total regardless of how many conferences/dates are involved (one for
+candidate conferences, one for busy event-date spans in the relevant range;
+date-set membership done in PHP) — satisfies the spec's explicit "avoid
+N+1 queries" / "dashboard-ready aggregates" requirement. No venue_id
+filtering: a single-tenant DB holds exactly one venue's calendar (verified:
+`SELECT id,name FROM venues` returns exactly 1 row on this DB; multi-venue
+is handled by separate tenant DBs in SaaS mode, not multiple `venues` rows
+here), so "any active event in this DB" already means "this venue."
+Deliberately reusable as its own service — Phase 8's "find prospects for
+empty dates" is expected to call the same primitive rather than duplicate
+the date math.
+
+**"AI Suggestions" panel — deliberately not AI**: `Opportunities::dashboardSuggestions()`
+is a small deterministic rule set (overdue follow-ups, opportunities with no
+next action, conferences with an open venue night, conferences with zero
+linked companies) — every entry backed by a real COUNT, matching the spec's
+explicit Phase 2 allowance ("these may be deterministic/non-AI suggestions
+generated from data. AI integration arrives later.").
+
+**Frontend — new files** (`public/assets/opportunities/`, imported into
+`app.js` as one `import './opportunities/opportunities-shell.js';` line, per
+the directory-split precedent in `tasks/`):
+- `shared.js` — stage labels/badges, score-tone class helper, date
+  formatting (mirrors `core.js`'s `eventDate()` noon-local convention to
+  avoid UTC-midnight day-shift), note-type labels. Grows with each later
+  phase, not ahead of them.
+- `discover-page.js` — `<pb-opportunities-discover>`, the real Phase 2 page:
+  5 `.kpi-card`s (reused verbatim from Contacts' CSS), the Best
+  Opportunities / Upcoming Conferences panels (reusing `.dashboard-grid`),
+  and a 3-panel Venue Availability Match / Suggestions / Recent Notes row
+  (new `.opp-panel-row-3` grid, collapsing to 1 column at the same
+  breakpoints `.dashboard-grid` already does). One `GET
+  /api/opportunities/dashboard` call per load/window-change; nothing else
+  fetched separately (no N+1 on the frontend either).
+- `opportunities-shell.js` — the module's entry point; also defines
+  `<pb-opportunities-placeholder>`, an honest "Planned — not yet built" page
+  (same shape as `processes/automation-placeholder.js`) for every nav
+  destination/detail route without a real page yet (Conferences/Companies/
+  Pipeline/Notes lists = Phase 3/4/5/6; every `*-detail` route follows its
+  list). This is what satisfies "clicking company/conference/opportunity
+  placeholders routes correctly or to a safe not-yet-implemented state."
+
+**Routes** (`public/assets/app.js`): `#opportunities` → real Discover page;
+`#opportunities-conferences`/`-companies`/`-pipeline`/`-notes`,
+`#opportunities-conference-{id}`/`-company-{id}`/`-note-{id}`, and
+`#opportunities-{id}` (numeric — opportunity detail) → the placeholder,
+parameterized by page. `navKeyForRoute()` maps every detail route back to
+its owning list's nav leaf (e.g. `opportunities-conference-42` highlights
+the Conferences nav item); the 5 top-level pages match `nav_items.link`
+exactly and fall through the existing `return route` default unchanged.
+
+**CSS** (`public/assets/app.css`): new "── Opportunities ──" section
+(`.opp-kpis`, `.kpi-sub`, `.kpi-card.kpi-warn`, `.opp-panel-row-3`,
+`.opp-score-*`, `.opp-suggestion-list`, `.opp-note-list`) plus one
+pre-existing-gap fix made in passing: `.table-scroll` (already used as a
+wrapper by 8+ other panels across the app) had **no actual CSS behind it**
+— a repo comment near `tk-list-scroll` said so explicitly. Added
+`overflow-x: auto`, which the Phase 2 "data tables scroll appropriately"
+responsive requirement needed for the new Opportunities tables and which
+now also fixes every other panel already using that class name.
+
+**Tests:**
+- `tests/opportunities_dashboard_db_test.php` (new, DB-backed,
+  `RUN_DB_TESTS=1`) — 17 assertions: creates a conference spanning two
+  genuinely-free future dates (same free-date-finding technique as
+  `room_conflict_guard_db_test.php`), asserts both are empty-night matches,
+  books a throwaway event on one, re-asserts that date drops out while the
+  other stays, then asserts the dashboard endpoint's `kpis`/
+  `best_opportunities`/`upcoming_conferences`/`availability_matches`/
+  `recent_notes` (incl. resolved `context`) all reflect the fixtures.
+- `tests/ui/118-opportunities-discover.test.mjs` (new, headless-Chromium) —
+  nav-gating, KPI-card count, panel presence, active-state highlighting, and
+  the placeholder-routing acceptance criterion. **Could not be run from
+  this checkout**: `/home/cdr/domains/panicbackstage.com/app/.env` has
+  `SUPER_DB_NAME` set (multi-tenant SaaS mode active on this specific
+  docroot), so `TenantContext::resolve()` rejects the UI harness's
+  `127.0.0.1:PORT` dev-server host before the app ever boots ("Unrecognized
+  host") — a pre-existing property of *this* docroot, not something Phase 2
+  introduced (confirmed: `/home/cdr/backstage`, the other live docroot, has
+  no `SUPER_DB_NAME`, and CI's own `.env` explicitly sets `SUPER_DB_NAME=`
+  empty for exactly this reason — see `.github/workflows/*.yml`). The test
+  is written and syntax-checked (`node --check`) and will run normally in
+  CI or from a single-tenant checkout; verify it there before trusting it
+  blind. Registered in `tests/run-php-tests.sh`'s `DB_TESTS` list
+  (dashboard test) — the UI test runs via `node tests/ui/run.mjs` per
+  existing convention, not that list.
+
+---
+
 ## 5. Open TODOs / assumptions to verify in later phases
 
 - `opportunity_qualification`'s fixed-boolean-columns design (§3.1) assumes
@@ -735,10 +853,21 @@ phase is backend-only per its own spec.
 
 - No live-refresh on Opportunities panels yet — `RealtimeInvalidationMapper`
   doesn't map any Opportunities table (fails open, not a hard bug; see §1.9).
+  The Discover dashboard is fetch-once-per-load/window-change, no polling.
 - `opportunity_research_jobs` exists as a schema-only stub (no reader/writer)
   until Phase 7. `opportunity_note_versions` doesn't exist yet (Phase 6).
-- No frontend — Phase 1 is backend-only per its own spec; every route above
-  is reachable only via direct API calls / the test suite today.
+- Only Discover is a real page — Conferences/Companies/Pipeline/Notes and
+  every detail route are the honest placeholder until Phase 3/4/5/6 land.
+- `tests/ui/118-opportunities-discover.test.mjs` has not actually been run
+  (only syntax-checked) — this checkout's multi-tenant `.env` blocks the
+  whole UI harness, not just this test. See §4.2's Tests note for the full
+  explanation and where it's confirmed to run (CI, or a single-tenant
+  checkout like `/home/cdr/backstage`). **Run it for real at the start of
+  whichever future session next touches the Opportunities frontend**, before
+  trusting it.
+- "Best Opportunities" table's Likely Buyer column always renders "—" — no
+  buyer-contact data exists until `opportunity_contacts` (Phase 4); the
+  column header is kept so the table doesn't need a structural change later.
 
 ## 7. Tests added
 
@@ -748,3 +877,11 @@ phase is backend-only per its own spec.
   Phase 1 acceptance-criteria flow, and FK/enum/duplicate-link validation
   failure cases. Cleans up its own throwaway rows (`PB TEST OPP — ` prefix)
   in a `finally` block regardless of pass/fail.
+- `tests/opportunities_dashboard_db_test.php` — DB-backed, opt-in via
+  `RUN_DB_TESTS=1`. 17 assertions covering `Availability::emptyNightMatches()`
+  directly (before/after booking an event on a matched date) and the
+  dashboard endpoint's full Phase 2 response shape. `PB TEST OPPDASH — `
+  throwaway-row prefix, cleaned up in `finally`.
+- `tests/ui/118-opportunities-discover.test.mjs` — headless-Chromium, nav
+  gating / KPI rendering / active-state / placeholder-routing. Written and
+  syntax-checked but **not run** in this session — see Known issues above.
