@@ -4250,6 +4250,16 @@ components:
         venue_group:
           type: string
           nullable: true
+        latitude:
+          type: number
+          nullable: true
+          description: >-
+            Entered manually via this same PATCH (Admin > Venue) — never geocoded automatically.
+            Added for the Opportunities module's conference-distance calculation
+            (Opportunities/Availability.php); null means "not researched yet".
+        longitude:
+          type: number
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -4279,6 +4289,12 @@ components:
           nullable: true
         website_url:
           type: string
+          nullable: true
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
           nullable: true
     VenueResource:
       type: object
@@ -11321,7 +11337,22 @@ components:
         distance_from_venue_miles:
           type: number
           nullable: true
-          description: Null until researched — never auto-geocoded.
+          description: >-
+            Computed locally (Haversine) whenever both this conference's and the venue's own
+            latitude/longitude are known (src/Opportunities/Availability.php); otherwise falls back
+            to a manually-entered value in this column, or null ("Unknown") if neither exists. Never
+            auto-geocoded.
+        target_company_count:
+          type: integer
+          description: >-
+            COUNT of opportunity_conference_companies rows for this conference. Present on both list
+            and detail responses.
+        side_event_signal_count:
+          type: integer
+          description: COUNT of opportunity_signals rows scoped to this conference. List responses only.
+        venue_coordinates_known:
+          type: boolean
+          description: Whether this tenant's venue has latitude/longitude set (Admin > Venue). Detail response only.
         opportunity_score:
           type: integer
           nullable: true
@@ -11336,6 +11367,32 @@ components:
         task_document_id:
           type: integer
           nullable: true
+        created_by:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    OpportunityConferenceFact:
+      type: object
+      description: >-
+        A short, discrete, sourceable "Key Fact" (Phase 3) — distinct from freeform Notes and from
+        opportunity_signals (reused as-is for the Side Event Signals panel).
+      properties:
+        id:
+          type: integer
+        conference_id:
+          type: integer
+        fact:
+          type: string
+        source_url:
+          type: string
+          nullable: true
+        sort_order:
+          type: integer
         created_by:
           type: integer
           nullable: true
@@ -17795,8 +17852,9 @@ paths:
       summary: Update venue details
       description: >-
         venue_admin role only (not a capability-table gate — checked directly via isVenueAdmin()).
-        Partial patch limited to name/address/city/state/timezone/phone/website_url; name cannot be
-        set empty. Returns 422 if no updatable fields are present in the body.
+        Partial patch limited to name/address/city/state/timezone/phone/website_url/latitude/
+        longitude; name cannot be set empty. Returns 422 if no updatable fields are present in the
+        body.
       tags:
         - Venues
       requestBody:
@@ -30662,12 +30720,23 @@ paths:
     get:
       operationId: opportunity_conferences_list
       summary: List conferences
-      description: Requires view_opportunities. Filterable by q (name/city/state) and upcoming=1.
+      description: >-
+        Requires view_opportunities. Filterable and sortable per the Phase 3 spec (upcoming/past
+        tabs, search, date range, city, researched/unresearched, minimum score; sort by date, score,
+        attendance, proximity, or target-company count). `sort=proximity` is computed and sorted in
+        PHP after fetching (no meaningful SQL ORDER BY over a value that mixes computed and stored
+        nulls) — fine at this table's expected row count, not a query-level concern.
       tags:
         - Opportunity Conferences
       parameters:
         - name: q
           in: query
+          description: Free-text match against name/city/state.
+          schema:
+            type: string
+        - name: city
+          in: query
+          description: Dedicated city filter (LIKE), distinct from the free-text q above.
           schema:
             type: string
         - name: upcoming
@@ -30676,6 +30745,49 @@ paths:
             type: string
             enum:
               - '1'
+        - name: past
+          in: query
+          description: COALESCE(ends_at, starts_at) < today.
+          schema:
+            type: string
+            enum:
+              - '1'
+        - name: date_from
+          in: query
+          description: starts_at >= this date.
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          description: starts_at <= this date.
+          schema:
+            type: string
+            format: date
+        - name: researched
+          in: query
+          description: '1 = last_researched_at IS NOT NULL; 0 = IS NULL.'
+          schema:
+            type: string
+            enum:
+              - '1'
+              - '0'
+        - name: min_score
+          in: query
+          schema:
+            type: integer
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum:
+              - date
+              - date_desc
+              - score
+              - attendance
+              - proximity
+              - target_companies
+            default: date
       responses:
         '200':
           description: List of conferences.
@@ -30688,6 +30800,8 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/OpportunityConference'
+                  sort:
+                    type: string
         '401':
           description: Authentication required.
           content:
@@ -30783,7 +30897,14 @@ paths:
     get:
       operationId: opportunity_conferences_get
       summary: Get conference detail
-      description: Requires view_opportunities. Includes participating companies (conference<->company links).
+      description: >-
+        Requires view_opportunities. Includes participating companies, Key Facts, and three
+        deterministic, locally-computed sections (no AI, no external calls): `peak_windows` (evening
+        before / each conference day / evening after — spec's "start with deterministic date
+        logic"), `empty_night_dates` (this conference's own dates with no active venue booking, from
+        Opportunities/Availability.php's emptyNightMatches()), and `outreach_angles` (template
+        strings derived from real sponsor/exhibitor counts and empty_night_dates — spec's
+        "Initially deterministic templates ... AI enrichment comes later").
       tags:
         - Opportunity Conferences
       parameters:
@@ -30802,6 +30923,49 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/OpportunityConferenceCompanyLink'
+                  target_company_count:
+                    type: integer
+                  facts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityConferenceFact'
+                  peak_windows:
+                    type: object
+                    properties:
+                      windows:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            date:
+                              type: string
+                              format: date
+                            phase:
+                              type: string
+                              enum:
+                                - pre
+                                - main
+                                - post
+                            activity:
+                              type: string
+                              enum:
+                                - high
+                                - very_high
+                      best_dates:
+                        type: array
+                        items:
+                          type: string
+                          format: date
+                        description: A small recommended subset (first pre-day, first/last main day, post day).
+                  empty_night_dates:
+                    type: array
+                    items:
+                      type: string
+                      format: date
+                  outreach_angles:
+                    type: array
+                    items:
+                      type: string
         '401':
           description: Authentication required.
           content:
@@ -30889,6 +31053,243 @@ paths:
                 properties:
                   conference:
                     $ref: '#/components/schemas/OpportunityConference'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Conference not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: opportunity_conferences_delete
+      summary: Delete a conference
+      description: >-
+        Requires manage_opportunities AND the venue_admin role — not in the Phase 3 spec's
+        acceptance list (add/edit, not delete), added so a mis-entered or throwaway conference isn't
+        permanently stuck. Cascades opportunity_conference_companies and
+        opportunity_conference_facts; linked opportunities keep their row with conference_id set to
+        null (ON DELETE SET NULL); linked opportunity_signals are deleted (ON DELETE CASCADE);
+        opportunity_note_links pointing at this conference are cleaned up explicitly (that table has
+        no SQL FK — linked_id is polymorphic).
+      tags:
+        - Opportunity Conferences
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing manage_opportunities, or caller is not a venue_admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Conference not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-conferences/{conferenceId}/facts:
+    get:
+      operationId: opportunity_conferences_facts_list
+      summary: List a conference's Key Facts
+      description: Requires view_opportunities.
+      tags:
+        - Opportunity Conferences
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+      responses:
+        '200':
+          description: Key facts, in sort order.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  facts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityConferenceFact'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunity_conferences_facts_create
+      summary: Add a Key Fact to a conference
+      description: Requires manage_opportunities. `fact` is required; `source_url` is optional but encouraged ("Facts should be stored and sourceable").
+      tags:
+        - Opportunity Conferences
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fact
+              properties:
+                fact:
+                  type: string
+                source_url:
+                  type: string
+      responses:
+        '200':
+          description: Created fact.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fact:
+                    $ref: '#/components/schemas/OpportunityConferenceFact'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Conference not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing fact.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-conferences/{conferenceId}/facts/{factId}:
+    delete:
+      operationId: opportunity_conferences_facts_delete
+      summary: Remove a Key Fact
+      description: Requires manage_opportunities.
+      tags:
+        - Opportunity Conferences
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+        - name: factId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-conferences/{conferenceId}/tasks:
+    get:
+      operationId: opportunity_conferences_tasks_get
+      summary: Get the conference's linked task_documents id, if any
+      description: >-
+        Requires view_opportunities. Returns `task_document_id: null` until a task is first added
+        (see POST below) — no task_documents row is created just by viewing a conference.
+      tags:
+        - Opportunity Conferences
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+      responses:
+        '200':
+          description: The linked task document id, or null.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_document_id:
+                    type: integer
+                    nullable: true
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Conference not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunity_conferences_tasks_ensure
+      summary: Lazily provision the conference's linked task_documents row
+      description: >-
+        Requires manage_opportunities. Idempotent — a `task_documents` row (owned by the ordinary,
+        unmodified Tasks app; see src/Tasks/Items.php) is created only the first time this is
+        called, and its id is stored on the conference row (`task_document_id`). Every later call
+        returns the same id with `created: false`. Task CRUD itself happens through the existing
+        `/api/task-documents/{id}/tasks` endpoints, not through this one — this only owns the
+        one-time provision-and-link step (docs/OPPORTUNITIES-IMPLEMENTATION.md §1.11).
+      tags:
+        - Opportunity Conferences
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+      responses:
+        '200':
+          description: The (possibly newly created) task document id.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_document_id:
+                    type: integer
+                  created:
+                    type: boolean
         '401':
           description: Authentication required.
           content:

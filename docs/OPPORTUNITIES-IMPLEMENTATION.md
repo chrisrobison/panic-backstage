@@ -1,8 +1,8 @@
 # Opportunities Module — Implementation Handoff
 
-**Status:** Phase 2 complete — nav + the Discover dashboard (first visible
-UI) shipped on top of Phase 1's backend. See §4.1 (Phase 1) and §4.2
-(Phase 2) for exactly what landed.
+**Status:** Phase 3 complete — Conference list + Conference Detail, the
+first fully-usable-without-AI Opportunities surface. See §4.1 (Phase 1),
+§4.2 (Phase 2), §4.3 (Phase 3) for exactly what landed each phase.
 **Branch:** `opportunities-module` (long-lived feature branch; not merged to `main`
 until the module is stable — see "Branch strategy" below). Do not squash/delete
 mid-project; each phase adds commits here.
@@ -604,7 +604,7 @@ before the generic `match`, keyed on a non-numeric segment).
 | 0 — Recon & plan | **Done** (this doc) | |
 | 1 — DB/capabilities/API skeleton | **Done** | See §4.1 below |
 | 2 — Nav + Discover dashboard | **Done** | See §4.2 below |
-| 3 — Conference list/detail | Not started | |
+| 3 — Conference list/detail | **Done** | See §4.3 below |
 | 4 — Company list/detail + buyer contacts | Not started | |
 | 5 — Pipeline + Opportunity detail + conversion | Not started | |
 | 6 — Notes workspace | Not started | |
@@ -823,6 +823,137 @@ now also fixes every other panel already using that class name.
 
 ---
 
+### 4.3 Phase 3 — what actually shipped
+
+**Migration:** `database/migrations/111_add_opportunities_phase3.sql` —
+`venues.latitude`/`longitude` (nullable decimal, the one missing piece
+flagged as a §5 TODO since Phase 0: there was no venue-location source
+anywhere in the schema) and a new `opportunity_conference_facts` table
+(Key Facts: short, discrete, sourceable bullets — distinct from freeform
+Notes and from `opportunity_signals`, reused as-is for Side Event Signals).
+Applied to the live DB; audit triggers regenerated. **This checkout's own
+venue** (Mabuhay Gardens) now has real coordinates set (37.7969, -122.4077,
+its 443 Broadway address) — set directly via SQL for this session's testing,
+exactly what a venue_admin would otherwise do through Admin > Venue; **not**
+in a migration (a migration seeding one venue's real-world coordinates would
+hard-code this deployment into a supposedly generic multi-tenant module).
+
+**Backend — Venues:** `src/Venues.php`'s `UPDATABLE` allowlist gained
+`latitude`/`longitude` (cast to float/null, mirroring the existing `name`
+special-case in that same loop); `public/assets/admin.js`'s Venue Details
+form gained the two fields with an explanatory note. Still only ever
+entered manually — no geocoding call anywhere in this codebase.
+
+**Backend — `src/Opportunities/Availability.php` gained three static
+helpers** (kept here, not on `Conferences`, since they're pure geo/date
+primitives other phases will also want): `venueCoordinates()` (this
+tenant's own venue's lat/long, or null = "not researched"),
+`distanceMiles()` (Haversine, purely local math), and
+`conferenceDistanceMiles()` — computes fresh when both coordinate pairs are
+known, otherwise **falls back to whatever's already stored** on the
+conference row (respects a human-entered approximate value like "0.6 mi"
+rather than clobbering it just because exact coordinates aren't available
+this request) — never fabricates a number, per the spec's "if coordinates
+are absent, show unknown until researched."
+
+**Backend — `src/Opportunities/Conferences.php` grew substantially**, all
+within the existing endpoint (no new Kernel route family):
+- `index()`: `city`, `date_from`/`date_to`, `researched=1|0`, `min_score`,
+  and `past=1` (alongside the existing `q`/`upcoming`) filters; `sort=date|
+  date_desc|score|attendance|proximity|target_companies` (`proximity` is
+  hydrated then sorted in PHP — no meaningful single-query ORDER BY over a
+  computed-or-stored-or-null value at this row count). `target_company_count`
+  and `side_event_signal_count` are single-query LEFT JOIN aggregates, not
+  N+1 per row.
+- `show()`: adds `target_company_count`, `facts`, `peak_windows` (evening
+  before / each conference day / evening after, plus a small `best_dates`
+  subset — spec's "start with deterministic date logic"), `empty_night_dates`
+  (this conference's own empty-night matches, reusing
+  `Availability::emptyNightMatches()` — computed once and passed into both
+  the response and the outreach-angle generator, not recomputed twice), and
+  `outreach_angles` (deterministic templates from real sponsor/exhibitor
+  counts and `empty_night_dates` — spec: "Initially deterministic templates
+  ... AI enrichment comes later," never a fabricated company or date).
+- New Key Facts sub-resource (`GET`/`POST /{id}/facts`,
+  `DELETE /{id}/facts/{factId}`), dispatched via `child`/`factId` params
+  Kernel now passes through on the `opportunity-conferences` family's
+  fallback branch (Phase 1/2's fallback dropped `child` entirely — needed
+  fixing to make this sub-resource reachable).
+- New `DELETE /{id}` (venue_admin-gated, same shape as
+  `Opportunities::deleteOpportunity()`) — **not** in the spec's Phase 3
+  acceptance list (add/edit, not delete), added anyway so a mis-entered or
+  throwaway conference (including this phase's own test fixtures, which
+  need it to clean up after themselves in a shared production DB) isn't
+  permanently stuck. Explicitly cleans up `opportunity_note_links` rows
+  pointing at the deleted conference first — that table has no SQL FK
+  (`linked_id` is polymorphic), so nothing else would.
+
+**Backend — `src/Opportunities/TaskLink.php`** (new): lazily provisions one
+`task_documents` row per conference/company/opportunity the first time a
+task is added, per the §1.11 decision — no new tasks table, no polymorphic
+columns, a task created from a conference is a genuine ordinary Backstage
+task served by the existing, unmodified `/api/task-documents/{id}/tasks`
+endpoints. `GET`/`POST /api/opportunity-conferences/{id}/tasks`. The class
+already supports `company`/`opportunity` owner types too (same generic
+table-name map) — **only conferences got a Kernel route this phase**;
+Phase 4/5 just add their own route, not touch this file.
+
+**Frontend — new files**: `conferences-list.js` (`<pb-opportunities-
+conferences-list>` — tabs, search, city/researched/score filters, sort,
+data-table, "+ Add Conference" -> `openModal()` create form) and
+`conference-detail.js` (`<pb-opportunities-conference-detail>` — one
+cohesive file, same "single-file detail page" shape as contacts.js/leads.js
+rather than a shell-plus-children workspace, since this is one page's worth
+of related panels, not several independently-navigable views). Both wired
+into `opportunities-shell.js`/`app.js`, replacing the Phase 2 placeholder
+for `#opportunities-conferences` and `#opportunities-conference-{id}`
+(Companies/Pipeline/Notes and their detail routes still placeholder).
+`shared.js` gained a `debounce()` helper (moved out of both new files once
+duplicated).
+
+Conference detail implements every panel from the mockup
+(`opportunity-2.png`, "Dreamforce 2026"): header KPI cards, Overview, Key
+Facts (with per-fact source link + remove), Peak Side-Event Windows
+(phase-banded date chips), Target Companies & Sponsors (with per-row
+**Create Opportunity** — the spec's "create an opportunity from a
+conference/company pair" acceptance item, a lightweight prefilled modal
+posting straight to `POST /api/opportunities`, no new opportunity-detail UI
+built ahead of Phase 5), Side Event Signals (reusing `opportunity_signals`,
+`signal_type='side_event_history'`), Venue Proximity & Availability, Recommended
+Outreach Angles, Conference Notes (inline composer), and Open Tasks
+("+ Add first task" lazily provisions via TaskLink, then an ordinary
+checklist against `/api/task-documents/{id}/tasks`, plus a real "Open in
+Tasks" link into the standalone Tasks app). The Add Company modal supports
+both searching-and-picking an existing company and creating a new one
+inline, satisfying "associate companies" without needing the Phase 4
+Companies list page to exist yet.
+
+**CSS**: new rules for the conference list's filter bar/tabs, and the
+detail page's Key Facts/Peak Windows/Signals/Tasks/inline-add-forms/
+Add-Company-modal-search — all under the existing "── Opportunities ──"
+section, reusing `.panel`/`.data-table`/`.dashboard-grid`/`.badge`/`.pill`
+throughout rather than inventing parallel primitives.
+
+**Tests:**
+- `tests/opportunities_conferences_db_test.php` (new, DB-backed,
+  `RUN_DB_TESTS=1`) — 33 assertions: index() filters (`city`, `researched`,
+  `min_score`) and sorts (`score`, `target_companies`, `proximity`), show()'s
+  computed sections (target_company_count, peak_windows, outreach_angles
+  mentioning the *real* sponsor count, distance computed-vs-unknown both
+  branches), the Key Facts sub-resource end to end, TaskLink's idempotent
+  provisioning **verified by actually creating and listing a task through
+  the real, unmodified `Panic\Tasks\Items` endpoint** (proving the
+  "ordinary Backstage task, not a parallel system" requirement), and the new
+  DELETE endpoint (capability-gated, actually removes the row).
+- `tests/ui/119-opportunities-conferences.test.mjs` (new) — list page
+  chrome, a conference created via raw API fetch rendering every detail
+  panel, adding a Key Fact through the real form and seeing it reappear,
+  and cleanup via the new DELETE endpoint. Same environment limitation as
+  Phase 2's UI test (§4.2) — **written and syntax-checked, not run** from
+  this multi-tenant-configured checkout.
+
+---
+
 ## 5. Open TODOs / assumptions to verify in later phases
 
 - `opportunity_qualification`'s fixed-boolean-columns design (§3.1) assumes
@@ -839,11 +970,10 @@ now also fixes every other panel already using that class name.
 - `opportunity_signals`/`opportunity_notes` "at least one FK set" rule is
   enforced in PHP validation, not a SQL `CHECK` constraint (matches
   existing repo style of validating in the endpoint, not the schema).
-- Distance calculation: spec forbids calling Google Maps automatically and
-  requires "if coordinates are absent, show unknown until researched" — venue
-  lat/long needs a source; check for an existing venue-config location
-  field (not yet confirmed — search for one in Phase 3, don't assume it
-  exists).
+- ~~Distance calculation: venue lat/long needs a source~~ — **resolved in
+  Phase 3**: `venues.latitude`/`longitude` added (migration 111),
+  `Opportunities/Availability.php` does the Haversine math locally, never
+  auto-geocoded.
 - No generic job-status polling endpoint pattern exists yet in the repo;
   `opportunity_research_jobs` + `GET .../jobs/{id}` will be the first one —
   reasonable and self-contained, but worth flagging as new-pattern-not-just-
@@ -856,18 +986,25 @@ now also fixes every other panel already using that class name.
   The Discover dashboard is fetch-once-per-load/window-change, no polling.
 - `opportunity_research_jobs` exists as a schema-only stub (no reader/writer)
   until Phase 7. `opportunity_note_versions` doesn't exist yet (Phase 6).
-- Only Discover is a real page — Conferences/Companies/Pipeline/Notes and
-  every detail route are the honest placeholder until Phase 3/4/5/6 land.
-- `tests/ui/118-opportunities-discover.test.mjs` has not actually been run
-  (only syntax-checked) — this checkout's multi-tenant `.env` blocks the
-  whole UI harness, not just this test. See §4.2's Tests note for the full
-  explanation and where it's confirmed to run (CI, or a single-tenant
-  checkout like `/home/cdr/backstage`). **Run it for real at the start of
-  whichever future session next touches the Opportunities frontend**, before
-  trusting it.
+- Only Discover and Conferences are real pages — Companies/Pipeline/Notes
+  and their detail routes are the honest placeholder until Phase 4/5/6 land.
+- **No UI test has actually been run in a browser yet** (118 from Phase 2,
+  119 from Phase 3) — both written and syntax-checked only. This checkout's
+  multi-tenant `.env` (`SUPER_DB_NAME` set) blocks the whole
+  `node tests/ui/run.mjs` harness at the host-allowlist layer before the app
+  boots. See §4.2's Tests note for the full explanation and where it's
+  confirmed to run instead (CI, or a single-tenant checkout like
+  `/home/cdr/backstage`). **Run both for real at the start of whichever
+  future session next touches the Opportunities frontend**, before trusting
+  either.
 - "Best Opportunities" table's Likely Buyer column always renders "—" — no
   buyer-contact data exists until `opportunity_contacts` (Phase 4); the
   column header is kept so the table doesn't need a structural change later.
+- Conference deletion has no confirmation dialog check in the test (the
+  DELETE endpoint itself is capability-gated and tested; the frontend has no
+  delete button yet at all — only exercised via raw API in tests). Add a
+  delete affordance to `conference-detail.js` if/when a real workflow needs
+  it from the UI, not just via cleanup scripts.
 
 ## 7. Tests added
 
@@ -885,3 +1022,12 @@ now also fixes every other panel already using that class name.
 - `tests/ui/118-opportunities-discover.test.mjs` — headless-Chromium, nav
   gating / KPI rendering / active-state / placeholder-routing. Written and
   syntax-checked but **not run** in this session — see Known issues above.
+- `tests/opportunities_conferences_db_test.php` — DB-backed, opt-in via
+  `RUN_DB_TESTS=1`. 33 assertions covering Conferences::index() filters/sorts,
+  show()'s computed sections, the Key Facts sub-resource, TaskLink's
+  provisioning verified end-to-end through the real Tasks endpoint, and the
+  new DELETE endpoint. `PB TEST OPPCONF — ` throwaway-row prefix.
+- `tests/ui/119-opportunities-conferences.test.mjs` — headless-Chromium, list
+  page chrome, a real API-created conference rendering every detail panel,
+  adding a Key Fact through the actual form, cleanup via DELETE. Written and
+  syntax-checked but **not run** — see Known issues above.

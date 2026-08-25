@@ -1,29 +1,22 @@
 // public/assets/opportunities/opportunities-shell.js — the single entry
 // point app.js imports for the whole Opportunities module. Imports the real
-// pages as they land phase by phase (today: discover-page.js only) and
-// defines <pb-opportunities-placeholder>, an honest "not built yet" page —
-// same purpose and shape as processes/automation-placeholder.js — for every
-// nav destination/detail route that doesn't have a real page yet
-// (Conferences/Companies/Pipeline/Notes lists are Phase 3/4/5/6; detail
-// routes for a given company/conference/opportunity/note follow their list).
+// pages as they land phase by phase (Discover: Phase 2; Conference
+// list/detail: Phase 3) and defines <pb-opportunities-placeholder>, an
+// honest "not built yet" page — same purpose and shape as
+// processes/automation-placeholder.js — for every nav destination/detail
+// route that doesn't have a real page yet (Companies/Pipeline/Notes lists
+// are Phase 4/5/6; detail routes for a given company/opportunity/note
+// follow their list).
 //
 // Phase 2 acceptance criteria explicitly allows this: "clicking company/
 // conference/opportunity placeholders routes correctly or to a safe
 // not-yet-implemented state."
 import { publish, PanicElement } from '../core.js';
 import './discover-page.js';
+import './conferences-list.js';
+import './conference-detail.js';
 
 const PAGES = {
-  conferences: {
-    title: 'Conferences',
-    blurb: 'Conference/trade-show source-of-demand records.',
-    body: '<p>Browse and research conferences near the venue, and see which companies are attending each one. Not built yet — this lands in Phase 3.</p>',
-  },
-  'conference-detail': {
-    title: 'Conference',
-    blurb: 'Conference detail.',
-    body: '<p>Full conference detail — participating companies, signals, notes, and venue-availability fit. Not built yet — this lands in Phase 3.</p>',
-  },
   companies: {
     title: 'Companies',
     blurb: 'Prospect companies that could purchase a private event.',

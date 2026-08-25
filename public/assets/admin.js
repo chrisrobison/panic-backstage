@@ -831,6 +831,9 @@ class AdminVenue extends PanicElement {
           </label>
           <label>Phone <input name="phone" value="${esc(v.phone || '')}" placeholder="(415) 555-0100"></label>
           <label>Website <input type="url" name="website_url" value="${esc(v.website_url || '')}" placeholder="https://thefillmore.com"></label>
+          <label>Latitude <input type="number" step="any" name="latitude" value="${esc(v.latitude != null ? v.latitude : '')}" placeholder="37.784100"></label>
+          <label>Longitude <input type="number" step="any" name="longitude" value="${esc(v.longitude != null ? v.longitude : '')}" placeholder="-122.409400"></label>
+          <p class="muted small wide">Used by Opportunities to compute distance-from-venue for conferences (never looked up automatically — enter once from a map/geocoder of your choice).</p>
           <div class="form-actions">
             <button class="btn-primary" ${this.saving ? 'disabled' : ''}>${this.saving ? 'Saving…' : 'Save venue details'}</button>
           </div>

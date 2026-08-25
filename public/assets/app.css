@@ -8264,6 +8264,52 @@ pb-inbox-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direc
 .opp-note-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
 .opp-note-item p { margin: 0 0 4px; font-size: 13.5px; line-height: 1.4; color: var(--ink); }
 
+/* Conference list (Phase 3) — filter bar + tabs. */
+.opp-conf-filters { flex-wrap: wrap; gap: 12px; }
+.opp-conf-filters [data-tab] {
+  background: none; border: 1px solid var(--line); border-radius: 999px;
+  padding: 5px 14px; font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer;
+}
+.opp-conf-filters [data-tab].active { background: var(--blue); border-color: var(--blue); color: #fff; }
+.opp-conf-filters input[type="search"], .opp-conf-filters input[type="text"] { min-width: 0; }
+
+/* Conference detail (Phase 3) — Key Facts, Peak Side-Event Windows, Side
+   Event Signals, Open Tasks, and the small inline add-forms shared by
+   several of those panels. */
+.opp-fact-list, .opp-signal-list, .opp-task-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.opp-fact-item { display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px; line-height: 1.4; }
+.opp-fact-item i.fa-check { color: var(--green); margin-top: 2px; flex: none; }
+.opp-fact-item span { flex: 1; }
+.opp-fact-source, .opp-fact-remove { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0; flex: none; }
+.opp-fact-remove:hover { color: var(--red); }
+
+.opp-window-bands { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 10px; }
+.opp-window-band { flex: 1 1 160px; min-width: 140px; }
+.opp-window-band-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin-bottom: 6px; }
+.opp-window-dates { display: flex; flex-wrap: wrap; gap: 6px; }
+.opp-window-date { display: inline-block; padding: 4px 9px; border-radius: 6px; font-size: 12px; font-weight: 700; background: var(--soft); }
+.opp-window-date.opp-activity-very_high { background: #d3f1df; color: #0c7a3c; }
+.opp-window-date.opp-activity-high { background: #ffedc2; color: #a06400; }
+
+.opp-signal-item strong { display: block; font-size: 13.5px; }
+
+.opp-task-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13.5px; }
+.opp-task-item label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.opp-task-item.opp-task-done label { color: var(--muted); text-decoration: line-through; }
+
+.opp-inline-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.opp-inline-form input, .opp-inline-form textarea { flex: 1 1 200px; min-width: 0; }
+.opp-inline-form-wide { flex-direction: column; align-items: flex-start; }
+.opp-inline-form-wide textarea { width: 100%; }
+.opp-inline-form button { flex: none; }
+
+/* Add Company modal — existing-vs-new toggle + live search results. */
+.opp-company-mode { display: flex; gap: 18px; font-size: 13.5px; font-weight: 600; }
+.opp-company-results { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; max-height: 180px; overflow-y: auto; }
+.opp-company-result { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+.opp-company-result:hover { border-color: var(--blue); }
+
 @media (max-width: 760px) {
   .opp-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .opp-window-bands { flex-direction: column; }
 }

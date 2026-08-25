@@ -519,7 +519,12 @@ final class Kernel
             if ($child === 'signals') {
                 return [Opportunities\Signals::class, ['scopeType' => 'conference', 'scopeId' => $conferenceId]];
             }
-            return [Opportunities\Conferences::class, ['conferenceId' => $conferenceId]];
+            if ($child === 'tasks') {
+                return [Opportunities\TaskLink::class, ['ownerType' => 'conference', 'ownerId' => $conferenceId]];
+            }
+            // 'facts' (Phase 3 Key Facts sub-resource) falls through here —
+            // Conferences::handle() dispatches it itself via $child/$childId.
+            return [Opportunities\Conferences::class, ['conferenceId' => $conferenceId, 'child' => $child, 'factId' => $childId]];
         }
 
         if ($segments[0] === 'opportunity-companies') {

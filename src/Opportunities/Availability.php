@@ -82,4 +82,52 @@ final class Availability
 
         return $matches;
     }
+
+    /**
+     * This tenant's own venue coordinates, if a venue_admin has entered them
+     * (Admin > Venue — see src/Venues.php's `latitude`/`longitude` fields,
+     * migration 111). Null means "not researched yet" — callers must show
+     * "Unknown" distance, never fall back to guessing or geocoding.
+     *
+     * @return array{lat: float, lng: float}|null
+     */
+    public static function venueCoordinates(Database $db): ?array
+    {
+        $venue = $db->one(
+            'SELECT latitude, longitude FROM venues WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY id LIMIT 1'
+        );
+        return $venue ? ['lat' => (float) $venue['latitude'], 'lng' => (float) $venue['longitude']] : null;
+    }
+
+    /** Great-circle (Haversine) distance in miles — purely local math, never an external API call. */
+    public static function distanceMiles(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $earthRadiusMiles = 3958.8;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+        $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+        return round($earthRadiusMiles * $c, 2);
+    }
+
+    /**
+     * Distance from the venue to $conference, computed locally when both
+     * coordinate pairs are known; otherwise falls back to whatever's already
+     * stored on the conference row (a human-researched approximation, e.g.
+     * "0.6 mi" entered without exact coordinates) — never fabricated, and
+     * never silently overwrites a manual value just because coordinates
+     * happen to be unavailable this request.
+     */
+    public static function conferenceDistanceMiles(array $conference, ?array $venueCoords): ?float
+    {
+        if ($venueCoords && $conference['latitude'] !== null && $conference['longitude'] !== null) {
+            return self::distanceMiles(
+                $venueCoords['lat'],
+                $venueCoords['lng'],
+                (float) $conference['latitude'],
+                (float) $conference['longitude']
+            );
+        }
+        return $conference['distance_from_venue_miles'] !== null ? (float) $conference['distance_from_venue_miles'] : null;
+    }
 }

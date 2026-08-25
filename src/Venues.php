@@ -30,7 +30,7 @@ namespace Panic;
 final class Venues extends BaseEndpoint
 {
     /** Venue fields callers may update via PATCH /venues/{id}. */
-    private const UPDATABLE = ['name', 'address', 'city', 'state', 'timezone', 'phone', 'website_url'];
+    private const UPDATABLE = ['name', 'address', 'city', 'state', 'timezone', 'phone', 'website_url', 'latitude', 'longitude'];
 
     public function handle(Request $request): Response
     {
@@ -107,8 +107,18 @@ final class Venues extends BaseEndpoint
             if ($field === 'name' && (!is_string($value) || trim($value) === '')) {
                 return Response::json(['error' => 'Venue name cannot be empty.'], 422);
             }
+            // Opportunities module (Phase 3): the one place a venue_admin can
+            // enter this venue's own coordinates, so opportunity-conference
+            // distance calculations have something real to compare against
+            // instead of always reading "Unknown". Never populated any other
+            // way (no geocoding call anywhere in this codebase).
+            if (in_array($field, ['latitude', 'longitude'], true)) {
+                $value = $value !== null && $value !== '' ? (float) $value : null;
+            } else {
+                $value = is_string($value) ? trim($value) : $value;
+            }
             $setClauses[] = "`$field` = ?";
-            $params[]     = is_string($value) ? trim($value) : $value;
+            $params[]     = $value;
         }
 
         if (empty($setClauses)) {

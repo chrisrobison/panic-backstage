@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `opportunities` — Phase 3 — Conference list + Conference Detail
 - **Added** `opportunities` — Phase 2 — nav + Discover dashboard
 - **Added** `opportunities` — Phase 1 — DB model, capabilities, API skeleton
 - **Documentation** `opportunities` — Add Phase 0 recon + implementation plan for Opportunities module

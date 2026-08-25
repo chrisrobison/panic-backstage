@@ -84,3 +84,9 @@ export function dateRangeLabel(startValue, endValue) {
 export function noteTypeLabel(type) {
   return { general: 'Note', meeting: 'Meeting', call: 'Call', research: 'Research', internal: 'Internal' }[type] || titleCaseFallback(type);
 }
+
+/** Delay invoking `fn` until `ms` have passed since the last call — used by every live-search/filter input across the module. */
+export function debounce(fn, ms = 300) {
+  let timer;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
+}
