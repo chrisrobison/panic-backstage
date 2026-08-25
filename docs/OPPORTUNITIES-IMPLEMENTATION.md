@@ -1,6 +1,8 @@
 # Opportunities Module — Implementation Handoff
 
-**Status:** Phase 0 complete (recon + plan only — no schema/code changes yet).
+**Status:** Phase 1 complete — durable backend model (migration 109, 6 PHP
+endpoint classes, 4 Kernel route families, capabilities, OpenAPI) shipped, no
+UI yet (Phase 2+). See §4.1 for exactly what landed.
 **Branch:** `opportunities-module` (long-lived feature branch; not merged to `main`
 until the module is stable — see "Branch strategy" below). Do not squash/delete
 mid-project; each phase adds commits here.
@@ -600,7 +602,7 @@ before the generic `match`, keyed on a non-numeric segment).
 | Phase | Status | Notes |
 |---|---|---|
 | 0 — Recon & plan | **Done** (this doc) | |
-| 1 — DB/capabilities/API skeleton | Not started | |
+| 1 — DB/capabilities/API skeleton | **Done** | See §4.1 below |
 | 2 — Nav + Discover dashboard | Not started | |
 | 3 — Conference list/detail | Not started | |
 | 4 — Company list/detail + buyer contacts | Not started | |
@@ -609,6 +611,97 @@ before the generic `match`, keyed on a non-numeric segment).
 | 7 — Claude CLI research | Not started | |
 | 8 — Tasks/activities/realtime/scoring/availability | Not started | |
 | 9 — Polish/tests/docs/perf/a11y | Not started | |
+
+---
+
+### 4.1 Phase 1 — what actually shipped
+
+**Migration:** `database/migrations/109_add_opportunities_module.sql` — 10
+new tables: `opportunity_conferences`, `opportunity_companies`,
+`opportunity_conference_companies`, `opportunities`, `opportunity_signals`,
+`opportunity_notes`, `opportunity_note_links`, `opportunity_note_tags`,
+`opportunity_activities`, `opportunity_research_jobs` (schema-only stub,
+unused until Phase 7). Applied to the live DB; audit triggers regenerated
+(`php scripts/generate-audit-triggers.php`) so every write lands in
+`db_history` like every other table.
+
+**Deliberately deferred, contrary to §3.1's full list** (that section is the
+whole-module target architecture; this phase followed
+`docs/opportunity-ui/opportunity-ui.txt`'s own narrower Phase 1 table list,
+which omits these): `opportunity_contacts` and `opportunity_decision_makers`
+(Phase 4/5 — buyer contacts don't exist yet, so `opportunities` has no
+`primary_contact_id` column yet either; add it alongside
+`opportunity_contacts`), `opportunity_qualification` (Phase 5, checklist
+UI), `opportunity_note_versions` (Phase 6, revision history — the doc's own
+§3.1 already scoped this to Phase 6).
+
+**Capabilities** (`src/Capabilities.php` `GLOBAL_CAPABILITIES`): added
+`view_opportunities` (venue_admin, event_owner, staff), `manage_opportunities`
+(venue_admin, event_owner), `research_opportunities` (venue_admin only, unused
+until Phase 7) — exactly the §1.3 proposed grant. **Correction to §1.3's
+claim that `nav-manager.js` needs a capability-list edit**: it doesn't —
+`NavItems::index()` (`src/NavItems.php:67`) sources the capability picker
+dynamically from `Capabilities::globalCapabilities()`, so the three new keys
+already appear there with zero JS changes. Nav items themselves (Phase 2)
+still need a migration to insert `nav_items` rows.
+
+**PHP classes** (6, not the full §3.3 list — `Contacts`/`Qualification`/
+`Conversion`/`Scoring`/`Availability`/`Research` are later-phase work):
+- `src/Opportunities.php` — dashboard, list/create/get/update/delete,
+  read-only `/{id}/activities`. Writes `opportunity_activities` rows via a
+  new `log_opportunity_activity()` helper in `src/Support.php` (same shape
+  as `log_activity()`/`log_lead_activity()`).
+- `src/Opportunities/Conferences.php`, `Companies.php` — CRUD for the two
+  prospect-source tables. `Companies` normalizes `domain` (lowercase,
+  scheme/www/path stripped) and enforces uniqueness in PHP.
+- `src/Opportunities/ConferenceCompanies.php` — one class serves both
+  directions of the conference<->company participation link (write side
+  nested under a conference, read-only reverse list nested under a company).
+- `src/Opportunities/Notes.php` — **polymorphic**, shared by every nested
+  `/{family}/{id}/notes` route and the cross-cutting `/api/opportunity-notes`
+  family. A note's `links` (type+id pairs) and `tags` live in
+  `opportunity_note_links`/`opportunity_note_tags`; `linked_type=contact` is
+  explicitly rejected with a clear 422 (not silently accepted) until Phase 4.
+- `src/Opportunities/Signals.php` — shared by every nested `/{family}/{id}/signals`
+  route; scope (conference/company/opportunity) comes from which route
+  Kernel dispatched through, not from the request body.
+
+**Kernel routes** (`src/Kernel.php`, inserted after the `crm-followups`
+block): four top-level families — `opportunities`, `opportunity-conferences`,
+`opportunity-companies`, `opportunity-notes` — each dispatching `notes`/
+`signals`/`companies`/`conferences` children straight to the shared
+Notes/Signals/ConferenceCompanies classes rather than through
+`Opportunities.php`. `/api/opportunities/dashboard` is matched before generic
+id parsing, same convention as other computed/bulk actions in this codebase.
+
+**OpenAPI:** `docs/openapi.yaml` — added 4 tags (Opportunities, Opportunity
+Conferences, Opportunity Companies, Opportunity Notes & Signals), 15 schemas,
+9 path parameters, and all 34 documented path+method operations backing the
+routes above. `php scripts/check-openapi-routes.php` and full
+`scripts/static-analysis.sh` (includes `phpstan` level 5) both pass clean.
+
+**Tests:** `tests/opportunities_module_db_test.php` (added to
+`run-php-tests.sh`'s `DB_TESTS` opt-in list — `RUN_DB_TESTS=1`). 34
+assertions, DB-backed, throwaway-fixture-in-`finally`: Kernel routing
+spot-checks (via reflection, no HTTP), a capability-boundary check (`band`
+role gets 403 on both read and write), and the full acceptance-criteria flow
+— create conference -> create company -> associate them -> create opportunity
+-> retrieve detail (joined names) -> move stage -> add note (verifies the
+`opportunity_note_links` row and tags) -> add signal -> read activity feed
+(asserts `created`/`stage_changed`/`note_added`/`signal_added` all present) —
+plus negative cases (bad FK, bad enum, duplicate conference/company link,
+`linked_type=contact` rejected).
+
+**Seed/demo data:** none added — Phase 1 acceptance criteria didn't require
+it and the repo has no existing dev-seed pattern to plug into (per the
+"do not pollute production migrations with Dreamforce/NVIDIA demo rows"
+instruction); revisit if a later phase's UI needs something to render against.
+
+**Known gaps carried forward** (not blocking Phase 1, tracked for later
+phases): `RealtimeInvalidationMapper` has no `opportunities`(+children)
+entries yet, so new panels won't live-refresh until Phase 5/8 adds them
+(fails open, per §1.9). No nav UI yet (Phase 2). No frontend at all yet — this
+phase is backend-only per its own spec.
 
 ---
 
@@ -640,8 +733,18 @@ before the generic `match`, keyed on a non-numeric segment).
 
 ## 6. Known issues
 
-None yet — no code written.
+- No live-refresh on Opportunities panels yet — `RealtimeInvalidationMapper`
+  doesn't map any Opportunities table (fails open, not a hard bug; see §1.9).
+- `opportunity_research_jobs` exists as a schema-only stub (no reader/writer)
+  until Phase 7. `opportunity_note_versions` doesn't exist yet (Phase 6).
+- No frontend — Phase 1 is backend-only per its own spec; every route above
+  is reachable only via direct API calls / the test suite today.
 
 ## 7. Tests added
 
-None yet.
+- `tests/opportunities_module_db_test.php` — DB-backed, opt-in via
+  `RUN_DB_TESTS=1` (registered in `tests/run-php-tests.sh`'s `DB_TESTS`).
+  34 assertions covering Kernel routing, capability boundaries, the full
+  Phase 1 acceptance-criteria flow, and FK/enum/duplicate-link validation
+  failure cases. Cleans up its own throwaway rows (`PB TEST OPP — ` prefix)
+  in a `finally` block regardless of pass/fail.

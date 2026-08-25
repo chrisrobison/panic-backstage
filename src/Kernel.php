@@ -483,6 +483,71 @@ final class Kernel
             return [CrmFollowups::class, []];
         }
 
+        // Opportunities module — outbound/private-event sales CRM prepended
+        // to the Leads pipeline (see docs/OPPORTUNITIES-IMPLEMENTATION.md).
+        // Notes and signals are polymorphic (Panic\Opportunities\Notes /
+        // Signals) and reachable both nested under a parent record and, for
+        // notes, as their own cross-cutting top-level resource.
+        if ($segments[0] === 'opportunities') {
+            if (($segments[1] ?? null) === 'dashboard') {
+                return [Opportunities::class, ['action' => 'dashboard']];
+            }
+            $opportunityId = $this->intOrNull($segments[1] ?? null);
+            $child         = $segments[2] ?? null;
+            $childId       = $this->intOrNull($segments[3] ?? null);
+
+            if ($child === 'notes') {
+                return [Opportunities\Notes::class, ['linkedType' => 'opportunity', 'linkedId' => $opportunityId, 'noteId' => $childId]];
+            }
+            if ($child === 'signals') {
+                return [Opportunities\Signals::class, ['scopeType' => 'opportunity', 'scopeId' => $opportunityId]];
+            }
+            return [Opportunities::class, ['opportunityId' => $opportunityId, 'child' => $child]];
+        }
+
+        if ($segments[0] === 'opportunity-conferences') {
+            $conferenceId = $this->intOrNull($segments[1] ?? null);
+            $child        = $segments[2] ?? null;
+            $childId      = $this->intOrNull($segments[3] ?? null);
+
+            if ($child === 'companies') {
+                return [Opportunities\ConferenceCompanies::class, ['conferenceId' => $conferenceId, 'linkId' => $childId]];
+            }
+            if ($child === 'notes') {
+                return [Opportunities\Notes::class, ['linkedType' => 'conference', 'linkedId' => $conferenceId, 'noteId' => $childId]];
+            }
+            if ($child === 'signals') {
+                return [Opportunities\Signals::class, ['scopeType' => 'conference', 'scopeId' => $conferenceId]];
+            }
+            return [Opportunities\Conferences::class, ['conferenceId' => $conferenceId]];
+        }
+
+        if ($segments[0] === 'opportunity-companies') {
+            $companyId = $this->intOrNull($segments[1] ?? null);
+            $child     = $segments[2] ?? null;
+            $childId   = $this->intOrNull($segments[3] ?? null);
+
+            if ($child === 'conferences') {
+                return [Opportunities\ConferenceCompanies::class, ['companyId' => $companyId]];
+            }
+            if ($child === 'notes') {
+                return [Opportunities\Notes::class, ['linkedType' => 'company', 'linkedId' => $companyId, 'noteId' => $childId]];
+            }
+            if ($child === 'signals') {
+                return [Opportunities\Signals::class, ['scopeType' => 'company', 'scopeId' => $companyId]];
+            }
+            return [Opportunities\Companies::class, ['companyId' => $companyId]];
+        }
+
+        // Cross-cutting note list/search across every linked record type —
+        // not nested under a specific parent (that's the
+        // `/{family}/{id}/notes` routes above, same underlying class).
+        // linked_type/linked_id come from the query string (GET) or the
+        // request body (POST) instead of from the path.
+        if ($segments[0] === 'opportunity-notes') {
+            return [Opportunities\Notes::class, ['noteId' => $this->intOrNull($segments[1] ?? null)]];
+        }
+
         // Client portal — token-gated read-only event view for promoters/clients
         //   GET  /api/portal/view?token=...        (public)
         //   POST /api/portal/{eventId}/create-link

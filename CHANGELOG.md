@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `opportunities` — Phase 1 — DB model, capabilities, API skeleton
 - **Documentation** `opportunities` — Add Phase 0 recon + implementation plan for Opportunities module
 - **Added** `events` — Add Cancel Series button to bulk-cancel future occurrences
 - **Fixed** `dashboard` — Make upcoming event thumbnails square

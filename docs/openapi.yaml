@@ -231,6 +231,24 @@ tags:
       Which *categories* a registered device receives is controlled by the
       `push_*` flags on `POST /api/auth/preferences`, which are deliberately
       separate from the `notify_*` email flags. See `docs/push-notifications.md`.
+  - name: Opportunities
+    description: >-
+      Outbound/private-event sales pipeline — prospecting stage prepended to the existing
+      inquiry->event spine (Leads). An opportunity converts into exactly one ordinary Backstage
+      event; it never becomes a second event system. See docs/OPPORTUNITIES-IMPLEMENTATION.md.
+  - name: Opportunity Conferences
+    description: >-
+      Conference/convention/trade-show source-of-demand records and their conference<->company
+      participation links. A conference is a source of prospects and timing information, not
+      itself a sales opportunity.
+  - name: Opportunity Companies
+    description: >-
+      Prospect companies (organizations that could purchase a private event) — a dedicated table,
+      distinct from the B2C ticket-buyer `contacts` audience.
+  - name: Opportunity Notes & Signals
+    description: >-
+      First-class, polymorphic Opportunities notes (a note can link a conference, company,
+      contact, and/or opportunity at once) and research/buying signals.
   - name: Feeds
     description: Public calendar/RSS syndication of publicly-visible events.
   - name: Invite Accept
@@ -11173,6 +11191,476 @@ components:
           format: email
         admin_password:
           type: string
+    OpportunityStage:
+      type: string
+      enum:
+        - new_signal
+        - researching
+        - contacted
+        - qualified
+        - proposal_sent
+        - verbal_yes
+        - won
+        - lost
+        - nurture
+    OpportunityConfidence:
+      type: string
+      enum:
+        - low
+        - medium
+        - high
+    OpportunityConferenceRole:
+      type: string
+      enum:
+        - organizer
+        - headline_sponsor
+        - sponsor
+        - exhibitor
+        - speaker
+        - partner
+        - vendor
+        - delegation
+        - attendee
+        - unknown
+    OpportunityCompanyRelationshipStatus:
+      type: string
+      enum:
+        - prospect
+        - active
+        - past_client
+        - do_not_contact
+        - unknown
+    OpportunitySignalType:
+      type: string
+      enum:
+        - proximity
+        - availability
+        - sponsorship
+        - exhibitor
+        - hospitality_history
+        - side_event_history
+        - hiring
+        - company_size
+        - speaking
+        - budget
+        - other
+    OpportunityNoteType:
+      type: string
+      enum:
+        - general
+        - meeting
+        - call
+        - research
+        - internal
+    OpportunityNoteLinkedType:
+      type: string
+      description: >-
+        `contact` is accepted by the schema but currently rejected by the API — opportunity_contacts
+        doesn't exist until Phase 4.
+      enum:
+        - conference
+        - company
+        - contact
+        - opportunity
+    OpportunityConference:
+      type: object
+      description: >-
+        A conference/convention/trade-show source-of-demand record. Not itself a sales opportunity
+        -- a source of prospects and timing information.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        website_url:
+          type: string
+          nullable: true
+        venue_name:
+          type: string
+          nullable: true
+        venue_address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        starts_at:
+          type: string
+          format: date
+          nullable: true
+        ends_at:
+          type: string
+          format: date
+          nullable: true
+        estimated_attendance:
+          type: integer
+          nullable: true
+        estimated_exhibitors:
+          type: integer
+          nullable: true
+        estimated_sponsors:
+          type: integer
+          nullable: true
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+        distance_from_venue_miles:
+          type: number
+          nullable: true
+          description: Null until researched — never auto-geocoded.
+        opportunity_score:
+          type: integer
+          nullable: true
+          description: 0-100.
+        source_url:
+          type: string
+          nullable: true
+        last_researched_at:
+          type: string
+          format: date-time
+          nullable: true
+        task_document_id:
+          type: integer
+          nullable: true
+        created_by:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    OpportunityCompany:
+      type: object
+      description: A prospect company — distinct from the B2C ticket-buyer `contacts` marketing audience.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        domain:
+          type: string
+          nullable: true
+          description: Normalized (lowercase, scheme/www/path stripped) for dedup; unique when set.
+        website_url:
+          type: string
+          nullable: true
+        logo_url:
+          type: string
+          nullable: true
+        industry:
+          type: string
+          nullable: true
+        employee_range:
+          type: string
+          nullable: true
+        hq_city:
+          type: string
+          nullable: true
+        hq_state:
+          type: string
+          nullable: true
+        local_office:
+          type: boolean
+        linkedin_url:
+          type: string
+          nullable: true
+        relationship_status:
+          $ref: '#/components/schemas/OpportunityCompanyRelationshipStatus'
+        description:
+          type: string
+          nullable: true
+        last_researched_at:
+          type: string
+          format: date-time
+          nullable: true
+        task_document_id:
+          type: integer
+          nullable: true
+        created_by:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    OpportunityConferenceCompanyLink:
+      type: object
+      description: A company's participation in a conference (sponsor/exhibitor/speaker/...).
+      properties:
+        id:
+          type: integer
+        conference_id:
+          type: integer
+        company_id:
+          type: integer
+        role:
+          $ref: '#/components/schemas/OpportunityConferenceRole'
+        sponsor_tier:
+          type: string
+          nullable: true
+        booth:
+          type: string
+          nullable: true
+        participation_notes:
+          type: string
+          nullable: true
+        confidence:
+          $ref: '#/components/schemas/OpportunityConfidence'
+        source_url:
+          type: string
+          nullable: true
+        observed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_by:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        company_name:
+          type: string
+          description: Joined; present on list responses only.
+        company_domain:
+          type: string
+          nullable: true
+        conference_name:
+          type: string
+          description: Joined; present on the reverse (per-company) list only.
+    Opportunity:
+      type: object
+      description: A specific potential private event tied to one company, optionally one conference.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        company_id:
+          type: integer
+        conference_id:
+          type: integer
+          nullable: true
+        stage:
+          $ref: '#/components/schemas/OpportunityStage'
+        probability:
+          type: integer
+          nullable: true
+          description: 0-100.
+        estimated_value:
+          type: number
+          nullable: true
+        target_date:
+          type: string
+          format: date
+          nullable: true
+        target_date_end:
+          type: string
+          format: date
+          nullable: true
+        guest_count_min:
+          type: integer
+          nullable: true
+        guest_count_max:
+          type: integer
+          nullable: true
+        event_type:
+          type: string
+          nullable: true
+        event_concept:
+          type: string
+          nullable: true
+        owner_user_id:
+          type: integer
+          nullable: true
+        next_action:
+          type: string
+          nullable: true
+        next_action_at:
+          type: string
+          format: date-time
+          nullable: true
+        lost_reason:
+          type: string
+          nullable: true
+        won_event_id:
+          type: integer
+          nullable: true
+          description: Set only by the (Phase 5) conversion flow; preserved forever afterward.
+        converted_at:
+          type: string
+          format: date-time
+          nullable: true
+        task_document_id:
+          type: integer
+          nullable: true
+        created_by:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        company_name:
+          type: string
+          description: Joined, list/detail responses only.
+        company_domain:
+          type: string
+          nullable: true
+        conference_name:
+          type: string
+          nullable: true
+        conference_slug:
+          type: string
+          nullable: true
+        owner_name:
+          type: string
+          nullable: true
+        won_event_title:
+          type: string
+          nullable: true
+    OpportunityNoteLink:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/OpportunityNoteLinkedType'
+        id:
+          type: integer
+    OpportunityNote:
+      type: object
+      description: >-
+        First-class, polymorphic note. `links` holds every record it is attached to (a note can
+        link a conference, company, contact, and/or opportunity all at once).
+      properties:
+        id:
+          type: integer
+        body:
+          type: string
+        note_type:
+          $ref: '#/components/schemas/OpportunityNoteType'
+        is_pinned:
+          type: boolean
+        is_ai_generated:
+          type: boolean
+        ai_model:
+          type: string
+          nullable: true
+        ai_prompt_version:
+          type: string
+          nullable: true
+        created_by:
+          type: integer
+          nullable: true
+        created_by_name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpportunityNoteLink'
+        tags:
+          type: array
+          items:
+            type: string
+    OpportunitySignal:
+      type: object
+      description: >-
+        Evidence that makes a prospect more or less attractive. Feeds the deterministic PHP
+        scoring service (Phase 8) — AI may suggest signals but is never the sole source of a score.
+      properties:
+        id:
+          type: integer
+        company_id:
+          type: integer
+          nullable: true
+        conference_id:
+          type: integer
+          nullable: true
+        opportunity_id:
+          type: integer
+          nullable: true
+        signal_type:
+          $ref: '#/components/schemas/OpportunitySignalType'
+        description:
+          type: string
+        weight:
+          type: number
+          nullable: true
+        confidence:
+          $ref: '#/components/schemas/OpportunityConfidence'
+        source_url:
+          type: string
+          nullable: true
+        source_title:
+          type: string
+          nullable: true
+        observed_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_ai_generated:
+          type: boolean
+        created_by:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    OpportunityActivity:
+      type: object
+      description: Read-only audit/activity feed entry for one opportunity.
+      properties:
+        id:
+          type: integer
+        opportunity_id:
+          type: integer
+        action:
+          type: string
+        details_json:
+          type: string
+          nullable: true
+          description: Raw JSON string (op-specific payload); decode client-side.
+        created_by:
+          type: integer
+          nullable: true
+        created_by_name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
   parameters:
     EventIdPath:
       name: id
@@ -11283,6 +11771,37 @@ components:
       schema:
         type: integer
       description: Tenant id.
+    OpportunityIdPath:
+      name: opportunityId
+      in: path
+      required: true
+      schema:
+        type: integer
+    OpportunityConferenceIdPath:
+      name: conferenceId
+      in: path
+      required: true
+      schema:
+        type: integer
+    OpportunityCompanyIdPath:
+      name: companyId
+      in: path
+      required: true
+      schema:
+        type: integer
+    OpportunityConferenceCompanyLinkIdPath:
+      name: linkId
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: opportunity_conference_companies.id (the participation link row, not either side's id).
+    OpportunityNoteIdPath:
+      name: noteId
+      in: path
+      required: true
+      schema:
+        type: integer
 paths:
   /api/events/{eventId}/clone:
     post:
@@ -29335,6 +29854,2261 @@ paths:
                       - true
         '404':
           description: Tenant not found, or domain does not belong to this tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunities/dashboard:
+    get:
+      operationId: opportunities_dashboard
+      summary: Opportunities pipeline dashboard
+      description: Requires view_opportunities. Stage totals/values, upcoming next actions, and upcoming conferences.
+      tags:
+        - Opportunities
+      responses:
+        '200':
+          description: Dashboard summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stage_counts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        stage:
+                          $ref: '#/components/schemas/OpportunityStage'
+                        count:
+                          type: integer
+                        total_value:
+                          type: number
+                  stages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityStage'
+                  upcoming_actions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Opportunity'
+                  upcoming_conferences:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityConference'
+                  capabilities:
+                    type: object
+                    additionalProperties:
+                      type: boolean
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunities:
+    get:
+      operationId: opportunities_list
+      summary: List opportunities
+      description: Requires view_opportunities. Filterable by stage, company_id, conference_id, owner_id, mine.
+      tags:
+        - Opportunities
+      parameters:
+        - name: stage
+          in: query
+          schema:
+            $ref: '#/components/schemas/OpportunityStage'
+        - name: company_id
+          in: query
+          schema:
+            type: integer
+        - name: conference_id
+          in: query
+          schema:
+            type: integer
+        - name: owner_id
+          in: query
+          schema:
+            type: integer
+        - name: mine
+          in: query
+          schema:
+            type: string
+            enum:
+              - '1'
+      responses:
+        '200':
+          description: List of opportunities, joined with company/conference/owner names.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  opportunities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Opportunity'
+                  stages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityStage'
+                  capabilities:
+                    type: object
+                    additionalProperties:
+                      type: boolean
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunities_create
+      summary: Create an opportunity
+      description: >-
+        Requires manage_opportunities. `name` and a `company_id` referencing an existing
+        opportunity_companies row are required; `conference_id`/`owner_user_id`, if given, must also
+        reference existing rows. Defaults stage to new_signal and owner_user_id to the caller. Writes
+        a 'created' opportunity_activities entry.
+      tags:
+        - Opportunities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - company_id
+              properties:
+                name:
+                  type: string
+                company_id:
+                  type: integer
+                conference_id:
+                  type: integer
+                  nullable: true
+                stage:
+                  $ref: '#/components/schemas/OpportunityStage'
+                probability:
+                  type: integer
+                estimated_value:
+                  type: number
+                target_date:
+                  type: string
+                  format: date
+                target_date_end:
+                  type: string
+                  format: date
+                guest_count_min:
+                  type: integer
+                guest_count_max:
+                  type: integer
+                event_type:
+                  type: string
+                event_concept:
+                  type: string
+                owner_user_id:
+                  type: integer
+                next_action:
+                  type: string
+                next_action_at:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Created opportunity.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  opportunity:
+                    $ref: '#/components/schemas/Opportunity'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing/invalid name, or company_id/conference_id/owner_user_id does not reference an existing row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunities/{opportunityId}:
+    get:
+      operationId: opportunities_get
+      summary: Get opportunity detail
+      description: Requires view_opportunities. Joined with company/conference/owner/won-event names.
+      tags:
+        - Opportunities
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      responses:
+        '200':
+          description: Opportunity detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  opportunity:
+                    $ref: '#/components/schemas/Opportunity'
+                  capabilities:
+                    type: object
+                    additionalProperties:
+                      type: boolean
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: opportunities_update
+      summary: Update an opportunity, including moving its pipeline stage
+      description: >-
+        Requires manage_opportunities. Any subset of the writable fields may be sent. Moving `stage`
+        writes a 'stage_changed' opportunity_activities entry (from/to); any other field change writes
+        an 'updated' entry.
+      tags:
+        - Opportunities
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                company_id:
+                  type: integer
+                conference_id:
+                  type: integer
+                  nullable: true
+                stage:
+                  $ref: '#/components/schemas/OpportunityStage'
+                probability:
+                  type: integer
+                estimated_value:
+                  type: number
+                target_date:
+                  type: string
+                  format: date
+                target_date_end:
+                  type: string
+                  format: date
+                guest_count_min:
+                  type: integer
+                guest_count_max:
+                  type: integer
+                event_type:
+                  type: string
+                event_concept:
+                  type: string
+                owner_user_id:
+                  type: integer
+                next_action:
+                  type: string
+                next_action_at:
+                  type: string
+                  format: date-time
+                lost_reason:
+                  type: string
+      responses:
+        '200':
+          description: Updated opportunity.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  opportunity:
+                    $ref: '#/components/schemas/Opportunity'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid stage, or company_id/conference_id/owner_user_id does not reference an existing row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: opportunities_delete
+      summary: Delete an opportunity
+      description: Requires manage_opportunities AND the venue_admin role.
+      tags:
+        - Opportunities
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing manage_opportunities, or caller is not a venue_admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunities/{opportunityId}/activities:
+    get:
+      operationId: opportunities_activities
+      summary: Read an opportunity's audit/activity feed
+      description: Requires view_opportunities. Read-only — written internally by Opportunities/Notes/Signals, never by clients.
+      tags:
+        - Opportunities
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      responses:
+        '200':
+          description: Activity feed, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityActivity'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunities/{opportunityId}/notes:
+    get:
+      operationId: opportunities_notes_list
+      summary: List notes linked to an opportunity
+      description: Requires view_opportunities. Convenience wrapper over the polymorphic opportunity_notes/opportunity_note_links tables.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      responses:
+        '200':
+          description: Notes linked to this opportunity, pinned first then newest.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityNote'
+                  note_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityNoteType'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunities_notes_create
+      summary: Add a note to an opportunity
+      description: >-
+        Requires manage_opportunities. `body` is required. Optional `additional_links` (array of
+        `{type, id}`) lets one note also link a conference/company/opportunity at creation, matching
+        the polymorphic note model. Optional `tags` (string array) fully replaces the tag set. Writes
+        a 'note_added' opportunity_activities entry.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - body
+              properties:
+                body:
+                  type: string
+                note_type:
+                  $ref: '#/components/schemas/OpportunityNoteType'
+                is_pinned:
+                  type: boolean
+                is_ai_generated:
+                  type: boolean
+                ai_model:
+                  type: string
+                ai_prompt_version:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+                additional_links:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/OpportunityNoteLink'
+      responses:
+        '200':
+          description: Created note.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  note:
+                    $ref: '#/components/schemas/OpportunityNote'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing body, or a linked record does not exist (or linked_type=contact, unavailable until Phase 4).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunities/{opportunityId}/notes/{noteId}:
+    patch:
+      operationId: opportunities_notes_update
+      summary: Update a note reached via an opportunity
+      description: Requires manage_opportunities. Same handler as PATCH /api/opportunity-notes/{id} — see that operation.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+        - $ref: '#/components/parameters/OpportunityNoteIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body:
+                  type: string
+                note_type:
+                  $ref: '#/components/schemas/OpportunityNoteType'
+                is_pinned:
+                  type: boolean
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Updated note.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  note:
+                    $ref: '#/components/schemas/OpportunityNote'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Note not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: opportunities_notes_delete
+      summary: Delete a note reached via an opportunity
+      description: Requires manage_opportunities. Same handler as DELETE /api/opportunity-notes/{id}.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+        - $ref: '#/components/parameters/OpportunityNoteIdPath'
+      responses:
+        '204':
+          description: Deleted (cascades its links/tags).
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Note not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunities/{opportunityId}/signals:
+    get:
+      operationId: opportunities_signals_list
+      summary: List signals scoped to an opportunity
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      responses:
+        '200':
+          description: Signals for this opportunity, most recently observed first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signals:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunitySignal'
+                  signal_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunitySignalType'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunities_signals_create
+      summary: Add a signal to an opportunity
+      description: Requires manage_opportunities. `description` and a valid `signal_type` are required. Writes a 'signal_added' opportunity_activities entry.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - description
+              properties:
+                signal_type:
+                  $ref: '#/components/schemas/OpportunitySignalType'
+                description:
+                  type: string
+                weight:
+                  type: number
+                confidence:
+                  $ref: '#/components/schemas/OpportunityConfidence'
+                source_url:
+                  type: string
+                source_title:
+                  type: string
+                observed_at:
+                  type: string
+                  format: date-time
+                is_ai_generated:
+                  type: boolean
+      responses:
+        '200':
+          description: Created signal.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signal:
+                    $ref: '#/components/schemas/OpportunitySignal'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing description, or invalid signal_type/confidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-conferences:
+    get:
+      operationId: opportunity_conferences_list
+      summary: List conferences
+      description: Requires view_opportunities. Filterable by q (name/city/state) and upcoming=1.
+      tags:
+        - Opportunity Conferences
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: upcoming
+          in: query
+          schema:
+            type: string
+            enum:
+              - '1'
+      responses:
+        '200':
+          description: List of conferences.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conferences:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityConference'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunity_conferences_create
+      summary: Create a conference
+      description: >-
+        Requires manage_opportunities. `name` is required; `slug` is derived from it and
+        de-duplicated automatically (appends -2, -3, ...).
+      tags:
+        - Opportunity Conferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                website_url:
+                  type: string
+                venue_name:
+                  type: string
+                venue_address:
+                  type: string
+                city:
+                  type: string
+                state:
+                  type: string
+                country:
+                  type: string
+                starts_at:
+                  type: string
+                  format: date
+                ends_at:
+                  type: string
+                  format: date
+                estimated_attendance:
+                  type: integer
+                estimated_exhibitors:
+                  type: integer
+                estimated_sponsors:
+                  type: integer
+                latitude:
+                  type: number
+                longitude:
+                  type: number
+                source_url:
+                  type: string
+      responses:
+        '200':
+          description: Created conference.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conference:
+                    $ref: '#/components/schemas/OpportunityConference'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-conferences/{conferenceId}:
+    get:
+      operationId: opportunity_conferences_get
+      summary: Get conference detail
+      description: Requires view_opportunities. Includes participating companies (conference<->company links).
+      tags:
+        - Opportunity Conferences
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+      responses:
+        '200':
+          description: Conference detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conference:
+                    $ref: '#/components/schemas/OpportunityConference'
+                  companies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityConferenceCompanyLink'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Conference not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: opportunity_conferences_update
+      summary: Update a conference
+      description: >-
+        Requires manage_opportunities. Includes fields typically filled in by research
+        (latitude/longitude, distance_from_venue_miles, opportunity_score, last_researched_at) —
+        Phase 1 has no automated research/geocoding, these are set manually or by a later phase.
+      tags:
+        - Opportunity Conferences
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                website_url:
+                  type: string
+                venue_name:
+                  type: string
+                venue_address:
+                  type: string
+                city:
+                  type: string
+                state:
+                  type: string
+                country:
+                  type: string
+                starts_at:
+                  type: string
+                  format: date
+                ends_at:
+                  type: string
+                  format: date
+                estimated_attendance:
+                  type: integer
+                estimated_exhibitors:
+                  type: integer
+                estimated_sponsors:
+                  type: integer
+                latitude:
+                  type: number
+                longitude:
+                  type: number
+                distance_from_venue_miles:
+                  type: number
+                opportunity_score:
+                  type: integer
+                source_url:
+                  type: string
+                last_researched_at:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Updated conference.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conference:
+                    $ref: '#/components/schemas/OpportunityConference'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Conference not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-conferences/{conferenceId}/companies:
+    get:
+      operationId: opportunity_conferences_companies_list
+      summary: List a conference's participating companies
+      tags:
+        - Opportunity Conferences
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+      responses:
+        '200':
+          description: Participation links, ordered by role prominence then company name.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  companies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityConferenceCompanyLink'
+                  roles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityConferenceRole'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Conference not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunity_conferences_companies_attach
+      summary: Associate a company with a conference
+      description: >-
+        Requires manage_opportunities. `company_id` must reference an existing
+        opportunity_companies row; the (conference_id, company_id) pair must not already be linked.
+      tags:
+        - Opportunity Conferences
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - company_id
+              properties:
+                company_id:
+                  type: integer
+                role:
+                  $ref: '#/components/schemas/OpportunityConferenceRole'
+                sponsor_tier:
+                  type: string
+                booth:
+                  type: string
+                participation_notes:
+                  type: string
+                confidence:
+                  $ref: '#/components/schemas/OpportunityConfidence'
+                source_url:
+                  type: string
+                observed_at:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Created participation link.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  link:
+                    $ref: '#/components/schemas/OpportunityConferenceCompanyLink'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Conference not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: company_id missing/invalid, or this company is already linked to this conference.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-conferences/{conferenceId}/companies/{linkId}:
+    patch:
+      operationId: opportunity_conferences_companies_update
+      summary: Update a conference/company participation link
+      description: Requires manage_opportunities.
+      tags:
+        - Opportunity Conferences
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+        - $ref: '#/components/parameters/OpportunityConferenceCompanyLinkIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  $ref: '#/components/schemas/OpportunityConferenceRole'
+                sponsor_tier:
+                  type: string
+                booth:
+                  type: string
+                participation_notes:
+                  type: string
+                confidence:
+                  $ref: '#/components/schemas/OpportunityConfidence'
+                source_url:
+                  type: string
+                observed_at:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Updated link.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  link:
+                    $ref: '#/components/schemas/OpportunityConferenceCompanyLink'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Link not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid role or confidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: opportunity_conferences_companies_detach
+      summary: Remove a conference/company participation link
+      description: Requires manage_opportunities.
+      tags:
+        - Opportunity Conferences
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+        - $ref: '#/components/parameters/OpportunityConferenceCompanyLinkIdPath'
+      responses:
+        '204':
+          description: Detached.
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Link not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-conferences/{conferenceId}/notes:
+    get:
+      operationId: opportunity_conferences_notes_list
+      summary: List notes linked to a conference
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+      responses:
+        '200':
+          description: Notes linked to this conference, pinned first then newest.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityNote'
+                  note_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityNoteType'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunity_conferences_notes_create
+      summary: Add a note to a conference
+      description: Requires manage_opportunities. Same handler/body shape as POST /api/opportunities/{opportunityId}/notes.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - body
+              properties:
+                body:
+                  type: string
+                note_type:
+                  $ref: '#/components/schemas/OpportunityNoteType'
+                is_pinned:
+                  type: boolean
+                tags:
+                  type: array
+                  items:
+                    type: string
+                additional_links:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/OpportunityNoteLink'
+      responses:
+        '200':
+          description: Created note.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  note:
+                    $ref: '#/components/schemas/OpportunityNote'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing body, or a linked record does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-conferences/{conferenceId}/notes/{noteId}:
+    patch:
+      operationId: opportunity_conferences_notes_update
+      summary: Update a note reached via a conference
+      description: Requires manage_opportunities. Same handler as PATCH /api/opportunity-notes/{id}.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+        - $ref: '#/components/parameters/OpportunityNoteIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body:
+                  type: string
+                note_type:
+                  $ref: '#/components/schemas/OpportunityNoteType'
+                is_pinned:
+                  type: boolean
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Updated note.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  note:
+                    $ref: '#/components/schemas/OpportunityNote'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Note not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: opportunity_conferences_notes_delete
+      summary: Delete a note reached via a conference
+      description: Requires manage_opportunities. Same handler as DELETE /api/opportunity-notes/{id}.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+        - $ref: '#/components/parameters/OpportunityNoteIdPath'
+      responses:
+        '204':
+          description: Deleted (cascades its links/tags).
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Note not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-conferences/{conferenceId}/signals:
+    get:
+      operationId: opportunity_conferences_signals_list
+      summary: List signals scoped to a conference
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+      responses:
+        '200':
+          description: Signals for this conference, most recently observed first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signals:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunitySignal'
+                  signal_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunitySignalType'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Conference not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunity_conferences_signals_create
+      summary: Add a signal to a conference
+      description: Requires manage_opportunities. Same handler/body shape as POST /api/opportunities/{opportunityId}/signals.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityConferenceIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - description
+              properties:
+                signal_type:
+                  $ref: '#/components/schemas/OpportunitySignalType'
+                description:
+                  type: string
+                weight:
+                  type: number
+                confidence:
+                  $ref: '#/components/schemas/OpportunityConfidence'
+                source_url:
+                  type: string
+                source_title:
+                  type: string
+                observed_at:
+                  type: string
+                  format: date-time
+                is_ai_generated:
+                  type: boolean
+      responses:
+        '200':
+          description: Created signal.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signal:
+                    $ref: '#/components/schemas/OpportunitySignal'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Conference not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing description, or invalid signal_type/confidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-companies:
+    get:
+      operationId: opportunity_companies_list
+      summary: List companies
+      description: Requires view_opportunities. Filterable by q (name/domain/hq_city) and relationship_status.
+      tags:
+        - Opportunity Companies
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: relationship_status
+          in: query
+          schema:
+            $ref: '#/components/schemas/OpportunityCompanyRelationshipStatus'
+      responses:
+        '200':
+          description: List of companies.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  companies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityCompany'
+                  relationship_statuses:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityCompanyRelationshipStatus'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunity_companies_create
+      summary: Create a company
+      description: >-
+        Requires manage_opportunities. `name` is required. `domain`, if given, is normalized
+        (lowercase, scheme/www/path stripped) and rejected if it collides with an existing company.
+      tags:
+        - Opportunity Companies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                domain:
+                  type: string
+                website_url:
+                  type: string
+                logo_url:
+                  type: string
+                industry:
+                  type: string
+                employee_range:
+                  type: string
+                hq_city:
+                  type: string
+                hq_state:
+                  type: string
+                local_office:
+                  type: boolean
+                linkedin_url:
+                  type: string
+                relationship_status:
+                  $ref: '#/components/schemas/OpportunityCompanyRelationshipStatus'
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Created company.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  company:
+                    $ref: '#/components/schemas/OpportunityCompany'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing name, or domain already belongs to another company.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-companies/{companyId}:
+    get:
+      operationId: opportunity_companies_get
+      summary: Get company detail
+      description: Requires view_opportunities. Includes participating conferences and this company's opportunities.
+      tags:
+        - Opportunity Companies
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+      responses:
+        '200':
+          description: Company detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  company:
+                    $ref: '#/components/schemas/OpportunityCompany'
+                  conferences:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityConferenceCompanyLink'
+                  opportunities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Opportunity'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Company not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: opportunity_companies_update
+      summary: Update a company
+      description: Requires manage_opportunities. `domain`, if changed, is re-normalized and re-checked for collisions.
+      tags:
+        - Opportunity Companies
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                domain:
+                  type: string
+                website_url:
+                  type: string
+                logo_url:
+                  type: string
+                industry:
+                  type: string
+                employee_range:
+                  type: string
+                hq_city:
+                  type: string
+                hq_state:
+                  type: string
+                local_office:
+                  type: boolean
+                linkedin_url:
+                  type: string
+                relationship_status:
+                  $ref: '#/components/schemas/OpportunityCompanyRelationshipStatus'
+                description:
+                  type: string
+                last_researched_at:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Updated company.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  company:
+                    $ref: '#/components/schemas/OpportunityCompany'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Company not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid relationship_status, or domain already belongs to another company.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-companies/{companyId}/conferences:
+    get:
+      operationId: opportunity_companies_conferences_list
+      summary: List conferences a company participates in (reverse of the conference-side link)
+      tags:
+        - Opportunity Companies
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+      responses:
+        '200':
+          description: Participation links, most recent conference first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conferences:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityConferenceCompanyLink'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Company not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-companies/{companyId}/notes:
+    get:
+      operationId: opportunity_companies_notes_list
+      summary: List notes linked to a company
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+      responses:
+        '200':
+          description: Notes linked to this company, pinned first then newest.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityNote'
+                  note_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityNoteType'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunity_companies_notes_create
+      summary: Add a note to a company
+      description: Requires manage_opportunities. Same handler/body shape as POST /api/opportunities/{opportunityId}/notes.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - body
+              properties:
+                body:
+                  type: string
+                note_type:
+                  $ref: '#/components/schemas/OpportunityNoteType'
+                is_pinned:
+                  type: boolean
+                tags:
+                  type: array
+                  items:
+                    type: string
+                additional_links:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/OpportunityNoteLink'
+      responses:
+        '200':
+          description: Created note.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  note:
+                    $ref: '#/components/schemas/OpportunityNote'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing body, or a linked record does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-companies/{companyId}/notes/{noteId}:
+    patch:
+      operationId: opportunity_companies_notes_update
+      summary: Update a note reached via a company
+      description: Requires manage_opportunities. Same handler as PATCH /api/opportunity-notes/{id}.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+        - $ref: '#/components/parameters/OpportunityNoteIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body:
+                  type: string
+                note_type:
+                  $ref: '#/components/schemas/OpportunityNoteType'
+                is_pinned:
+                  type: boolean
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Updated note.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  note:
+                    $ref: '#/components/schemas/OpportunityNote'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Note not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: opportunity_companies_notes_delete
+      summary: Delete a note reached via a company
+      description: Requires manage_opportunities. Same handler as DELETE /api/opportunity-notes/{id}.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+        - $ref: '#/components/parameters/OpportunityNoteIdPath'
+      responses:
+        '204':
+          description: Deleted (cascades its links/tags).
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Note not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-companies/{companyId}/signals:
+    get:
+      operationId: opportunity_companies_signals_list
+      summary: List signals scoped to a company
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+      responses:
+        '200':
+          description: Signals for this company, most recently observed first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signals:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunitySignal'
+                  signal_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunitySignalType'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Company not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunity_companies_signals_create
+      summary: Add a signal to a company
+      description: Requires manage_opportunities. Same handler/body shape as POST /api/opportunities/{opportunityId}/signals.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - description
+              properties:
+                signal_type:
+                  $ref: '#/components/schemas/OpportunitySignalType'
+                description:
+                  type: string
+                weight:
+                  type: number
+                confidence:
+                  $ref: '#/components/schemas/OpportunityConfidence'
+                source_url:
+                  type: string
+                source_title:
+                  type: string
+                observed_at:
+                  type: string
+                  format: date-time
+                is_ai_generated:
+                  type: boolean
+      responses:
+        '200':
+          description: Created signal.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signal:
+                    $ref: '#/components/schemas/OpportunitySignal'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Company not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing description, or invalid signal_type/confidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-notes:
+    get:
+      operationId: opportunity_notes_list
+      summary: Cross-cutting note list for one linked record
+      description: >-
+        Requires view_opportunities. `linked_type` and `linked_id` query params are required — this
+        is the same underlying table/handler as the `/{family}/{id}/notes` convenience routes, reached
+        without going through a specific parent family.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - name: linked_type
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/OpportunityNoteLinkedType'
+        - name: linked_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Notes linked to the given record, pinned first then newest.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityNote'
+                  note_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityNoteType'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: linked_type/linked_id missing or invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunity_notes_create
+      summary: Create a note without going through a specific parent route
+      description: >-
+        Requires manage_opportunities. `body`, `linked_type`, and `linked_id` are required (the
+        primary link); `additional_links` may attach the same note to further records at creation.
+      tags:
+        - Opportunity Notes & Signals
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - body
+                - linked_type
+                - linked_id
+              properties:
+                body:
+                  type: string
+                linked_type:
+                  $ref: '#/components/schemas/OpportunityNoteLinkedType'
+                linked_id:
+                  type: integer
+                note_type:
+                  $ref: '#/components/schemas/OpportunityNoteType'
+                is_pinned:
+                  type: boolean
+                is_ai_generated:
+                  type: boolean
+                ai_model:
+                  type: string
+                ai_prompt_version:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+                additional_links:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/OpportunityNoteLink'
+      responses:
+        '200':
+          description: Created note.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  note:
+                    $ref: '#/components/schemas/OpportunityNote'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing body/linked_type/linked_id, an invalid linked_type, or a linked record that does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-notes/{noteId}:
+    get:
+      operationId: opportunity_notes_get
+      summary: Get a single note
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityNoteIdPath'
+      responses:
+        '200':
+          description: Note detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  note:
+                    $ref: '#/components/schemas/OpportunityNote'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Note not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: opportunity_notes_update
+      summary: Update a note
+      description: Requires manage_opportunities. `tags`, if present, fully replaces the note's tag set.
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityNoteIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body:
+                  type: string
+                note_type:
+                  $ref: '#/components/schemas/OpportunityNoteType'
+                is_pinned:
+                  type: boolean
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Updated note.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  note:
+                    $ref: '#/components/schemas/OpportunityNote'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Note not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid note_type.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: opportunity_notes_delete
+      summary: Delete a note
+      description: Requires manage_opportunities. Cascades its links/tags (opportunity_note_links/opportunity_note_tags).
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityNoteIdPath'
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Note not found.
           content:
             application/json:
               schema:

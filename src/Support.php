@@ -144,6 +144,22 @@ function log_process_audit(
 }
 
 /**
+ * Same shape as log_activity() above, but for the Opportunities module's
+ * per-opportunity audit trail (opportunity_activities — see
+ * database/migrations/109_add_opportunities_module.sql), read back by
+ * GET /api/opportunities/{id}/activities. Written from src/Opportunities.php
+ * (create, stage/field changes) and from src/Opportunities/Notes.php +
+ * Signals.php when a note/signal links to an opportunity.
+ */
+function log_opportunity_activity(Database $db, int $opportunityId, ?int $userId, string $action, array $details = []): void
+{
+    $db->run(
+        'INSERT INTO opportunity_activities (opportunity_id, created_by, action, details_json) VALUES (?, ?, ?, ?)',
+        [$opportunityId, $userId, $action, $details ? json_encode($details, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null]
+    );
+}
+
+/**
  * Create a directory (recursively), throwing if it could not be created.
  *
  * PHP's mkdir() only emits a warning on failure, so unchecked calls turn a

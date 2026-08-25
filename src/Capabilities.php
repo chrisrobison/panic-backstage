@@ -121,6 +121,11 @@ final class Capabilities
             'claim_leads', 'override_lead_claims', 'manage_lead_routing',
             'decline_high_value_leads', 'export_leads', 'view_lead_audit',
             'manage_social_queue', 'view_social_queue', 'publish_social',
+            // Opportunities module (prospecting/sales-pipeline CRM prepended
+            // to the Leads spine — see docs/OPPORTUNITIES-IMPLEMENTATION.md).
+            // research_opportunities gates AI/web research actions
+            // specifically (Phase 7) and is intentionally venue_admin-only.
+            'view_opportunities', 'manage_opportunities', 'research_opportunities',
         ],
         'event_owner' => [
             'view_leads', 'manage_tasks_app', 'view_tasks_app',
@@ -128,6 +133,7 @@ final class Capabilities
             'view_booking_inbox', 'manage_booking_inbox', 'claim_leads',
             'decline_high_value_leads',
             'view_social_queue', 'manage_social_queue', 'publish_social',
+            'view_opportunities', 'manage_opportunities',
         ],
         'promoter' => [
             // Booking Inbox — Restricted external booker: row-scoped (assigned/
@@ -145,6 +151,7 @@ final class Capabilities
             'view_booking_inbox', 'manage_booking_inbox', 'claim_leads',
             'decline_high_value_leads',
             'view_social_queue', 'manage_social_queue', 'publish_social',
+            'view_opportunities',
         ],
         'viewer' => [],
         'global_viewer' => [
