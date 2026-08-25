@@ -3033,6 +3033,23 @@ components:
         description:
           type: string
           nullable: true
+        payee_name:
+          type: string
+          nullable: true
+          description: >-
+            Who a cost is owed to / a payment goes to. Free text, not a FK. Only meaningful on
+            cost and payment entries — always null on revenue. Used by
+            GET .../ledger's `balances` (see EventLedgerBalance) to group committed-vs-paid per
+            payee.
+        payee_type:
+          $ref: '#/components/schemas/EventLedgerPayeeType'
+        paid_entry_id:
+          type: integer
+          nullable: true
+          description: >-
+            Only set on a payment-type entry: the id of the specific cost-type entry (same event)
+            this payment pays down. Null for a payee-level payment not linked to one exact cost
+            line (still nets into that payee's balance by payee_name).
         source:
           type: string
           enum:
@@ -3110,6 +3127,44 @@ components:
         - vendor_payout
         - staff_payout
         - adjustment
+    EventLedgerPayeeType:
+      type: string
+      nullable: true
+      description: Who a cost/payment entry's payee is, for grouping in the Balances panel.
+      enum:
+        - artist
+        - promoter
+        - vendor
+        - staff
+        - client
+        - other
+    EventLedgerBalance:
+      type: object
+      description: >-
+        One payee's committed-vs-paid balance, computed server-side by Ledger::calculateBalances()
+        and shared verbatim by GET .../ledger, GET .../ledger/summary, and the money-owed check in
+        POST .../ledger/finalize — so the UI's "who's still owed money" view can never disagree
+        with what finalize() itself enforces.
+      properties:
+        payee_name:
+          type: string
+        payee_type:
+          $ref: '#/components/schemas/EventLedgerPayeeType'
+        committed:
+          type: number
+          description: Sum of non-void cost entries for this payee.
+        paid:
+          type: number
+          description: Sum of payments linked to this payee, via paid_entry_id or payee_name.
+        still_owed:
+          type: number
+          description: committed minus paid. Can go negative if a payee was overpaid.
+        status:
+          type: string
+          enum:
+            - paid
+            - partial
+            - unpaid
     EventLedgerCreateRequest:
       type: object
       required:
@@ -3129,6 +3184,18 @@ components:
             - payment
             - receivable
           description: Overrides the line_type normally derived from category, if provided and valid.
+        payee_name:
+          type: string
+          nullable: true
+          description: Only applied when line_type resolves to cost or payment; ignored for revenue.
+        payee_type:
+          $ref: '#/components/schemas/EventLedgerPayeeType'
+        paid_entry_id:
+          type: integer
+          nullable: true
+          description: >-
+            Only applied when line_type is payment. Must reference an existing, non-void
+            line_type=cost entry on the same event, or the request is rejected with 422.
         source:
           type: string
           enum:
@@ -3237,6 +3304,15 @@ components:
         gross_ticket_sales:
           type: number
           description: Non-comp paid/fulfilled ticket order line items, converted from cents to dollars.
+        total_still_owed:
+          type: number
+          description: Sum of every payee's positive still_owed balance (see EventLedgerBalance). $0 once everyone's paid.
+        payees_unpaid:
+          type: integer
+          description: Count of payees with status=unpaid.
+        payees_partial:
+          type: integer
+          description: Count of payees with status=partial.
     EventSettlement:
       type: object
       description: A row from event_settlements — a hand-entered summary view distinct from the Event Ledger.
@@ -15664,6 +15740,16 @@ paths:
                     type: array
                     items:
                       type: string
+                  payee_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EventLedgerPayeeType'
+                  balances:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EventLedgerBalance'
+                  total_still_owed:
+                    type: number
         '401':
           description: Authentication required
           content:
@@ -15712,6 +15798,12 @@ paths:
                     type: integer
                   summary:
                     $ref: '#/components/schemas/EventLedgerSummary'
+                  balances:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EventLedgerBalance'
+                  total_still_owed:
+                    type: number
         '401':
           description: Authentication required
           content:
@@ -15863,7 +15955,9 @@ paths:
         vendor_costs_entered, incidents_reviewed, final_invoice_prepared,
         payment_obligations_recorded) to be true either already on the closeout state or passed
         truthy in the body — pass `force: true` to bypass and finalize anyway (checklist items are
-        then force-set to true). On success, flips events.status from `completed` to `settled`
+        then force-set to true). Also rejected with 422 if any payee still shows a positive balance
+        (see EventLedgerBalance / GET .../ledger's `balances`) — `force` bypasses this check too.
+        On success, flips events.status from `completed` to `settled`
         (no-op otherwise) and triggers an outbound accounting sync (Accounting::onCloseoutFinalized)
         if a provider is configured — this is a side effect, not reflected in the response body.
       tags:
@@ -15932,7 +16026,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '422':
-          description: Closeout checklist incomplete (missing items listed)
+          description: >-
+            Closeout checklist incomplete (`missing` populated), or one or more payees still owed
+            money (`total_still_owed` / `unpaid_payees` populated) — never both response shapes at
+            once, but a client should check for either.
           content:
             application/json:
               schema:
@@ -15944,6 +16041,17 @@ paths:
                         type: array
                         items:
                           type: string
+                      total_still_owed:
+                        type: number
+                      unpaid_payees:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            payee_name:
+                              type: string
+                            still_owed:
+                              type: number
   /api/events/{eventId}/ledger/reopen:
     parameters:
       - name: eventId

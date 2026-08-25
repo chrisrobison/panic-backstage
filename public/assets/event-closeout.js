@@ -48,6 +48,26 @@ function formatDate(value) {
   return Number.isNaN(d.getTime()) ? esc(value) : esc(d.toLocaleDateString(undefined, { dateStyle: 'medium' }));
 }
 
+function statusPill(status) {
+  const label = status === 'paid' ? 'Paid' : status === 'partial' ? 'Partial' : 'Unpaid';
+  return `<span class="pill ${esc(status)}">${label}</span>`;
+}
+
+// Best-effort payment category for a quick "Log Payment" action fired from
+// the Balances panel (payee-level, not tied to one specific cost entry).
+// These four names are drawn straight from Ledger.php's PAYMENT_CATEGORIES
+// — see categoriesByType() above for why this file doesn't hand-maintain
+// the *whole* list, but these specific names are stable payout categories
+// unlikely to be renamed independent of this mapping.
+function defaultPaymentCategoryForPayeeType(payeeType) {
+  return {
+    artist: 'artist_payout',
+    promoter: 'promoter_payout',
+    vendor: 'vendor_payout',
+    staff: 'staff_payout',
+  }[payeeType] || 'adjustment';
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 class EventCloseout extends PanicElement {
   // Properties set by the workspace before mounting
@@ -115,6 +135,17 @@ class EventCloseout extends PanicElement {
     // runs after this render but needs the same lists) doesn't need its own
     // copy — see categoriesByType() above for why these come from the server.
     this._categoriesByType = categoriesByType(this._ledger);
+    this._payeeTypes = this._ledger?.payee_types || ['artist', 'promoter', 'vendor', 'staff', 'client', 'other'];
+
+    // ── Payee balances (who's still owed money) ───────────────────────────────
+    // Server-computed (Ledger::calculateBalances()) so this can't drift from
+    // what finalize() itself checks before allowing a closeout to lock.
+    const balances = this._ledger?.balances || [];
+    const totalStillOwed = Number(this._ledger?.total_still_owed || 0);
+    const payoutsDisbursed = totalStillOwed <= 0.005;
+    // Cost entries with a payee on them — offered as an optional "link this
+    // payment to a specific cost" choice on the generic Add Entry form.
+    const linkableCosts = entries.filter(e => e.line_type === 'cost' && !Number(e.is_void) && e.payee_name);
 
     // ── Partition entries by type ─────────────────────────────────────────────
     const revenue  = entries.filter(e => e.line_type === 'revenue');
@@ -184,6 +215,23 @@ class EventCloseout extends PanicElement {
               <input type="text" name="description" placeholder="e.g. Door sales Saturday night">
             </label>
           </div>
+          <div class="form-row" id="entry-payee-row" hidden>
+            <label>Payee
+              <input type="text" name="payee_name" placeholder="Who's this owed to / paid to?">
+            </label>
+            <label>Payee type
+              <select name="payee_type">
+                <option value="">&mdash;</option>
+                ${this._payeeTypes.map(t => `<option value="${esc(t)}">${esc(titleCase(t))}</option>`).join('')}
+              </select>
+            </label>
+            <label class="wide" id="entry-link-cost-wrap" hidden>Link to a specific cost <span class="field-hint">(optional)</span>
+              <select name="paid_entry_id" id="entry-link-cost">
+                <option value="">&mdash; payee-level payment, not linked to one cost line &mdash;</option>
+                ${linkableCosts.map(c => `<option value="${esc(String(c.id))}" data-payee="${esc(c.payee_name)}" data-payee-type="${esc(c.payee_type || '')}">${esc(c.payee_name)} &mdash; ${esc(titleCase(c.category))} &mdash; ${esc(money(c.amount))}</option>`).join('')}
+              </select>
+            </label>
+          </div>
           <div class="form-actions">
             <button type="submit">Add Entry</button>
             <button type="button" class="secondary small" id="cancel-add-entry">Cancel</button>
@@ -191,8 +239,39 @@ class EventCloseout extends PanicElement {
         </form>
       </div>` : '';
 
-    // ── All checklist items checked? ──────────────────────────────────────────
-    const allChecked = CHECKLIST_FIELDS.every(([field]) => Boolean(closeout[field]));
+    // ── Balances panel (primary view: who's still owed money) ────────────────
+    const balanceRow = (b) => {
+      const settled = b.status === 'paid';
+      const action = (editable && !settled)
+        ? `<button type="button" class="small log-pay-btn" data-payee="${esc(b.payee_name)}" data-payee-type="${esc(b.payee_type || '')}" data-owed="${esc(String(b.still_owed))}">Log Payment</button>`
+        : '<span class="muted">&mdash;</span>';
+      return `<tr class="bal-row" data-status="${esc(b.status)}">
+        <td><span class="payee-name">${esc(b.payee_name)}</span>${b.payee_type ? `<br><span class="payee-type">${esc(titleCase(b.payee_type))}</span>` : ''}</td>
+        <td class="amount">${esc(money(b.committed))}</td>
+        <td class="amount">${esc(money(b.paid))}</td>
+        <td class="amount">${esc(money(b.still_owed))}</td>
+        <td>${statusPill(b.status)}</td>
+        <td>${action}</td>
+      </tr>`;
+    };
+
+    const balancesSection = `
+      <div class="entry-group balances-group">
+        <h3 class="group-head">Balances &mdash; Who's Owed</h3>
+        ${balances.length ? `
+          <div class="filter-row"><label><input type="checkbox" id="filter-unpaid"> Show unpaid &amp; partial only</label></div>
+          <table class="entry-table balances-table">
+            <thead><tr><th>Payee</th><th>Committed</th><th>Paid</th><th>Still Owed</th><th>Status</th><th></th></tr></thead>
+            <tbody>${balances.map(balanceRow).join('')}</tbody>
+          </table>` : `<p class="entry-empty">No payee-tracked costs yet. Add a Cost entry with a Payee below to start tracking who's owed.</p>`}
+      </div>`;
+
+    // ── All checklist items checked, AND everyone's been paid? ────────────────
+    // Money owed to a payee blocks finalize the same way an unchecked
+    // checklist item does — see Ledger::finalize() for the server-side gate
+    // this mirrors (never trust the client copy alone).
+    const manualChecklistDone = CHECKLIST_FIELDS.every(([field]) => Boolean(closeout[field]));
+    const allChecked = manualChecklistDone && payoutsDisbursed;
 
     // ── Checklist HTML ────────────────────────────────────────────────────────
     const checklistDisabled = !editable ? ' disabled' : '';
@@ -202,7 +281,10 @@ class EventCloseout extends PanicElement {
         <input type="checkbox" data-checklist="${esc(field)}"${checked}${checklistDisabled}>
         ${esc(label)}
       </label>`;
-    }).join('');
+    }).join('') + `<label class="check-label derived-check" title="Checked automatically once every payee in Balances shows $0.00 still owed — not a box you check yourself.">
+        <input type="checkbox" disabled${payoutsDisbursed ? ' checked' : ''}>
+        All Payouts Disbursed <span class="derived-tag">auto</span>
+      </label>`;
 
     // ── Finalize / reopen controls ────────────────────────────────────────────
     let finalizeBlock = '';
@@ -219,8 +301,20 @@ class EventCloseout extends PanicElement {
       }
     } else if (this.canFinalize) {
       const disabled = allChecked ? '' : ' disabled';
+      let hint = '';
+      if (!allChecked) {
+        const parts = [];
+        if (!payoutsDisbursed) {
+          const unpaidNames = balances.filter(b => b.status !== 'paid').map(b => esc(b.payee_name));
+          parts.push(`${esc(money(totalStillOwed))} still owed to ${unpaidNames.length} ${unpaidNames.length === 1 ? 'payee' : 'payees'} (${unpaidNames.join(', ')})`);
+        }
+        if (!manualChecklistDone) {
+          parts.push('checklist not complete');
+        }
+        hint = `Can&rsquo;t finalize &mdash; ${parts.join('; ')}.`;
+      }
       finalizeBlock = `<button type="button" class="primary" id="btn-finalize"${disabled}>Finalize Closeout</button>
-        ${!allChecked ? '<p class="finalize-hint">Complete all checklist items to enable finalize.</p>' : ''}`;
+        ${hint ? `<p class="finalize-hint">${hint}</p>` : ''}`;
     }
 
     this.innerHTML = `
@@ -231,13 +325,18 @@ class EventCloseout extends PanicElement {
         </div>
         <div class="closeout-layout">
 
-          <!-- Left: Line Items -->
+          <!-- Left: Balances (primary) + full ledger detail -->
           <article class="panel closeout-panel-left">
-            <h3 class="panel-subtitle">Line Items</h3>
             ${addForm}
-            ${groupTable('Revenue', revenue, 'var(--green, #0f8f46)')}
-            ${groupTable('Costs',   costs,   'var(--red,   #ef4338)')}
-            ${groupTable('Payments', payments, 'var(--blue,  #1268c7)')}
+            ${balancesSection}
+            <details class="ledger-detail-toggle">
+              <summary>Full ledger detail (revenue / costs / payments, for the audit trail)</summary>
+              <div class="ledger-detail-body">
+                ${groupTable('Revenue', revenue, 'var(--green, #0f8f46)')}
+                ${groupTable('Costs',   costs,   'var(--red,   #ef4338)')}
+                ${groupTable('Payments', payments, 'var(--blue,  #1268c7)')}
+              </div>
+            </details>
           </article>
 
           <!-- Right: P&L Summary + Closeout Checklist -->
@@ -322,6 +421,35 @@ class EventCloseout extends PanicElement {
         .panel-success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; border-radius: 8px; padding: 0.6rem 0.9rem; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.75rem; }
         .reopen-block { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
         .reopen-block label { font-size: 0.85rem; }
+
+        /* ── Payee balances ────────────────────────────────────────────────── */
+        .balances-group { margin-bottom: 1rem; }
+        .filter-row { font-size: 0.82rem; color: var(--muted, #6f7582); margin-bottom: 0.4rem; }
+        .filter-row label { display: flex; align-items: center; gap: 0.4rem; font-weight: normal; }
+        .filter-row input { width: auto; }
+        .balances-table tr.bal-row[hidden] { display: none; }
+        .payee-name { font-weight: 600; }
+        .payee-type { font-size: 0.76rem; color: var(--muted, #6f7582); }
+        .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 0.74rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+        .pill.paid { background: #d1fae5; color: #065f46; }
+        .pill.partial { background: #fdf3df; color: #92660a; }
+        .pill.unpaid { background: #fdeceb; color: #a3221c; }
+        .muted { color: var(--muted, #6f7582); }
+        .field-hint { font-weight: normal; color: var(--muted, #6f7582); text-transform: none; letter-spacing: normal; }
+        .pay-inline td { background: var(--soft, #eef0f3); padding: 0.6rem !important; }
+        .pay-inline-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem; }
+        .pay-inline-form label { display: flex; flex-direction: column; gap: 3px; font-size: 0.78rem; color: var(--muted, #6f7582); }
+        .pay-inline-form label.wide { flex: 1 1 200px; }
+        .pay-inline-form input { font: inherit; font-size: 0.85rem; padding: 5px 7px; border-radius: 6px; border: 1px solid var(--line, #dfe3e8); }
+        .ledger-detail-toggle { margin-top: 0.5rem; }
+        .ledger-detail-toggle summary { cursor: pointer; font-size: 0.82rem; font-weight: 700; color: var(--muted, #6f7582); padding: 0.4rem 0; }
+        .ledger-detail-body { padding-top: 0.5rem; }
+        .derived-check { color: var(--muted, #6f7582); }
+        .derived-tag { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.03em; background: var(--soft, #eef0f3); border-radius: 5px; padding: 1px 6px; margin-left: 2px; }
+        .owed-row { margin-top: 4px; padding-top: 8px; border-top: 2px solid var(--line, #dfe3e8); }
+        .owed-sub-row { padding-top: 0; border-bottom: none; }
+        .owed-sub-row .sub-value { font-size: 0.76rem; color: var(--muted, #6f7582); }
+
         @media (max-width: 860px) {
           .closeout-layout { flex-direction: column; }
           .closeout-panel-left,
@@ -342,6 +470,13 @@ class EventCloseout extends PanicElement {
     const s = this._summary?.summary || {};
     const venueNet = Number(s.venue_net || 0);
     const netColor = venueNet >= 0 ? 'var(--green, #0f8f46)' : 'var(--red, #ef4338)';
+    const stillOwed = Number(s.total_still_owed || 0);
+    const owedColor = stillOwed > 0.005 ? 'var(--red, #ef4338)' : 'var(--green, #0f8f46)';
+    const unpaidCt  = Number(s.payees_unpaid || 0);
+    const partialCt = Number(s.payees_partial || 0);
+    const owedSub = stillOwed > 0.005
+      ? `${[unpaidCt ? `${unpaidCt} unpaid` : '', partialCt ? `${partialCt} partial` : ''].filter(Boolean).join(' · ')}`
+      : 'All payees settled';
     return `<div class="summary-card">
       <h3 class="panel-subtitle">P&amp;L Summary</h3>
       <div class="summary-row"><span class="label">Gross Revenue</span><span class="value">${esc(money(s.gross_revenue || 0))}</span></div>
@@ -349,6 +484,8 @@ class EventCloseout extends PanicElement {
       <div class="summary-row"><span class="label">Venue Net</span><span class="value" style="color:${netColor}">${esc(money(venueNet))}</span></div>
       <div class="summary-row"><span class="label">Margin</span><span class="value">${esc(String(s.margin_pct != null ? Number(s.margin_pct).toFixed(1) : '0.0'))}%</span></div>
       <div class="summary-row"><span class="label">Payments Received</span><span class="value">${esc(money(s.total_payments || 0))}</span></div>
+      <div class="summary-row owed-row"><span class="label">Still Owed to Payees</span><span class="value" style="color:${owedColor}">${esc(money(stillOwed))}</span></div>
+      <div class="summary-row owed-sub-row"><span class="label">&nbsp;</span><span class="sub-value">${esc(owedSub)}</span></div>
       <div class="summary-actions">
         <button type="button" class="secondary small" id="btn-refresh-summary"><i class="fa-solid fa-rotate" aria-hidden="true"></i> Refresh</button>
       </div>
@@ -385,15 +522,32 @@ class EventCloseout extends PanicElement {
       cancelAdd.addEventListener('click', () => { addWrap.hidden = true; });
     }
 
-    // Update category select when line_type changes
+    // Update category select + payee fields when line_type changes
     const form = $('#add-entry-form', this);
     if (form) {
       $$('input[name="line_type"]', form).forEach(radio => {
         radio.addEventListener('change', () => {
           const catSel = $('#entry-category', form);
           if (catSel) catSel.innerHTML = categoryOptions(radio.value, this._categoriesByType);
+          const payeeRow = $('#entry-payee-row', form);
+          const linkWrap = $('#entry-link-cost-wrap', form);
+          if (payeeRow) payeeRow.hidden = radio.value === 'revenue';
+          if (linkWrap) linkWrap.hidden = radio.value !== 'payment';
         });
       });
+
+      // Picking a specific cost to pay down autofills the payee fields so
+      // the payment entry records the same payee as the cost it settles.
+      const linkSel = $('#entry-link-cost', form);
+      if (linkSel) {
+        linkSel.addEventListener('change', () => {
+          const opt = linkSel.selectedOptions[0];
+          if (opt && opt.value) {
+            form.elements.payee_name.value = opt.dataset.payee || '';
+            form.elements.payee_type.value = opt.dataset.payeeType || '';
+          }
+        });
+      }
 
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -408,6 +562,69 @@ class EventCloseout extends PanicElement {
         }
       });
     }
+
+    // Balances: filter to unpaid/partial only
+    const filterBox = $('#filter-unpaid', this);
+    if (filterBox) {
+      filterBox.addEventListener('change', () => {
+        $$('.bal-row', this).forEach(row => {
+          const settled = row.dataset.status === 'paid';
+          row.hidden = filterBox.checked && settled;
+          const next = row.nextElementSibling;
+          if (next && next.classList.contains('pay-inline')) next.remove();
+        });
+      });
+    }
+
+    // Balances: "Log Payment" — a quick payee-level payment (not tied to one
+    // specific cost line; use the Add Entry form's "link to a specific cost"
+    // option when that precision matters).
+    $$('.log-pay-btn', this).forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('tr');
+        const existing = row.nextElementSibling;
+        if (existing && existing.classList.contains('pay-inline')) {
+          existing.remove();
+          return;
+        }
+        const payee = btn.dataset.payee;
+        const payeeType = btn.dataset.payeeType;
+        const owed = Number(btn.dataset.owed || 0);
+        const inline = document.createElement('tr');
+        inline.className = 'pay-inline';
+        inline.innerHTML = `<td colspan="6">
+          <form class="pay-inline-form">
+            <label>Amount <input type="number" step="0.01" min="0.01" name="amount" value="${owed > 0 ? owed.toFixed(2) : ''}" required></label>
+            <label class="wide">Note <input type="text" name="description" placeholder="cash / check / Zelle, etc."></label>
+            <button type="submit" class="small primary">Record payment</button>
+            <button type="button" class="small secondary" data-cancel-pay>Cancel</button>
+          </form>
+        </td>`;
+        row.after(inline);
+        $('[data-cancel-pay]', inline).addEventListener('click', () => inline.remove());
+        $('form', inline).addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const vals = Object.fromEntries(new FormData(e.target).entries());
+          try {
+            await api(`/events/${this.eventId}/ledger`, {
+              method: 'POST',
+              body: JSON.stringify({
+                line_type: 'payment',
+                category: defaultPaymentCategoryForPayeeType(payeeType),
+                amount: parseFloat(vals.amount) || 0,
+                description: vals.description || `Payment to ${payee}`,
+                payee_name: payee,
+                payee_type: payeeType,
+              }),
+            });
+            publish('toast.show', { message: `Payment to ${payee} recorded.` });
+            await this.reloadAll();
+          } catch (err) {
+            publish('toast.show', { message: err.message, tone: 'error' });
+          }
+        });
+      });
+    });
 
     // Void buttons
     $$('[data-void]', this).forEach(btn => {
@@ -481,17 +698,38 @@ class EventCloseout extends PanicElement {
     }
   }
 
-  // Re-check all boxes and enable/disable the finalize button without a reload.
+  // Re-check all boxes and enable/disable the finalize button without a full
+  // reload. Toggling a checklist item never changes who's owed money, so
+  // this reuses the balances totals from the last full load rather than
+  // re-fetching — but still folds them in, otherwise ticking the last
+  // checklist box would wrongly re-enable Finalize while a payee is unpaid.
   _updateFinalizeState() {
-    const allChecked = CHECKLIST_FIELDS.every(([field]) => {
+    const manualChecklistDone = CHECKLIST_FIELDS.every(([field]) => {
       const cb = $(`[data-checklist="${field}"]`, this);
       return cb ? cb.checked : false;
     });
+    const totalStillOwed = Number(this._ledger?.total_still_owed || 0);
+    const payoutsDisbursed = totalStillOwed <= 0.005;
+    const allChecked = manualChecklistDone && payoutsDisbursed;
+
     const btnFinalize = $('#btn-finalize', this);
     if (btnFinalize) {
       btnFinalize.disabled = !allChecked;
       const hint = $('.finalize-hint', this);
-      if (hint) hint.hidden = allChecked;
+      if (hint) {
+        if (allChecked) {
+          hint.hidden = true;
+        } else {
+          hint.hidden = false;
+          const parts = [];
+          if (!payoutsDisbursed) {
+            const unpaidNames = (this._ledger?.balances || []).filter(b => b.status !== 'paid').map(b => esc(b.payee_name));
+            parts.push(`${esc(money(totalStillOwed))} still owed to ${unpaidNames.length} ${unpaidNames.length === 1 ? 'payee' : 'payees'} (${unpaidNames.join(', ')})`);
+          }
+          if (!manualChecklistDone) parts.push('checklist not complete');
+          hint.innerHTML = `Can&rsquo;t finalize &mdash; ${parts.join('; ')}.`;
+        }
+      }
     }
   }
 }

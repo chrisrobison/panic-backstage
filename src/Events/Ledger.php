@@ -12,7 +12,7 @@ use function Panic\boolish;
 /**
  * Append-only event financial ledger.
  *
- *   GET    /api/events/{id}/ledger          list all non-void entries
+ *   GET    /api/events/{id}/ledger          list all non-void entries + payee balances
  *   POST   /api/events/{id}/ledger          add an entry (corrections are new entries)
  *   DELETE /api/events/{id}/ledger/{eid}    void an entry (audit trail preserved)
  *   PATCH  /api/events/{id}/ledger          toggle one or more closeout checklist items
@@ -20,6 +20,17 @@ use function Panic\boolish;
  *
  * All financial totals (venue_net, gross, margin) are computed server-side.
  * Client submits individual line-item inputs; server returns computed totals.
+ *
+ * ── Payee balances ───────────────────────────────────────────────────────
+ * A cost entry may carry a payee_name/payee_type (who the venue owes — an
+ * artist, a vendor, a promoter, a staffer). A payment entry either links to
+ * one specific cost via paid_entry_id, or carries its own payee_name for a
+ * looser payee-level payment. calculateBalances() nets committed cost vs.
+ * paid per payee so the Closeout tab can show "who's still owed money"
+ * directly, instead of staff reconciling separate Costs/Payments lists by
+ * eye. finalize() refuses to close out while any payee still shows a
+ * positive balance (bypassable the same way as the checklist, via `force`,
+ * for whoever already holds finalize_closeout).
  *
  * Capabilities: read_event (GET), manage_ledger (POST/PATCH/DELETE)
  *               finalize_closeout to finalize/reopen
@@ -50,6 +61,14 @@ final class Ledger extends BaseEndpoint
 
     private const SOURCES = ['manual','ticketing_sync','pos_import','vendor_link',
                               'staffing_link','payment_link','change_order_link','system'];
+
+    // Who a cost/payment entry's payee_type may be — mirrors the payee
+    // categories closeout already deals with (artist guarantees, promoter
+    // splits, vendor bills, staff payouts) plus 'client'/'other' for
+    // anything that doesn't fit those. Echoed back to the client the same
+    // way the category lists are, so the add-entry form's dropdown can't
+    // drift from what the server actually accepts.
+    private const PAYEE_TYPES = ['artist', 'promoter', 'vendor', 'staff', 'client', 'other'];
 
     // Single source of truth for the closeout checklist's DB columns — shared
     // by updateChecklist() (per-item PATCH toggle) and finalize() (completeness
@@ -120,12 +139,17 @@ final class Ledger extends BaseEndpoint
             [$eventId]
         );
 
+        $balances = $this->calculateBalances($eventId);
+
         return $this->ok([
             'entries'          => $entries,
             'closeout'         => $closeout,
             'revenue_categories' => self::REVENUE_CATEGORIES,
             'cost_categories'  => self::COST_CATEGORIES,
             'payment_categories' => self::PAYMENT_CATEGORIES,
+            'payee_types'      => self::PAYEE_TYPES,
+            'balances'         => $balances['balances'],
+            'total_still_owed' => $balances['total_still_owed'],
         ]);
     }
 
@@ -173,11 +197,46 @@ final class Ledger extends BaseEndpoint
             $source = 'manual';
         }
 
+        // ── Payee tracking (who this cost is owed to / this payment goes to) ──
+        // Only meaningful for cost and payment entries — a revenue line has no
+        // payee. Silently dropped rather than rejected for other line types so
+        // a client that always sends the field doesn't need to know that.
+        $payeeName = null;
+        $payeeType = null;
+        if (in_array($lineType, ['cost', 'payment'], true)) {
+            $payeeName = trim((string) ($b['payee_name'] ?? ''));
+            $payeeName = $payeeName !== '' ? mb_substr($payeeName, 0, 255) : null;
+
+            $payeeType = (string) ($b['payee_type'] ?? '');
+            if ($payeeType !== '' && !in_array($payeeType, self::PAYEE_TYPES, true)) {
+                return Response::json(['error' => 'Invalid payee_type'], 422);
+            }
+            $payeeType = $payeeType !== '' ? $payeeType : null;
+        }
+
+        // A payment entry may reference the exact cost entry it pays down.
+        // Validated against this same event and line_type='cost' so a
+        // payment can't be wired to another event's ledger or to another
+        // payment/revenue row.
+        $paidEntryId = null;
+        if ($lineType === 'payment' && !empty($b['paid_entry_id'])) {
+            $paidEntryId = (int) $b['paid_entry_id'];
+            $target = $this->db->one(
+                "SELECT id FROM event_ledger_entries
+                 WHERE id = ? AND event_id = ? AND line_type = 'cost' AND is_void = 0",
+                [$paidEntryId, $eventId]
+            );
+            if (!$target) {
+                return Response::json(['error' => 'paid_entry_id must reference an existing cost entry on this event'], 422);
+            }
+        }
+
         $id = $this->db->insert(
             'INSERT INTO event_ledger_entries
-             (event_id, category, line_type, amount, currency, description, source,
-              source_ref_id, reconciler_id, reconciled_at, created_by_id)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+             (event_id, category, line_type, amount, currency, description, payee_name,
+              payee_type, paid_entry_id, source, source_ref_id, reconciler_id,
+              reconciled_at, created_by_id)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             [
                 $eventId,
                 $category,
@@ -185,6 +244,9 @@ final class Ledger extends BaseEndpoint
                 $amount,
                 strtoupper((string) ($b['currency'] ?? 'USD')),
                 $b['description']  ?? null,
+                $payeeName,
+                $payeeType,
+                $paidEntryId,
                 $source,
                 isset($b['source_ref_id']) ? (int) $b['source_ref_id'] : null,
                 isset($b['reconciler_id']) ? (int) $b['reconciler_id'] : null,
@@ -202,7 +264,14 @@ final class Ledger extends BaseEndpoint
         // Ensure closeout state row exists
         $this->ensureCloseoutState($eventId);
 
-        return $this->ok(['id' => $id, 'summary' => $this->calculateSummary($eventId)]);
+        $balances = $this->calculateBalances($eventId);
+
+        return $this->ok([
+            'id'               => $id,
+            'summary'          => $this->calculateSummary($eventId),
+            'balances'         => $balances['balances'],
+            'total_still_owed' => $balances['total_still_owed'],
+        ]);
     }
 
     // ── Void Entry ────────────────────────────────────────────────────────────
@@ -342,6 +411,8 @@ final class Ledger extends BaseEndpoint
             [$eventId]
         );
 
+        $balances = $this->calculateBalances($eventId);
+
         return [
             'gross_revenue'    => $grossRevenue,
             'total_costs'      => $totalCosts,
@@ -351,7 +422,122 @@ final class Ledger extends BaseEndpoint
             'by_category'      => $byCategory,
             'tickets_sold'     => (int) ($ticketing['tickets_sold'] ?? 0),
             'gross_ticket_sales' => ((int) ($ticketing['gross_ticket_cents'] ?? 0)) / 100,
+            'total_still_owed'   => $balances['total_still_owed'],
+            'payees_unpaid'      => count(array_filter($balances['balances'], fn($b) => $b['status'] === 'unpaid')),
+            'payees_partial'     => count(array_filter($balances['balances'], fn($b) => $b['status'] === 'partial')),
         ];
+    }
+
+    // ── Payee Balances ────────────────────────────────────────────────────────
+
+    /**
+     * Nets, per payee, what's been committed (cost entries) against what's
+     * actually gone out the door (payment entries), so the Closeout tab can
+     * show "who's still owed money" directly instead of two flat lists staff
+     * have to reconcile by eye.
+     *
+     * A payment nets against a payee two ways, in order of precedence:
+     *   1. paid_entry_id — points at one specific (non-void) cost entry.
+     *      Precise: nets straight into that cost's payee group.
+     *   2. payee_name on the payment itself, with no paid_entry_id — a
+     *      looser "paid this payee something" entry (e.g. a deposit paid
+     *      before any cost line existed to link it to). Nets into that
+     *      payee's group by name+type instead of a specific line item.
+     * A payment with neither is pure cash-flow bookkeeping (e.g. a client
+     * deposit_received against the venue itself) and doesn't net into any
+     * payee balance — see the payment-line-type notes on Report.php for why
+     * "money in" and "money owed to someone" are genuinely different things.
+     *
+     * Grouping key is payee_name (case/whitespace-insensitive) + payee_type,
+     * so "Doorwolf Sound Co." typed twice for the same event always nets
+     * together even if payee_type was left blank once.
+     */
+    private function calculateBalances(int $eventId): array
+    {
+        $entries = $this->db->all(
+            "SELECT id, line_type, amount, payee_name, payee_type, paid_entry_id
+             FROM event_ledger_entries
+             WHERE event_id = ? AND is_void = 0",
+            [$eventId]
+        );
+
+        $keyFor = static fn(string $name, ?string $type): string =>
+            mb_strtolower(trim($name)) . '|' . ($type ?? '');
+
+        $costsById = [];
+        $groups    = [];
+
+        foreach ($entries as $e) {
+            if ($e['line_type'] !== 'cost' || empty($e['payee_name'])) {
+                continue;
+            }
+            $costsById[(int) $e['id']] = $e;
+            $key = $keyFor($e['payee_name'], $e['payee_type']);
+            $groups[$key] ??= [
+                'payee_name' => $e['payee_name'],
+                'payee_type' => $e['payee_type'],
+                'committed'  => 0.0,
+                'paid'       => 0.0,
+            ];
+            $groups[$key]['committed'] += (float) $e['amount'];
+        }
+
+        foreach ($entries as $e) {
+            if ($e['line_type'] !== 'payment') {
+                continue;
+            }
+            $amt = (float) $e['amount'];
+
+            $linkedCost = $e['paid_entry_id'] !== null ? ($costsById[(int) $e['paid_entry_id']] ?? null) : null;
+            if ($linkedCost) {
+                $key = $keyFor($linkedCost['payee_name'], $linkedCost['payee_type']);
+                $groups[$key]['paid'] += $amt;
+            } elseif (!empty($e['payee_name'])) {
+                $key = $keyFor($e['payee_name'], $e['payee_type']);
+                $groups[$key] ??= [
+                    'payee_name' => $e['payee_name'],
+                    'payee_type' => $e['payee_type'],
+                    'committed'  => 0.0,
+                    'paid'       => 0.0,
+                ];
+                $groups[$key]['paid'] += $amt;
+            }
+            // else: not tied to any payee (e.g. deposit_received from the
+            // client) — pure cash flow, excluded from payee balances.
+        }
+
+        $balances = [];
+        $totalStillOwed = 0.0;
+        foreach ($groups as $g) {
+            $stillOwed = round($g['committed'] - $g['paid'], 2);
+            $status    = $stillOwed <= 0.005 ? 'paid' : ($g['paid'] > 0 ? 'partial' : 'unpaid');
+            $balances[] = [
+                'payee_name' => $g['payee_name'],
+                'payee_type' => $g['payee_type'],
+                'committed'  => round($g['committed'], 2),
+                'paid'       => round($g['paid'], 2),
+                'still_owed' => $stillOwed,
+                'status'     => $status,
+            ];
+            if ($stillOwed > 0) {
+                $totalStillOwed += $stillOwed;
+            }
+        }
+
+        // Unpaid/partial first (what needs action), largest balance first,
+        // then alphabetical — matches how the Balances panel renders them.
+        usort($balances, static function (array $a, array $b): int {
+            $rank = static fn(string $s): int => $s === 'paid' ? 1 : 0;
+            if ($rank($a['status']) !== $rank($b['status'])) {
+                return $rank($a['status']) <=> $rank($b['status']);
+            }
+            if ($a['still_owed'] !== $b['still_owed']) {
+                return $b['still_owed'] <=> $a['still_owed'];
+            }
+            return strcasecmp($a['payee_name'], $b['payee_name']);
+        });
+
+        return ['balances' => $balances, 'total_still_owed' => round($totalStillOwed, 2)];
     }
 
     // ── Finalize / Reopen ─────────────────────────────────────────────────────
@@ -380,6 +566,23 @@ final class Ledger extends BaseEndpoint
             return Response::json([
                 'error'   => 'Closeout checklist incomplete',
                 'missing' => $missing,
+            ], 422);
+        }
+
+        // Money owed to a payee blocks finalize the same way an unchecked
+        // checklist item does — a fully-ticked checklist previously said
+        // nothing about whether anyone still had money coming. `force`
+        // (already gated on finalize_closeout above) overrides this too.
+        $balances    = $this->calculateBalances($eventId);
+        $unpaid      = array_values(array_filter($balances['balances'], fn($bal) => $bal['status'] !== 'paid'));
+        if (!empty($unpaid) && empty($b['force'])) {
+            return Response::json([
+                'error'           => 'Payees are still owed money',
+                'total_still_owed' => $balances['total_still_owed'],
+                'unpaid_payees'   => array_map(fn($bal) => [
+                    'payee_name' => $bal['payee_name'],
+                    'still_owed' => $bal['still_owed'],
+                ], $unpaid),
             ], 422);
         }
 
