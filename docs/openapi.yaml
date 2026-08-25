@@ -14882,6 +14882,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/events/{id}/series/cancel:
+    post:
+      operationId: eventSeries_cancel
+      summary: Cancel every not-yet-passed occurrence in this event's series
+      description: >-
+        Requires the `edit_event` event capability. Sets status='canceled' on every occurrence in the
+        series with date >= today that isn't already canceled, completed, or settled — the same
+        single-field status flip a normal event cancellation performs, applied to every qualifying
+        sibling in one request. Past occurrences and ones already canceled/completed/settled are left
+        untouched. Canceling immediately frees each occurrence's date/room for rebooking (canceled
+        events are excluded from room-conflict checks) — no separate release step. Series membership
+        itself is unchanged; occurrences are not unlinked or deleted, only their status changes.
+      tags:
+        - Event Series
+      parameters:
+        - $ref: '#/components/parameters/EventIdPath'
+      responses:
+        '200':
+          description: Occurrences canceled.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  canceled_event_ids:
+                    type: array
+                    items:
+                      type: integer
+        '403':
+          description: Missing edit_event capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: This event is not part of a series, or no upcoming events left to cancel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Cancellation failed and was rolled back
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/events/{eventId}/payments:
     parameters:
       - name: eventId

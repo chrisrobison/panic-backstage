@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `events` — Add Cancel Series button to bulk-cancel future occurrences
 - **Fixed** `dashboard` — Make upcoming event thumbnails square
 - **Fixed** `auth` — Proactively refresh session cookie to stop asset 401s
 - **Fixed** `realtime` — Stop false "updated elsewhere" banners, flash changed fields, add connection dot

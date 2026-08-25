@@ -1483,8 +1483,13 @@ final class Events extends BaseEndpoint
      * - needs_assets (public events): notify producer/artist + booker to submit promo materials.
      *
      * Best-effort — never throws.
+     *
+     * Public (not private like the rest of this file's status-change
+     * machinery) so Events\Series::cancelSeries() can reuse it verbatim when
+     * bulk-canceling a series, instead of duplicating this notification
+     * logic for the multi-event case.
      */
-    private function notifyStatusChange(int $eventId, string $oldStatus, string $newStatus): void
+    public function notifyStatusChange(int $eventId, string $oldStatus, string $newStatus): void
     {
         try {
             $event = $this->db->one(

@@ -52,9 +52,15 @@ final class Series extends BaseEndpoint
     public function handle(Request $request): Response
     {
         $eventId = $this->requireEventId();
-        if (($this->params['action'] ?? null) === 'conflicts') {
+        $action = $this->params['action'] ?? null;
+        if ($action === 'conflicts') {
             return $request->method() === 'POST'
                 ? $this->conflicts($request, $eventId)
+                : Response::methodNotAllowed();
+        }
+        if ($action === 'cancel') {
+            return $request->method() === 'POST'
+                ? $this->cancelSeries($eventId)
                 : Response::methodNotAllowed();
         }
         return match ($request->method()) {
@@ -585,6 +591,90 @@ final class Series extends BaseEndpoint
         }
         log_activity($this->db, $eventId, $this->userId(), 'removed from recurring series', ['series_id' => $seriesId]);
         return $this->ok(['ok' => true]);
+    }
+
+    /**
+     * POST /events/{id}/series/cancel — bulk-cancel every not-yet-passed
+     * occurrence in this event's series (today included). A canceled event
+     * is just status='canceled' — the same single-field flip
+     * Events::update()'s status branch does for one event at a time — and
+     * that status is already excluded from room-conflict checks by default
+     * (see Events::conflictBlockersFor() / EventRowHelpers::findRoomConflict()),
+     * so every canceled occurrence's date/room is freed for rebooking with
+     * no extra "release" step.
+     *
+     * Deliberately skips:
+     *  - past occurrences (date < today) — canceling a show that already
+     *    happened would corrupt history, not free anything useful.
+     *  - occurrences already 'canceled', 'completed', or 'settled' —
+     *    nothing to do, and the latter two are archived/locked (see
+     *    Events::LOCKED_EDIT_STATUSES), matching the guard the single-event
+     *    edit path enforces.
+     *
+     * Capability is checked once against the event this was invoked from —
+     * every occurrence in a series shares one venue (event_series has a
+     * single venue_id), same assumption remove() above already makes.
+     * Series membership itself is left untouched (matches remove(): only
+     * status changes here, nothing is unlinked or deleted).
+     */
+    private function cancelSeries(int $eventId): Response
+    {
+        if ($denied = $this->requireEventCapability($eventId, 'edit_event')) {
+            return $denied;
+        }
+        $event = $this->db->one('SELECT series_id FROM events WHERE id = ?', [$eventId]);
+        if (!$event) {
+            return $this->notFound('Event not found');
+        }
+        $seriesId = $event['series_id'];
+        if (!$seriesId) {
+            return Response::json(['error' => 'This event is not part of a series.'], 422);
+        }
+
+        $targets = $this->db->all(
+            "SELECT id, status FROM events
+              WHERE series_id = ? AND date >= CURDATE() AND status NOT IN ('canceled', 'completed', 'settled')
+              ORDER BY date",
+            [$seriesId]
+        );
+        if (!$targets) {
+            return Response::json(['error' => 'No upcoming events left in this series to cancel.'], 422);
+        }
+
+        $actingUserId = $this->userId();
+        $pdo = $this->db->pdo();
+        $pdo->beginTransaction();
+        try {
+            foreach ($targets as $row) {
+                $this->db->run('UPDATE events SET status = ? WHERE id = ?', ['canceled', $row['id']]);
+                log_activity($this->db, (int) $row['id'], $actingUserId, 'status changed', [
+                    'changes' => [['field' => 'Status', 'from' => (string) $row['status'], 'to' => 'canceled']],
+                ]);
+            }
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            @error_log('series cancel failed for series ' . $seriesId . ': ' . $e->getMessage());
+            return Response::json(['error' => 'Could not cancel the series. Nothing was changed.'], 500);
+        }
+
+        // Best-effort side effects, mirroring Events::update()'s status-change
+        // branch (email notification, Sheet/Calendar sync) — run after commit
+        // so a slow mailer/API call never holds the transaction open, and
+        // never allowed to fail the response since the DB write already
+        // succeeded. notifyStatusChange() lives on Events, not this class, so
+        // a plain instance is built here purely to reuse that logic.
+        $notifier = new \Panic\Events($this->db, $this->auth, [], $this->root);
+        $canceledIds = [];
+        foreach ($targets as $row) {
+            $id = (int) $row['id'];
+            $canceledIds[] = $id;
+            $notifier->notifyStatusChange($id, (string) $row['status'], 'canceled');
+            $this->pushToSheet($id);
+            $this->pushToCalendar($id);
+        }
+
+        return $this->ok(['ok' => true, 'canceled_event_ids' => $canceledIds]);
     }
 
     /**

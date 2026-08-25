@@ -1440,6 +1440,7 @@ class EventRecurrencePanel extends PanicElement {
           ${this._canEdit ? `<div class="calendar-actions">
             <button type="button" class="secondary" data-toggle-extend>${this._extending ? 'Cancel' : 'Add more dates'}</button>
             <button type="button" class="secondary" data-remove-series>Remove this event from the series</button>
+            <button type="button" class="danger" data-cancel-series>Cancel series</button>
           </div>` : ''}
           ${this._extending ? `<div class="grid-form" data-extend-form>
             <p class="muted small">New dates are generated using <strong>${esc(this._title || this._series.description || 'this event')}</strong> as the template (its times, pricing, and notes) and are appended to this same series.</p>
@@ -1449,6 +1450,7 @@ class EventRecurrencePanel extends PanicElement {
         </div>
       </section>`;
       $('[data-remove-series]', this)?.addEventListener('click', () => this.removeFromSeries());
+      $('[data-cancel-series]', this)?.addEventListener('click', () => this.cancelSeries());
       $('[data-toggle-extend]', this)?.addEventListener('click', () => {
         this._extending = !this._extending;
         this.render();
@@ -1589,6 +1591,35 @@ class EventRecurrencePanel extends PanicElement {
       await this.load();
     } catch (err) {
       publish('toast.show', { message: err.message || 'Could not remove from series.', tone: 'error' });
+    }
+  }
+
+  // Cancels every not-yet-happened occurrence in the series (today's date
+  // included), freeing those dates/rooms for rebooking. Past occurrences
+  // and ones already canceled/completed/settled are left alone — the count
+  // below is computed the same way the backend filters server-side, purely
+  // so the confirm dialog can tell the user what's actually about to change.
+  async cancelSeries() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const upcoming = this._siblings.filter((sibling) => {
+      if (['canceled', 'completed', 'settled'].includes(sibling.status)) return false;
+      return new Date(`${sibling.date}T12:00:00`) >= today;
+    });
+    if (!upcoming.length) {
+      publish('toast.show', { message: 'No upcoming events left in this series to cancel.', tone: 'error' });
+      return;
+    }
+    const n = upcoming.length;
+    if (!confirm(`Cancel ${n} upcoming event${n === 1 ? '' : 's'} in this series? ${n === 1 ? 'That date frees' : 'Those dates free'} up for rebooking. Past events are not affected.`)) return;
+    try {
+      const res = await api(`/events/${this._eventId}/series/cancel`, { method: 'POST' });
+      const count = res.canceled_event_ids?.length ?? n;
+      publish('toast.show', { message: `Canceled ${count} event${count === 1 ? '' : 's'} in the series.`, tone: 'success' });
+      this._series = undefined;
+      await this.load();
+    } catch (err) {
+      publish('toast.show', { message: err.message || 'Could not cancel the series.', tone: 'error' });
     }
   }
 }

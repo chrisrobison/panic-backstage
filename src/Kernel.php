@@ -846,10 +846,12 @@ final class Kernel
             if ($child === 'assets' && ($segments[3] ?? '') === 'generate-qr') {
                 return [Events\GenerateQr::class, ['eventId' => $eventId]];
             }
-            // Recurring events: GET/POST/DELETE /events/{id}/series, plus a
-            // conflict-preflight sub-action: POST /events/{id}/series/conflicts
+            // Recurring events: GET/POST/DELETE /events/{id}/series, plus
+            // sub-actions: POST /events/{id}/series/conflicts (preflight) and
+            // POST /events/{id}/series/cancel (bulk-cancel future occurrences)
             if ($child === 'series') {
-                $seriesAction = ($segments[3] ?? '') === 'conflicts' ? 'conflicts' : null;
+                $seriesSubAction = $segments[3] ?? '';
+                $seriesAction = in_array($seriesSubAction, ['conflicts', 'cancel'], true) ? $seriesSubAction : null;
                 return [Events\Series::class, ['eventId' => $eventId, 'action' => $seriesAction]];
             }
             // Editable one-off copy: POST /events/{id}/clone
