@@ -27,10 +27,11 @@ use Panic\Response;
  * exactly), a payments-received/disbursed split, a payout-obligations net
  * (committed promoter_settlement/artist_guarantee cost entries minus
  * whatever's already been disbursed), and a fallback to the
- * manually-entered Settlement tab figures for shows where tickets sold
- * outside this app's own ticketing module. Nothing here is editable — it's
- * a reporting view over data owned by Ledger, Vendors, Staffing, Lineup,
- * Ticketing and Settlement.
+ * manually-entered door-sales figures (event_settlements — now a collapsed
+ * fallback section on the Closeout tab itself, not a separate Settlement
+ * tab) for shows where tickets sold outside this app's own ticketing
+ * module. Nothing here is editable — it's a reporting view over data owned
+ * by Ledger, Vendors, Staffing, Lineup, Ticketing and Settlement.
  *
  * ── The "bottom line" ──────────────────────────────────────────────────────
  * A door/revenue-split deal (no room rental billed to the client) and a
@@ -124,12 +125,15 @@ final class Report extends BaseEndpoint
         $summary  = (new Ledger($this->db, $this->auth, [], $this->root))->calculateSummary($eventId);
         $closeout = $this->db->one('SELECT * FROM event_closeout_state WHERE event_id = ?', [$eventId]);
 
-        // The old "Settlement" tab (event_settlements) is a hand-typed door
-        // sheet — gross ticket sales, ticket count, bar sales, expenses,
-        // payouts — kept for shows where tickets sold through an outside
-        // service or at the door rather than this app's own ticketing
-        // module. Surfaced here so the printed statement can fall back to it
-        // (see tickets-sold below) and so staff can see it was recorded at all.
+        // event_settlements is a hand-typed door sheet — gross ticket sales
+        // and ticket count (plus a few now-unused legacy columns from before
+        // the Closeout ledger tracked costs/payouts properly) — kept for
+        // shows where tickets sold through an outside service or at the
+        // door rather than this app's own ticketing module. Entered on the
+        // Closeout tab's "door sales" fallback section (there is no
+        // standalone Settlement tab anymore). Surfaced here so the printed
+        // statement can fall back to it (see tickets-sold below) and so
+        // staff can see it was recorded at all.
         $manualSettlement = $this->db->one('SELECT * FROM event_settlements WHERE event_id = ?', [$eventId]);
 
         // Raw ledger line items (not just Ledger::calculateSummary()'s

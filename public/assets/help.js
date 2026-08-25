@@ -97,7 +97,6 @@ export const HELP_SECTIONS = [
       { slug: 'payments',     title: 'The Payments tab' },
       { slug: 'e-signatures', title: 'Electronic signatures' },
       { slug: 'ticketing',    title: 'Ticketing &amp; door' },
-      { slug: 'settlement',   title: 'Settlement' },
       { slug: 'publish',      title: 'Publishing the public page' },
       { slug: 'print',        title: 'Printable packets' },
       { slug: 'activity',     title: 'Activity log' },
@@ -582,7 +581,7 @@ const HELP_CONTENT = {
       <li><a href="#help-invites">Invites</a> — bring promoters, designers, or bands onto the event as collaborators.</li>
       <li><a href="#help-publish">Publish</a> — flip the public page on once the show is approved and ready to announce.</li>
       <li><a href="#help-guest-list">Guest list</a> — close to show day, build the comp / will-call / VIP door list.</li>
-      <li><a href="#help-settlement">Settlement</a> — after the show, reconcile the numbers and close the books.</li>
+      <li><a href="#help-closeout">Closeout</a> — after the show, reconcile the numbers, track who's been paid, and close the books.</li>
     </ol>
     <p>You don't have to do these strictly in order, and not every show needs every tab. A couple of supporting tools run alongside: the <a href="#help-print">Print</a> menu produces night-of packets (run sheet, staffing, guest list, or a combined master packet), and the <a href="#help-activity">Activity log</a> at the bottom of the event records who changed what, so hand-offs between bookers and night-of staff stay clean.</p>
   `,
@@ -779,7 +778,7 @@ const HELP_CONTENT = {
     <p>Below the header sits a <strong>Next Recommended Action</strong> banner suggesting the most important next step (sign the artist, approve the flyer, build the run sheet, etc.). It refreshes when you click <em>Refresh</em> or save something anywhere in the event. The <strong>&times;</strong> button collapses it to a slim "dismissed for now" strip (click <em>Show</em> to bring it back) — this is per-visit, not permanent: reopening the event shows it again, and if the recommendation itself changes (a new, different next step) it reappears automatically even while collapsed, so dismissing today's task can't accidentally hide tomorrow's.</p>
     <p>The <strong>Overview</strong> tab itself is a read-only, at-a-glance dashboard: a grid of cards for Schedule/Timeline, Promoter/Contacts, Performer Lineup, Venue Ops/Logistics, Financial/Ticketing, Notes/Tasks, and Documents/Attachments. Each card summarizes that part of the event and links out (e.g. "Full Run Sheet", "Manage Lineup") to the matching tab for the full editable view.</p>
     <ul>
-      <li>The <strong>Financial/Ticketing</strong> card shows ticket price, capacity, estimated guests, deposit amount and status, and — for in-house ticketed events — tickets sold so far; externally-ticketed events get a link out to the ticket URL instead. If you can view <a href="#help-settlement">Settlement</a>, a filed settlement's gross ticket sales, bar sales, and venue net are summarized here too.</li>
+      <li>The <strong>Financial/Ticketing</strong> card shows ticket price, capacity, estimated guests, deposit amount and status, and — for in-house ticketed events — tickets sold so far; externally-ticketed events get a link out to the ticket URL instead. If you can view <a href="#help-closeout">Closeout</a>, a filed door-sales fallback's gross ticket sales, bar sales, and venue net are summarized here too — click through to see who's still owed money.</li>
       <li>The <strong>Notes/Tasks</strong> card shows the event's internal notes (the staff-only field on the <a href="#help-details">Details</a> tab — nothing here ever appears on the public page) and the first several open tasks.</li>
     </ul>
     <p>Also on the Overview tab, the <strong>Readiness</strong> panel lists the gates we check before a show is "ready" (lineup confirmed, flyer approved, public page on, run sheet built, settlement filed, and so on) with a clear OK / not-OK mark.</p>
@@ -1355,23 +1354,6 @@ const HELP_CONTENT = {
     <p class="muted small">Look-up is off by default and, like selling, can't be switched on after the link is made. It shows the guest list — names, masked emails, what they bought — and lets someone admit by name without any ticket, so give it only to staff you'd trust with that, and add a PIN. It never exposes anyone's actual QR, so a leaked look-up link still can't manufacture working tickets.</p>
 
     <p class="muted small">Who sees what: the Ticketing tab (tiers, comps, refunds, scanner links) is limited to venue admins and event owners — promoters and other collaborators don't see it. Selecting the payment processor is a venue-admin task under <a href="#help-admin-payments">Admin &rarr; Payments</a>.</p>
-  `,
-
-  settlement: `
-    <h2>Settlement</h2>
-    <p>Settlement is the night-of-show or next-day reconciliation. It is visible to venue admins and event owners and hidden from promoters, designers, bands, and viewers.</p>
-    <h3>Fields</h3>
-    <ul>
-      <li><strong>Gross ticket sales</strong> — total ticket revenue (Stripe export or manual).</li>
-      <li><strong>Tickets sold</strong> — paid tickets, excluding comps.</li>
-      <li><strong>Bar sales</strong> — bar take.</li>
-      <li><strong>Expenses</strong> — production, hospitality, security, etc.</li>
-      <li><strong>Band payouts</strong> — total paid to performers (sum of all lineup payouts).</li>
-      <li><strong>Promoter payout</strong> — paid to outside promoter if applicable.</li>
-      <li><strong>Venue net</strong> — the venue's take. Click <em>Calculate venue net</em> to derive: <code>gross + bar − expenses − band − promoter</code>.</li>
-      <li><strong>Notes</strong> — anything else (cash float, discrepancies, comp count).</li>
-    </ul>
-    <p>Save the form to record the settlement. Once filed, the event drops off the dashboard's <em>Unsettled</em> count.</p>
   `,
 
   publish: `
@@ -2299,13 +2281,13 @@ const HELP_CONTENT = {
 
   closeout: `
     <h2>Closeout Overview</h2>
-    <p>After a show ends, the Closeout panel (a tab in the event workspace) replaces the old flat Settlement form with a full financial ledger workflow. It gives you a structured, auditable way to reconcile every dollar that came in and went out.</p>
+    <p>After a show ends, the Closeout tab is the one place to reconcile every dollar that came in and went out, track who's been paid and who hasn't, and lock the books once everything is settled. It used to be split across a separate Settlement tab (a hand-typed summary) and a read-only Report tab — both are folded in here now, so there's a single place to work instead of three.</p>
 
     <h3>Layout</h3>
-    <p>The Closeout panel has a two-column layout:</p>
+    <p>The Closeout tab has a two-column layout:</p>
     <ul>
-      <li><strong>Left panel</strong> — the financial ledger with all line items (revenue, costs, payments).</li>
-      <li><strong>Right panel</strong> — the P&amp;L summary (Gross Revenue, Total Costs, Venue Net, Margin %) and the closeout checklist.</li>
+      <li><strong>Left panel</strong> — the <strong>Balances</strong> panel (who's still owed money, see <a href="#help-closeout-ledger">The financial ledger</a>) above the full itemized ledger (revenue, costs, payments, collapsed by default), and a collapsed <strong>door sales &amp; settlement doc</strong> section for shows sold outside this app's own ticketing.</li>
+      <li><strong>Right panel</strong> — the P&amp;L summary (Gross Revenue, Total Costs, Venue Net, Margin %, Still Owed to Payees) and the closeout checklist.</li>
     </ul>
 
     <h3>Event types</h3>
@@ -2316,7 +2298,7 @@ const HELP_CONTENT = {
     </ul>
 
     <h3>Why the ledger workflow</h3>
-    <p>The closeout workflow prevents an event from being marked <em>Settled</em> until all financial loose ends are tied off. A 7-point checklist gates the Finalize button, ensuring nothing is missed. See <a href="#help-closeout-finalize">Finalizing closeout</a> for the checklist details.</p>
+    <p>The closeout workflow prevents an event from being marked <em>Settled</em> until all financial loose ends are tied off — including money still owed to a vendor, artist, promoter, or staffer. A 7-point checklist plus that money-owed check gate the Finalize button, ensuring nothing is missed. See <a href="#help-closeout-finalize">Finalizing closeout</a> for the details.</p>
 
     <div class="tip"><strong>Tip:</strong> Vendor actual amounts (from the <a href="#help-vendors">Vendors panel</a>) and execution records with financial impact (from the <a href="#help-execution">Execution tab</a>) automatically generate ledger entries, reducing manual data entry during closeout.</div>
   `,
@@ -2347,17 +2329,25 @@ const HELP_CONTENT = {
       <li>Pick the <strong>line type</strong>: Revenue, Cost, or Payment.</li>
       <li>Pick the <strong>category</strong> from the dropdown (filtered by type).</li>
       <li>Enter the <strong>amount</strong> and a <strong>description</strong>.</li>
+      <li>For a Cost or Payment, optionally fill in <strong>Payee</strong> and <strong>Payee type</strong> (artist, promoter, vendor, staff) — this is what powers the Balances panel below. A Payment can also optionally <strong>link to a specific cost</strong> it's paying down, instead of just naming the same payee loosely.</li>
       <li>Click <strong>Save</strong>. The entry is added immediately.</li>
     </ol>
+
+    <h3>Balances — who's still owed money</h3>
+    <p>Above the itemized ledger, the <strong>Balances</strong> panel groups every payee-tracked Cost against whatever Payments have been logged for them, and shows <strong>Committed</strong>, <strong>Paid</strong>, <strong>Still Owed</strong>, and a status (Paid / Partial / Unpaid) per payee. Click <strong>Log Payment</strong> on any unpaid or partial row to record a payment against that payee in one step — the amount prefills to exactly what's still owed. Check <strong>Show unpaid &amp; partial only</strong> to hide anyone already settled.</p>
+    <p>This is computed server-side from the same ledger entries — it's the same number Finalize itself checks before allowing a closeout to lock (see <a href="#help-closeout-finalize">Finalizing closeout</a>).</p>
 
     <h3>Voiding an entry</h3>
     <p>Click the <strong>Void</strong> button next to any manual entry. You'll be prompted to enter a reason for the void. Voided entries remain visible in the ledger with strikethrough text — there is no delete. Provider-reported fee and tax lines are protected because the payment processor owns those figures; a later reconciliation updates them in place.</p>
 
     <h3>The P&amp;L Summary</h3>
-    <p>The right panel shows a live P&amp;L summary: <strong>Gross Revenue</strong>, <strong>Total Costs</strong>, <strong>Venue Net</strong>, and <strong>Margin %</strong>. These figures are always calculated server-side — the app never trusts a submitted total.</p>
+    <p>The right panel shows a live P&amp;L summary: <strong>Gross Revenue</strong>, <strong>Total Costs</strong>, <strong>Venue Net</strong>, <strong>Margin %</strong>, and <strong>Still Owed to Payees</strong> (the same total as the Balances panel). These figures are always calculated server-side — the app never trusts a submitted total.</p>
     <p>Click <strong>Refresh</strong> to recalculate after adding entries. The summary updates to reflect all non-voided entries.</p>
 
     <div class="note"><strong>Note:</strong> The P&amp;L is a running total, not a snapshot. It reflects the current state of all active (non-voided) ledger entries at any given time.</div>
+
+    <h3>Door sales entered manually</h3>
+    <p>A collapsed section below the ledger — <strong>Door sales &amp; settlement doc</strong> — covers shows sold outside this app's own ticketing (at the door, or through an outside service). Enter <strong>Tickets sold</strong> and <strong>Gross ticket sales</strong> there and Backstage uses them anywhere the in-house ticket count reads zero (the P&amp;L Summary, the Report tab, printed statements). The same section also holds a <strong>Settlement document</strong> link/note field for pointing at an external night-of settlement sheet. This replaces the old standalone Settlement tab, whose other fields (bar sales, expenses, band/promoter payouts) are superseded by the ledger above — log those as Cost/Payment entries instead.</p>
   `,
 
   'closeout-report': `
@@ -2399,7 +2389,7 @@ const HELP_CONTENT = {
 
   'closeout-finalize': `
     <h2>Finalizing Closeout</h2>
-    <p>Before an event can be marked <strong>Settled</strong>, all items on the 7-point Closeout Checklist must be checked off. This gate ensures no financial or operational loose ends are left open.</p>
+    <p>Before an event can be marked <strong>Settled</strong>, all items on the 7-point Closeout Checklist must be checked off <em>and</em> every payee in the Balances panel must show $0.00 still owed. Either one blocks Finalize, and the button's tooltip/hint names exactly what's missing — a payee still owed money, incomplete checklist items, or both.</p>
 
     <h3>The 7-point checklist</h3>
     <ol>
@@ -2411,14 +2401,15 @@ const HELP_CONTENT = {
       <li><strong>Cash Reconciled</strong> — cash float and door take are balanced.</li>
       <li><strong>All Invoices Collected</strong> — all vendor invoices are received and entered in the ledger.</li>
     </ol>
-    <p>Each checkbox immediately PATCHes the server when clicked — there's no separate save button for the checklist.</p>
+    <p>Each checkbox immediately PATCHes the server when clicked — there's no separate save button for the checklist. An 8th row, <strong>All Payouts Disbursed</strong>, appears next to these but isn't a checkbox you click — it's checked automatically once the Balances panel shows everyone paid, and stays unchecked otherwise.</p>
 
     <h3>Finalizing</h3>
-    <p>Once all 7 boxes are checked, the <strong>Finalize</strong> button becomes active. Click it to:</p>
+    <p>Once all 7 boxes are checked and every payee is paid off, the <strong>Finalize</strong> button becomes active. Click it to:</p>
     <ul>
       <li>Set the event status to <strong>settled</strong>.</li>
       <li>Lock the ledger — no new entries can be added and existing entries cannot be voided.</li>
     </ul>
+    <div class="note"><strong>Note:</strong> The server enforces both gates independently of the button's disabled state — a direct API call to finalize still gets refused (422) with the same "still owed" or "checklist incomplete" reasons if either isn't satisfied.</div>
 
     <h3>Reopening a settled event</h3>
     <p>If something was missed after finalization, click <strong>Reopen</strong> and enter a reason. The ledger unlocks and the event reverts to an active state.</p>

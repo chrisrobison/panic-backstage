@@ -3068,102 +3068,69 @@
     <!-- SETTLEMENT ────────────────────────────────────────────────────────── -->
     <h2 id="settlement">Settlement — the big picture</h2>
 
-    <p>Settlement is the financial close-out of a show. You're reconciling what came in (ticket sales, bar) against what went out (expenses, band payments, promoter payout) to arrive at what the venue actually made.</p>
+    <p>Settlement is the financial close-out of a show. You're reconciling what came in (ticket sales, bar) against what went out (expenses, band payments, promoter payout) to arrive at what the venue actually made, and tracking who's actually been paid.</p>
+
+    <div class="callout note">
+      <span class="callout-title">This used to be its own tab — it isn't anymore</span>
+      <p>There was previously a standalone <span class="ui-label tab">Settlement</span> tab: a flat hand-typed form, separate from the real financial ledger. It's gone. Everything described below now happens on the <span class="ui-label tab">Closeout</span> tab — see <a href="#closeout">Chapter 5: Closeout &amp; Billing</a> for the full detail on the ledger, the Balances panel, and finalizing.</p>
+    </div>
 
     <p>The settlement process has two parts:</p>
     <ol>
       <li><strong>The night-of settlement doc</strong> — the physical or digital tally sheet done at the end of the show, often a Google Sheet or a handwritten form. The person running money tracks sales and expenses in real time during the event.</li>
-      <li><strong>Entering it in Backstage</strong> — once the night-of doc is finalized, those numbers get entered into the Settlement tab so the system has a record.</li>
+      <li><strong>Entering it in Backstage</strong> — once the night-of doc is finalized, those numbers get entered as itemized ledger entries on the Closeout tab, so the system has a real, auditable record instead of one hand-typed summary.</li>
     </ol>
 
     <div class="callout tip">
       <span class="callout-title">🔗 Link your settlement doc</span>
-      <p>In the Settlement tab, there's a field for <span class="ui-label field">Settlement document</span> — a URL or note pointing to your night-of tally (e.g., a Google Sheets link). Paste it here. This connects Backstage to the source document and also syncs the URL back to the connected tracking spreadsheet.</p>
+      <p>On the Closeout tab, inside the collapsed <span class="ui-label field">Door sales &amp; settlement doc</span> section, there's a field for <span class="ui-label field">Settlement document</span> — a URL or note pointing to your night-of tally (e.g., a Google Sheets link). Paste it here. This connects Backstage to the source document and also syncs the URL back to the connected tracking spreadsheet.</p>
     </div>
 
     <!-- FILING SETTLEMENT ────────────────────────────────────────────────── -->
     <h2 id="settling">Filing settlement in Backstage</h2>
 
-    <p>Open the event workspace and click the <span class="ui-label tab">Settlement</span> tab. You'll see a form with the following fields:</p>
+    <p>Open the event workspace and click the <span class="ui-label tab">Closeout</span> tab. Rather than one flat form, you log each dollar as its own itemized entry — this is the full detail in <a href="#closeout-ledger">Chapter 5: The financial ledger</a>, but the short version for closing out a night is:</p>
+
+    <ol>
+      <li>Add a <strong>Revenue</strong> entry for anything ticket/bar/rental money coming in (skip categories the ticketing module already tracks automatically).</li>
+      <li>Add a <strong>Cost</strong> entry for everything going out — artist guarantee, sound, security, cleaning, promoter settlement, etc. — and fill in <strong>Payee</strong> (who it's owed to) and <strong>Payee type</strong> (artist / promoter / vendor / staff). This is what makes the next step work.</li>
+      <li>As each payee actually gets paid, either add a <strong>Payment</strong> entry yourself or use <strong>Log Payment</strong> on their row in the <strong>Balances</strong> panel — it prefills the exact amount still owed.</li>
+      <li>If tickets sold outside this app (at the door or through an outside service), fill in the collapsed <span class="ui-label field">Door sales &amp; settlement doc</span> section's Tickets Sold / Gross Ticket Sales fields — see the callout above.</li>
+    </ol>
+
+    <p>The <strong>Balances</strong> panel is the fast way to see where things stand:</p>
 
     <div class="settlement-calc">
       <div class="settlement-row add">
-        <div class="label">Gross Ticket Sales</div>
-        <div class="amount">+ total ticket revenue</div>
-      </div>
-      <div class="settlement-row">
-        <div class="label">Tickets Sold</div>
-        <div class="amount">count (for records)</div>
-      </div>
-      <div class="settlement-row add">
-        <div class="label">Bar Sales</div>
-        <div class="amount">+ bar revenue attributed to event</div>
+        <div class="label">Committed</div>
+        <div class="amount">sum of that payee's Cost entries</div>
       </div>
       <div class="settlement-row deduct">
-        <div class="label">Expenses</div>
-        <div class="amount">− production, staffing, supplies</div>
-      </div>
-      <div class="settlement-row deduct">
-        <div class="label">Band Payouts</div>
-        <div class="amount">− total paid to all performers</div>
-      </div>
-      <div class="settlement-row deduct">
-        <div class="label">Promoter Payout</div>
-        <div class="amount">− promoter share (if applicable)</div>
+        <div class="label">Paid</div>
+        <div class="amount">sum of Payments logged for them</div>
       </div>
       <div class="settlement-row total">
-        <div class="label">Venue Net</div>
-        <div class="amount">= what the venue keeps</div>
+        <div class="label">Still Owed</div>
+        <div class="amount">= Committed − Paid</div>
       </div>
     </div>
 
-    <p>Click <span class="ui-label button">Calculate venue net</span> and the system will fill in the bottom line automatically from the numbers above. You can also let it calculate in real time as you type — the Venue Net field updates as you change any of the input fields.</p>
+    <p>Every payee shows a status — <strong>Paid</strong>, <strong>Partial</strong>, or <strong>Unpaid</strong> — and you can check <span class="ui-label field">Show unpaid &amp; partial only</span> to see just who's left before you finalize.</p>
 
     <div class="callout note">
-      <span class="callout-title">📝 Notes field</span>
-      <p>The settlement form has a Notes textarea at the bottom. Use it to record anything unusual about this settlement — partial payments, disputed amounts, payment method, or explanations for numbers that look off. This is the paper trail that saves you six months from now.</p>
-    </div>
-
-    <h3>Settlement field guide</h3>
-
-    <div class="field-ref">
-      <div class="field-ref-title">Settlement Fields</div>
-      <div class="field-row">
-        <div class="field-name">Gross Ticket Sales</div>
-        <div class="field-desc">Total ticket revenue before any splits or fees. If using Mabuhay Booking, this number comes from the ticketing dashboard. If using TIXR, pull from their settlement report.</div>
-      </div>
-      <div class="field-row">
-        <div class="field-name">Tickets Sold</div>
-        <div class="field-desc">Count of paid tickets (not comps). For reference and reporting — doesn't affect the venue net calculation.</div>
-      </div>
-      <div class="field-row">
-        <div class="field-name">Bar Sales</div>
-        <div class="field-desc">Bar revenue for the event. Use whatever figure your POS system reports for the show period.</div>
-      </div>
-      <div class="field-row">
-        <div class="field-name">Expenses</div>
-        <div class="field-desc">Production costs, staffing, security, catering, equipment rental, and any other out-of-pocket costs for this show.</div>
-      </div>
-      <div class="field-row">
-        <div class="field-name">Band Payouts</div>
-        <div class="field-desc">Total paid to all performers — guarantees, door-deal payouts, merchandise advances, etc.</div>
-      </div>
-      <div class="field-row">
-        <div class="field-name">Promoter Payout</div>
-        <div class="field-desc">Promoter's share, if any. On house-produced shows this is 0. On external promoter shows, this is the promoter's agreed cut after expenses.</div>
-      </div>
-      <div class="field-row">
-        <div class="field-name">Venue Net</div>
-        <div class="field-desc">Calculated automatically: Gross Ticket Sales + Bar Sales − Expenses − Band Payouts − Promoter Payout. This is what goes to the venue.</div>
-      </div>
+      <span class="callout-title">📝 Descriptions, not one Notes field</span>
+      <p>There's no single settlement Notes box anymore. Record anything unusual — a partial payment, a disputed amount, a payment method — in that specific ledger entry's Description field, right next to the number it explains. That keeps the explanation attached to the actual line item six months from now, instead of one paragraph you have to cross-reference by hand.</p>
     </div>
 
     <!-- SETTLED ───────────────────────────────────────────────────────────── -->
     <h2 id="settled">Marking the event as Settled</h2>
 
-    <p>Once settlement is filed and approved by the accounting team, manually change the event status to <strong>Settled</strong>. This is a deliberate manual step — it requires a human sign-off, not just data entry.</p>
+    <p>Once every ledger entry is logged, every payee in Balances shows $0.00 still owed, and the closeout checklist is complete, click <span class="ui-label button">Finalize Closeout</span> on the <span class="ui-label tab">Closeout</span> tab (see <a href="#closeout-finalize">Finalize &amp; reopen</a>). Finalizing sets the event status to <strong>Settled</strong> automatically — there is no separate manual step.</p>
 
-    <p>To change the status, go to the <span class="ui-label tab">Details</span> tab, find the Status dropdown, and change it to Settled. The system will save automatically.</p>
+    <div class="callout warn">
+      <span class="callout-title">Don't set the status to Settled by hand</span>
+      <p>The Details tab's Status dropdown technically allows selecting <code>Settled</code> directly, but that skips every check Finalize enforces — the 7-point checklist and whether anyone's still owed money. Always settle a show by clicking Finalize on the Closeout tab, never by changing the dropdown.</p>
+    </div>
 
     <p>Settled events are:</p>
     <ul>
@@ -3177,15 +3144,16 @@
       <div class="checklist-title">Post-Event Close-Out Checklist</div>
       <ul>
         <li>Confirm event auto-archived (check morning after show date)</li>
-        <li>Retrieve night-of settlement doc from the floor manager</li>
-        <li>Paste the settlement doc URL into the Settlement tab</li>
-        <li>Enter all settlement figures: ticket sales, bar, expenses, payouts</li>
-        <li>Click Calculate venue net and verify the number looks right</li>
-        <li>Add any notes about unusual circumstances</li>
-        <li>Click Save settlement</li>
+        <li>Retrieve the night-of settlement doc from the floor manager</li>
+        <li>Paste the settlement doc URL into the Closeout tab's door sales fallback section</li>
+        <li>Log every revenue, cost, and payment as its own ledger entry — payee + payee type on every cost</li>
+        <li>If tickets sold outside this app, fill in the door sales fallback's Tickets Sold / Gross Ticket Sales</li>
+        <li>Use the Balances panel's Log Payment action as each payee actually gets paid</li>
+        <li>Confirm every payee in Balances shows $0.00 still owed</li>
+        <li>Check off all 7 closeout checklist items</li>
         <li>Verify Google Sheet received the settlement doc URL (column S)</li>
         <li>Get accounting sign-off</li>
-        <li>Change status to Settled</li>
+        <li>Click Finalize Closeout — this sets status to Settled for you</li>
       </ul>
     </div>
 
@@ -3262,7 +3230,7 @@
   <div class="chapter-hero">
     <span class="chapter-num">Chapter 5</span>
     <h1>Closeout &amp; Billing</h1>
-    <p class="lead">The Closeout replaces the old Settlement form with a full financial ledger workflow — append-only line items, a seven-point checklist, and a finalize button that locks the books when everything checks out.</p>
+    <p class="lead">The Closeout replaces the old Settlement form with a full financial ledger workflow — append-only line items, a Balances panel that tracks who's still owed money, a seven-point checklist, and a finalize button that locks the books once everyone's paid and everything checks out.</p>
   </div>
 
   <div class="book-content">
@@ -3274,7 +3242,7 @@
 
     <p>The Closeout panel has two columns:</p>
     <ul>
-      <li><strong>Left column</strong> — the financial ledger: every revenue and cost line item for the event</li>
+      <li><strong>Left column</strong> — the Balances panel (who's still owed money) above the full financial ledger: every revenue, cost, and payment line item for the event, plus a collapsed door-sales fallback for outside ticketing</li>
       <li><strong>Right column</strong> — the P&amp;L summary and the 7-point closeout checklist</li>
     </ul>
 
@@ -3347,9 +3315,32 @@
         <div class="label">Payments Received</div>
         <div class="amount">Sum of inbound Payment line items</div>
       </div>
+      <div class="settlement-row deduct">
+        <div class="label">Still Owed to Payees</div>
+        <div class="amount">Sum of every payee's positive Balances total</div>
+      </div>
     </div>
 
-    <p>Venue Net is displayed in <strong style="color:#16a34a;">green</strong> when positive and <strong style="color:#dc2626;">red</strong> when negative — so the financial health of the event is unmissable.</p>
+    <p>Venue Net is displayed in <strong style="color:#16a34a;">green</strong> when positive and <strong style="color:#dc2626;">red</strong> when negative — so the financial health of the event is unmissable. Still Owed to Payees is red until it hits $0.00, then flips to green with an "all payees settled" note.</p>
+
+    <h3 id="closeout-balances">Balances — who's still owed money</h3>
+
+    <p>Above the itemized ledger, the <strong>Balances</strong> panel is the fastest way to answer "who still needs to be paid." Give a Cost entry a <strong>Payee</strong> (free text — an artist name, a vendor, a promoter) and a <strong>Payee type</strong> (artist / promoter / vendor / staff), and Backstage nets it against every Payment recorded for that same payee:</p>
+
+    <table>
+      <tr><th>Column</th><th>Meaning</th></tr>
+      <tr><td>Committed</td><td>Sum of that payee's Cost entries.</td></tr>
+      <tr><td>Paid</td><td>Sum of Payments logged for them — either linked to one specific cost, or just matched by payee name.</td></tr>
+      <tr><td>Still Owed</td><td>Committed minus Paid.</td></tr>
+      <tr><td>Status</td><td><strong>Paid</strong> (nothing owed), <strong>Partial</strong> (something's been paid but not all), or <strong>Unpaid</strong> (nothing paid yet).</td></tr>
+    </table>
+
+    <p>Click <span class="ui-label button">Log Payment</span> on any Partial/Unpaid row to record a payment for that payee — the amount prefills to exactly what's left. Check <span class="ui-label field">Show unpaid &amp; partial only</span> to hide everyone already settled, useful when a night has a dozen line items but only two people are still waiting to get paid.</p>
+
+    <div class="callout note">
+      <span class="callout-title">This is the same number Finalize checks</span>
+      <p>Balances isn't just a display — Total Still Owed is computed server-side by the same code Finalize itself runs before allowing the closeout to lock (see <a href="#closeout-finalize">Finalize &amp; reopen</a>). If Balances says $0.00 owed, Finalize's money check will pass; if it doesn't, Finalize will refuse.</p>
+    </div>
 
     <div class="callout tip">
       <span class="callout-title">Execution records auto-populate the ledger</span>
@@ -3399,7 +3390,7 @@
 
     <div class="callout note">
       <span class="callout-title">Ticket Sales table hides itself when nothing sold in-house</span>
-      <p>If a show sold entirely through an outside ticketing service or at the door — so every ticket type shows 0 sold in-house — the per-type Ticket Sales breakdown is hidden rather than printing a misleading all-zero table. The effective ticket count and gross above still reflect the real numbers (falling back to the Settlement tab's hand-entered figures), just without a fake-looking per-type row.</p>
+      <p>If a show sold entirely through an outside ticketing service or at the door — so every ticket type shows 0 sold in-house — the per-type Ticket Sales breakdown is hidden rather than printing a misleading all-zero table. The effective ticket count and gross above still reflect the real numbers (falling back to the Closeout tab's door-sales fallback figures), just without a fake-looking per-type row.</p>
     </div>
 
     <h3 id="report-sharing">Sharing the report</h3>
@@ -3439,7 +3430,9 @@
       </ul>
     </div>
 
-    <p>The <span class="ui-label button">Finalize</span> button remains <strong>disabled</strong> until all seven items are checked. This is enforced server-side — checking boxes in the UI does not unlock finalization if the server-side state disagrees.</p>
+    <p>An 8th row, <strong>All Payouts Disbursed</strong>, sits alongside these but isn't something you check yourself — it ticks automatically once every payee in <a href="#closeout-balances">Balances</a> shows $0.00 still owed, and stays unchecked otherwise.</p>
+
+    <p>The <span class="ui-label button">Finalize</span> button remains <strong>disabled</strong> until all seven manual items are checked <em>and</em> Balances shows nothing owed. This is enforced server-side — checking boxes (or paying everyone off) in the UI does not unlock finalization if the server-side state disagrees. The disabled button's hint text names exactly what's still blocking it, including which payees are unpaid.</p>
 
     <div class="callout note">
       <span class="callout-title">Checking items requires manage_ledger</span>
@@ -3451,7 +3444,7 @@
 
     <h3>Finalizing the closeout</h3>
 
-    <p>Once all seven checklist items are checked, click <span class="ui-label button">Finalize</span>. Finalizing:</p>
+    <p>Once all seven manual checklist items are checked and no payee in Balances is still owed money, click <span class="ui-label button">Finalize</span>. Finalizing:</p>
     <ul>
       <li>Locks the ledger — no new entries can be added and no existing entries can be voided</li>
       <li>Sets the event status to <code>settled</code></li>
@@ -3459,7 +3452,7 @@
       <li>Removes the event from the "Events Awaiting Closeout" dashboard card</li>
     </ul>
 
-    <p>Finalizing requires the <code>finalize_closeout</code> capability (venue admin by default).</p>
+    <p>Finalizing requires the <code>finalize_closeout</code> capability (venue admin by default). If a payee is still owed money, the server refuses with a 422 naming who and how much — the same check the disabled Finalize button reflects in the UI.</p>
 
     <div class="callout danger">
       <span class="callout-title">Finalization locks the books</span>

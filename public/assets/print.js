@@ -920,16 +920,13 @@ function renderSettlementSection(data) {
     </tr>`).join('');
   const payoutStillOwedTotal = payoutObligations.reduce((sum, p) => sum + Number(p.still_owed || 0), 0);
 
-  const manualBlock = manual ? `
-    <h2 class="section">Door / Manual Settlement Record</h2>
-    <p class="stl-note">Hand-entered on the Settlement tab the night of the show — kept as a supplementary record; the Revenue/Costs/Payments figures above (from the Closeout ledger) are authoritative.</p>
+  const manualHasDoorSales = manual && (Number(manual.tickets_sold || 0) > 0 || Number(manual.gross_ticket_sales || 0) > 0);
+  const manualBlock = manualHasDoorSales ? `
+    <h2 class="section">Door Sales (Entered Manually)</h2>
+    <p class="stl-note">Entered on the Closeout tab's fallback for tickets sold outside this app (at the door or an outside ticketing service) — used only to fill in the ticket count/gross above when in-house ticketing shows zero. The Revenue/Costs/Payments figures above (from the Closeout ledger) are authoritative for everything else.</p>
     <div class="facts">
       <div class="fact"><label>Tickets Sold</label><strong>${esc(String(manual.tickets_sold || 0))}</strong></div>
       <div class="fact"><label>Gross Ticket Sales</label><strong>${esc(money(manual.gross_ticket_sales || 0))}</strong></div>
-      <div class="fact"><label>Bar Sales</label><strong>${esc(money(manual.bar_sales || 0))}</strong></div>
-      <div class="fact"><label>Expenses</label><strong>${esc(money(manual.expenses || 0))}</strong></div>
-      <div class="fact"><label>Band Payouts</label><strong>${esc(money(manual.band_payouts || 0))}</strong></div>
-      <div class="fact"><label>Promoter Payout</label><strong>${esc(money(manual.promoter_payout || 0))}</strong></div>
     </div>
     ${manual.notes ? `<div class="notes-block">${esc(manual.notes)}</div>` : ''}` : '';
 
@@ -1131,14 +1128,10 @@ function buildSettlementCsv(data) {
     out += csvRow();
   }
 
-  if (manual) {
-    out += csvRow('DOOR / MANUAL SETTLEMENT RECORD');
+  if (manual && (Number(manual.tickets_sold || 0) > 0 || Number(manual.gross_ticket_sales || 0) > 0)) {
+    out += csvRow('DOOR SALES (ENTERED MANUALLY)');
     out += csvRow('Tickets Sold', manual.tickets_sold || 0);
     out += csvRow('Gross Ticket Sales', csvNum(manual.gross_ticket_sales));
-    out += csvRow('Bar Sales', csvNum(manual.bar_sales));
-    out += csvRow('Expenses', csvNum(manual.expenses));
-    out += csvRow('Band Payouts', csvNum(manual.band_payouts));
-    out += csvRow('Promoter Payout', csvNum(manual.promoter_payout));
     if (manual.notes) out += csvRow('Notes', manual.notes);
     out += csvRow();
   }

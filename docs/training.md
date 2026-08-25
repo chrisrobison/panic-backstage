@@ -162,13 +162,14 @@ personal inbox.
 **Goal:** Managers/admins know how to close out a show properly.
 
 ### Topics
-- After the show: **auto-archive** timing — the system sets Settled automatically after a window, or you can do it manually
-- Filing **settlement** — what data to enter (attendance, bar, ticket revenue)
-- Marking the event **Settled**
+- After the show: **auto-archive** timing
+- The **Closeout** tab — logging revenue/cost/payment ledger entries with a payee on each cost
+- The **Balances** panel — who's still owed money, and using Log Payment to pay them off
+- Marking the event **Settled** by clicking **Finalize** (never the Status dropdown — it skips the checks)
 - The **Activity Log** — your audit trail for anything that happened on an event
 
 ### Hands-On
-> Walk through the settlement fields on the Training Night event. Don't save — just show where everything goes.
+> Walk through the Closeout tab on the Training Night event — add a cost entry with a payee, show how it appears in Balances, click Log Payment. Don't actually finalize — just show where everything goes.
 
 ---
 
@@ -208,7 +209,7 @@ Let trainees know these exist for later:
 | Send a contract | Event → Contracts tab → Send for signature |
 | Night-of scanner | Go to `[url]/scanner.html` on any phone |
 | Guest list | Event → Door tab |
-| Settle a show | Event → Settlement tab |
+| Settle a show | Event → Closeout tab (log ledger entries, pay off Balances, Finalize) |
 | Add staff | Admin → Users → Invite |
 | Full manual | `[url]/docs/ops-manual.html` |
 | Booking Inbox reference | `[url]/docs/training.html` · `docs/booking-inbox.md` |

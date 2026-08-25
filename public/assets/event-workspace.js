@@ -403,11 +403,13 @@ class EventOverview extends EventBusCard {
         stats.push(ovStat('Tickets', ticketing));
       }
     }
-    // The Settlement tab only exists for non-private events with the
-    // capability — match that exact gate here so the footer link never
-    // points at a tab that isn't actually mounted.
+    // Settlement used to be its own tab; it's now folded into Closeout (the
+    // "door sales entered manually" fallback section there still writes the
+    // same event_settlements row, so a legacy filed settlement still shows
+    // here). Match Closeout's exact tab gate so the footer link never points
+    // at a tab that isn't actually mounted.
     const canViewSettlement = can(data, 'view_settlement');
-    const hasSettlementTab = canViewSettlement && !isPrivate;
+    const hasCloseoutTab = can(data, 'manage_ledger') || can(data, 'finalize_closeout');
     let settlementBlock = '';
     if (canViewSettlement && data.settlement) {
       const s = data.settlement;
@@ -418,7 +420,7 @@ class EventOverview extends EventBusCard {
       </div>`;
     }
     const body = `<div class="ov-stat-grid">${stats.join('')}</div>${settlementBlock}`;
-    return ovCard({ icon: 'dollar-sign', title: 'Financial / Ticketing', help: 'settlement', body, footerLabel: hasSettlementTab ? 'View Settlement' : 'Event Details', footerTab: hasSettlementTab ? 'settlement' : 'details' });
+    return ovCard({ icon: 'dollar-sign', title: 'Financial / Ticketing', help: 'closeout', body, footerLabel: hasCloseoutTab ? 'View Closeout' : 'Event Details', footerTab: hasCloseoutTab ? 'closeout' : 'details' });
   }
 
   _notesTasksCard(data) {
@@ -467,7 +469,6 @@ const SECTION_LABELS = {
   contracts:    'Contracts',
   invites:      'Invites',
   vendors:      'Vendors',
-  settlement:   'Settlement',
   ticketing:    'Ticketing',
   execution:    'Execution',
   payments:     'Payments',
@@ -681,7 +682,9 @@ class EventWorkspace extends PanicElement {
     if (can(data, 'manage_ticketing') && !isPrivate) tabs.splice(afterDetails++, 0, 'ticketing');
     if (can(data, 'manage_invites')) tabs.splice(tabs.length - 1, 0, 'invites');
     if (can(data, 'manage_payments')) tabs.splice(tabs.length - 1, 0, 'payments');
-    if (can(data, 'view_settlement') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'settlement');
+    // The old standalone Settlement tab is folded into Closeout (its
+    // "door sales entered manually" fallback section) rather than being a
+    // separate tab — see pb-event-closeout in event-closeout.js.
     if (can(data, 'manage_ledger') || can(data, 'finalize_closeout')) tabs.splice(tabs.length - 1, 0, 'closeout');
     if (can(data, 'view_settlement') && !isPrivate) tabs.splice(tabs.length - 1, 0, 'report');
     const user = getAppUser();
@@ -782,7 +785,6 @@ class EventWorkspace extends PanicElement {
     ${can(data, 'view_contracts') ? '<pb-event-contracts id="contracts"></pb-event-contracts>' : ''}
     ${can(data, 'manage_invites') ? '<pb-invite-manager id="invites"></pb-invite-manager>' : ''}
     ${can(data, 'manage_payments') ? '<pb-event-payments id="payments"></pb-event-payments>' : ''}
-    ${(!isPrivate && can(data, 'view_settlement')) ? '<pb-settlement-form id="settlement"></pb-settlement-form>' : ''}
     ${(!isPrivate && can(data, 'manage_ticketing')) ? '<pb-ticketing-admin id="ticketing"></pb-ticketing-admin>' : ''}
     <pb-event-execution id="execution"></pb-event-execution>
     ${(can(data, 'manage_ledger') || can(data, 'finalize_closeout')) ? '<pb-event-closeout id="closeout"></pb-event-closeout>' : ''}
@@ -808,10 +810,20 @@ class EventWorkspace extends PanicElement {
     if ($('pb-invite-manager', this)) $('pb-invite-manager', this).data = data;
     const paymentsEl = $('pb-event-payments', this);
     if (paymentsEl) { paymentsEl.eventId = data.event.id; paymentsEl.data = data; }
-    if ($('pb-settlement-form', this)) $('pb-settlement-form', this).data = data;
     if ($('pb-ticketing-admin', this)) $('pb-ticketing-admin', this).data = data;
     const closeoutEl = $('pb-event-closeout', this);
-    if (closeoutEl) { closeoutEl.eventId = data.event.id; closeoutEl.canEdit = can(data, 'manage_ledger'); closeoutEl.canFinalize = can(data, 'finalize_closeout'); }
+    if (closeoutEl) {
+      // Everything except eventId must be assigned first: pb-event-closeout's
+      // eventId setter synchronously kicks off its data load, and its render
+      // reads these flags — see the "door sales fallback" comment on that
+      // setter in event-closeout.js.
+      closeoutEl.canEdit = can(data, 'manage_ledger');
+      closeoutEl.canFinalize = can(data, 'finalize_closeout');
+      closeoutEl.canEditSettlement = can(data, 'edit_settlement');
+      closeoutEl.showDoorSalesFallback = !isPrivate && can(data, 'view_settlement');
+      closeoutEl.eventId = data.event.id;
+      closeoutEl.settlementDocUrl = event.settlement_doc_url || '';
+    }
     const reportEl = $('pb-event-report', this);
     if (reportEl) reportEl.eventId = data.event.id;
     const execEl = $('pb-event-execution', this);

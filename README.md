@@ -487,7 +487,7 @@ Suggested flow:
 3. Create an invite link from the event workspace and copy it for a collaborator.
 4. Use the public page button after publishing the event to show the guest-facing event page.
 5. Open Templates, create a new show from `Three-Band Local Show`, then show how tasks and schedule items come preloaded.
-6. Open `Legacy Benefit Night`, calculate venue net, and show the completed settlement fields.
+6. Open `Legacy Benefit Night`'s Closeout tab, add a cost entry with a payee, and show it appear in the Balances panel with a Log Payment action.
 7. Open Calendar and Pipeline to show the same events by date and update operational status.
 
 Example public event URL after seeding:

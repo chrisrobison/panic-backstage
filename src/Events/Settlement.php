@@ -23,16 +23,60 @@ final class Settlement extends BaseEndpoint
         };
     }
 
+    private const FIELDS = [
+        'gross_ticket_sales', 'tickets_sold', 'bar_sales', 'expenses',
+        'band_payouts', 'promoter_payout', 'venue_net', 'notes',
+    ];
+
+    /**
+     * Partial update: only columns present in the request body are touched.
+     *
+     * This used to be a blind upsert that defaulted every omitted field to
+     * 0/null — harmless while the old Settlement tab's full 7-field form was
+     * the only caller (it always submitted everything together), but the
+     * Closeout tab's "door sales entered manually" fallback only ever
+     * submits tickets_sold/gross_ticket_sales, and a blind upsert would have
+     * silently zeroed out bar_sales/expenses/band_payouts/promoter_payout on
+     * any event that had a fuller settlement recorded earlier. See
+     * dev-environment memory / commit history around the Settlement ->
+     * Closeout tab consolidation for the full story.
+     */
     private function save(Request $request, int $eventId): Response
     {
         $b = $request->body();
+
+        $provided = array_intersect_key($b, array_flip(self::FIELDS));
+        if (empty($provided)) {
+            return Response::json(['error' => 'No settlement fields provided'], 422);
+        }
+
+        // Ensure a row exists without touching any column on an existing one
+        // — event_id is UNIQUE, so this is a harmless no-op once a row is
+        // already there.
         $this->db->run(
-            'INSERT INTO event_settlements (event_id, gross_ticket_sales, tickets_sold, bar_sales, expenses, band_payouts, promoter_payout, venue_net, notes, settled_by_user_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE gross_ticket_sales=VALUES(gross_ticket_sales), tickets_sold=VALUES(tickets_sold), bar_sales=VALUES(bar_sales), expenses=VALUES(expenses), band_payouts=VALUES(band_payouts), promoter_payout=VALUES(promoter_payout), venue_net=VALUES(venue_net), notes=VALUES(notes), settled_by_user_id=VALUES(settled_by_user_id)',
-            [$eventId, $b['gross_ticket_sales'] ?? 0, $b['tickets_sold'] ?? 0, $b['bar_sales'] ?? 0, $b['expenses'] ?? 0, $b['band_payouts'] ?? 0, $b['promoter_payout'] ?? 0, $b['venue_net'] ?? 0, $b['notes'] ?? null, $this->userId()]
+            'INSERT INTO event_settlements (event_id) VALUES (?) ON DUPLICATE KEY UPDATE event_id = event_id',
+            [$eventId]
         );
-        log_activity($this->db, $eventId, $this->userId(), 'settlement saved');
+
+        $sets   = [];
+        $params = [];
+        foreach ($provided as $field => $value) {
+            // Safe to interpolate: $field is drawn only from the fixed
+            // self::FIELDS whitelist via array_intersect_key() above, never
+            // from $b's keys directly.
+            $sets[]   = "$field = ?";
+            $params[] = $value;
+        }
+        $sets[]   = 'settled_by_user_id = ?';
+        $params[] = $this->userId();
+        $params[] = $eventId;
+
+        $this->db->run(
+            'UPDATE event_settlements SET ' . implode(', ', $sets) . ' WHERE event_id = ?',
+            $params
+        );
+
+        log_activity($this->db, $eventId, $this->userId(), 'settlement saved', ['fields' => array_keys($provided)]);
         return $this->ok(['ok' => true]);
     }
 }

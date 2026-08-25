@@ -3362,6 +3362,14 @@ components:
           format: date-time
     EventSettlementSaveRequest:
       type: object
+      description: >-
+        Partial update — only fields present in the body are written; omitted fields keep their
+        existing stored value (a fresh row defaults every column to 0/null). At least one field is
+        required. The Closeout tab's "door sales entered manually" fallback section only ever
+        submits gross_ticket_sales/tickets_sold; bar_sales/expenses/band_payouts/promoter_payout/
+        venue_net are legacy columns from the old standalone Settlement tab and are no longer
+        written by any UI, though a value saved there previously is preserved and still returned by
+        GET.
       properties:
         gross_ticket_sales:
           type: number
@@ -16134,7 +16142,10 @@ paths:
       summary: Get the event settlement summary
       description: >-
         Requires `view_settlement`. Returns the raw event_settlements row (null if never saved) —
-        this is a lightweight, hand-entered summary view distinct from the append-only Event Ledger.
+        a lightweight, hand-entered record distinct from the append-only Event Ledger, now surfaced
+        as the Closeout tab's "door sales entered manually" fallback section rather than a
+        standalone Settlement tab (see EventSettlementSaveRequest for which fields that section
+        actually writes).
       tags:
         - Event Settlement
       responses:
@@ -16170,11 +16181,12 @@ paths:
                 $ref: '#/components/schemas/Error'
     post:
       operationId: eventSettlement_create
-      summary: Save the event settlement summary (upsert)
+      summary: Save the event settlement summary (partial update)
       description: >-
-        Requires `edit_settlement`. Upserts via `INSERT ... ON DUPLICATE KEY UPDATE` keyed on
-        event_id — behaves identically whether or not a settlement row already exists, so POST and
-        PATCH on this resource are equivalent. All numeric fields default to 0 if omitted.
+        Requires `edit_settlement`. Creates the event_settlements row if it doesn't exist yet, then
+        updates only the fields present in the body — omitted fields keep whatever was stored
+        before (see EventSettlementSaveRequest). POST and PATCH on this resource are equivalent.
+        Rejected with 422 if the body contains none of the recognized fields.
       tags:
         - Event Settlement
       requestBody:
@@ -16207,19 +16219,23 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Body contained none of the recognized settlement fields
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
     patch:
       operationId: eventSettlement_update
-      summary: Save the event settlement summary (upsert)
+      summary: Save the event settlement summary (partial update)
       description: >-
-        Requires `edit_settlement`. Identical handler to POST on this same path — an upsert keyed on
-        event_id, not a true partial patch (omitted fields default to 0/null on the values used in
-        the INSERT, but ON DUPLICATE KEY UPDATE means an existing row's other columns are only
-        touched for the columns explicitly listed, which is every settlement column). Send the full
-        settlement object.
+        Requires `edit_settlement`. Identical handler to POST on this same path — a true partial
+        update keyed on event_id; omitted fields are left untouched, not defaulted. See
+        EventSettlementSaveRequest.
       tags:
         - Event Settlement
       requestBody:
@@ -16252,6 +16268,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Body contained none of the recognized settlement fields
           content:
             application/json:
               schema:

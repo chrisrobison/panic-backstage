@@ -1082,43 +1082,13 @@ class InviteManager extends HTMLElement {
 }
 
 
-class SettlementForm extends HTMLElement {
-  set data(data) {
-    this.eventData = data;
-    const settlement = data.settlement || {};
-    const event = data.event || {};
-    const fields = ['gross_ticket_sales','tickets_sold','bar_sales','expenses','band_payouts','promoter_payout','venue_net'];
-    const docUrl = event.settlement_doc_url || '';
-    const docLink = docUrl && /^https?:/i.test(docUrl)
-      ? `<a class="button small secondary" href="${esc(docUrl)}" target="_blank" rel="noopener noreferrer">Open settlement doc &nearr;</a>`
-      : '';
-    this.innerHTML = `<section class="panel">
-      <div class="section-head padded"><h2>Settlement ${helpLink('settlement', 'Settlement')}</h2><div class="inline-actions">${docLink}<button class="secondary small" type="button" data-calc>Calculate venue net</button></div></div>
-      <form class="row-form" data-form="doc"><label class="wide">Settlement document <input name="settlement_doc_url" value="${esc(docUrl)}" placeholder="URL or note pointing to the night-of settlement sheet"></label><button class="small">Save link</button></form>
-      <form class="row-form" data-form="settlement">${fields.map((field) => `<label>${esc(titleCase(field))}<input name="${esc(field)}" type="number" step="0.01" value="${esc(settlement[field] || 0)}"></label>`).join('')}<label class="wide">Notes <textarea name="notes">${esc(settlement.notes || '')}</textarea></label><button>Save settlement</button></form>
-    </section>`;
-    const form = $('form[data-form="settlement"]', this);
-    const calculate = () => {
-      const values = formData(form);
-      const venueNet = Number(values.gross_ticket_sales || 0) + Number(values.bar_sales || 0) - Number(values.expenses || 0) - Number(values.band_payouts || 0) - Number(values.promoter_payout || 0);
-      form.elements.venue_net.value = venueNet.toFixed(2);
-    };
-    $('[data-calc]', this).addEventListener('click', calculate);
-    ['gross_ticket_sales','bar_sales','expenses','band_payouts','promoter_payout'].forEach((name) => form.elements[name].addEventListener('input', calculate));
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      await api(`/events/${this.eventData.event.id}/settlement`, { method: 'POST', body: JSON.stringify(formData(e.target)) });
-      await refreshSection(this);
-      publish('toast.show', { message: 'Settlement saved.' });
-    });
-    $('form[data-form="doc"]', this).addEventListener('submit', async (e) => {
-      e.preventDefault();
-      await api(`/events/${this.eventData.event.id}`, { method: 'PATCH', body: JSON.stringify({ settlement_doc_url: formData(e.target).settlement_doc_url }) });
-      await refreshSection(this);
-      publish('toast.show', { message: 'Settlement doc link saved.' });
-    });
-  }
-}
+// The old standalone Settlement tab (a flat 7-field form duplicating what
+// the Closeout ledger tracks properly, plus a settlement-doc-URL field) was
+// folded into the Closeout tab — see pb-event-closeout in event-closeout.js
+// for the "door sales entered manually" fallback and the settlement-doc-URL
+// form it inherited. Removed here rather than left dead: `pb-settlement-form`
+// is no longer mounted anywhere (event-workspace.js), so keeping this class
+// around would just be an unreachable duplicate of that logic.
 
 customElements.define('pb-task-list', TaskList);
 customElements.define('pb-lineup-editor', LineupEditor);
@@ -1129,4 +1099,3 @@ customElements.define('pb-open-items', OpenItems);
 customElements.define('pb-guest-list-manager', GuestListManager);
 customElements.define('pb-asset-manager', AssetManager);
 customElements.define('pb-invite-manager', InviteManager);
-customElements.define('pb-settlement-form', SettlementForm);

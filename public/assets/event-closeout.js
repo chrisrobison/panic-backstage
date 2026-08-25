@@ -70,11 +70,18 @@ function defaultPaymentCategoryForPayeeType(payeeType) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 class EventCloseout extends PanicElement {
-  // Properties set by the workspace before mounting
+  // Properties set by the workspace BEFORE eventId (see the comment on the
+  // eventId setter for why order matters):
+  //   canEdit, canFinalize, canEditSettlement, showDoorSalesFallback
+  // showDoorSalesFallback mirrors the old standalone Settlement tab's own
+  // gate (view_settlement && !isPrivate) — see event-workspace.js. That tab
+  // is gone; its two functionally-load-bearing fields (tickets_sold /
+  // gross_ticket_sales — the only ones Report.php's ticket-count fallback
+  // actually reads) live on here as a collapsed fallback section, alongside
+  // the settlement-doc-URL link the old tab also owned.
+  //
   // Properties set by the workspace after DOM insertion:
-  //   eventId, canEdit, canFinalize
-  // Use a backing field + setter so load() fires when eventId is assigned,
-  // not on connect() — connect() fires before the workspace sets the property.
+  //   eventId (triggers load()), settlementDocUrl
 
   get eventId()  { return this._eventId; }
   set eventId(v) {
@@ -88,15 +95,25 @@ class EventCloseout extends PanicElement {
     if (this._eventId) await this.load();
   }
 
+  // Settlement fetch is conditional on showDoorSalesFallback, which the
+  // workspace sets BEFORE eventId specifically so it's already correct by
+  // the time this (synchronous, up to the first await) function body runs.
+  _fetchAll() {
+    const calls = [
+      api(`/events/${this.eventId}/ledger`),
+      api(`/events/${this.eventId}/ledger/summary`),
+    ];
+    if (this.showDoorSalesFallback) calls.push(api(`/events/${this.eventId}/settlement`));
+    return Promise.all(calls);
+  }
+
   async load() {
     this.setLoading('Loading closeout data');
     try {
-      const [ledger, summary] = await Promise.all([
-        api(`/events/${this.eventId}/ledger`),
-        api(`/events/${this.eventId}/ledger/summary`),
-      ]);
-      this._ledger  = ledger;
-      this._summary = summary;
+      const [ledger, summary, doorSales] = await this._fetchAll();
+      this._ledger    = ledger;
+      this._summary   = summary;
+      this._doorSales = doorSales?.settlement || {};
       this.render();
     } catch (err) {
       this.showError(err);
@@ -105,12 +122,10 @@ class EventCloseout extends PanicElement {
 
   async reloadAll() {
     try {
-      const [ledger, summary] = await Promise.all([
-        api(`/events/${this.eventId}/ledger`),
-        api(`/events/${this.eventId}/ledger/summary`),
-      ]);
-      this._ledger  = ledger;
-      this._summary = summary;
+      const [ledger, summary, doorSales] = await this._fetchAll();
+      this._ledger    = ledger;
+      this._summary   = summary;
+      this._doorSales = doorSales?.settlement || {};
       this.render();
     } catch (err) {
       publish('toast.show', { message: err.message, tone: 'error' });
@@ -317,6 +332,42 @@ class EventCloseout extends PanicElement {
         ${hint ? `<p class="finalize-hint">${hint}</p>` : ''}`;
     }
 
+    // ── Door sales fallback + settlement doc link (folded in from the old
+    // standalone Settlement tab) ──────────────────────────────────────────────
+    const doorSales = this._doorSales || {};
+    const editableSettlement = editable && Boolean(this.canEditSettlement);
+    const docUrl = this.settlementDocUrl || '';
+    const docLink = docUrl && /^https?:/i.test(docUrl)
+      ? `<a class="button small secondary" href="${esc(docUrl)}" target="_blank" rel="noopener noreferrer">Open settlement doc &nearr;</a>`
+      : '';
+    const doorSalesSection = this.showDoorSalesFallback ? `
+      <details class="ledger-detail-toggle door-sales-toggle">
+        <summary>Door sales &amp; settlement doc <span class="field-hint">(fallback for outside ticketing)</span></summary>
+        <div class="ledger-detail-body">
+          <p class="fallback-note">Only needed when tickets sold outside this app — at the door or through an outside ticketing service. Leave blank when in-house ticketing already covers the count; it won't be double-counted against the Revenue above.</p>
+          <form class="row-form add-entry-form" id="door-sales-form">
+            <div class="form-row">
+              <label>Tickets sold
+                <input type="number" name="tickets_sold" min="0" step="1" value="${esc(String(doorSales.tickets_sold ?? 0))}"${editableSettlement ? '' : ' disabled'}>
+              </label>
+              <label>Gross ticket sales
+                <input type="number" name="gross_ticket_sales" min="0" step="0.01" value="${esc(String(doorSales.gross_ticket_sales ?? 0))}"${editableSettlement ? '' : ' disabled'}>
+              </label>
+              ${editableSettlement ? '<button type="submit" class="small">Save door sales</button>' : ''}
+            </div>
+          </form>
+          <form class="row-form add-entry-form" id="settlement-doc-form">
+            <div class="form-row">
+              <label class="wide">Settlement document
+                <input type="text" name="settlement_doc_url" value="${esc(docUrl)}" placeholder="URL or note pointing to the night-of settlement sheet"${editableSettlement ? '' : ' disabled'}>
+              </label>
+              ${docLink}
+              ${editableSettlement ? '<button type="submit" class="small">Save link</button>' : ''}
+            </div>
+          </form>
+        </div>
+      </details>` : '';
+
     this.innerHTML = `
       <section class="panel">
         <div class="section-head padded">
@@ -337,6 +388,7 @@ class EventCloseout extends PanicElement {
                 ${groupTable('Payments', payments, 'var(--blue,  #1268c7)')}
               </div>
             </details>
+            ${doorSalesSection}
           </article>
 
           <!-- Right: P&L Summary + Closeout Checklist -->
@@ -444,6 +496,11 @@ class EventCloseout extends PanicElement {
         .ledger-detail-toggle { margin-top: 0.5rem; }
         .ledger-detail-toggle summary { cursor: pointer; font-size: 0.82rem; font-weight: 700; color: var(--muted, #6f7582); padding: 0.4rem 0; }
         .ledger-detail-body { padding-top: 0.5rem; }
+        .door-sales-toggle { margin-top: 0.75rem; }
+        .fallback-note { font-size: 0.8rem; color: var(--muted, #6f7582); line-height: 1.45; margin: 0 0 0.6rem; }
+        .door-sales-toggle .add-entry-form { margin-bottom: 0.6rem; }
+        .door-sales-toggle .add-entry-form:last-child { margin-bottom: 0; }
+        .door-sales-toggle input[disabled] { opacity: 0.6; }
         .derived-check { color: var(--muted, #6f7582); }
         .derived-tag { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.03em; background: var(--soft, #eef0f3); border-radius: 5px; padding: 1px 6px; margin-left: 2px; }
         .owed-row { margin-top: 4px; padding-top: 8px; border-top: 2px solid var(--line, #dfe3e8); }
@@ -625,6 +682,48 @@ class EventCloseout extends PanicElement {
         });
       });
     });
+
+    // Door sales fallback (tickets_sold/gross_ticket_sales — see the
+    // property docblock at the top of this class for why these two fields
+    // specifically survive from the old Settlement tab).
+    const doorSalesForm = $('#door-sales-form', this);
+    if (doorSalesForm) {
+      doorSalesForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const vals = Object.fromEntries(new FormData(doorSalesForm).entries());
+        try {
+          await api(`/events/${this.eventId}/settlement`, {
+            method: 'POST',
+            body: JSON.stringify({
+              tickets_sold: parseInt(vals.tickets_sold, 10) || 0,
+              gross_ticket_sales: parseFloat(vals.gross_ticket_sales) || 0,
+            }),
+          });
+          publish('toast.show', { message: 'Door sales saved.' });
+          await this.reloadAll();
+        } catch (err) {
+          publish('toast.show', { message: err.message, tone: 'error' });
+        }
+      });
+    }
+
+    // Settlement document link — a plain PATCH on the event itself
+    // (settlement_doc_url), same as the old Settlement tab's "doc" form.
+    const settlementDocForm = $('#settlement-doc-form', this);
+    if (settlementDocForm) {
+      settlementDocForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const url = new FormData(settlementDocForm).get('settlement_doc_url') || '';
+        try {
+          await api(`/events/${this.eventId}`, { method: 'PATCH', body: JSON.stringify({ settlement_doc_url: url }) });
+          this.settlementDocUrl = url;
+          publish('toast.show', { message: 'Settlement doc link saved.' });
+          this.render();
+        } catch (err) {
+          publish('toast.show', { message: err.message, tone: 'error' });
+        }
+      });
+    }
 
     // Void buttons
     $$('[data-void]', this).forEach(btn => {

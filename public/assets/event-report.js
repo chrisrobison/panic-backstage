@@ -52,9 +52,10 @@ class EventReport extends PanicElement {
     const costEntries    = entries.filter((e) => e.line_type === 'cost');
     const paymentEntries = entries.filter((e) => e.line_type === 'payment');
 
-    // Effective ticket count: falls back to the hand-entered Settlement tab
-    // figure when in-house ticketing shows 0 sold (door / outside-service sales
-    // never create ticket_order_items rows) — see Report.php for the logic.
+    // Effective ticket count: falls back to the hand-entered "door sales"
+    // figure (Closeout tab fallback section) when in-house ticketing shows
+    // 0 sold (door / outside-service sales never create ticket_order_items
+    // rows) — see Report.php for the logic.
     const ticketsSold = d.tickets_sold_effective ?? s.tickets_sold ?? 0;
     const grossTicketSales = d.gross_ticket_sales_effective ?? s.gross_ticket_sales ?? 0;
     const ticketSourceNote = d.ticket_sales_source === 'door_or_manual'
@@ -220,16 +221,12 @@ class EventReport extends PanicElement {
             <tbody>${lineupRows}</tbody>
           </table>` : ''}
 
-          ${d.manual_settlement ? `
-          <h3 class="panel-subtitle">Door / Manual Settlement Record</h3>
-          <p class="er-note">Hand-entered on the Settlement tab the night of the show — kept as a supplementary record; the Revenue/Costs/Payments figures above (from the Closeout ledger) are authoritative.</p>
+          ${(Number(d.manual_settlement?.tickets_sold || 0) > 0 || Number(d.manual_settlement?.gross_ticket_sales || 0) > 0) ? `
+          <h3 class="panel-subtitle">Door Sales (Entered Manually)</h3>
+          <p class="er-note">Entered on the Closeout tab's fallback for tickets sold outside this app (at the door or an outside ticketing service) — used only to fill in the ticket count/gross above when in-house ticketing shows zero. The Revenue/Costs/Payments figures above (from the Closeout ledger) are authoritative for everything else.</p>
           <div class="summary-card">
             <div class="summary-row"><span class="label">Tickets Sold</span><span class="value">${esc(String(d.manual_settlement.tickets_sold || 0))}</span></div>
             <div class="summary-row"><span class="label">Gross Ticket Sales</span><span class="value">${esc(money(d.manual_settlement.gross_ticket_sales || 0))}</span></div>
-            <div class="summary-row"><span class="label">Bar Sales</span><span class="value">${esc(money(d.manual_settlement.bar_sales || 0))}</span></div>
-            <div class="summary-row"><span class="label">Expenses</span><span class="value">${esc(money(d.manual_settlement.expenses || 0))}</span></div>
-            <div class="summary-row"><span class="label">Band Payouts</span><span class="value">${esc(money(d.manual_settlement.band_payouts || 0))}</span></div>
-            <div class="summary-row"><span class="label">Promoter Payout</span><span class="value">${esc(money(d.manual_settlement.promoter_payout || 0))}</span></div>
           </div>` : ''}
 
           ${payoutObligations.length ? `
