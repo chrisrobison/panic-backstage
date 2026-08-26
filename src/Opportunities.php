@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Panic;
 
 use Panic\Opportunities\Availability;
+use Panic\Opportunities\Conversion;
 
 use function Panic\boolish;
 use function Panic\date_or_null;
@@ -49,10 +50,17 @@ final class Opportunities extends BaseEndpoint
 
     private const WRITABLE_FIELDS = [
         'name', 'company_id', 'conference_id', 'primary_contact_id', 'probability',
-        'estimated_value', 'target_date', 'target_date_end', 'guest_count_min',
-        'guest_count_max', 'event_type', 'event_concept', 'owner_user_id',
-        'next_action', 'next_action_at', 'lost_reason',
+        'estimated_value', 'budget_range_min', 'budget_range_max',
+        'target_date', 'target_date_end', 'guest_count_min',
+        'guest_count_max', 'event_type', 'event_concept', 'recommended_resource_id',
+        'av_requirements', 'catering_notes', 'quote_package', 'quote_duration_hours',
+        'owner_user_id', 'next_action', 'next_action_at', 'lost_reason',
     ];
+
+    // Manual "Log Activity" entry types (Phase 5) — a free-text entry point
+    // distinct from the automatic created/stage_changed/note_added/etc.
+    // activities every other write already logs. See activities()/logActivity().
+    private const LOGGABLE_ACTIVITY_TYPES = ['call', 'meeting', 'note', 'proposal', 'other'];
 
     public function handle(Request $request): Response
     {
@@ -64,7 +72,15 @@ final class Opportunities extends BaseEndpoint
         $child = $this->params['child'] ?? null;
 
         if ($child === 'activities' && $id) {
-            return $this->activities((int) $id, $request);
+            return $request->method() === 'POST'
+                ? $this->logActivity($request, (int) $id)
+                : $this->activities((int) $id, $request);
+        }
+
+        if ($child === 'convert' && $id) {
+            return $request->method() === 'POST'
+                ? $this->convert($request, (int) $id)
+                : Response::methodNotAllowed();
         }
 
         return match ($request->method()) {
@@ -381,12 +397,123 @@ final class Opportunities extends BaseEndpoint
                 LIMIT 200';
 
         $opportunities = $this->db->all($sql, array_merge($params, self::STAGES));
+        $this->attachPipelineAggregates($opportunities);
 
         return $this->ok([
             'opportunities' => $opportunities,
             'stages'        => self::STAGES,
+            // Pipeline board's Owner filter — same plain query as show()'s
+            // owner picker (see that method's comment re: Leads.php:120).
+            'users'         => $this->db->all('SELECT id, name FROM users WHERE is_hidden = 0 ORDER BY name'),
             'capabilities'  => $this->globalCapabilities(),
         ]);
+    }
+
+    /**
+     * Attaches `note_count`, `task_count` (open tasks only), and `warnings`
+     * to every row in place — the Pipeline board's cards need all three
+     * (spec: "note count, task count, warnings") without the browser
+     * fetching per-card. Three bulk queries total regardless of how many
+     * opportunities are in the result set (never one query per row):
+     * note-link counts, open-task counts, and a single "which target dates
+     * already have another event booked" lookup for the date_conflict
+     * warning. Mirrors Availability::emptyNightMatches()'s "hydrate a small
+     * set of ids/dates in PHP after one or two bulk queries" shape.
+     */
+    private function attachPipelineAggregates(array &$opportunities): void
+    {
+        if (!$opportunities) {
+            return;
+        }
+
+        $ids = array_column($opportunities, 'id');
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+        $noteCounts = [];
+        foreach ($this->db->all(
+            "SELECT linked_id, COUNT(*) c FROM opportunity_note_links WHERE linked_type = 'opportunity' AND linked_id IN ($placeholders) GROUP BY linked_id",
+            $ids
+        ) as $row) {
+            $noteCounts[(int) $row['linked_id']] = (int) $row['c'];
+        }
+
+        $docIds = array_values(array_filter(array_map(static fn (array $o) => $o['task_document_id'] ?? null, $opportunities)));
+        $taskCounts = [];
+        $tasksDueSoon = [];
+        if ($docIds) {
+            $docPlaceholders = implode(',', array_fill(0, count($docIds), '?'));
+            foreach ($this->db->all(
+                "SELECT document_id, COUNT(*) c FROM tasks WHERE status != 'done' AND document_id IN ($docPlaceholders) GROUP BY document_id",
+                $docIds
+            ) as $row) {
+                $taskCounts[(int) $row['document_id']] = (int) $row['c'];
+            }
+            // "Tasks Due" pipeline-summary KPI needs a due-within-7-days
+            // count specifically (mockup: "18 — Due in next 7 days"), not
+            // just the total open-task count above.
+            foreach ($this->db->all(
+                "SELECT document_id, COUNT(*) c FROM tasks
+                 WHERE status != 'done' AND due_date IS NOT NULL
+                   AND due_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+                   AND document_id IN ($docPlaceholders)
+                 GROUP BY document_id",
+                $docIds
+            ) as $row) {
+                $tasksDueSoon[(int) $row['document_id']] = (int) $row['c'];
+            }
+        }
+
+        $targetDates = array_values(array_unique(array_filter(array_map(static fn (array $o) => $o['target_date'] ?? null, $opportunities))));
+        $busyDates = [];
+        if ($targetDates) {
+            $datePlaceholders = implode(',', array_fill(0, count($targetDates), '?'));
+            $busyDates = array_column($this->db->all(
+                "SELECT DISTINCT date FROM events WHERE status NOT IN ('canceled','empty') AND date IN ($datePlaceholders)",
+                $targetDates
+            ), 'date');
+        }
+
+        foreach ($opportunities as &$o) {
+            $o['note_count']      = $noteCounts[(int) $o['id']] ?? 0;
+            $o['task_count']      = $o['task_document_id'] ? ($taskCounts[(int) $o['task_document_id']] ?? 0) : 0;
+            $o['tasks_due_soon']  = $o['task_document_id'] ? ($tasksDueSoon[(int) $o['task_document_id']] ?? 0) : 0;
+            $o['warnings']        = $this->opportunityWarnings($o, $busyDates);
+        }
+        unset($o);
+    }
+
+    /**
+     * Deterministic warning tags for one opportunity row — every one backed
+     * by a real, already-hydrated column (or the bulk busy-dates lookup
+     * above). Never AI, never fabricated. Open (not won/lost) opportunities
+     * only — a closed opportunity's pipeline card doesn't need warnings.
+     */
+    private function opportunityWarnings(array $o, array $busyDates): array
+    {
+        if (in_array($o['stage'], ['won', 'lost'], true)) {
+            return [];
+        }
+
+        $warnings = [];
+        if (!empty($o['next_action_at']) && $o['next_action_at'] < gmdate('Y-m-d H:i:s')) {
+            $warnings[] = 'needs_follow_up';
+        } elseif (empty($o['next_action_at'])) {
+            $warnings[] = 'no_next_action';
+        }
+        if ($o['estimated_value'] === null) {
+            $warnings[] = 'budget_unknown';
+        }
+        if (empty($o['primary_contact_id']) && in_array($o['stage'], ['new_signal', 'researching', 'contacted'], true)) {
+            $warnings[] = 'waiting_on_intro';
+        }
+        if (!empty($o['target_date']) && in_array($o['target_date'], $busyDates, true)) {
+            $warnings[] = 'date_conflict';
+        }
+        $updatedAt = $o['updated_at'] ?? $o['created_at'] ?? null;
+        if ($updatedAt && strtotime((string) $updatedAt) < strtotime('-21 days')) {
+            $warnings[] = 'stale';
+        }
+        return $warnings;
     }
 
     // ── Show ─────────────────────────────────────────────────────────────────
@@ -404,6 +531,14 @@ final class Opportunities extends BaseEndpoint
 
         return $this->ok([
             'opportunity'  => $opportunity,
+            'risk_flags'   => $this->riskFlags($opportunity),
+            'budget_fit'   => $this->budgetFit($opportunity),
+            'resources'    => $this->venueResourceOptions($opportunity),
+            // Owner picker — same plain "every active user" query Leads.php
+            // exposes for its own owner assignment (src/Leads.php:120), not
+            // the event-scoped accessibleUsers() helper (that one restricts
+            // by event ownership/collaborator rows, which doesn't apply here).
+            'users'        => $this->db->all('SELECT id, name FROM users WHERE is_hidden = 0 ORDER BY name'),
             'capabilities' => $this->globalCapabilities(),
         ]);
     }
@@ -411,19 +546,130 @@ final class Opportunities extends BaseEndpoint
     private function find(int $id): ?array
     {
         return $this->db->one(
-            'SELECT o.*, c.name AS company_name, c.domain AS company_domain,
+            'SELECT o.*, c.name AS company_name, c.domain AS company_domain, c.logo_url AS company_logo_url,
                     conf.name AS conference_name, conf.slug AS conference_slug,
                     u.name AS owner_name, e.title AS won_event_title,
-                    pc.name AS primary_contact_name, pc.title AS primary_contact_title
+                    pc.name AS primary_contact_name, pc.title AS primary_contact_title,
+                    pc.email AS primary_contact_email, pc.phone AS primary_contact_phone,
+                    r.name AS recommended_resource_name, r.capacity AS recommended_resource_capacity
              FROM opportunities o
              JOIN opportunity_companies c ON c.id = o.company_id
              LEFT JOIN opportunity_conferences conf ON conf.id = o.conference_id
              LEFT JOIN users u ON u.id = o.owner_user_id
              LEFT JOIN events e ON e.id = o.won_event_id
              LEFT JOIN opportunity_contacts pc ON pc.id = o.primary_contact_id
+             LEFT JOIN resources r ON r.id = o.recommended_resource_id
              WHERE o.id = ?',
             [$id]
         );
+    }
+
+    /**
+     * "Proposed Event Format & Venue Fit" — this tenant's own actually
+     * configured rooms (`resources`, the same table the calendar/scheduling
+     * side of the app already uses), never a hard-coded "Upstairs"/
+     * "Downstairs" (spec's explicit instruction). `recommended` is the
+     * smallest active room whose capacity covers the opportunity's upper
+     * guest estimate — a simple, auditable rule, not a fabricated pick.
+     * Single-tenant-DB assumption already established in Phase 2/3
+     * (Availability::venueCoordinates()'s docblock) — one query, no venue_id
+     * filtering needed.
+     */
+    private function venueResourceOptions(array $opportunity): array
+    {
+        $resources = $this->db->all('SELECT id, name, capacity, zone FROM resources WHERE active = 1 ORDER BY sort_order, name');
+        $guestTarget = $opportunity['guest_count_max'] ?? $opportunity['guest_count_min'] ?? null;
+
+        $bestFitId = null;
+        if ($guestTarget !== null) {
+            $bestCapacity = null;
+            foreach ($resources as $r) {
+                if ($r['capacity'] === null || (int) $r['capacity'] < (int) $guestTarget) {
+                    continue;
+                }
+                if ($bestCapacity === null || (int) $r['capacity'] < $bestCapacity) {
+                    $bestCapacity = (int) $r['capacity'];
+                    $bestFitId    = (int) $r['id'];
+                }
+            }
+        }
+
+        foreach ($resources as &$r) {
+            $r['recommended'] = $bestFitId !== null && (int) $r['id'] === $bestFitId;
+        }
+        unset($r);
+
+        return $resources;
+    }
+
+    /**
+     * Compares estimated_value against the (optional) human-entered
+     * budget_range_min/max — never invents a range. Mirrors the Discover
+     * dashboard's "deterministic, data-derived" principle: a plain
+     * comparison, not a score.
+     */
+    private function budgetFit(array $opportunity): array
+    {
+        $min = $opportunity['budget_range_min'] !== null ? (float) $opportunity['budget_range_min'] : null;
+        $max = $opportunity['budget_range_max'] !== null ? (float) $opportunity['budget_range_max'] : null;
+        $value = $opportunity['estimated_value'] !== null ? (float) $opportunity['estimated_value'] : null;
+
+        if ($min === null && $max === null) {
+            return ['status' => 'unknown', 'label' => 'Budget range not identified yet'];
+        }
+        if ($value === null) {
+            return ['status' => 'unknown', 'label' => 'Estimated value not set yet'];
+        }
+        if (($min === null || $value >= $min) && ($max === null || $value <= $max)) {
+            return ['status' => 'within_range', 'label' => 'Within identified range'];
+        }
+        if ($max !== null && $value > $max) {
+            return ['status' => 'above_range', 'label' => 'Above identified range'];
+        }
+        return ['status' => 'below_range', 'label' => 'Below identified range'];
+    }
+
+    /**
+     * Deterministic Risk Flags (spec examples: budget unapproved, date
+     * conflict, no decision maker, no follow-up scheduled, competitor
+     * venue). Every flag reads a real stored value — never AI, never
+     * fabricated. Closed (won/lost) opportunities carry no risk flags.
+     */
+    private function riskFlags(array $opportunity): array
+    {
+        if (in_array($opportunity['stage'], ['won', 'lost'], true)) {
+            return [];
+        }
+
+        $flags = [];
+        if ($opportunity['estimated_value'] === null || $opportunity['budget_range_min'] === null) {
+            $flags[] = ['code' => 'budget_unapproved', 'label' => 'Budget not formally approved'];
+        }
+        if (empty($opportunity['next_action_at'])) {
+            $flags[] = ['code' => 'no_followup_scheduled', 'label' => 'No follow-up scheduled'];
+        }
+        $hasDecisionMaker = (bool) $this->db->one(
+            "SELECT id FROM opportunity_decision_makers WHERE opportunity_id = ? AND role IN ('decision_maker','champion')",
+            [$opportunity['id']]
+        );
+        if (!$hasDecisionMaker) {
+            $flags[] = ['code' => 'no_decision_maker', 'label' => 'No decision maker identified'];
+        }
+        if (!empty($opportunity['target_date'])) {
+            $conflict = $this->db->one(
+                "SELECT id FROM events WHERE date = ? AND status NOT IN ('canceled','empty') LIMIT 1",
+                [$opportunity['target_date']]
+            );
+            if ($conflict) {
+                $flags[] = ['code' => 'date_conflict', 'label' => 'Target date already has another event booked'];
+            }
+        }
+        $qualification = $this->db->one('SELECT competitor_venues_assessed FROM opportunity_qualification WHERE opportunity_id = ?', [$opportunity['id']]);
+        if (in_array($opportunity['stage'], ['proposal_sent', 'verbal_yes'], true) && empty($qualification['competitor_venues_assessed'])) {
+            $flags[] = ['code' => 'competitor_venue', 'label' => 'Competitor venues not yet assessed'];
+        }
+
+        return $flags;
     }
 
     // ── Create ───────────────────────────────────────────────────────────────
@@ -527,6 +773,9 @@ final class Opportunities extends BaseEndpoint
                 return $error;
             }
         }
+        if (array_key_exists('recommended_resource_id', $b) && ($error = $this->validateOptionalResource($b['recommended_resource_id']))) {
+            return $error;
+        }
 
         $newStage = $existing['stage'];
         if (array_key_exists('stage', $b)) {
@@ -546,11 +795,11 @@ final class Opportunities extends BaseEndpoint
             $val = $b[$field];
             if (in_array($field, ['target_date', 'target_date_end'], true)) {
                 $val = date_or_null($val);
-            } elseif (in_array($field, ['company_id', 'conference_id', 'primary_contact_id', 'owner_user_id', 'guest_count_min', 'guest_count_max'], true)) {
+            } elseif (in_array($field, ['company_id', 'conference_id', 'primary_contact_id', 'owner_user_id', 'guest_count_min', 'guest_count_max', 'recommended_resource_id'], true)) {
                 $val = $val !== null && $val !== '' ? (int) $val : null;
             } elseif ($field === 'probability') {
                 $val = $this->clampProbability($val);
-            } elseif ($field === 'estimated_value') {
+            } elseif (in_array($field, ['estimated_value', 'budget_range_min', 'budget_range_max', 'quote_duration_hours'], true)) {
                 $val = $this->toDecimalOrNull($val);
             } elseif ($field === 'next_action_at') {
                 $val = $val !== null && $val !== '' ? (string) $val : null;
@@ -631,6 +880,84 @@ final class Opportunities extends BaseEndpoint
         return $this->ok(['activities' => $activities]);
     }
 
+    /**
+     * Manual "Log Activity" entry point (Phase 5 — deferred from Phase 4's
+     * "Activity & Outreach" panel, see §4.4/§6). A free-text note attached
+     * to this opportunity's own activity feed, distinct from the automatic
+     * created/stage_changed/note_added/signal_added/converted entries every
+     * other write already logs. `activity_type` labels it call/meeting/
+     * note/other for activityActionLabel() on the frontend; the underlying
+     * `action` column stores `{type}_logged` so the feed can tell manual
+     * entries apart from automatic ones at a glance.
+     */
+    private function logActivity(Request $request, int $id): Response
+    {
+        if ($denied = $this->requireGlobalCapability('manage_opportunities')) {
+            return $denied;
+        }
+        if (!$this->db->one('SELECT id FROM opportunities WHERE id = ?', [$id])) {
+            return $this->notFound('Opportunity not found');
+        }
+
+        $b = $request->body();
+        $note = trim((string) ($b['note'] ?? ''));
+        if ($note === '') {
+            return Response::json(['error' => 'note is required'], 422);
+        }
+        $type = (string) ($b['activity_type'] ?? 'other');
+        if (!in_array($type, self::LOGGABLE_ACTIVITY_TYPES, true)) {
+            $type = 'other';
+        }
+
+        log_opportunity_activity($this->db, $id, $this->userId(), "{$type}_logged", ['note' => $note]);
+
+        return $this->ok(['activities' => $this->db->all(
+            'SELECT a.*, u.name AS created_by_name
+             FROM opportunity_activities a LEFT JOIN users u ON u.id = a.created_by
+             WHERE a.opportunity_id = ? ORDER BY a.created_at DESC LIMIT 200',
+            [$id]
+        )]);
+    }
+
+    // ── Convert to Event ────────────────────────────────────────────────────
+
+    /**
+     * "Convert to Event" — mirrors Leads::convert() exactly in shape (see
+     * §1.10/§4.5): a narrow precondition here (not lost, capability check),
+     * the actual locked create-or-return-existing transaction lives in
+     * Opportunities\Conversion::createEventFromOpportunity(), which is the
+     * single place that ever inserts an `events` row from an opportunity.
+     * Idempotent: converting an already-converted opportunity just returns
+     * its existing event rather than erroring or creating a second one.
+     */
+    private function convert(Request $request, int $id): Response
+    {
+        if ($denied = $this->requireGlobalCapability('manage_opportunities')) {
+            return $denied;
+        }
+
+        $opportunity = $this->find($id);
+        if (!$opportunity) {
+            return $this->notFound('Opportunity not found');
+        }
+        if ($opportunity['stage'] === 'lost') {
+            return Response::json(['error' => 'A lost opportunity cannot be converted to an event.'], 422);
+        }
+
+        try {
+            $result = Conversion::createEventFromOpportunity($this->db, $opportunity, $request->body(), $this->userId());
+        } catch (\RuntimeException $e) {
+            return Response::json(['error' => $e->getMessage()], 422);
+        }
+
+        return $this->ok([
+            'event_id'          => $result['event_id'],
+            'event_url'         => "#event-{$result['event_id']}",
+            'already_converted' => $result['already_converted'],
+            'opportunity'       => $this->find($id),
+        ]);
+    }
+
     // ── Validation helpers ──────────────────────────────────────────────────
 
     private function validateOptionalConference(mixed $value): ?Response
@@ -663,6 +990,17 @@ final class Opportunities extends BaseEndpoint
         }
         if (!$this->db->one('SELECT id FROM opportunity_contacts WHERE id = ? AND company_id = ?', [(int) $value, $companyId])) {
             return Response::json(['error' => 'primary_contact_id does not reference a contact belonging to this company'], 422);
+        }
+        return null;
+    }
+
+    private function validateOptionalResource(mixed $value): ?Response
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if (!$this->db->one('SELECT id FROM resources WHERE id = ?', [(int) $value])) {
+            return Response::json(['error' => 'recommended_resource_id does not reference an existing room'], 422);
         }
         return null;
     }

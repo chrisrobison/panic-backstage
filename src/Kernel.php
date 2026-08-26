@@ -502,6 +502,19 @@ final class Kernel
             if ($child === 'signals') {
                 return [Opportunities\Signals::class, ['scopeType' => 'opportunity', 'scopeId' => $opportunityId]];
             }
+            if ($child === 'tasks') {
+                return [Opportunities\TaskLink::class, ['ownerType' => 'opportunity', 'ownerId' => $opportunityId]];
+            }
+            if ($child === 'qualification') {
+                return [Opportunities\Qualification::class, ['opportunityId' => $opportunityId]];
+            }
+            if ($child === 'decision-makers') {
+                return [Opportunities\DecisionMakers::class, ['opportunityId' => $opportunityId, 'linkId' => $childId]];
+            }
+            // 'convert' (Phase 5 conversion-to-event) and 'activities' (GET
+            // read-only feed / POST manual "Log Activity" entry) fall
+            // through here — Opportunities::handle() dispatches both itself
+            // via $child.
             return [Opportunities::class, ['opportunityId' => $opportunityId, 'child' => $child]];
         }
 

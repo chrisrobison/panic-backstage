@@ -8354,3 +8354,114 @@ pb-inbox-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direc
   .opp-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
   .opp-window-bands { flex-direction: column; }
 }
+
+.pill-danger { background: #fde0e0; color: var(--red, #b91c1c); }
+
+/* ── Pipeline board (Phase 5) — reuses .pipeline-board/.pipe-col/.pipe-card
+   (event-views.js's Kanban, app.css:891) verbatim for the grid/column/card
+   shell; everything below is card-content styling unique to Opportunities
+   cards (probability, value, owner/date meta, note/task icon counts,
+   warnings, the accessible stage <select>, and drag-over feedback). */
+.opp-pipe-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+.opp-pipe-filters input[type="search"] { flex: 1 1 220px; min-width: 0; }
+
+.opp-pipeline-board { grid-template-columns: repeat(8, minmax(230px, 1fr)); overflow-x: auto; }
+.opp-pipe-col.opp-pipe-col-over { outline: 2px dashed var(--blue); outline-offset: -4px; }
+.opp-pipe-col-total { margin: -4px 0 8px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.opp-pipe-add { width: 100%; margin-top: 4px; }
+
+.opp-pipe-card { cursor: pointer; }
+.opp-pipe-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 2px !important; }
+.opp-pipe-card-head strong { margin-bottom: 0 !important; }
+.opp-pipe-prob { font-size: 12px; font-weight: 800; color: var(--blue); }
+.opp-pipe-name { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
+.opp-pipe-conf { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px !important; }
+.opp-pipe-conf i { margin-right: 4px; }
+.opp-pipe-value { display: block; font-weight: 800; margin-bottom: 8px !important; }
+.opp-pipe-meta { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px !important; }
+.opp-pipe-meta span { margin-bottom: 0 !important; display: inline; }
+.opp-pipe-icons { display: flex; gap: 12px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.opp-pipe-warnings { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.opp-pipe-warning { font-size: 11px; font-weight: 700; color: var(--amber, #a06400); display: flex; align-items: center; gap: 4px; }
+.opp-pipe-warning-date_conflict, .opp-pipe-warning-needs_follow_up { color: var(--red, #b91c1c); }
+.opp-pipe-actions { display: flex; flex-direction: column; gap: 6px; }
+.opp-pipe-stage-select { width: 100%; font-size: 12px; }
+
+/* ── Opportunity detail (Phase 5, opportunity-4.png) ─────────────────────── */
+.opp-header-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+}
+.opp-header-fact { display: flex; flex-direction: column; gap: 4px; }
+.opp-header-fact .muted { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; font-weight: 700; }
+.opp-header-fact strong { font-size: 14px; }
+
+.opp-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.opp-tab {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  padding: 10px 4px; margin-right: 18px; font-size: 14px; font-weight: 700; color: var(--muted); cursor: pointer;
+}
+.opp-tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+.opp-qual-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.opp-qual-item label { display: flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; }
+.opp-qual-item input[type="checkbox"] { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.opp-qual-item i { color: var(--muted); }
+.opp-qual-item i.opp-qual-done { color: var(--green); }
+
+.opp-dm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.opp-dm-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13.5px; }
+.opp-dm-item .badge { margin-left: 0; }
+
+.opp-room-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.opp-room-card {
+  display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px; cursor: pointer; text-align: left;
+}
+.opp-room-card:disabled { cursor: default; }
+.opp-room-card.opp-room-recommended { border-color: var(--green); }
+.opp-room-card.opp-room-selected { box-shadow: 0 0 0 2px var(--blue) inset; }
+.opp-fact-row-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin: 0 0 8px; }
+.opp-budget-fit { font-size: 13px; padding: 8px 12px; border-radius: 8px; background: var(--soft); margin-bottom: 14px; }
+.opp-budget-fit-within_range { background: #d3f1df; color: #0c7a3c; }
+.opp-budget-fit-above_range, .opp-budget-fit-below_range { background: #ffedc2; color: #a06400; }
+
+.opp-note-tabs { flex-wrap: wrap; gap: 4px; }
+.opp-tab-sm {
+  background: none; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;
+  font-size: 12.5px; font-weight: 700; color: var(--muted); cursor: pointer;
+}
+.opp-tab-sm.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+.opp-note-pin-toggle { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0 0 0 4px; }
+.opp-note-pin-toggle:hover { color: var(--amber, #a06400); }
+
+.opp-linked-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.opp-linked-item { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; }
+.opp-linked-item i { color: var(--muted); margin-top: 2px; }
+.opp-linked-item > div { display: flex; flex-direction: column; gap: 2px; }
+.opp-linked-item .muted { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; font-weight: 700; }
+
+.opp-next-action { font-size: 13.5px; margin: 0 0 10px; }
+.opp-risk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.opp-risk-item { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--red, #b91c1c); }
+
+.opp-quick-quote button { width: 100%; }
+
+@media (max-width: 1320px) {
+  .opp-pipeline-board { grid-template-columns: repeat(8, minmax(210px, 1fr)); }
+}
+@media (max-width: 760px) {
+  .opp-header-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .opp-tabs { overflow-x: auto; }
+}

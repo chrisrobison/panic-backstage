@@ -534,12 +534,12 @@ class AppShell extends PanicElement {
     const oppCompanyDetail = route.match(/^opportunities-company-(\d+)$/);
     if (oppCompanyDetail) return this.mount(outlet, 'pb-opportunities-company-detail', { id: Number(oppCompanyDetail[1]) });
     if (route === 'opportunities-companies') return this.mount(outlet, 'pb-opportunities-companies-list');
-    if (route === 'opportunities-pipeline') return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'pipeline' });
+    if (route === 'opportunities-pipeline') return this.mount(outlet, 'pb-opportunities-pipeline');
     const oppNoteDetail = route.match(/^opportunities-note-(\d+)$/);
     if (oppNoteDetail) return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'notes', noteId: Number(oppNoteDetail[1]) });
     if (route === 'opportunities-notes') return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'notes' });
     const oppDetail = route.match(/^opportunities-(\d+)$/);
-    if (oppDetail) return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'opportunity-detail', id: Number(oppDetail[1]) });
+    if (oppDetail) return this.mount(outlet, 'pb-opportunities-detail', { id: Number(oppDetail[1]) });
     return this.mount(outlet, 'pb-dashboard');
   }
 

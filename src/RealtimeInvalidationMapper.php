@@ -38,8 +38,9 @@ final class RealtimeInvalidationMapper
 {
     /** Tables whose own primary key IS the entity id. */
     private const DIRECT = [
-        'events' => 'event',
-        'leads'  => 'lead',
+        'events'        => 'event',
+        'leads'         => 'lead',
+        'opportunities' => 'opportunity',
     ];
 
     /**
@@ -80,6 +81,17 @@ final class RealtimeInvalidationMapper
         'lead_status_history'      => ['lead', 'lead_id'],
         'lead_approval_requests'   => ['lead', 'lead_id'],
         'lead_audit_log'           => ['lead', 'lead_id'],
+        // Opportunities (Phase 5 — pipeline board + opportunity detail need
+        // targeted refresh; see docs/OPPORTUNITIES-IMPLEMENTATION.md §1.9/§5
+        // TODO). opportunity_signals is shared by three scopes (opportunity/
+        // conference/company) but only ever has one FK column set per row —
+        // fkFromRow() falls back to 'global' when opportunity_id is null,
+        // which is exactly right for a signal scoped to a conference/company
+        // instead.
+        'opportunity_activities'      => ['opportunity', 'opportunity_id'],
+        'opportunity_qualification'   => ['opportunity', 'opportunity_id'],
+        'opportunity_decision_makers' => ['opportunity', 'opportunity_id'],
+        'opportunity_signals'         => ['opportunity', 'opportunity_id'],
     ];
 
     /**

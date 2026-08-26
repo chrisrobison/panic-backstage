@@ -11616,6 +11616,13 @@ components:
         estimated_value:
           type: number
           nullable: true
+        budget_range_min:
+          type: number
+          nullable: true
+          description: Phase 5. Optional human-entered budget floor — feeds the read-only `budget_fit` comparison on GET.
+        budget_range_max:
+          type: number
+          nullable: true
         target_date:
           type: string
           format: date
@@ -11635,6 +11642,25 @@ components:
           nullable: true
         event_concept:
           type: string
+          nullable: true
+        recommended_resource_id:
+          type: integer
+          nullable: true
+          description: >-
+            Phase 5. FK into the venue's own configured `resources` (rooms) — never a hard-coded
+            room name. Set via PATCH from the Proposed Event Format & Venue Fit panel.
+        av_requirements:
+          type: string
+          nullable: true
+        catering_notes:
+          type: string
+          nullable: true
+        quote_package:
+          type: string
+          nullable: true
+          description: Phase 5. Freeform Quick Quote package label (e.g. "Reception Package") — not a second quoting system.
+        quote_duration_hours:
+          type: number
           nullable: true
         owner_user_id:
           type: integer
@@ -11694,6 +11720,111 @@ components:
         primary_contact_title:
           type: string
           nullable: true
+        primary_contact_email:
+          type: string
+          nullable: true
+          description: Phase 5. Joined from opportunity_contacts — prefills the converted event's booker_email.
+        primary_contact_phone:
+          type: string
+          nullable: true
+        company_logo_url:
+          type: string
+          nullable: true
+        recommended_resource_name:
+          type: string
+          nullable: true
+          description: Detail response only (GET /api/opportunities/{id}) — joined from `resources`.
+        recommended_resource_capacity:
+          type: integer
+          nullable: true
+        note_count:
+          type: integer
+          description: Phase 5. List (GET /api/opportunities) response only — Pipeline board card count.
+        task_count:
+          type: integer
+          description: Phase 5. Open (not done) task count. List response only.
+        tasks_due_soon:
+          type: integer
+          description: Phase 5. Open tasks due within 7 days. List response only — feeds the Pipeline summary's Tasks Due KPI.
+        warnings:
+          type: array
+          description: >-
+            Phase 5. Deterministic card warnings (needs_follow_up, no_next_action, waiting_on_intro,
+            date_conflict, stale, budget_unknown). List response only; empty for won/lost.
+          items:
+            type: string
+    OpportunityQualification:
+      type: object
+      description: >-
+        One row per opportunity, a fixed boolean per Phase 5 checklist item (see
+        docs/OPPORTUNITIES-IMPLEMENTATION.md §3.1/§5). Lazily created on first GET/PATCH — a brand
+        new opportunity reads back all-false rather than 404ing.
+      properties:
+        opportunity_id:
+          type: integer
+        decision_makers_identified:
+          type: boolean
+        event_objective_understood:
+          type: boolean
+        guest_range_confirmed:
+          type: boolean
+        budget_range_identified:
+          type: boolean
+        venue_fit_explored:
+          type: boolean
+        target_date_confirmed:
+          type: boolean
+        must_have_amenities_identified:
+          type: boolean
+        competitor_venues_assessed:
+          type: boolean
+        success_metrics_established:
+          type: boolean
+        completed_count:
+          type: integer
+          description: Computed — how many of the 9 items above are true.
+        total_count:
+          type: integer
+        updated_by:
+          type: integer
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+    OpportunityDecisionMakerRole:
+      type: string
+      enum: [champion, influencer, decision_maker, finance, blocker, other]
+    OpportunityDecisionMaker:
+      type: object
+      description: Contact <-> opportunity role link (Phase 5).
+      properties:
+        id:
+          type: integer
+        opportunity_id:
+          type: integer
+        contact_id:
+          type: integer
+        role:
+          $ref: '#/components/schemas/OpportunityDecisionMakerRole'
+        name:
+          type: string
+          description: Joined from opportunity_contacts.
+        title:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        department:
+          type: string
+          nullable: true
+        created_by:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
     OpportunityNoteLink:
       type: object
       properties:
@@ -30221,6 +30352,16 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/OpportunityStage'
+                  users:
+                    type: array
+                    description: Phase 5. Every active user, for the Pipeline board's Owner filter.
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        name:
+                          type: string
                   capabilities:
                     type: object
                     additionalProperties:
@@ -30338,6 +30479,57 @@ paths:
                 properties:
                   opportunity:
                     $ref: '#/components/schemas/Opportunity'
+                  risk_flags:
+                    type: array
+                    description: >-
+                      Phase 5. Deterministic risk tags (budget unapproved, no follow-up scheduled,
+                      no decision maker, date conflict, competitor venues unassessed) — every one
+                      computed from real stored data, never AI. Empty for won/lost opportunities.
+                    items:
+                      type: object
+                      properties:
+                        code:
+                          type: string
+                        label:
+                          type: string
+                  budget_fit:
+                    type: object
+                    description: Phase 5. Compares estimated_value against budget_range_min/max.
+                    properties:
+                      status:
+                        type: string
+                        enum: [unknown, within_range, above_range, below_range]
+                      label:
+                        type: string
+                  resources:
+                    type: array
+                    description: >-
+                      Phase 5. This tenant's own configured venue rooms (`resources`), each flagged
+                      `recommended` by a simple capacity-fit rule — never a hard-coded room name.
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        name:
+                          type: string
+                        capacity:
+                          type: integer
+                          nullable: true
+                        zone:
+                          type: string
+                        recommended:
+                          type: boolean
+                  users:
+                    type: array
+                    description: Every active user, for the Owner picker (same plain query Leads.php's detail response uses).
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        name:
+                          type: string
                   capabilities:
                     type: object
                     additionalProperties:
@@ -30414,6 +30606,24 @@ paths:
                   format: date-time
                 lost_reason:
                   type: string
+                primary_contact_id:
+                  type: integer
+                  nullable: true
+                budget_range_min:
+                  type: number
+                budget_range_max:
+                  type: number
+                recommended_resource_id:
+                  type: integer
+                  nullable: true
+                av_requirements:
+                  type: string
+                catering_notes:
+                  type: string
+                quote_package:
+                  type: string
+                quote_duration_hours:
+                  type: number
       responses:
         '200':
           description: Updated opportunity.
@@ -30481,7 +30691,10 @@ paths:
     get:
       operationId: opportunities_activities
       summary: Read an opportunity's audit/activity feed
-      description: Requires view_opportunities. Read-only — written internally by Opportunities/Notes/Signals, never by clients.
+      description: >-
+        Requires view_opportunities. Most entries are written internally by Opportunities/Notes/
+        Signals/Conversion; POST below (Phase 5) is the one client-writable entry point, for the
+        manual "Log Activity" action.
       tags:
         - Opportunities
       parameters:
@@ -30506,6 +30719,463 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunities_log_activity
+      summary: Manually log an activity (Phase 5 "Log Activity" action)
+      description: >-
+        Requires manage_opportunities. Free-text entry distinct from the automatic activities every
+        other write already logs — stores `action = "{activity_type}_logged"` so the feed can tell
+        manual entries apart from automatic ones at a glance.
+      tags:
+        - Opportunities
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - note
+              properties:
+                activity_type:
+                  type: string
+                  enum: [call, meeting, note, proposal, other]
+                  default: other
+                note:
+                  type: string
+      responses:
+        '200':
+          description: Updated activity feed, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityActivity'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing note.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunities/{opportunityId}/convert:
+    post:
+      operationId: opportunities_convert
+      summary: Convert to Event
+      description: >-
+        Requires manage_opportunities. Mirrors Leads::convert()'s shape exactly
+        (docs/OPPORTUNITIES-IMPLEMENTATION.md §1.10/§4.5): creates exactly one ordinary Backstage
+        event prefilled from the opportunity (+ company + primary contact), sets `won_event_id`/
+        `converted_at`/`stage=won`. Idempotent under the same locked re-check
+        Leads\Onboarding::createEventFromLead() uses — converting an already-converted opportunity
+        returns its existing event (`already_converted: true`) instead of creating a second one.
+        Optional body overrides `title`/`date`/`event_type`/`estimated_guests`/`venue_id`.
+      tags:
+        - Opportunities
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                date:
+                  type: string
+                  format: date
+                event_type:
+                  type: string
+                estimated_guests:
+                  type: integer
+                venue_id:
+                  type: integer
+      responses:
+        '200':
+          description: The created (or already-existing) event.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event_id:
+                    type: integer
+                  event_url:
+                    type: string
+                  already_converted:
+                    type: boolean
+                  opportunity:
+                    $ref: '#/components/schemas/Opportunity'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: The opportunity is lost, or event creation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunities/{opportunityId}/qualification:
+    get:
+      operationId: opportunities_qualification_get
+      summary: Get an opportunity's qualification checklist
+      description: Requires view_opportunities. Lazily-defaulted — reads back all-false if never PATCHed.
+      tags:
+        - Opportunities
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      responses:
+        '200':
+          description: Qualification checklist state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  qualification:
+                    $ref: '#/components/schemas/OpportunityQualification'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: opportunities_qualification_update
+      summary: Update an opportunity's qualification checklist
+      description: Requires manage_opportunities. Any subset of the 9 boolean items may be sent.
+      tags:
+        - Opportunities
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                decision_makers_identified:
+                  type: boolean
+                event_objective_understood:
+                  type: boolean
+                guest_range_confirmed:
+                  type: boolean
+                budget_range_identified:
+                  type: boolean
+                venue_fit_explored:
+                  type: boolean
+                target_date_confirmed:
+                  type: boolean
+                must_have_amenities_identified:
+                  type: boolean
+                competitor_venues_assessed:
+                  type: boolean
+                success_metrics_established:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated qualification checklist state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  qualification:
+                    $ref: '#/components/schemas/OpportunityQualification'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunities/{opportunityId}/decision-makers:
+    get:
+      operationId: opportunities_decision_makers_list
+      summary: List decision makers linked to an opportunity
+      description: Requires view_opportunities.
+      tags:
+        - Opportunities
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      responses:
+        '200':
+          description: Decision makers, most decision-making role first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decision_makers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityDecisionMaker'
+                  roles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityDecisionMakerRole'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunities_decision_makers_create
+      summary: Link a contact to an opportunity with a role
+      description: >-
+        Requires manage_opportunities. `contact_id` must reference an opportunity_contacts row
+        belonging to this opportunity's own company_id (same rule as `primary_contact_id`).
+      tags:
+        - Opportunities
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - contact_id
+              properties:
+                contact_id:
+                  type: integer
+                role:
+                  $ref: '#/components/schemas/OpportunityDecisionMakerRole'
+      responses:
+        '200':
+          description: The created link.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decision_maker:
+                    $ref: '#/components/schemas/OpportunityDecisionMaker'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: This contact is already linked to this opportunity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: contact_id missing/invalid, or belongs to a different company.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunities/{opportunityId}/decision-makers/{linkId}:
+    delete:
+      operationId: opportunities_decision_makers_delete
+      summary: Unlink a decision maker from an opportunity
+      description: Requires manage_opportunities.
+      tags:
+        - Opportunities
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+        - name: linkId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: opportunity_decision_makers.id (the link row, not the contact's own id).
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity or link not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunities/{opportunityId}/tasks:
+    get:
+      operationId: opportunities_tasks_get
+      summary: Get the opportunity's linked task_documents id, if any
+      description: >-
+        Requires view_opportunities. Returns `task_document_id: null` until a task is first added
+        (see POST below) — no task_documents row is created just by viewing an opportunity. Same
+        lazy-provisioning pattern as the Conferences/Companies `/tasks` sub-resources (TaskLink.php).
+      tags:
+        - Opportunities
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      responses:
+        '200':
+          description: The linked task document id, or null.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_document_id:
+                    type: integer
+                    nullable: true
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Opportunity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunities_tasks_ensure
+      summary: Lazily provision the opportunity's linked task_documents row
+      description: >-
+        Requires manage_opportunities. Idempotent — see the Conferences `/tasks` POST operation for
+        the full behavior description (this is the same TaskLink.php class, `ownerType=opportunity`).
+      tags:
+        - Opportunities
+      parameters:
+        - $ref: '#/components/parameters/OpportunityIdPath'
+      responses:
+        '200':
+          description: The (possibly newly created) task document id.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_document_id:
+                    type: integer
+                  created:
+                    type: boolean
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
           content:
             application/json:
               schema:

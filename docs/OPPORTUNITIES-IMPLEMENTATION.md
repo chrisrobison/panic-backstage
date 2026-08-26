@@ -1,8 +1,8 @@
 # Opportunities Module — Implementation Handoff
 
-**Status:** Phase 4 complete — Company list + Company Detail + buyer
-contacts. See §4.1 (Phase 1), §4.2 (Phase 2), §4.3 (Phase 3), §4.4 (Phase 4)
-for exactly what landed each phase.
+**Status:** Phase 5 complete — Pipeline board + Opportunity detail +
+conversion to event. See §4.1 (Phase 1), §4.2 (Phase 2), §4.3 (Phase 3),
+§4.4 (Phase 4), §4.5 (Phase 5) for exactly what landed each phase.
 **Branch:** `opportunities-module` (long-lived feature branch; not merged to `main`
 until the module is stable — see "Branch strategy" below). Do not squash/delete
 mid-project; each phase adds commits here.
@@ -606,7 +606,7 @@ before the generic `match`, keyed on a non-numeric segment).
 | 2 — Nav + Discover dashboard | **Done** | See §4.2 below |
 | 3 — Conference list/detail | **Done** | See §4.3 below |
 | 4 — Company list/detail + buyer contacts | **Done** | See §4.4 below |
-| 5 — Pipeline + Opportunity detail + conversion | Not started | |
+| 5 — Pipeline + Opportunity detail + conversion | **Done** | See §4.5 below |
 | 6 — Notes workspace | Not started | |
 | 7 — Claude CLI research | Not started | |
 | 8 — Tasks/activities/realtime/scoring/availability | Not started | |
@@ -1108,15 +1108,231 @@ throughout.
 
 ---
 
+### 4.5 Phase 5 — what actually shipped
+
+**Migration:** `database/migrations/113_add_opportunities_phase5.sql` — two
+new tables and seven new nullable `opportunities` columns. Applied to the
+live DB; audit triggers regenerated.
+- `opportunity_qualification` — one row per opportunity, a boolean per the
+  spec's fixed 9-item checklist (§3.1's "start with fixed boolean columns,
+  simplest thing that works" — no evidence yet it needs to become
+  data-driven). Lazily created on first GET/PATCH (`INSERT ... ON DUPLICATE
+  KEY UPDATE`) — a brand new opportunity reads back all-false rather than
+  404ing.
+- `opportunity_decision_makers` — the contact↔opportunity role link
+  (champion/influencer/decision_maker/finance/blocker/other) deferred from
+  Phase 4 (§4.4/§5's own open TODO). Unique `(opportunity_id, contact_id)`.
+- `opportunities` gained `budget_range_min`/`budget_range_max` (Quick
+  Quote/Budget Fit), `recommended_resource_id` (FK → `resources`, ON DELETE
+  SET NULL — this tenant's own configured rooms, never a hard-coded
+  "Upstairs"/"Downstairs"), `av_requirements`/`catering_notes` (Proposed
+  Event Format), `quote_package`/`quote_duration_hours` (Quick Quote). All
+  small, plain, editable fields — no second quoting/contract subsystem.
+
+**Backend — `src/Opportunities/Qualification.php`** (new): `GET`/`PATCH
+/api/opportunities/{id}/qualification`. `findOrDefault()` synthesizes the
+all-false shape when no row exists yet so the frontend never has to special-
+case "no qualification row." Returns `completed_count`/`total_count` so the
+UI's "6 / 9" header needs no client-side counting.
+
+**Backend — `src/Opportunities/DecisionMakers.php`** (new): `GET`/`POST
+/api/opportunities/{id}/decision-makers`, `DELETE .../{linkId}`. Same
+company-membership validation rule as `primary_contact_id`
+(`contact_id` must belong to the opportunity's own `company_id`, 422
+otherwise); a duplicate `(opportunity_id, contact_id)` link is rejected 409
+rather than silently upserting a new role.
+
+**Backend — `src/Opportunities/Conversion.php`** (new): `Conversion::
+createEventFromOpportunity()` mirrors `Leads\Onboarding::
+createEventFromLead()` exactly in shape (§1.10) — a transaction does
+`SELECT ... FOR UPDATE` re-checking `won_event_id` is still empty before
+inserting the event, because the caller's pre-check in
+`Opportunities::convert()` alone is not authoritative under a concurrent
+double-click. Prefills `events` from the opportunity + its joined company/
+primary-contact fields (title, date, event_type — defaulting to
+`private_event` if the opportunity's own `event_type` isn't one of the
+existing `events.event_type` enum values — client_org, booker_name/email/
+phone, estimated_guests, description_internal, av_requirements,
+catering_notes, potential_revenue, owner_user_id), assigns a `public_slug`
+(duplicated `assignPublicSlug()` — same "not worth a shared trait for one
+static caller" reasoning `Leads\Onboarding` already gives), sets
+`opportunities.stage='won'`/`won_event_id`/`converted_at`, and logs both a
+`converted` `opportunity_activities` row and an ordinary `event_activity_log`
+row. **Idempotent**: converting an already-converted opportunity returns its
+existing `event_id` with `already_converted: true` instead of creating a
+second event. Rejects (422) converting a `lost` opportunity.
+
+**Backend — `src/Opportunities.php` grew substantially**, all within the
+existing endpoint (no new Kernel route family):
+- `handle()`: dispatches `child === 'convert'` (POST → `convert()`) and
+  `child === 'activities'` POST (→ new `logActivity()`, GET stays the
+  existing read-only feed) itself; `qualification`/`decision-makers`/`tasks`
+  children are routed by Kernel straight to their own classes (same pattern
+  as `notes`/`signals`).
+- `index()`: now calls `attachPipelineAggregates()`, which attaches
+  `note_count`, `task_count` (open-only), `tasks_due_soon` (due within 7
+  days — feeds the Pipeline summary's Tasks Due KPI), and `warnings`
+  (`needs_follow_up`, `no_next_action`, `waiting_on_intro`, `date_conflict`,
+  `stale`, `budget_unknown`) to every row — **3 bulk queries total**
+  regardless of result-set size (note-link counts, open/due-soon task
+  counts, one "which target dates already have another event booked"
+  lookup), never one query per card. Also now returns a plain `users` list
+  (same `SELECT id, name FROM users WHERE is_hidden=0` query `Leads.php`
+  already exposes on its own detail response) for the Pipeline board's Owner
+  filter — `/api/users` itself requires `manage_users` (admin-only), which
+  most Opportunities users won't have.
+- `show()`: adds `risk_flags` (budget_unapproved, no_followup_scheduled,
+  no_decision_maker, date_conflict, competitor_venue — every one a real
+  query, empty for won/lost), `budget_fit` (compares `estimated_value`
+  against `budget_range_min`/`max`), `resources` (this tenant's real
+  `resources` rows, each flagged `recommended` by a simple smallest-
+  capacity-that-fits rule against `guest_count_max`/`min`), and `users`.
+  `find()`'s join gained `company_logo_url`, `primary_contact_email`/
+  `primary_contact_phone` (Conversion's booker_email/phone source), and
+  `recommended_resource_name`/`capacity`.
+- `update()`: the 7 new columns added to `WRITABLE_FIELDS` with correct
+  casting (decimal for the two budget/quote-duration fields, int for
+  `recommended_resource_id`, validated via new `validateOptionalResource()`
+  against the real `resources` table).
+- `logActivity()`: the Phase 4-deferred manual "Log Activity" entry point.
+  Stores `action = "{activity_type}_logged"` (call/meeting/note/proposal/
+  other) so the feed can tell manual entries apart from automatic
+  created/stage_changed/note_added/signal_added/converted ones at a glance.
+- `convert()`: capability + "not lost" precondition, then delegates to
+  `Conversion::createEventFromOpportunity()`.
+
+**Backend — `RealtimeInvalidationMapper`**: added `opportunities` to
+`DIRECT` and `opportunity_activities`/`opportunity_qualification`/
+`opportunity_decision_makers`/`opportunity_signals` to `CHILD` (§1.9's
+"likely Phase 5" TODO, now resolved) — Pipeline board and Opportunity detail
+both subscribe to `data.invalidated` and debounce-refetch on a matching
+`entity==='opportunity'` message, same pattern as `event-workspace.js`.
+
+**Frontend — new files** (`public/assets/opportunities/`, wired into
+`opportunities-shell.js`/`app.js`, replacing the Phase 2 placeholders for
+`#opportunities-pipeline` and `#opportunities-{id}` — only the dedicated
+Notes workspace, Phase 6, still shows a placeholder):
+- `pipeline-board.js` — `<pb-opportunities-pipeline>`
+  (`opportunity-5.png`): reuses the existing `.pipeline-board`/`.pipe-col`/
+  `.pipe-card` Kanban CSS (event-views.js's events pipeline) for the
+  grid/column/card shell; only card-content styling is new. 8 columns (the
+  9 backend stages with `lost`+`nurture` combined into one "Lost / Nurture"
+  column, matching the mockup). Stage changes have **two** paths per the
+  spec's explicit fallback instruction: an always-present, accessible
+  `<select>` per card (the authoritative control) plus HTML5 native
+  drag-and-drop as a progressive enhancement on top of the same PATCH call
+  — no third-party drag/drop package. 6 KPI summary cards (Total Pipeline
+  Value, Weighted Pipeline, Open Opportunities, Quarter Forecast, Stale
+  Opportunities, Tasks Due) computed client-side over the one fetched page
+  (weighted excludes lost, per spec). Filters (conference/owner/event
+  type/date range/value range/stale-only/search) re-filter that single
+  fetch in place — same tradeoff the existing events `PipelineBoard`
+  already makes for its own date-range filter, not a new backend query per
+  filter change.
+- `opportunity-detail.js` — `<pb-opportunities-detail>`
+  (`opportunity-4.png`): single-file detail page (same shape as
+  `company-detail.js`/`conference-detail.js`) with a real Overview/Notes/
+  Activity/Linked Records tab switch over the main column; the right rail
+  (Next Actions, Risk Flags, Buying Signals, Quick Quote) stays visible
+  regardless of tab, matching the mockup's persistent sidebar. Header
+  actions are strictly "only expose actions that actually work" (spec):
+  **Convert to Event** (confirmation modal prefilled from the opportunity,
+  hidden once already converted in favor of a "View Event" link),
+  **Create Proposal** (moves stage to `proposal_sent` + logs a
+  `proposal_logged` activity — no document-generation system exists to
+  reuse, so this is a real, working, narrower action rather than a
+  fabricated PDF), **Log Activity** (the manual entry point), plus Edit/
+  Delete. Qualification checklist toggles PATCH immediately per-checkbox.
+  Decision Makers panel adds/removes links against the opportunity's own
+  company contacts (fetched via the existing, unmodified
+  `/opportunity-companies/{id}/contacts`). Proposed Event Format & Venue Fit
+  renders the real `resources` list with a clickable card per room. Next
+  Actions reuses the plain `next_action`/`next_action_at` fields (editable
+  inline) plus the lazily-provisioned Tasks link (same `TaskLink.php`
+  pattern as conferences/companies — Kernel's `opportunities/{id}/tasks`
+  route added this phase).
+- `opportunities-shell.js`: imports both new files;
+  `<pb-opportunities-placeholder>`'s `PAGES` map now only has `notes`
+  (Phase 6) — Pipeline/Opportunity-detail placeholders are gone.
+- `shared.js` gained `decisionMakerRoleLabel`/`Badge`, `warningLabel`,
+  `QUALIFICATION_ITEMS` (the canonical 9-item list + labels, shared so the
+  checklist order can't drift from the backend's column list), and
+  `activityActionLabel` cases for the new `*_logged` manual-entry actions.
+
+**Routes** (`public/assets/app.js`): `#opportunities-pipeline` →
+`pb-opportunities-pipeline` (was the placeholder); `#opportunities-{id}`
+(numeric) → `pb-opportunities-detail` (was the placeholder).
+`navKeyForRoute()` needed no changes — its existing
+`/^opportunities-\d+$/` → `opportunities-pipeline` mapping already
+highlights the right nav leaf for a detail page.
+
+**CSS** (`public/assets/app.css`): new rules under the existing
+"── Opportunities ──" section for the Pipeline board (`.opp-pipeline-board`,
+`.opp-pipe-col`/`.opp-pipe-card` content styling, drag-over state, the
+accessible stage `<select>`) and the Opportunity detail page
+(`.opp-header-facts`, `.opp-tabs`, `.opp-qual-list`, `.opp-dm-list`,
+`.opp-room-grid`, `.opp-budget-fit`, `.opp-note-tabs`, `.opp-linked-grid`,
+`.opp-risk-list`, `.opp-quick-quote`) — all still reusing `.panel`/
+`.data-table`/`.badge`/`.pill`/`.opp-detail-layout` (the main+rail grid
+Phase 4's Company detail already established) throughout. Added
+`.pill-danger` (Risk Flags count badge) as the one new base-primitive class.
+
+**Tests:**
+- `tests/opportunities_pipeline_db_test.php` (new, DB-backed,
+  `RUN_DB_TESTS=1`) — 50 assertions: qualification lazy-default +
+  partial-PATCH + `completed_count` math + capability boundary; decision
+  makers create/duplicate-reject(409)/cross-company-reject(422)/list/
+  delete; risk_flags for `no_decision_maker` (an influencer-only link still
+  flags; a `decision_maker`-role link clears it) /`budget_unapproved`/
+  `no_followup_scheduled`, and `budget_fit`'s `within_range` status;
+  `resources` returns this tenant's real rooms with exactly one
+  `recommended`; `index()`'s `note_count`/`task_count`/`warnings` including
+  `date_conflict` (booking a real second event on the same `target_date`)
+  and `stale` (backdating `updated_at`); the manual Log Activity POST
+  (missing-note 422, capability 403, successful `call_logged` entry); and
+  the full conversion flow — creates a real event prefilled from the
+  opportunity (title/date/estimated_guests/potential_revenue/client_org/
+  status), sets `stage=won`/`won_event_id`/`converted_at`, a second convert
+  call is idempotent (same event id, `already_converted: true`, exactly one
+  event row total), and a `lost` opportunity is rejected (422).
+- `tests/ui/121-opportunities-pipeline.test.mjs` (new, headless-Chromium) —
+  board chrome (KPIs, filters, 8 columns), a real API-created opportunity
+  appearing in its stage column, moving stage via the accessible `<select>`
+  and seeing the card migrate columns, the Opportunity detail page's header
+  facts/tabs/qualification checklist/header actions, a checklist toggle
+  persisting server-side, and cleanup. **Written and syntax-checked only —
+  not run**, same pre-existing environment limitation as tests 118-120 (this
+  checkout's `SUPER_DB_NAME` multi-tenant `.env` blocks
+  `node tests/ui/run.mjs`'s dev-server host at `TenantContext::resolve()`
+  before the app boots — confirmed still true this phase, see §4.2's Tests
+  note for the full explanation). Run all four for real at the start of
+  whichever future session next touches the Opportunities frontend.
+
+**Known gaps carried forward from this phase:**
+- "Create Proposal" does not generate an actual proposal document/PDF — no
+  such system exists anywhere in this codebase to reuse (spec: "do not build
+  a second full contract system"), so the action is deliberately narrow
+  (stage move + logged note) rather than fabricated.
+- Quick Quote has no "Download PDF" — same reasoning; only the editable
+  fields (estimated value, guest range, package, duration) exist.
+- `opportunity_note_versions` (Phase 6 revision history) still doesn't
+  exist. Notes on the Opportunity detail page are edit-in-place with no
+  history, consistent with every other phase's Notes panel so far.
+- Company detail's "+ New Opportunity" modal (Phase 4) still doesn't offer a
+  `primary_contact_id`/decision-maker picker at creation time — set it
+  afterward from the Opportunity detail page's Linked Records tab
+  ("Change" button) or Decision Makers panel.
+
 ## 5. Open TODOs / assumptions to verify in later phases
 
-- `opportunity_qualification`'s fixed-boolean-columns design (§3.1) assumes
-  the 9-item checklist stays fixed. If it needs to become configurable,
-  revisit before Phase 5 ships.
-- RealtimeInvalidationMapper needs `opportunities`(+children) added — not
-  blocking, but do it as part of whichever phase first needs live-refresh
-  (likely Phase 5 pipeline board, or defer cleanly to Phase 8 as the spec
-  suggests).
+- `opportunity_qualification`'s fixed-boolean-columns design (§3.1) shipped
+  as originally planned in Phase 5 (9 fixed boolean columns). Revisit only if
+  a real need for a configurable/data-driven checklist shows up later.
+- ~~RealtimeInvalidationMapper needs `opportunities`(+children) added~~ —
+  **resolved in Phase 5**: `opportunities` (DIRECT) plus
+  `opportunity_activities`/`opportunity_qualification`/
+  `opportunity_decision_makers`/`opportunity_signals` (CHILD) are mapped;
+  Pipeline board and Opportunity detail both subscribe and debounce-refetch.
 - Phase 7 must confirm the installed Claude CLI's actual supported
   built-in tool names (`WebSearch`/`WebFetch` or otherwise) before wiring
   anything — nothing in the codebase currently exercises them, so this is
@@ -1132,36 +1348,39 @@ throughout.
   `opportunity_research_jobs` + `GET .../jobs/{id}` will be the first one —
   reasonable and self-contained, but worth flagging as new-pattern-not-just-
   reuse.
-- `opportunity_decision_makers` (contact↔opportunity role link — champion/
-  influencer/decision_maker/finance/blocker/other) is still deferred to
-  Phase 5, per §4.1's original plan — Phase 4 only shipped the contact
-  record itself (`opportunity_contacts`) plus the single
-  `opportunities.primary_contact_id` pointer, not the many-to-many role
-  table the spec's Phase 5 "Decision makers" section describes.
-- No UI yet sets `primary_contact_id` on an existing opportunity (the field/
-  validation/joins are real and tested via the API — see §4.4 — but nothing
-  in company-detail.js's "+ New Opportunity" flow or elsewhere offers a
-  picker). Expected to land with Phase 5's opportunity detail edit surface.
+- ~~`opportunity_decision_makers` deferred to Phase 5~~ — **resolved in
+  Phase 5**: table + `src/Opportunities/DecisionMakers.php` +
+  Opportunity detail's Decision Makers panel all shipped.
+- ~~No UI yet sets `primary_contact_id`~~ — **resolved in Phase 5**: the
+  Opportunity detail page's Linked Records tab has a "Change" primary-contact
+  picker. `company-detail.js`'s own "+ New Opportunity" modal still doesn't
+  set one at creation time (§4.5's "Known gaps carried forward") — set it
+  afterward from the opportunity's own detail page.
 
 ## 6. Known issues
 
-- No live-refresh on Opportunities panels yet — `RealtimeInvalidationMapper`
-  doesn't map any Opportunities table (fails open, not a hard bug; see §1.9).
-  The Discover dashboard is fetch-once-per-load/window-change, no polling.
+- ~~No live-refresh on Opportunities panels yet~~ — **partially resolved in
+  Phase 5**: `opportunities` + its Phase 5 child tables are now mapped in
+  `RealtimeInvalidationMapper`, and Pipeline board / Opportunity detail both
+  subscribe. Discover/Conferences/Companies pages still fetch-once (Phase 8
+  scope, per §1.9, if it's worth extending further).
 - `opportunity_research_jobs` exists as a schema-only stub (no reader/writer)
   until Phase 7. `opportunity_note_versions` doesn't exist yet (Phase 6).
-- Only Discover, Conferences, and Companies are real pages —
-  Pipeline/Notes and their detail routes are the honest placeholder until
-  Phase 5/6 land.
+- Discover, Conferences, Companies, Pipeline, and Opportunity detail are all
+  real pages now — only the dedicated Notes workspace (and its `#opportunities-
+  note-{id}` detail route) is still the honest placeholder, until Phase 6.
 - **No UI test has actually been run in a browser yet** (118 from Phase 2,
-  119 from Phase 3, 120 from Phase 4) — all written and syntax-checked
-  only. This checkout's multi-tenant `.env` (`SUPER_DB_NAME` set) blocks the
-  whole `node tests/ui/run.mjs` harness at the host-allowlist layer before
-  the app boots. See §4.2's Tests note for the full explanation and where
-  it's confirmed to run instead (CI, or a single-tenant checkout like
-  `/home/cdr/backstage`). **Run all three for real at the start of
+  119 from Phase 3, 120 from Phase 4, 121 from Phase 5) — all written and
+  syntax-checked only. This checkout's multi-tenant `.env` (`SUPER_DB_NAME`
+  set) blocks the whole `node tests/ui/run.mjs` harness at the host-allowlist
+  layer before the app boots. See §4.2's Tests note for the full explanation
+  and where it's confirmed to run instead (CI, or a single-tenant checkout
+  like `/home/cdr/backstage`). **Run all four for real at the start of
   whichever future session next touches the Opportunities frontend**,
   before trusting any of them.
+- "Create Proposal" and Quick Quote deliberately don't generate an actual
+  document/PDF (see §4.5) — no such system exists in this codebase to reuse,
+  and the spec explicitly says not to build a second contract system.
 - Conference deletion has no confirmation dialog check in the test (the
   DELETE endpoint itself is capability-gated and tested; the frontend has no
   delete button yet at all — only exercised via raw API in tests). Add a
@@ -1213,3 +1432,18 @@ throughout.
   adding a buyer contact through the actual form and seeing its Likely
   Buyer badge, cleanup via DELETE. Written and syntax-checked but **not
   run** — see Known issues above.
+- `tests/opportunities_pipeline_db_test.php` — DB-backed, opt-in via
+  `RUN_DB_TESTS=1`. 50 assertions covering qualification checklist lazy-
+  default/PATCH/capability boundary, decision makers create/duplicate-reject/
+  cross-company-reject/list/delete, `risk_flags`/`budget_fit`, `resources`
+  venue-fit recommendations, `index()`'s pipeline aggregates (note_count,
+  task_count, warnings including date_conflict and stale), the manual Log
+  Activity POST, and the full convert-to-event flow (prefill, idempotency,
+  lost-opportunity rejection). `PB TEST OPPPIPE — ` throwaway-row prefix.
+- `tests/ui/121-opportunities-pipeline.test.mjs` — headless-Chromium, board
+  chrome (KPIs/filters/8 columns), a real API-created opportunity appearing
+  in its stage column, moving stage via the accessible `<select>` and
+  watching the card migrate columns, the Opportunity detail page's header/
+  tabs/qualification checklist/header actions, a checklist toggle
+  persisting server-side, cleanup via DELETE. Written and syntax-checked but
+  **not run** — see Known issues above.

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `opportunities` — Phase 5 — Pipeline board + Opportunity detail + conversion
 - **Added** `opportunities` — Phase 4 — Company list + Company Detail + buyer contacts
 - **Added** `opportunities` — Phase 3 — Conference list + Conference Detail
 - **Added** `opportunities` — Phase 2 — nav + Discover dashboard

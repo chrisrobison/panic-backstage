@@ -162,9 +162,55 @@ export function activityActionLabel(action, details) {
     case 'signal_added': return `Signal added${d.signal_type ? ` (${d.signal_type.replace(/_/g, ' ')})` : ''}`;
     case 'converted': return 'Converted to event';
     case 'updated': return `Updated${Array.isArray(d.fields) && d.fields.length ? ` (${d.fields.join(', ')})` : ''}`;
+    // Manual "Log Activity" entries (Phase 5) — action is `{type}_logged`.
+    case 'call_logged': return 'Call logged';
+    case 'meeting_logged': return 'Meeting logged';
+    case 'note_logged': return 'Note logged';
+    case 'proposal_logged': return 'Proposal noted';
+    case 'other_logged': return 'Activity logged';
     default: return titleCaseFallback(action);
   }
 }
+
+// ── Pipeline / Opportunity detail (Phase 5) ─────────────────────────────────
+
+const DECISION_MAKER_ROLE_LABELS = {
+  champion: 'Champion', influencer: 'Influencer', decision_maker: 'Decision Maker',
+  finance: 'Finance', blocker: 'Blocker', other: 'Other',
+};
+export function decisionMakerRoleLabel(role) {
+  return DECISION_MAKER_ROLE_LABELS[role] || titleCaseFallback(role);
+}
+const DECISION_MAKER_ROLE_TONES = {
+  champion: 'success', influencer: 'info', decision_maker: 'warning', finance: '', blocker: 'error', other: '',
+};
+export function decisionMakerRoleBadge(role) {
+  return `<span class="badge ${DECISION_MAKER_ROLE_TONES[role] ?? ''}">${esc(decisionMakerRoleLabel(role))}</span>`;
+}
+
+const WARNING_LABELS = {
+  needs_follow_up: 'Needs follow-up',
+  no_next_action: 'No next action set',
+  waiting_on_intro: 'Waiting on intro',
+  date_conflict: 'Date conflict',
+  stale: 'Stale',
+  budget_unknown: 'Budget unknown',
+};
+export function warningLabel(code) {
+  return WARNING_LABELS[code] || titleCaseFallback(code);
+}
+
+export const QUALIFICATION_ITEMS = [
+  ['decision_makers_identified', 'Identify decision makers'],
+  ['event_objective_understood', 'Understand event objectives'],
+  ['guest_range_confirmed', 'Confirm guest count range'],
+  ['budget_range_identified', 'Budget range identified'],
+  ['venue_fit_explored', 'Explore venue + format'],
+  ['target_date_confirmed', 'Confirm target date'],
+  ['must_have_amenities_identified', 'Identify must-have amenities'],
+  ['competitor_venues_assessed', 'Assess competitor venues'],
+  ['success_metrics_established', 'Finalize success metrics'],
+];
 
 /** "3 days ago" / "just now" / "in 2 days" from an ISO date(-time) string. */
 export function relativeTime(value) {
