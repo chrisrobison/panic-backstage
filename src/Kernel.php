@@ -541,6 +541,15 @@ final class Kernel
             if ($child === 'signals') {
                 return [Opportunities\Signals::class, ['scopeType' => 'company', 'scopeId' => $companyId]];
             }
+            if ($child === 'contacts') {
+                return [Opportunities\Contacts::class, ['companyId' => $companyId, 'contactId' => $childId]];
+            }
+            if ($child === 'tasks') {
+                return [Opportunities\TaskLink::class, ['ownerType' => 'company', 'ownerId' => $companyId]];
+            }
+            if ($child === 'activity') {
+                return [Opportunities\Companies::class, ['companyId' => $companyId, 'child' => 'activity']];
+            }
             return [Opportunities\Companies::class, ['companyId' => $companyId]];
         }
 

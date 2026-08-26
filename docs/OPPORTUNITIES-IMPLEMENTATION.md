@@ -1,8 +1,8 @@
 # Opportunities Module — Implementation Handoff
 
-**Status:** Phase 3 complete — Conference list + Conference Detail, the
-first fully-usable-without-AI Opportunities surface. See §4.1 (Phase 1),
-§4.2 (Phase 2), §4.3 (Phase 3) for exactly what landed each phase.
+**Status:** Phase 4 complete — Company list + Company Detail + buyer
+contacts. See §4.1 (Phase 1), §4.2 (Phase 2), §4.3 (Phase 3), §4.4 (Phase 4)
+for exactly what landed each phase.
 **Branch:** `opportunities-module` (long-lived feature branch; not merged to `main`
 until the module is stable — see "Branch strategy" below). Do not squash/delete
 mid-project; each phase adds commits here.
@@ -605,7 +605,7 @@ before the generic `match`, keyed on a non-numeric segment).
 | 1 — DB/capabilities/API skeleton | **Done** | See §4.1 below |
 | 2 — Nav + Discover dashboard | **Done** | See §4.2 below |
 | 3 — Conference list/detail | **Done** | See §4.3 below |
-| 4 — Company list/detail + buyer contacts | Not started | |
+| 4 — Company list/detail + buyer contacts | **Done** | See §4.4 below |
 | 5 — Pipeline + Opportunity detail + conversion | Not started | |
 | 6 — Notes workspace | Not started | |
 | 7 — Claude CLI research | Not started | |
@@ -954,6 +954,160 @@ throughout rather than inventing parallel primitives.
 
 ---
 
+### 4.4 Phase 4 — what actually shipped
+
+**Migration:** `database/migrations/112_add_opportunities_phase4.sql` — new
+`opportunity_contacts` table (corporate buyer contacts scoped to a company;
+dedup identity is normalized email *within a company*, via a
+`(company_id, email)` unique key that tolerates multiple NULL emails per
+company, same trick as `opportunity_companies.domain`) and
+`opportunities.primary_contact_id` (nullable, `ON DELETE SET NULL` FK into
+`opportunity_contacts`) — the column §4.1 explicitly deferred from Phase 1
+pending buyer contacts existing. Applied to the live DB; audit triggers
+regenerated. "Likely buyer" is deliberately **not** a stored column —
+`Opportunities/Contacts.php` computes `is_likely_buyer` on every read from a
+deterministic keyword match against `title`, so it can't go stale relative
+to a manually edited title.
+
+**Backend — `src/Opportunities/Contacts.php`** (new): full CRUD nested under
+a company (`/api/opportunity-companies/{id}/contacts[/{contactId}]`).
+Email is normalized (lowercased/trimmed) and a second contact with the same
+normalized email at the same company is rejected with 422 rather than
+silently duplicated — the spec's "do not create multiple independent people
+solely because research found the same person twice" — matching how
+`Companies::create()` already handles a colliding domain. Deleting a contact
+relies on the real FK to clear any opportunity's `primary_contact_id`
+automatically, and explicitly deletes its `opportunity_note_links` rows
+(polymorphic — no SQL FK covers those).
+
+**Backend — `src/Opportunities/Notes.php`**: the Phase 1/3 placeholder
+rejection of `linked_type=contact` is gone — it now validates against
+`opportunity_contacts` like every other linked type. Reachable via the
+cross-cutting `/api/opportunity-notes` family or an `additional_links`
+entry; there's no `/opportunity-companies/{id}/contacts/{contactId}/notes`
+nested route (consistent with every other "contact of a company" sub-resource
+having a flat, not doubly-nested, shape).
+
+**Backend — `src/Opportunities.php`**: `primary_contact_id` added to the
+writable field list, validated on create/update to belong to the
+opportunity's own `company_id` (`validateOptionalContact()` — a contact from
+a different company is rejected, 422). `find()` and the dashboard's
+`bestOpportunities` query both now `LEFT JOIN opportunity_contacts` and
+expose `primary_contact_name`/`primary_contact_title` — this is what
+finally fixes the "Best Opportunities" table's Likely Buyer column, which
+Phase 2/3 documented as permanently rendering "—". No Phase 4 UI sets
+`primary_contact_id` directly on an opportunity yet (that arrives with
+Phase 5's opportunity detail edit surface) — company-detail.js's "+ New
+Opportunity" action still creates without one — but the field, validation,
+and every read-path join are real and tested now, not stubbed.
+
+**Backend — `src/Opportunities/Companies.php` grew substantially**, all
+within the existing endpoint (no new Kernel route family beyond the nested
+sub-resources below):
+- `index()`: `industry` (substring), `conference_id` (participation
+  `EXISTS` subquery), `researched=1|0`, `has_open_opportunities=1` filters
+  alongside the existing `q`/`relationship_status`; `sort=name|pipeline_value|
+  open_opportunities|last_activity|conferences|research`. Aggregates
+  (`open_opportunity_count`, `pipeline_value`, `last_activity_at`,
+  `conference_count`) come from two derived-table `LEFT JOIN`s computed
+  once and joined onto the row set — deliberately **not** a direct join
+  against `opportunities`/`opportunity_conference_companies`, which would
+  fan out each company row by however many conference links it also has and
+  silently inflate `SUM(estimated_value)`; a DB test
+  (`opportunities_companies_db_test.php`) asserts the un-inflated value
+  directly to guard against regressing this.
+- `show()`: adds `kpis` (open_opportunity_count, pipeline_value,
+  conference_count, last_activity_at), a `why_relevant` string per
+  conference-participation row (built from real role/sponsor_tier/
+  participation_notes — never fabricated), `venue_fit_tags` (deterministic
+  heuristics — see below), and `pitch_ideas` (deterministic templates keyed
+  off those tags, explicitly **not** labeled "AI" anywhere in the UI, same
+  precedent as Discover's Phase 2 "Suggestions" panel).
+- New `GET /{id}/activity`: aggregates `opportunity_activities` across every
+  one of the company's opportunities (created/stage_changed/note_added/
+  signal_added/...) — deliberately does **not** fabricate an emails/calls/
+  meetings integration that doesn't exist anywhere in this codebase (spec:
+  "do not fabricate integrations that do not exist"). The company detail
+  page combines this feed with its own separately-fetched Notes and Tasks
+  panels for the spec's "combine available: notes, tasks, stage changes"
+  requirement. A free-text manual "Log Activity" entry point is explicitly
+  a **Phase 5** opportunity-detail action in the spec, not built here.
+- New `DELETE /{id}` (venue_admin-gated, same shape as
+  `Conferences::deleteConference()`) — but with a guard `Conferences`
+  didn't need: `opportunities.company_id` has **no** `ON DELETE` fallback
+  (unlike `conference_id`'s `SET NULL`), so deleting a company with any
+  opportunities is rejected with 422 instead of throwing a raw FK
+  constraint error or silently orphaning pipeline history. Added mainly so
+  the new UI test (120) and any future manual cleanup aren't stuck — same
+  rationale as Phase 3's conference delete.
+
+**Deterministic Venue Fit tags** (`Companies::venueFitTags()`) — the spec's
+own example tag set (`large_audience`, `tech_and_innovation`,
+`executive_visibility`, `nightlife_fit`, `presentation_fit`,
+`live_entertainment_fit`), each derived from real stored data with a simple,
+auditable, inline-documented rule (employee count parsed from
+`employee_range`, industry keyword match, conference participation role,
+repeat-conference-attendee count). Never AI, never fabricated — Phase 8's
+scoring service or a future AI phase may refine these later.
+
+**Frontend — new files**: `companies-list.js`
+(`<pb-opportunities-companies-list>` — same filter-bar + data-table +
+`openModal()` create-form shape as `conferences-list.js`; no dedicated
+mockup exists for the list view, built from the spec's filter/sort/column
+list) and `company-detail.js` (`<pb-opportunities-company-detail>` — same
+single-file detail-page shape as `conference-detail.js`). Both wired into
+`opportunities-shell.js`/`app.js`, replacing the Phase 2 placeholder for
+`#opportunities-companies` and `#opportunities-company-{id}` (Pipeline/Notes
+and their detail routes still placeholder).
+
+Company detail implements every panel from the mockup
+(`opportunity-3.png`, "NVIDIA"): header with relationship-status badge and
+Edit/Delete actions, 4 KPI cards, Active Opportunities (with inline
+"+ New Opportunity"), Conference Presence (with `why_relevant`), Key
+Contacts (avatar-initials chips, Likely Buyer badge, add/edit/remove),
+Activity & Outreach, Notes (inline composer with pin toggle), Open Tasks
+(reusing the same lazy `TaskLink` provisioning pattern as conferences — a
+task created from a company is a genuine ordinary Backstage task), and a
+right-rail sidebar (Company Intelligence, Buying Signals with a type
+selector, Venue Fit tag cloud, Pitch Ideas). The main+rail layout is a new
+`.opp-detail-layout` CSS grid (mirrors `.promote-overview-layout`'s shape
+under this module's own class names) that Phase 5's Opportunity detail
+"right sidebar" is expected to reuse rather than inventing a second one.
+
+**CSS**: new rules for the companies list's filter bar (reuses
+`.opp-conf-filters`), the detail page's main+rail layout, avatar-initials
+chips (`.opp-avatar`, mirrors `.tk-avatar`'s shape under this module's own
+prefix), the fact-grid/tag-cloud/activity-feed panels, and inline-form
+checkbox rows — all still reusing `.panel`/`.data-table`/`.badge`/`.pill`
+throughout.
+
+**Tests:**
+- `tests/opportunities_companies_db_test.php` (new, DB-backed,
+  `RUN_DB_TESTS=1`) — 49 assertions: `Companies::index()` filters
+  (industry, conference_id, researched, has_open_opportunities) and sorts
+  (pipeline_value, open_opportunities, conferences), an explicit
+  non-fan-out check on the aggregate join math, `show()`'s computed
+  sections (kpis, why_relevant, venue_fit_tags, pitch_ideas — both the
+  "rich" and "bare" company cases), the new `/activity` feed,
+  `Contacts.php` CRUD end to end (including the email-dedup rejection and
+  the `is_likely_buyer` keyword match, both positive and negative cases),
+  Notes now accepting `linked_type=contact`, `primary_contact_id`
+  cross-company rejection and successful same-company set (verified all
+  the way through to the opportunity detail response and the dashboard's
+  Best Opportunities row), contact deletion clearing `primary_contact_id`
+  via the real FK, and company deletion's open-opportunities guard
+  (blocked, then allowed once clear). `PB TEST OPPCO — ` throwaway-row
+  prefix, cleaned up in `finally` in FK-safe order (opportunities before
+  conferences/companies).
+- `tests/ui/120-opportunities-companies.test.mjs` (new) — list page chrome,
+  a real API-created company rendering every detail panel, adding a buyer
+  contact through the actual form and seeing it appear with its Likely
+  Buyer badge, cleanup via DELETE. Same environment limitation as Phase
+  2/3's UI tests (§4.2) — **written and syntax-checked, not run** from this
+  multi-tenant-configured checkout.
+
+---
+
 ## 5. Open TODOs / assumptions to verify in later phases
 
 - `opportunity_qualification`'s fixed-boolean-columns design (§3.1) assumes
@@ -978,6 +1132,16 @@ throughout rather than inventing parallel primitives.
   `opportunity_research_jobs` + `GET .../jobs/{id}` will be the first one —
   reasonable and self-contained, but worth flagging as new-pattern-not-just-
   reuse.
+- `opportunity_decision_makers` (contact↔opportunity role link — champion/
+  influencer/decision_maker/finance/blocker/other) is still deferred to
+  Phase 5, per §4.1's original plan — Phase 4 only shipped the contact
+  record itself (`opportunity_contacts`) plus the single
+  `opportunities.primary_contact_id` pointer, not the many-to-many role
+  table the spec's Phase 5 "Decision makers" section describes.
+- No UI yet sets `primary_contact_id` on an existing opportunity (the field/
+  validation/joins are real and tested via the API — see §4.4 — but nothing
+  in company-detail.js's "+ New Opportunity" flow or elsewhere offers a
+  picker). Expected to land with Phase 5's opportunity detail edit surface.
 
 ## 6. Known issues
 
@@ -986,25 +1150,30 @@ throughout rather than inventing parallel primitives.
   The Discover dashboard is fetch-once-per-load/window-change, no polling.
 - `opportunity_research_jobs` exists as a schema-only stub (no reader/writer)
   until Phase 7. `opportunity_note_versions` doesn't exist yet (Phase 6).
-- Only Discover and Conferences are real pages — Companies/Pipeline/Notes
-  and their detail routes are the honest placeholder until Phase 4/5/6 land.
+- Only Discover, Conferences, and Companies are real pages —
+  Pipeline/Notes and their detail routes are the honest placeholder until
+  Phase 5/6 land.
 - **No UI test has actually been run in a browser yet** (118 from Phase 2,
-  119 from Phase 3) — both written and syntax-checked only. This checkout's
-  multi-tenant `.env` (`SUPER_DB_NAME` set) blocks the whole
-  `node tests/ui/run.mjs` harness at the host-allowlist layer before the app
-  boots. See §4.2's Tests note for the full explanation and where it's
-  confirmed to run instead (CI, or a single-tenant checkout like
-  `/home/cdr/backstage`). **Run both for real at the start of whichever
-  future session next touches the Opportunities frontend**, before trusting
-  either.
-- "Best Opportunities" table's Likely Buyer column always renders "—" — no
-  buyer-contact data exists until `opportunity_contacts` (Phase 4); the
-  column header is kept so the table doesn't need a structural change later.
+  119 from Phase 3, 120 from Phase 4) — all written and syntax-checked
+  only. This checkout's multi-tenant `.env` (`SUPER_DB_NAME` set) blocks the
+  whole `node tests/ui/run.mjs` harness at the host-allowlist layer before
+  the app boots. See §4.2's Tests note for the full explanation and where
+  it's confirmed to run instead (CI, or a single-tenant checkout like
+  `/home/cdr/backstage`). **Run all three for real at the start of
+  whichever future session next touches the Opportunities frontend**,
+  before trusting any of them.
 - Conference deletion has no confirmation dialog check in the test (the
   DELETE endpoint itself is capability-gated and tested; the frontend has no
   delete button yet at all — only exercised via raw API in tests). Add a
   delete affordance to `conference-detail.js` if/when a real workflow needs
-  it from the UI, not just via cleanup scripts.
+  it from the UI, not just via cleanup scripts. (Company deletion, added
+  this phase, *does* have a real UI affordance — `company-detail.js`'s
+  Delete button — since the new UI test's cleanup step needed one.)
+- Company detail's "Activity & Outreach" panel is real (aggregated
+  `opportunity_activities`, not fabricated) but intentionally narrower than
+  the mockup's tabbed Emails/Calls/Tasks/Meetings view — this codebase has
+  no email/call/meeting integration to draw from. A manual "Log Activity"
+  entry point is scoped to Phase 5 per the spec, not added here.
 
 ## 7. Tests added
 
@@ -1031,3 +1200,16 @@ throughout rather than inventing parallel primitives.
   page chrome, a real API-created conference rendering every detail panel,
   adding a Key Fact through the actual form, cleanup via DELETE. Written and
   syntax-checked but **not run** — see Known issues above.
+- `tests/opportunities_companies_db_test.php` — DB-backed, opt-in via
+  `RUN_DB_TESTS=1`. 49 assertions covering `Companies::index()` filters/sorts
+  and its non-fan-out aggregate join math, `show()`'s computed sections
+  (kpis, why_relevant, venue_fit_tags, pitch_ideas), the new `/activity`
+  feed, `Contacts.php` CRUD + email dedup + `is_likely_buyer`, Notes
+  accepting `linked_type=contact`, `primary_contact_id` validation/joins,
+  and company deletion's open-opportunities guard. `PB TEST OPPCO — `
+  throwaway-row prefix.
+- `tests/ui/120-opportunities-companies.test.mjs` — headless-Chromium, list
+  page chrome, a real API-created company rendering every detail panel,
+  adding a buyer contact through the actual form and seeing its Likely
+  Buyer badge, cleanup via DELETE. Written and syntax-checked but **not
+  run** — see Known issues above.

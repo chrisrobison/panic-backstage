@@ -1,12 +1,12 @@
 // public/assets/opportunities/opportunities-shell.js — the single entry
 // point app.js imports for the whole Opportunities module. Imports the real
 // pages as they land phase by phase (Discover: Phase 2; Conference
-// list/detail: Phase 3) and defines <pb-opportunities-placeholder>, an
-// honest "not built yet" page — same purpose and shape as
-// processes/automation-placeholder.js — for every nav destination/detail
-// route that doesn't have a real page yet (Companies/Pipeline/Notes lists
-// are Phase 4/5/6; detail routes for a given company/opportunity/note
-// follow their list).
+// list/detail: Phase 3; Company list/detail: Phase 4) and defines
+// <pb-opportunities-placeholder>, an honest "not built yet" page — same
+// purpose and shape as processes/automation-placeholder.js — for every nav
+// destination/detail route that doesn't have a real page yet
+// (Pipeline/Notes lists are Phase 5/6; detail routes for a given
+// opportunity/note follow their list).
 //
 // Phase 2 acceptance criteria explicitly allows this: "clicking company/
 // conference/opportunity placeholders routes correctly or to a safe
@@ -15,18 +15,10 @@ import { publish, PanicElement } from '../core.js';
 import './discover-page.js';
 import './conferences-list.js';
 import './conference-detail.js';
+import './companies-list.js';
+import './company-detail.js';
 
 const PAGES = {
-  companies: {
-    title: 'Companies',
-    blurb: 'Prospect companies that could purchase a private event.',
-    body: '<p>Browse prospect companies, their conference history, and buyer contacts. Not built yet — this lands in Phase 4.</p>',
-  },
-  'company-detail': {
-    title: 'Company',
-    blurb: 'Company detail.',
-    body: '<p>Full company detail — conference participation, buyer contacts, signals, and notes. Not built yet — this lands in Phase 4.</p>',
-  },
   pipeline: {
     title: 'Pipeline',
     blurb: 'Kanban board of every opportunity by stage.',

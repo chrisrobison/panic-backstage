@@ -48,10 +48,10 @@ final class Opportunities extends BaseEndpoint
     ];
 
     private const WRITABLE_FIELDS = [
-        'name', 'company_id', 'conference_id', 'probability', 'estimated_value',
-        'target_date', 'target_date_end', 'guest_count_min', 'guest_count_max',
-        'event_type', 'event_concept', 'owner_user_id', 'next_action',
-        'next_action_at', 'lost_reason',
+        'name', 'company_id', 'conference_id', 'primary_contact_id', 'probability',
+        'estimated_value', 'target_date', 'target_date_end', 'guest_count_min',
+        'guest_count_max', 'event_type', 'event_concept', 'owner_user_id',
+        'next_action', 'next_action_at', 'lost_reason',
     ];
 
     public function handle(Request $request): Response
@@ -142,10 +142,11 @@ final class Opportunities extends BaseEndpoint
 
         $bestOpportunities = $this->db->all(
             "SELECT o.id, o.name, o.estimated_value, o.probability, o.next_action, o.next_action_at,
-                    c.name AS company_name, conf.name AS conference_name
+                    c.name AS company_name, conf.name AS conference_name, pc.name AS primary_contact_name
              FROM opportunities o
              JOIN opportunity_companies c ON c.id = o.company_id
              LEFT JOIN opportunity_conferences conf ON conf.id = o.conference_id
+             LEFT JOIN opportunity_contacts pc ON pc.id = o.primary_contact_id
              WHERE o.stage NOT IN ('won', 'lost')
              ORDER BY o.probability IS NULL, o.probability DESC, o.estimated_value IS NULL, o.estimated_value DESC
              LIMIT 10"
@@ -412,12 +413,14 @@ final class Opportunities extends BaseEndpoint
         return $this->db->one(
             'SELECT o.*, c.name AS company_name, c.domain AS company_domain,
                     conf.name AS conference_name, conf.slug AS conference_slug,
-                    u.name AS owner_name, e.title AS won_event_title
+                    u.name AS owner_name, e.title AS won_event_title,
+                    pc.name AS primary_contact_name, pc.title AS primary_contact_title
              FROM opportunities o
              JOIN opportunity_companies c ON c.id = o.company_id
              LEFT JOIN opportunity_conferences conf ON conf.id = o.conference_id
              LEFT JOIN users u ON u.id = o.owner_user_id
              LEFT JOIN events e ON e.id = o.won_event_id
+             LEFT JOIN opportunity_contacts pc ON pc.id = o.primary_contact_id
              WHERE o.id = ?',
             [$id]
         );
@@ -449,6 +452,9 @@ final class Opportunities extends BaseEndpoint
         if ($error = $this->validateOptionalUser($b['owner_user_id'] ?? null, 'owner_user_id')) {
             return $error;
         }
+        if ($error = $this->validateOptionalContact($b['primary_contact_id'] ?? null, $companyId)) {
+            return $error;
+        }
 
         $stage = (string) ($b['stage'] ?? 'new_signal');
         if (!in_array($stage, self::STAGES, true)) {
@@ -457,15 +463,16 @@ final class Opportunities extends BaseEndpoint
 
         $id = $this->db->insert(
             'INSERT INTO opportunities (
-                name, company_id, conference_id, stage, probability, estimated_value,
+                name, company_id, conference_id, primary_contact_id, stage, probability, estimated_value,
                 target_date, target_date_end, guest_count_min, guest_count_max,
                 event_type, event_concept, owner_user_id, next_action, next_action_at,
                 created_by
-             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             [
                 $name,
                 $companyId,
                 isset($b['conference_id']) && $b['conference_id'] !== '' ? (int) $b['conference_id'] : null,
+                isset($b['primary_contact_id']) && $b['primary_contact_id'] !== '' ? (int) $b['primary_contact_id'] : null,
                 $stage,
                 $this->clampProbability($b['probability'] ?? null),
                 $this->toDecimalOrNull($b['estimated_value'] ?? null),
@@ -514,6 +521,12 @@ final class Opportunities extends BaseEndpoint
         if (array_key_exists('owner_user_id', $b) && ($error = $this->validateOptionalUser($b['owner_user_id'], 'owner_user_id'))) {
             return $error;
         }
+        if (array_key_exists('primary_contact_id', $b)) {
+            $contactCompanyId = array_key_exists('company_id', $b) ? (int) $b['company_id'] : (int) $existing['company_id'];
+            if ($error = $this->validateOptionalContact($b['primary_contact_id'], $contactCompanyId)) {
+                return $error;
+            }
+        }
 
         $newStage = $existing['stage'];
         if (array_key_exists('stage', $b)) {
@@ -533,7 +546,7 @@ final class Opportunities extends BaseEndpoint
             $val = $b[$field];
             if (in_array($field, ['target_date', 'target_date_end'], true)) {
                 $val = date_or_null($val);
-            } elseif (in_array($field, ['company_id', 'conference_id', 'owner_user_id', 'guest_count_min', 'guest_count_max'], true)) {
+            } elseif (in_array($field, ['company_id', 'conference_id', 'primary_contact_id', 'owner_user_id', 'guest_count_min', 'guest_count_max'], true)) {
                 $val = $val !== null && $val !== '' ? (int) $val : null;
             } elseif ($field === 'probability') {
                 $val = $this->clampProbability($val);
@@ -638,6 +651,18 @@ final class Opportunities extends BaseEndpoint
         }
         if (!$this->db->one('SELECT id FROM users WHERE id = ?', [(int) $value])) {
             return Response::json(['error' => "$field does not reference an existing user"], 422);
+        }
+        return null;
+    }
+
+    /** primary_contact_id, if set, must be a buyer contact belonging to this opportunity's own company. */
+    private function validateOptionalContact(mixed $value, int $companyId): ?Response
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if (!$this->db->one('SELECT id FROM opportunity_contacts WHERE id = ? AND company_id = ?', [(int) $value, $companyId])) {
+            return Response::json(['error' => 'primary_contact_id does not reference a contact belonging to this company'], 422);
         }
         return null;
     }

@@ -25,9 +25,11 @@ use function Panic\log_opportunity_activity;
  *   GET/POST/PATCH/DELETE /api/opportunity-notes[/{id}]             cross-cutting
  *     (linked_type/linked_id come from the query string on GET, the body on POST)
  *
- * `opportunity_contacts` doesn't exist until Phase 4, so `linked_type=contact`
- * is rejected here for now with a clear error rather than silently accepted
- * against nothing.
+ * `linked_type=contact` (Phase 4+) validates against `opportunity_contacts`,
+ * reached through the top-level `/api/opportunity-notes` cross-cutting
+ * family or an `additional_links` entry — there is no
+ * `/opportunity-companies/{id}/contacts/{contactId}/notes` nested route,
+ * matching every other "contact of a company" resource's flat shape.
  *
  * Capabilities: view_opportunities (read), manage_opportunities (write).
  */
@@ -259,12 +261,10 @@ final class Notes extends BaseEndpoint
             if (!in_array($link['type'], self::LINKED_TYPES, true)) {
                 return Response::json(['error'=> "Invalid linked_type: {$link['type']}"], 422);
             }
-            if ($link['type'] === 'contact') {
-                return Response::json(['error' => 'Linking notes to contacts is not available until buyer contacts (Phase 4) ship'], 422);
-            }
             $table = match ($link['type']) {
                 'conference'  => 'opportunity_conferences',
                 'company'     => 'opportunity_companies',
+                'contact'     => 'opportunity_contacts',
                 'opportunity' => 'opportunities',
             };
             if (!$this->db->one("SELECT id FROM `$table` WHERE id = ?", [$link['id']])) {

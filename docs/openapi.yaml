@@ -11271,13 +11271,74 @@ components:
     OpportunityNoteLinkedType:
       type: string
       description: >-
-        `contact` is accepted by the schema but currently rejected by the API — opportunity_contacts
-        doesn't exist until Phase 4.
+        `contact` validates against opportunity_contacts (Phase 4). There is no
+        `/opportunity-companies/{id}/contacts/{contactId}/notes` nested route — link a note to a
+        contact via `/api/opportunity-notes` or an `additional_links` entry instead.
       enum:
         - conference
         - company
         - contact
         - opportunity
+    OpportunityContactStatus:
+      type: string
+      enum:
+        - active
+        - cold
+        - left_company
+        - unknown
+    OpportunityContact:
+      type: object
+      description: >-
+        A corporate buyer contact scoped to one prospect company (Phase 4) — deliberately NOT the
+        existing `contacts` table (a B2C ticket-buyer marketing audience; see
+        docs/OPPORTUNITIES-IMPLEMENTATION.md §1.15).
+      properties:
+        id:
+          type: integer
+        company_id:
+          type: integer
+        name:
+          type: string
+        title:
+          type: string
+          nullable: true
+        department:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+          description: Normalized (lowercased, trimmed); unique within the company when present.
+        phone:
+          type: string
+          nullable: true
+        linkedin_url:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/OpportunityContactStatus'
+        last_touch_at:
+          type: string
+          format: date-time
+          nullable: true
+        source_url:
+          type: string
+          nullable: true
+        is_likely_buyer:
+          type: boolean
+          description: >-
+            Computed on every read (not stored) from a deterministic keyword match of `title`
+            against the spec's example buyer-role list — never AI, never persisted, so it can't go
+            stale relative to a manually edited title.
+        created_by:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
     OpportunityConference:
       type: object
       description: >-
@@ -11458,6 +11519,22 @@ components:
         updated_at:
           type: string
           format: date-time
+        open_opportunity_count:
+          type: integer
+          description: >-
+            Open (not won/lost) opportunities for this company. From a single-query derived-table
+            join, not per-row N+1. List responses only.
+        pipeline_value:
+          type: number
+          description: SUM(estimated_value) of this company's open opportunities. List responses only.
+        last_activity_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: MAX(updated_at) across this company's opportunities. List responses only.
+        conference_count:
+          type: integer
+          description: Distinct conferences this company participates in. List responses only.
     OpportunityConferenceCompanyLink:
       type: object
       description: A company's participation in a conference (sponsor/exhibitor/speaker/...).
@@ -11506,6 +11583,11 @@ components:
         conference_name:
           type: string
           description: Joined; present on the reverse (per-company) list only.
+        why_relevant:
+          type: string
+          description: >-
+            Deterministic, non-fabricated summary built from role/sponsor_tier/participation_notes
+            (e.g. "Sponsor · Gold tier"). Company-detail response only.
     Opportunity:
       type: object
       description: A specific potential private event tied to one company, optionally one conference.
@@ -11519,6 +11601,12 @@ components:
         conference_id:
           type: integer
           nullable: true
+        primary_contact_id:
+          type: integer
+          nullable: true
+          description: >-
+            Phase 4+. Must reference an opportunity_contacts row belonging to this opportunity's own
+            company_id — validated on create/update.
         stage:
           $ref: '#/components/schemas/OpportunityStage'
         probability:
@@ -11597,6 +11685,13 @@ components:
           type: string
           nullable: true
         won_event_title:
+          type: string
+          nullable: true
+        primary_contact_name:
+          type: string
+          nullable: true
+          description: Joined from opportunity_contacts. Powers the "Likely Buyer" column on the Discover dashboard once set.
+        primary_contact_title:
           type: string
           nullable: true
     OpportunityNoteLink:
@@ -11855,6 +11950,12 @@ components:
       description: opportunity_conference_companies.id (the participation link row, not either side's id).
     OpportunityNoteIdPath:
       name: noteId
+      in: path
+      required: true
+      schema:
+        type: integer
+    OpportunityContactIdPath:
+      name: contactId
       in: path
       required: true
       schema:
@@ -31810,7 +31911,13 @@ paths:
     get:
       operationId: opportunity_companies_list
       summary: List companies
-      description: Requires view_opportunities. Filterable by q (name/domain/hq_city) and relationship_status.
+      description: >-
+        Requires view_opportunities. Filterable by q (name/domain/hq_city), industry (substring),
+        relationship_status, conference_id (companies participating in that conference),
+        researched (1|0, based on last_researched_at), and has_open_opportunities (1). Sortable via
+        `sort` (name, pipeline_value, open_opportunities, last_activity, conferences, research);
+        default name. Aggregates (open_opportunity_count, pipeline_value, last_activity_at,
+        conference_count) come from a single-query derived-table join, not per-row N+1.
       tags:
         - Opportunity Companies
       parameters:
@@ -31822,6 +31929,29 @@ paths:
           in: query
           schema:
             $ref: '#/components/schemas/OpportunityCompanyRelationshipStatus'
+        - name: industry
+          in: query
+          schema:
+            type: string
+        - name: conference_id
+          in: query
+          schema:
+            type: integer
+        - name: researched
+          in: query
+          schema:
+            type: string
+            enum: ['0', '1']
+        - name: has_open_opportunities
+          in: query
+          schema:
+            type: string
+            enum: ['1']
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [name, pipeline_value, open_opportunities, last_activity, conferences, research]
       responses:
         '200':
           description: List of companies.
@@ -31838,6 +31968,10 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/OpportunityCompanyRelationshipStatus'
+                  sorts:
+                    type: array
+                    items:
+                      type: string
         '401':
           description: Authentication required.
           content:
@@ -31923,7 +32057,11 @@ paths:
     get:
       operationId: opportunity_companies_get
       summary: Get company detail
-      description: Requires view_opportunities. Includes participating conferences and this company's opportunities.
+      description: >-
+        Requires view_opportunities. Includes participating conferences (each with a deterministic
+        `why_relevant` summary), this company's opportunities, rollup KPIs, deterministic Venue Fit
+        tags, and deterministic pitch ideas (spec: "use deterministic suggestions until AI phase" —
+        never AI-labeled here).
       tags:
         - Opportunity Companies
       parameters:
@@ -31946,6 +32084,28 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Opportunity'
+                  kpis:
+                    type: object
+                    properties:
+                      open_opportunity_count:
+                        type: integer
+                      pipeline_value:
+                        type: number
+                      conference_count:
+                        type: integer
+                      last_activity_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                  venue_fit_tags:
+                    type: array
+                    items:
+                      type: string
+                      enum: [large_audience, tech_and_innovation, executive_visibility, nightlife_fit, presentation_fit, live_entertainment_fit]
+                  pitch_ideas:
+                    type: array
+                    items:
+                      type: string
         '401':
           description: Authentication required.
           content:
@@ -32036,6 +32196,46 @@ paths:
                 $ref: '#/components/schemas/Error'
         '422':
           description: Invalid relationship_status, or domain already belongs to another company.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: opportunity_companies_delete
+      summary: Delete a company
+      description: >-
+        Requires manage_opportunities AND the venue_admin role. Rejected with 422 if the company
+        still has any opportunities (opportunities.company_id has no ON DELETE fallback, unlike
+        conference_id's SET NULL) — remove or reassign them first. Buyer contacts cascade via their
+        own FK; polymorphic note links pointing at the company or its contacts are cleaned up
+        explicitly.
+      tags:
+        - Opportunity Companies
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing manage_opportunities, or not a venue_admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Company not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: The company still has one or more opportunities.
           content:
             application/json:
               schema:
@@ -32364,6 +32564,366 @@ paths:
                 $ref: '#/components/schemas/Error'
         '422':
           description: Missing description, or invalid signal_type/confidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-companies/{companyId}/contacts:
+    get:
+      operationId: opportunity_companies_contacts_list
+      summary: List a company's buyer contacts
+      description: Requires view_opportunities. Active contacts first, then name.
+      tags:
+        - Opportunity Companies
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+      responses:
+        '200':
+          description: Buyer contacts for this company.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contacts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityContact'
+                  statuses:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityContactStatus'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Company not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunity_companies_contacts_create
+      summary: Add a buyer contact to a company
+      description: >-
+        Requires manage_opportunities. `name` is required. `email`, if given, is normalized
+        (lowercased, trimmed) and rejected if it collides with another contact already on this same
+        company — normalized email is the dedup identity per spec (a second contact record is never
+        silently created for the same person at the same company).
+      tags:
+        - Opportunity Companies
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                title:
+                  type: string
+                department:
+                  type: string
+                email:
+                  type: string
+                phone:
+                  type: string
+                linkedin_url:
+                  type: string
+                status:
+                  $ref: '#/components/schemas/OpportunityContactStatus'
+                source_url:
+                  type: string
+      responses:
+        '200':
+          description: Created contact.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contact:
+                    $ref: '#/components/schemas/OpportunityContact'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Company not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing name, or email already belongs to another contact at this company.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-companies/{companyId}/contacts/{contactId}:
+    patch:
+      operationId: opportunity_companies_contacts_update
+      summary: Update a buyer contact
+      description: Requires manage_opportunities. `email`, if changed, is re-normalized and re-checked for collisions within the company.
+      tags:
+        - Opportunity Companies
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+        - $ref: '#/components/parameters/OpportunityContactIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                title:
+                  type: string
+                department:
+                  type: string
+                email:
+                  type: string
+                phone:
+                  type: string
+                linkedin_url:
+                  type: string
+                status:
+                  $ref: '#/components/schemas/OpportunityContactStatus'
+                source_url:
+                  type: string
+                last_touch_at:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Updated contact.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contact:
+                    $ref: '#/components/schemas/OpportunityContact'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Contact not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid status, or email already belongs to another contact at this company.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: opportunity_companies_contacts_delete
+      summary: Delete a buyer contact
+      description: >-
+        Requires manage_opportunities. Any opportunity that had this contact as its
+        primary_contact_id is set back to null (real FK, ON DELETE SET NULL); polymorphic note links
+        pointing at this contact are removed explicitly (no SQL FK covers those).
+      tags:
+        - Opportunity Companies
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+        - $ref: '#/components/parameters/OpportunityContactIdPath'
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Contact not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-companies/{companyId}/tasks:
+    get:
+      operationId: opportunity_companies_tasks_get
+      summary: Get the company's linked task_documents id, if any
+      description: >-
+        Requires view_opportunities. Same lazy-provisioning shape as
+        GET /api/opportunity-conferences/{conferenceId}/tasks — see src/Opportunities/TaskLink.php.
+      tags:
+        - Opportunity Companies
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+      responses:
+        '200':
+          description: The linked task document id, or null.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_document_id:
+                    type: integer
+                    nullable: true
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Company not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunity_companies_tasks_ensure
+      summary: Lazily provision the company's linked task_documents row
+      description: >-
+        Requires manage_opportunities. Idempotent, same one-time provision-and-link shape as the
+        conference version — task CRUD itself happens through the existing, unmodified
+        `/api/task-documents/{id}/tasks` endpoints.
+      tags:
+        - Opportunity Companies
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+      responses:
+        '200':
+          description: The (possibly newly created) task document id.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_document_id:
+                    type: integer
+                  created:
+                    type: boolean
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Company not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-companies/{companyId}/activity:
+    get:
+      operationId: opportunity_companies_activity_list
+      summary: Company activity feed
+      description: >-
+        Requires view_opportunities. Aggregates opportunity_activities rows (created, stage_changed,
+        note_added, signal_added, converted, ...) across every one of this company's opportunities —
+        does NOT fabricate an emails/calls/meetings integration that doesn't exist anywhere in this
+        codebase. Combine with the company's own Notes and Tasks panels (fetched separately) for the
+        full "Activity & Outreach" picture.
+      tags:
+        - Opportunity Companies
+      parameters:
+        - $ref: '#/components/parameters/OpportunityCompanyIdPath'
+      responses:
+        '200':
+          description: Up to 50 most recent activity rows across this company's opportunities.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activity:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        action:
+                          type: string
+                        details:
+                          type: object
+                          nullable: true
+                        created_at:
+                          type: string
+                          format: date-time
+                        created_by_name:
+                          type: string
+                          nullable: true
+                        opportunity_id:
+                          type: integer
+                        opportunity_name:
+                          type: string
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Company not found.
           content:
             application/json:
               schema:

@@ -85,6 +85,101 @@ export function noteTypeLabel(type) {
   return { general: 'Note', meeting: 'Meeting', call: 'Call', research: 'Research', internal: 'Internal' }[type] || titleCaseFallback(type);
 }
 
+// ── Companies / Contacts (Phase 4) ──────────────────────────────────────────
+
+const RELATIONSHIP_STATUS_LABELS = {
+  prospect: 'Prospect', active: 'Active Account', past_client: 'Past Client',
+  do_not_contact: 'Do Not Contact', unknown: 'Unknown',
+};
+const RELATIONSHIP_STATUS_TONES = {
+  prospect: '', active: 'success', past_client: 'info', do_not_contact: 'error', unknown: '',
+};
+
+export function relationshipStatusLabel(status) {
+  return RELATIONSHIP_STATUS_LABELS[status] || titleCaseFallback(status);
+}
+
+export function relationshipStatusBadge(status) {
+  const tone = RELATIONSHIP_STATUS_TONES[status] ?? '';
+  return `<span class="badge ${tone}">${esc(relationshipStatusLabel(status))}</span>`;
+}
+
+const CONTACT_STATUS_LABELS = { active: 'Active', cold: 'Cold', left_company: 'Left Company', unknown: 'Unknown' };
+const CONTACT_STATUS_TONES = { active: 'success', cold: 'info', left_company: 'error', unknown: '' };
+
+export function contactStatusLabel(status) {
+  return CONTACT_STATUS_LABELS[status] || titleCaseFallback(status);
+}
+
+export function contactStatusBadge(status) {
+  const tone = CONTACT_STATUS_TONES[status] ?? '';
+  return `<span class="badge ${tone}">${esc(contactStatusLabel(status))}</span>`;
+}
+
+const VENUE_FIT_TAG_LABELS = {
+  large_audience: 'Large Audience', tech_and_innovation: 'Tech & Innovation',
+  executive_visibility: 'Executive Visibility', nightlife_fit: 'Nightlife Fit',
+  presentation_fit: 'Presentation Fit', live_entertainment_fit: 'Live Entertainment Fit',
+};
+
+export function venueFitTagLabel(tag) {
+  return VENUE_FIT_TAG_LABELS[tag] || titleCaseFallback(tag);
+}
+
+/** Up to 2 uppercase initials from a display name, for a small avatar circle. */
+export function initials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+
+// A small fixed palette (not random) so the same name always gets the same
+// color across a session and across reloads — deterministic, not decorative
+// noise. Mirrors the "hash a stable key into a fixed palette" approach used
+// by other per-module avatar classes (.tk-avatar, .lm-avatar) in app.css.
+const AVATAR_PALETTE = ['#2563eb', '#0c7a3c', '#a06400', '#7c3aed', '#c2185b', '#0891b2', '#b91c1c', '#4d7c0f'];
+
+export function avatarColor(key) {
+  const s = String(key || '');
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+}
+
+/**
+ * A short human label for an opportunity_activities row, built entirely
+ * from the real `action`/`details` the backend stored — never fabricated.
+ * Shared by the Company activity feed (Phase 4) and, later, the Opportunity
+ * detail activity feed (Phase 5) so the two don't drift.
+ */
+export function activityActionLabel(action, details) {
+  const d = details || {};
+  switch (action) {
+    case 'created': return `Opportunity created${d.stage ? ` (${stageLabel(d.stage)})` : ''}`;
+    case 'stage_changed': return `Stage changed: ${stageLabel(d.from)} → ${stageLabel(d.to)}`;
+    case 'note_added': return `Note added${d.note_type ? ` (${noteTypeLabel(d.note_type)})` : ''}`;
+    case 'note_deleted': return 'Note removed';
+    case 'signal_added': return `Signal added${d.signal_type ? ` (${d.signal_type.replace(/_/g, ' ')})` : ''}`;
+    case 'converted': return 'Converted to event';
+    case 'updated': return `Updated${Array.isArray(d.fields) && d.fields.length ? ` (${d.fields.join(', ')})` : ''}`;
+    default: return titleCaseFallback(action);
+  }
+}
+
+/** "3 days ago" / "just now" / "in 2 days" from an ISO date(-time) string. */
+export function relativeTime(value) {
+  if (!value) return '—';
+  const then = new Date(value.includes('T') || value.includes(' ') ? value.replace(' ', 'T') : `${value}T12:00:00`);
+  if (Number.isNaN(then.getTime())) return '—';
+  const diffMs = Date.now() - then.getTime();
+  const diffDays = Math.round(diffMs / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays > 1 && diffDays < 30) return `${diffDays} days ago`;
+  if (diffDays < 0 && diffDays > -30) return `in ${-diffDays} days`;
+  return shortMonthDay(value.slice(0, 10));
+}
+
 /** Delay invoking `fn` until `ms` have passed since the last call — used by every live-search/filter input across the module. */
 export function debounce(fn, ms = 300) {
   let timer;
