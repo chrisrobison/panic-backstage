@@ -10,6 +10,12 @@
 // scoring/availability polish (Phase 8) still have their own "planned"
 // affordances scoped to the pages that need them, not a whole-page
 // placeholder.
+//
+// ai-research-panel.js (Phase 7) defines <pb-opportunities-ai-research>, a
+// shared widget embedded into Discover/Conference-detail/Company-detail
+// (each creates one via document.createElement + prop assignment — see
+// that file's own docblock) rather than being its own routed page.
+import './ai-research-panel.js';
 import './discover-page.js';
 import './conferences-list.js';
 import './conference-detail.js';

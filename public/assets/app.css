@@ -8552,3 +8552,25 @@ pb-inbox-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direc
   .opp-notes-workspace { grid-template-columns: 1fr; }
   .opp-notes-list-pane { max-height: 320px; }
 }
+
+/* ── AI Research panel (Phase 7) — <pb-opportunities-ai-research>, embedded
+   into Discover / Conference detail / Company detail. Reuses .panel/.badge/
+   .button throughout; only the job-list rows and the review modal's
+   checklist sections are new. ────────────────────────────────────────────── */
+.opp-ai-research-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.opp-ai-research-jobs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.opp-ai-research-jobs li { border-top: 1px solid var(--line); padding-top: 10px; }
+.opp-ai-research-jobs li:first-child { border-top: none; padding-top: 0; }
+.opp-ai-research-job-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 600; }
+.opp-ai-research-job-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+
+.opp-ai-review { max-height: 65vh; overflow-y: auto; }
+.opp-ai-review-section { margin-bottom: 18px; }
+.opp-ai-review-section h3 { margin: 0 0 8px; font-size: 14px; }
+.opp-ai-review-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.opp-ai-review-list li { border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.opp-ai-review-list li:last-child { border-bottom: none; padding-bottom: 0; }
+.opp-ai-review-list label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.opp-ai-review-list label.opp-ai-imported { cursor: default; opacity: 0.7; }
+.opp-ai-review-list input[type="checkbox"] { margin-top: 4px; flex-shrink: 0; }
+.opp-ai-review-actions { display: flex; justify-content: flex-end; margin-top: 8px; }

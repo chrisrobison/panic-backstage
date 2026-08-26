@@ -6,6 +6,7 @@ namespace Panic\Jobs;
 use Panic\Database;
 use Panic\Leads\PublicInquiryFollowup;
 use Panic\Notifications\PushNotifier;
+use Panic\Opportunities\Research\Runner as OpportunityResearchRunner;
 
 final class JobWorker
 {
@@ -71,6 +72,14 @@ final class JobWorker
             // themselves, transient FCM failures rethrow so the queue's
             // existing backoff owns the retry.
             PushNotifier::JOB_TYPE => (new PushNotifier())->deliver($this->db, $payload),
+            // Opportunities AI/web research (Phase 7) — see
+            // src/Opportunities/Research/Runner.php's docblock. The actual
+            // `claude` CLI call happens here, on the worker, never on a
+            // public request thread.
+            'opportunity_research' => OpportunityResearchRunner::run(
+                $this->db,
+                (int) ($payload['research_job_id'] ?? 0)
+            ),
             default => throw new \RuntimeException('Unknown background job type: ' . $job['job_type']),
         };
     }

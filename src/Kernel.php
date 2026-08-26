@@ -581,6 +581,19 @@ final class Kernel
             return [Opportunities\Notes::class, ['noteId' => $noteId]];
         }
 
+        // AI/web research jobs (Phase 7) — durable, worker-processed; see
+        // src/Opportunities/Research/Jobs.php's docblock and
+        // docs/OPPORTUNITIES-IMPLEMENTATION.md.
+        //   POST /api/opportunity-research/jobs
+        //   GET  /api/opportunity-research/jobs
+        //   GET  /api/opportunity-research/jobs/{id}
+        //   POST /api/opportunity-research/jobs/{id}/import
+        if ($segments[0] === 'opportunity-research' && ($segments[1] ?? null) === 'jobs') {
+            $jobId  = $this->intOrNull($segments[2] ?? null);
+            $action = $segments[3] ?? null;
+            return [Opportunities\Research\Jobs::class, ['jobId' => $jobId, 'action' => $action]];
+        }
+
         // Client portal — token-gated read-only event view for promoters/clients
         //   GET  /api/portal/view?token=...        (public)
         //   POST /api/portal/{eventId}/create-link

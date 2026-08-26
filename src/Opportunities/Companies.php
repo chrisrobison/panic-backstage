@@ -421,8 +421,14 @@ final class Companies extends BaseEndpoint
         return Response::noContent();
     }
 
-    /** Lowercase, scheme/www/path stripped — e.g. "https://www.NVIDIA.com/en-us/" -> "nvidia.com". */
-    private function normalizeDomain(mixed $raw): ?string
+    /**
+     * Lowercase, scheme/www/path stripped — e.g. "https://www.NVIDIA.com/en-us/" -> "nvidia.com".
+     * Public + static so Research\Importer (Phase 7) can dedupe an
+     * AI-discovered company against existing rows using the exact same
+     * normalization this class's own create()/update() use, rather than a
+     * second drifting implementation.
+     */
+    public static function normalizeDomain(mixed $raw): ?string
     {
         $raw = trim((string) $raw);
         if ($raw === '') {

@@ -66,6 +66,7 @@ class OpportunitiesConferenceDetail extends PanicElement {
         ${this.canManage ? '<button type="button" class="button secondary" data-edit-conference>Edit</button>' : ''}
       </div>
       ${this.headerCardsHtml(c)}
+      <div data-ai-research-slot></div>
       <section class="dashboard-grid">
         <article class="panel padded">
           <h2>Overview</h2>
@@ -89,6 +90,21 @@ class OpportunitiesConferenceDetail extends PanicElement {
       </section>`;
 
     this.bind();
+    this.mountAiResearch();
+  }
+
+  // See ai-research-panel.js's docblock — created via document.createElement
+  // (never inline in the innerHTML template above) so scopeType/scopeId are
+  // real JS properties already set before its connectedCallback fires.
+  mountAiResearch() {
+    const slot = $('[data-ai-research-slot]', this);
+    if (!slot) return;
+    const panel = document.createElement('pb-opportunities-ai-research');
+    panel.scopeType = 'conference';
+    panel.scopeId = this.id;
+    panel.scopeName = this.data.conference.name;
+    panel.addEventListener('research-imported', () => this.load());
+    slot.replaceWith(panel);
   }
 
   // ── Header ───────────────────────────────────────────────────────────────

@@ -249,6 +249,13 @@ tags:
     description: >-
       First-class, polymorphic Opportunities notes (a note can link a conference, company,
       contact, and/or opportunity at once) and research/buying signals.
+  - name: Opportunity Research
+    description: >-
+      Durable, worker-processed AI/web research jobs (Phase 7) — the Claude CLI, with WebSearch/
+      WebFetch enabled and nothing else, finds conferences/sponsors/exhibitors/side events/company
+      intelligence and returns structured, source-cited results for a human to review and
+      selectively import into the trusted tables above. Never writes CRM data on its own; never
+      runs synchronously on a request thread. See docs/OPPORTUNITIES-IMPLEMENTATION.md.
   - name: Feeds
     description: Public calendar/RSS syndication of publicly-visible events.
   - name: Invite Accept
@@ -11993,6 +12000,68 @@ components:
         created_at:
           type: string
           format: date-time
+    OpportunityResearchJobType:
+      type: string
+      enum:
+        - discover_conferences
+        - research_conference
+        - find_target_companies
+        - research_company
+        - research_side_events
+        - generate_outreach_angles
+    OpportunityResearchJobStatus:
+      type: string
+      enum: [pending, processing, completed, failed]
+    OpportunityResearchJob:
+      type: object
+      description: >-
+        One AI/web research run. `input_json`/`result_json` are decoded to real JSON objects in
+        the API response (not raw strings) — `result_json`'s exact shape depends on `job_type` (see
+        docs/OPPORTUNITIES-IMPLEMENTATION.md's Phase 7 section for each mode's shape), and every
+        result item carries `source_url`(s) plus, once reviewed, an `_imported`/`_imported_id` pair
+        set by POST .../import. `result_json` is null until the job completes.
+      properties:
+        id:
+          type: integer
+        job_type:
+          $ref: '#/components/schemas/OpportunityResearchJobType'
+        status:
+          $ref: '#/components/schemas/OpportunityResearchJobStatus'
+        conference_id:
+          type: integer
+          nullable: true
+        company_id:
+          type: integer
+          nullable: true
+        opportunity_id:
+          type: integer
+          nullable: true
+        input_json:
+          type: object
+          additionalProperties: true
+        result_json:
+          type: object
+          nullable: true
+          additionalProperties: true
+        error:
+          type: string
+          nullable: true
+        background_job_id:
+          type: integer
+          nullable: true
+        requested_by:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
   parameters:
     EventIdPath:
       name: id
@@ -12136,6 +12205,12 @@ components:
         type: integer
     OpportunityContactIdPath:
       name: contactId
+      in: path
+      required: true
+      schema:
+        type: integer
+    OpportunityResearchJobIdPath:
+      name: jobId
       in: path
       required: true
       schema:
@@ -34000,6 +34075,241 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Note not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-research/jobs:
+    get:
+      operationId: opportunity_research_jobs_list
+      summary: List AI/web research jobs
+      description: >-
+        Requires view_opportunities. Filterable by conference_id/company_id/opportunity_id,
+        job_type, and status; newest first, capped at 100 (default 20).
+      tags:
+        - Opportunity Research
+      parameters:
+        - name: conference_id
+          in: query
+          schema:
+            type: integer
+        - name: company_id
+          in: query
+          schema:
+            type: integer
+        - name: opportunity_id
+          in: query
+          schema:
+            type: integer
+        - name: job_type
+          in: query
+          schema:
+            $ref: '#/components/schemas/OpportunityResearchJobType'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/OpportunityResearchJobStatus'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Matching jobs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityResearchJob'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: opportunity_research_jobs_create
+      summary: Enqueue an AI/web research job
+      description: >-
+        Requires research_opportunities. Creates a durable `opportunity_research_jobs` row and
+        enqueues it onto the existing background_jobs queue — this endpoint never blocks on the
+        actual `claude` subprocess call, which happens on the worker (see
+        src/Opportunities/Research/Runner.php). `conference_id`/`company_id` are required or
+        rejected depending on `job_type` (discover_conferences needs neither; research_conference/
+        find_target_companies/research_side_events need conference_id; research_company needs
+        company_id; generate_outreach_angles needs at least one of the two). `input` is only
+        meaningful for discover_conferences (`location` required; `date_from`/`date_to`/
+        `venue_context` optional) — every other mode derives its whole prompt from the scope
+        record's own already-stored fields. Rate-limited (20/hour/user) and disabled entirely when
+        `OPPORTUNITY_RESEARCH_ENABLED=0`. Rejects (409) a duplicate pending/processing job for the
+        same (job_type, conference_id, company_id, opportunity_id).
+      tags:
+        - Opportunity Research
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - job_type
+              properties:
+                job_type:
+                  $ref: '#/components/schemas/OpportunityResearchJobType'
+                conference_id:
+                  type: integer
+                company_id:
+                  type: integer
+                opportunity_id:
+                  type: integer
+                input:
+                  type: object
+                  description: discover_conferences only — {location, date_from?, date_to?, venue_context?}.
+                  additionalProperties: true
+      responses:
+        '200':
+          description: The newly-created, pending job.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job:
+                    $ref: '#/components/schemas/OpportunityResearchJob'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the research_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Unknown job_type, a missing/invalid scope id, or missing input.location for discover_conferences.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: AI research is disabled on this deployment (OPPORTUNITY_RESEARCH_ENABLED=0).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-research/jobs/{jobId}:
+    get:
+      operationId: opportunity_research_jobs_show
+      summary: Get one research job's status/result
+      description: Requires view_opportunities.
+      tags:
+        - Opportunity Research
+      parameters:
+        - $ref: '#/components/parameters/OpportunityResearchJobIdPath'
+      responses:
+        '200':
+          description: The job.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job:
+                    $ref: '#/components/schemas/OpportunityResearchJob'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Job not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-research/jobs/{jobId}/import:
+    post:
+      operationId: opportunity_research_jobs_import
+      summary: Import selected items from a completed research job into real CRM rows
+      description: >-
+        Requires manage_opportunities (a distinct, stricter gate than research_opportunities —
+        turning reviewed AI output into trusted data is an ordinary write). Body is a plain object
+        keyed by the result's own top-level array name to a list of selected indices, e.g.
+        `{"companies": [0, 2, 3]}` for a find_target_companies job, or `{"company_fields":
+        ["industry","hq_city"], "buyer_roles": [0]}` for research_company. Re-selecting an
+        already-imported index is a no-op (marked `_imported` on the stored result). Never
+        overwrites an existing human-entered field. Returns a small created/linked-count summary.
+      tags:
+        - Opportunity Research
+      parameters:
+        - $ref: '#/components/parameters/OpportunityResearchJobIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Import summary and the job's updated (now `_imported`-flagged) result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: object
+                    additionalProperties:
+                      type: integer
+                  job:
+                    $ref: '#/components/schemas/OpportunityResearchJob'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Job not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: The job has no completed result yet, or a selected index is out of range.
           content:
             application/json:
               schema:

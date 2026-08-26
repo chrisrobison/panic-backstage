@@ -1,8 +1,9 @@
 # Opportunities Module — Implementation Handoff
 
-**Status:** Phase 6 complete — First-class Research Notes workspace. See
-§4.1 (Phase 1), §4.2 (Phase 2), §4.3 (Phase 3), §4.4 (Phase 4), §4.5
-(Phase 5), §4.6 (Phase 6) for exactly what landed each phase.
+**Status:** Phase 7 complete — Claude CLI (WebSearch/WebFetch) research
+jobs. See §4.1 (Phase 1), §4.2 (Phase 2), §4.3 (Phase 3), §4.4 (Phase 4),
+§4.5 (Phase 5), §4.6 (Phase 6), §4.7 (Phase 7) for exactly what landed each
+phase.
 **Branch:** `opportunities-module` (long-lived feature branch; not merged to `main`
 until the module is stable — see "Branch strategy" below). Do not squash/delete
 mid-project; each phase adds commits here.
@@ -608,7 +609,7 @@ before the generic `match`, keyed on a non-numeric segment).
 | 4 — Company list/detail + buyer contacts | **Done** | See §4.4 below |
 | 5 — Pipeline + Opportunity detail + conversion | **Done** | See §4.5 below |
 | 6 — Notes workspace | **Done** | See §4.6 below |
-| 7 — Claude CLI research | Not started | |
+| 7 — Claude CLI research | **Done** | See §4.7 below |
 | 8 — Tasks/activities/realtime/scoring/availability | Not started | |
 | 9 — Polish/tests/docs/perf/a11y | Not started | |
 
@@ -1494,6 +1495,315 @@ Markdown rendering, rather than a global rule).
   Phase 7 (the context pane says so explicitly) — nothing here infers
   anything from note content.
 
+### 4.7 Phase 7 — what actually shipped
+
+**Migration: none.** `opportunity_research_jobs` (Phase 1 schema-only stub)
+already had every column this phase needed (`job_type varchar(64)`, `status`,
+`conference_id`/`company_id`/`opportunity_id`, `input_json`/`result_json`,
+`error`, `background_job_id`, `requested_by`, timestamps) — validated in PHP,
+not a DB enum, matching repo convention. Every table an import can write to
+(`opportunity_conferences`/`companies`/`conference_companies`/`_facts`,
+`opportunity_signals`, `opportunity_contacts`, `opportunity_notes`) already
+had a `source_url` column from earlier phases, so source provenance survives
+import with zero schema change. Deliberately **not** adding an
+`is_ai_generated` column to every one of those tables (only
+`opportunity_signals`/`opportunity_notes` already had one, from Phase 1/6) —
+see "Import/review workflow" below for why the review-then-import gate
+itself is the provenance/trust boundary here, not a per-row flag.
+
+**CLI tool names confirmed, not guessed** (the one explicit open TODO
+carried since Phase 0/§1.13/§5): this checkout's installed `claude` CLI is
+2.1.246. `claude --help`'s `--tools <tools...>` accepts comma-separated
+built-in tool names including `WebSearch`/`WebFetch` (verified against the
+live `--help` output, not assumed from training knowledge of some other
+version). Hand-verified end-to-end outside the app (see this phase's own
+session transcript): `--tools 'WebSearch,WebFetch' --mcp-config <empty
+mcpServers> --strict-mcp-config --permission-mode bypassPermissions` runs
+clean (`is_error:false`, zero `permission_denials`) and a prompt that
+requires current information gets a real, specific, correctly-sourced
+answer back (not a training-data guess) — confirming WebSearch/WebFetch
+actually work under this exact restricted configuration before any
+production code was written against it.
+
+**Correction to §1.13's proposed `scripts/ai-opportunities-mcp-server.php`**:
+not built, deliberately. §1.13 anticipated a second, narrower MCP server for
+"strictly controlled Backstage MCP tools where needed" — but every one of
+the 6 research modes takes its own explicit scope (conference/company row,
+loaded server-side by `Runner::loadScope()`) and needs nothing further
+pulled from our own DB mid-prompt; the model only ever needs to search the
+open web. An MCP server was therefore unnecessary attack surface to add for
+no functional gain — `ClaudeCli::promptWithTools()` still passes an empty
+`--mcp-config`+`--strict-mcp-config` pair (see below) so the *absence* of a
+Backstage MCP server is itself enforced, not just incidental. Revisit only
+if a future research mode genuinely needs the model to call back into our
+own data mid-turn (e.g. checking live availability while researching) rather
+than having it handed the answer up front.
+
+**Backend — `src/Ai/ClaudeCli.php` gained `promptWithTools()`**, alongside
+the existing `prompt()`/`promptJson()` (tool-less, used by Leads\Classifier
+etc.) rather than a new parallel subprocess implementation (spec: "do not
+copy a large fragile subprocess routine into five classes"). Same
+guardrails as `Ai\Assistant::runClaude()`/`ClaudeCli::prompt()`: env-stripped
+(`ANTHROPIC_API_KEY`/`_FILE`), `HOME` pinned, hard `timeout --signal=KILL`,
+isolated 0700 temp dir cleaned up in `finally`, no session persistence, JSON
+output, stdin from `/dev/null`. Additionally always passes
+`--mcp-config`+`--strict-mcp-config` with an **empty** `mcpServers` object —
+no MCP server is actually needed for web research, but this guarantees zero
+MCP tools are reachable on top of `--tools` only ever naming the specific
+built-ins the caller allowlists (belt and suspenders per the spec's "strict
+MCP configuration" bullet). Returns a `{ok, result, error}` shape (not a
+bare null like `prompt()`) so a failure can become a specific, useful
+`opportunity_research_jobs.error` message instead of a silent degrade.
+
+**Backend — `src/Opportunities/Research/Modes.php`** (new, pure/DB-free,
+unit-tested): prompt-builder + result-validator pairs for the spec's 6
+"focused modes" — `discover_conferences`, `research_conference`,
+`find_target_companies`, `research_company`, `research_side_events`,
+`generate_outreach_angles`. **Deliberate scope split** to avoid two modes
+producing overlapping/conflicting importable facts: the spec's mode-2 bullet
+list (organizer/attendance/industry/audience **and** sponsors/exhibitors
+**and** side-event patterns) is divided so `research_conference` covers only
+organizer/attendance/industry/audience (as importable Key Facts) plus
+coarse side-event-pattern signals; `find_target_companies` owns
+sponsors/exhibitors/speakers'-companies; `research_side_events` owns
+specific dated host/event records. Every prompt embeds real data loaded from
+our own DB (conference/company/venue name, dates, city) — never lets the
+model guess "our own" facts — and every result validator treats the reply as
+**untrusted external input** with two distinct failure policies: a
+structural problem (missing required array, wrong type) throws and fails the
+whole job; a field-level problem (bad URL, unparsable date, out-of-enum
+value, oversized string) is silently sanitized/dropped/defaulted for that
+one field, keeping the rest of the item usable. `research_company`'s
+`buyer_roles` validator specifically **strips a person's name if it has no
+`source_url`** (an unattributed name is indistinguishable from a
+fabrication) and **always nulls `email`** regardless of source — "never
+invent a personal email address" is enforced in code, not just prompted for.
+Tested hermetically: `tests/opportunity_research_modes_test.php`.
+
+**Backend — `src/Opportunities/Research/Jobs.php`** (new): the durable-job
+API surface, mirroring the spec's own conceptual flow exactly —
+`POST /api/opportunity-research/jobs` (enqueue only; requires
+`research_opportunities`, rate-limited 20/hour/user, rejects an unknown
+`job_type` or a missing/nonexistent scope id with 422, rejects a duplicate
+pending/processing job for the same `(job_type, conference_id, company_id,
+opportunity_id)` with 409, and can be killed outright via
+`OPPORTUNITY_RESEARCH_ENABLED=0` → 503), `GET .../jobs` (filterable list),
+`GET .../jobs/{id}` (status/result — `input_json`/`result_json` decoded to
+real JSON objects in the response, not raw strings the client has to
+re-parse), and `POST .../jobs/{id}/import` (requires `manage_opportunities`
+— a **distinct, stricter** gate than `research_opportunities`, since turning
+reviewed AI output into trusted CRM data is an ordinary write like any
+other). Enqueuing inserts the `opportunity_research_jobs` row and calls
+`JobQueue::enqueue('opportunity_research', ..., maxAttempts: 2)` in the same
+transaction — `max_attempts` deliberately lower than the generic default of
+5, since a retried web-search burns real usage each time, unlike a cheap DB
+job.
+
+**Backend — `src/Opportunities/Research/Runner.php`** (new): the
+`JobWorker`-invoked glue (`src/Jobs/JobWorker.php` gained a
+`'opportunity_research'` case in its `match`, calling
+`Research\Runner::run()` statically — no instance state needed). Loads the
+job's scope record fresh from the DB (never from request input), builds the
+prompt via `Modes::buildPrompt()`, spawns `ClaudeCli::promptWithTools($system,
+$user, ['WebSearch','WebFetch'], ...)`, validates the reply via
+`Modes::validateResult()`, and persists `status`/`result_json`/`error`.
+**Idempotent**: a `completed` job is a no-op on re-run (worker restart or a
+duplicate dispatch can't overwrite a good result with a worse retry).
+**Every failure path** (subprocess/timeout, malformed JSON, a structural
+validation failure) marks the row `failed` with a human-readable `error`
+and then *rethrows*, so `JobQueue`'s own bounded exponential backoff decides
+whether to retry — mirrors `Leads\PublicInquiryFollowup`'s "throw on real
+failure, let the queue's own retry policy own the decision" convention
+rather than swallowing errors in the worker itself. Config read from env
+per-request, same pattern as `Ai\Assistant`: `OPPORTUNITY_RESEARCH_MODEL`
+(default `sonnet`), `OPPORTUNITY_RESEARCH_TIMEOUT_SECONDS` (default 240 —
+higher than the AI Assistant's 60s, since multi-search web research needs
+more headroom), `OPPORTUNITY_RESEARCH_MAX_RESULTS` (default 25, caps every
+result list regardless of what the model returns).
+
+**Backend — `src/Opportunities/Research/Importer.php`** (new): the
+human-reviewed "Research Complete → \[ \] item → Import Selected" workflow
+the spec requires ("Research must not silently populate trusted CRM data"),
+called only from `Jobs::import()` (`manage_opportunities`-gated, POST-only —
+never reachable from the research job itself). `$selections` is a plain
+`{resultArrayKey: [indices]}` object matching `result_json`'s own array keys
+1:1. Per mode: `discover_conferences` → new `opportunity_conferences` rows
+(deduped by slug); `research_conference` → `opportunity_conference_facts` +
+`opportunity_signals` (`side_event_history`); `find_target_companies` →
+find-or-create `opportunity_companies` (by normalized domain, reusing
+`Companies::normalizeDomain()` — now `public static` for exactly this reuse
+— or exact name) + `opportunity_conference_companies` links (skips an
+already-linked pair rather than overwriting its role/notes);
+`research_company` → fills **only currently-NULL** company columns (never
+overwrites a human-entered value — verified explicitly in the DB test by
+re-importing a second, different value and confirming the first import's
+value survives), `hospitality_signals`/`conference_presence` →
+`opportunity_signals`, `buyer_roles` → a real `opportunity_contacts` row
+**only** when a name survived `Modes::validateResult()`'s source-check
+(otherwise a role-only `opportunity_signals` row — never a fabricated
+person, per spec); `research_side_events` → `opportunity_signals` scoped to
+**both** the conference and a find-or-created host company at once (no
+schema change needed — `opportunity_signals` already allows multiple scope
+FKs set simultaneously); `generate_outreach_angles` → a real
+`opportunity_notes` row (`note_type='strategy'`, `is_ai_generated=1`,
+`ai_model`/`ai_prompt_version` set), linked via ordinary
+`opportunity_note_links` rows to whichever of conference/company were in
+scope — reuses the existing Notes engine rather than inventing a parallel
+"AI suggestions" store. Every imported item is marked `_imported`/
+`_imported_id` directly on the stored `result_json`, so re-selecting an
+already-imported index is a verified no-op (idempotent import, not a
+duplicate-row bug) and the UI can show "Imported" without extra state.
+
+**Provenance decision**: imported rows are **not** additionally flagged
+`is_ai_generated` on every table (only `opportunity_signals`/
+`opportunity_notes` have that column, from earlier phases) — the review/
+import step itself is the human-approval boundary (same "proposal only
+becomes real once a human clicks Apply" philosophy as the existing AI
+Assistant drawer), and every imported row's `source_url` already lets a
+human tell "this came from research" apart from a hand-entered row with no
+source. Revisit only if a real need for a stronger per-row AI/human split
+on `opportunity_conferences`/`companies`/`contacts` shows up later.
+
+**Frontend — new file `public/assets/opportunities/ai-research-panel.js`**
+(`<pb-opportunities-ai-research>`): a shared widget, not its own routed page
+— each host page (`discover-page.js`, `conference-detail.js`,
+`company-detail.js`) creates one via `document.createElement()` + direct
+property assignment (`scopeType`/`scopeId`/`scopeName`) **before** inserting
+it into the DOM, so its `connectedCallback` fires with real scope props
+already set (mirrors `AppShell.mount()`'s own `Object.assign(element,
+props)` convention — embedding the tag inline in an `innerHTML` template
+would fire `connectedCallback` during HTML parsing, before any props could
+be assigned). Renders contextual mode buttons (gated client-side on
+`getAppCapabilities().research_opportunities`, same pattern every other
+Opportunities page already uses for `manage_opportunities`) plus a small job
+history list that **polls** every 5s while any job is pending/processing
+(spec's explicit fallback: "UI should poll reasonably or use existing
+realtime invalidation" — realtime invalidation wasn't extended to
+`opportunity_research_jobs` this phase, see Known gaps). Clicking "Review
+results" on a completed job opens the "Research Complete" checklist modal
+— one checkbox per result item (checked by default, disabled+labeled
+"Imported" once already imported), grouped into sections per result list
+(Key Facts, Side-Event Patterns, Companies, Company Details,
+Conference Presence, Buyer Roles, Hospitality Signals, Side Events, Angles
+— whichever the mode produced), each item showing its real `source_url`(s)
+as `target="_blank" rel="noopener"` links. "Import Selected" posts the
+checked indices to `.../import` and dispatches a bubbling
+`research-imported` `CustomEvent` so the host page just does
+`$('pb-opportunities-ai-research', this)?.addEventListener('research-imported',
+() => this.load())` — "child calls the API itself, parent just reacts to an
+event," the same convention the `tasks/` directory's shell+children split
+already established. **Every value rendered is `esc()`'d** — nothing from a
+research job is ever `innerHTML`'d raw, since it's explicitly untrusted
+external input (spec: "Do not render AI/web content as trusted HTML").
+
+**Frontend — wiring**: `opportunities-shell.js` gained one
+`import './ai-research-panel.js';` line. `discover-page.js` mounts a
+`scopeType: 'discover'` panel above the KPI row (its only mode is
+`discover_conferences`, which opens a small inline location/date-range
+form — the spec's "On Discover: Find upcoming conferences" — its sibling
+bullet "Find opportunities for empty dates" is the *existing* Phase 2
+deterministic Venue Availability Match panel, not a new AI mode).
+`conference-detail.js` mounts a `scopeType: 'conference'` panel below the
+header KPI cards (`research_conference`/`find_target_companies`/
+`research_side_events`/`generate_outreach_angles`).
+`company-detail.js` mounts a `scopeType: 'company'` panel at the top of its
+existing right-rail sidebar (`research_company`/`generate_outreach_angles`).
+No new hash routes — this is an embedded widget, not a page.
+
+**CSS**: new rules under the existing "── Opportunities ──" section
+(`.opp-ai-research-actions`, `.opp-ai-research-jobs`/`-job-row`/`-job-meta`,
+`.opp-ai-review`/`-section`/`-list`/`-imported`/`-actions`) — reuses
+`.panel`/`.badge`/`.button` throughout, no new base primitives.
+
+**OpenAPI**: new `Opportunity Research` tag, `OpportunityResearchJob(Type|
+Status)` schemas, `OpportunityResearchJobIdPath` parameter, and all 4
+documented path+method operations (`POST`/`GET /api/opportunity-research/jobs`,
+`GET .../jobs/{id}`, `POST .../jobs/{id}/import`).
+`php scripts/check-openapi-routes.php` and full `scripts/static-analysis.sh`
+(phpstan level 5 included) both pass clean.
+
+**Env vars** (`.env.example`): `OPPORTUNITY_RESEARCH_ENABLED` (default 1),
+`OPPORTUNITY_RESEARCH_MODEL` (default `sonnet`),
+`OPPORTUNITY_RESEARCH_TIMEOUT_SECONDS` (default 240),
+`OPPORTUNITY_RESEARCH_MAX_RESULTS` (default 25) — reuses `CLAUDE_CLI_BIN`/
+`CLAUDE_CLI_HOME`/`AI_ASSISTANT_MAX_BUDGET_USD` rather than duplicating
+them, per the spec's own "reuse where appropriate" instruction.
+
+**Tests:**
+- `tests/opportunity_research_modes_test.php` (new, hermetic, no DB/CLI) —
+  39 assertions covering `Modes`' scope table, `validateInput()`'s
+  location-required/date-sanitizing behavior, `buildPrompt()` embedding real
+  scope data (and never a hard-coded Dreamforce example), and
+  `validateResult()`'s untrusted-input handling for every one of the 6
+  modes: structural failures (empty/missing required arrays) vs. field-level
+  sanitization (bad URLs dropped, bad dates nulled, out-of-enum
+  role/confidence/type normalized, oversized strings truncated), and —
+  the highest-stakes case — a named buyer_role with no source has its name
+  stripped while `email` is unconditionally nulled regardless of source.
+- `tests/opportunities_research_db_test.php` (new, DB-backed, opt-in via
+  `RUN_DB_TESTS=1`) — 41 assertions against the real endpoint classes:
+  Kernel routing spot-check; capability boundaries on both enqueue
+  (`research_opportunities`) and import (`manage_opportunities`, a stricter,
+  distinct gate); `create()`'s scope validation (missing/nonexistent
+  conference_id both 422) and duplicate-pending-job 409; a real enqueue
+  verified all the way through to the `background_jobs` row it created
+  (`job_type='opportunity_research'`, payload referencing the research job
+  id); `index()`/`show()`'s filtering and JSON-hydration. **Deliberately
+  does not invoke the real `claude` subprocess** (no test in this repo does
+  — see `booking_email_parser_test.php`'s own precedent — and a live web
+  search would make this test slow/flaky/network-dependent); instead
+  hand-crafts `completed` job rows with fixed `result_json` (the exact shape
+  `Modes::validateResult()` would have produced, that function's own
+  handling covered separately/hermetically above) and exercises
+  `Importer::import()` for real: `find_target_companies` creates+links two
+  companies then proves re-importing the same selection is a true no-op
+  (zero new rows, zero duplicate links); `research_company` proves a
+  named+sourced buyer role becomes a real contact while an unnamed one
+  becomes a signal, that exactly one (empty) company field gets filled, and
+  — the most important negative case — that a **second** import with a
+  *different* value already sitting in `result_json` never overwrites the
+  first-filled value; `generate_outreach_angles` proves the imported note is
+  a real, AI-flagged `strategy` note linked to both its conference and
+  company. `PB TEST OPPRESEARCH — ` throwaway-row prefix, cleaned up in
+  `finally` (verified: zero leftover rows across every affected table after
+  a real run against the shared dev DB).
+- The Claude CLI's actual support for `WebSearch`/`WebFetch` under this
+  phase's exact restricted flag set (`--tools`, empty `--mcp-config` +
+  `--strict-mcp-config`, `--permission-mode bypassPermissions`) was
+  hand-verified live against the installed 2.1.246 binary during this
+  session (see "CLI tool names confirmed, not guessed" above) — not
+  re-verified by an automated test, since that would require a real,
+  billable, network-dependent subprocess call on every test run.
+
+**Known gaps carried forward:**
+- `RealtimeInvalidationMapper` has no `opportunity_research_jobs` entry —
+  the AI Research panel polls every 5s while a job is active instead
+  (explicitly an acceptable fallback per the spec: "UI should poll
+  reasonably or use existing realtime invalidation"). Add a mapper entry +
+  switch the panel to `subscribe('data.invalidated', ...)` if polling ever
+  proves too chatty at scale.
+- The Opportunity-detail page and the Notes workspace's own AI panel are
+  **not** wired to the AI Research widget this phase — the spec's "AI
+  Research button" wishlist section additionally lists opportunity-level
+  actions (Summarize research / Identify missing qualification data /
+  Suggest next actions) and note-level actions (Summarize / Extract facts /
+  Extract buying signals / Suggest next actions) that aren't among the
+  spec's own authoritative, schema-defined "Research modes" 1-6 — treating
+  that narrower, fully-specified list as this phase's real scope (per
+  "Implement focused modes rather than one magical prompt") rather than
+  inventing a 7th/8th unspecified mode. The Notes workspace's context pane
+  still shows its Phase 6 "Planned — not yet built" AI panel text; a future
+  phase can add the note-scoped modes and wire both pages the same way
+  Discover/Conference/Company were wired here.
+- No admin UI toggle for `OPPORTUNITY_RESEARCH_ENABLED` — like every other
+  Claude-CLI-backed feature in this codebase, it's an env var, not a
+  database-backed setting.
+- The review-modal's per-item checklist has no "select all"/"select none"
+  convenience control yet — every item defaults checked (so "Import
+  Selected" with no changes imports everything found), but a large
+  `find_target_companies` result (up to 25 companies) has no bulk-deselect
+  shortcut. Small, additive polish if it turns out to matter in practice.
+
 ## 5. Open TODOs / assumptions to verify in later phases
 
 - `opportunity_qualification`'s fixed-boolean-columns design (§3.1) shipped
@@ -1504,10 +1814,12 @@ Markdown rendering, rather than a global rule).
   `opportunity_activities`/`opportunity_qualification`/
   `opportunity_decision_makers`/`opportunity_signals` (CHILD) are mapped;
   Pipeline board and Opportunity detail both subscribe and debounce-refetch.
-- Phase 7 must confirm the installed Claude CLI's actual supported
-  built-in tool names (`WebSearch`/`WebFetch` or otherwise) before wiring
-  anything — nothing in the codebase currently exercises them, so this is
-  unverified, not just unused.
+- ~~Phase 7 must confirm the installed Claude CLI's actual supported
+  built-in tool names~~ — **resolved in Phase 7**: 2.1.246's `--tools`
+  accepts `WebSearch`/`WebFetch` by name, confirmed against live `--help`
+  output and then hand-verified end to end (accepted with zero permission
+  denials, and functionally returns real search-backed answers) before
+  `Ai\ClaudeCli::promptWithTools()` was written against it. See §4.7.
 - `opportunity_signals`/`opportunity_notes` "at least one FK set" rule is
   enforced in PHP validation, not a SQL `CHECK` constraint (matches
   existing repo style of validating in the endpoint, not the schema).
@@ -1515,10 +1827,10 @@ Markdown rendering, rather than a global rule).
   Phase 3**: `venues.latitude`/`longitude` added (migration 111),
   `Opportunities/Availability.php` does the Haversine math locally, never
   auto-geocoded.
-- No generic job-status polling endpoint pattern exists yet in the repo;
-  `opportunity_research_jobs` + `GET .../jobs/{id}` will be the first one —
-  reasonable and self-contained, but worth flagging as new-pattern-not-just-
-  reuse.
+- ~~No generic job-status polling endpoint pattern exists yet in the repo;
+  `opportunity_research_jobs` + `GET .../jobs/{id}` will be the first one~~ —
+  **resolved in Phase 7**: shipped exactly as anticipated here, plus
+  `GET .../jobs` (list) and `POST .../jobs/{id}/import`. See §4.7.
 - ~~`opportunity_decision_makers` deferred to Phase 5~~ — **resolved in
   Phase 5**: table + `src/Opportunities/DecisionMakers.php` +
   Opportunity detail's Decision Makers panel all shipped.
@@ -1535,9 +1847,15 @@ Markdown rendering, rather than a global rule).
   `RealtimeInvalidationMapper`, and Pipeline board / Opportunity detail both
   subscribe. Discover/Conferences/Companies pages still fetch-once (Phase 8
   scope, per §1.9, if it's worth extending further).
-- `opportunity_research_jobs` exists as a schema-only stub (no reader/writer)
-  until Phase 7. ~~`opportunity_note_versions` doesn't exist yet~~ — resolved
-  in Phase 6.
+- ~~`opportunity_research_jobs` exists as a schema-only stub (no
+  reader/writer) until Phase 7~~ — **resolved in Phase 7**: full
+  create/list/show/import + worker dispatch shipped, see §4.7.
+  ~~`opportunity_note_versions` doesn't exist yet~~ — resolved in Phase 6.
+- AI research jobs poll (5s interval while active) rather than subscribing
+  to realtime invalidation — `opportunity_research_jobs` isn't in
+  `RealtimeInvalidationMapper` (Phase 7's own "Known gaps carried forward,"
+  §4.7). Acceptable per the spec's explicit polling fallback; revisit if
+  polling proves too chatty at scale.
 - Every planned Opportunities screen is a real page as of Phase 6 — there is
   no longer any `<pb-opportunities-placeholder>` route (it was deleted;
   nothing referenced it anymore). Phase 7 (AI research) and Phase 8
@@ -1639,3 +1957,26 @@ Markdown rendering, rather than a global rule).
   editing the body and confirming exactly one version was archived
   server-side, and the Preview toggle rendering through `mdToHtml()`.
   Written and syntax-checked but **not run** — see Known issues above.
+- `tests/opportunity_research_modes_test.php` — hermetic, no DB/CLI. 39
+  assertions covering `Modes`' mode/scope table, `validateInput()`'s
+  location-required/date-sanitizing rules, `buildPrompt()` embedding real
+  scope data rather than hard-coded examples, and `validateResult()`'s
+  untrusted-model-output handling for all 6 modes (structural failures vs.
+  field-level sanitization, out-of-enum normalization, URL/date validation,
+  string truncation, and — the highest-stakes case — stripping an
+  unattributed buyer name while unconditionally nulling `email`).
+- `tests/opportunities_research_db_test.php` — DB-backed, opt-in via
+  `RUN_DB_TESTS=1`. 41 assertions against the real `Research\Jobs` endpoint:
+  Kernel routing, capability boundaries on both enqueue
+  (`research_opportunities`) and import (`manage_opportunities`), scope
+  validation + duplicate-pending-job 409, a real enqueue traced through to
+  its `background_jobs` row, `index()`/`show()`'s filtering and JSON
+  hydration, and — against hand-crafted `completed` job rows rather than a
+  live `claude` subprocess call (see §4.7's Tests note for why) —
+  `Importer::import()`'s actual writes for `find_target_companies` (create +
+  link + idempotent re-import), `research_company` (named+sourced buyer →
+  contact, unnamed → signal, and an already-filled field surviving a second
+  import with a different value), and `generate_outreach_angles` (a real,
+  AI-flagged note linked to both its conference and company).
+  `PB TEST OPPRESEARCH — ` throwaway-row prefix, verified zero leftover rows
+  after a real run.

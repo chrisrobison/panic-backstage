@@ -159,6 +159,111 @@ final class ClaudeCli
         return is_array($parsed) ? $parsed : null;
     }
 
+    /**
+     * Run a single-shot headless prompt with a specific, narrow set of
+     * built-in tools enabled (e.g. ['WebSearch', 'WebFetch']) instead of the
+     * fully tool-less mode prompt()/promptJson() use above. Added for
+     * Opportunities' AI research jobs (src/Opportunities/Research/Runner.php,
+     * Phase 7 — see docs/OPPORTUNITIES-IMPLEMENTATION.md and the spec's
+     * "Security model" section) rather than copying runClaude()'s subprocess
+     * plumbing a second time.
+     *
+     * Same guardrails as prompt(): env-stripped, hard `timeout --signal=KILL`,
+     * isolated 0700 temp dir cleaned up in `finally`, HOME pinned, no session
+     * persistence, JSON output, stdin from /dev/null. Additionally passes
+     * `--mcp-config`+`--strict-mcp-config` with an EMPTY server list — no MCP
+     * server is actually needed for web research, but this guarantees the
+     * model has zero MCP tools available on top of `--tools` only ever
+     * naming the specific built-ins the caller allowlists — belt and
+     * suspenders per the spec's explicit "strict MCP configuration" bullet.
+     *
+     * Unlike prompt(), which collapses every failure to a bare null (its
+     * callers only ever need "AI unavailable, degrade quietly"), this
+     * returns a small result shape so a failure can be surfaced to a human
+     * as a specific, useful error message (a durable `opportunity_research_
+     * jobs.error` column, not a silent degrade) — see the spec's "bad/
+     * invalid model JSON fails safely" acceptance criterion.
+     *
+     * @param list<string> $allowedTools e.g. ['WebSearch', 'WebFetch'] — never empty, never a shell/file/edit tool.
+     * @return array{ok: bool, result: ?string, error: ?string}
+     */
+    public static function promptWithTools(
+        string $system,
+        string $user,
+        array $allowedTools,
+        ?string $model = null,
+        ?int $timeoutSeconds = null,
+        ?float $maxBudgetUsd = null
+    ): array {
+        if (!$allowedTools) {
+            return ['ok' => false, 'result' => null, 'error' => 'No tools were allowed for this request.'];
+        }
+        $bin = self::binPath();
+        if ($bin === null) {
+            return ['ok' => false, 'result' => null, 'error' => 'The AI research feature is not available on this deployment (Claude CLI not found).'];
+        }
+        $model = $model ?: 'sonnet';
+        $timeoutSeconds = ($timeoutSeconds !== null && $timeoutSeconds > 0) ? $timeoutSeconds : self::DEFAULT_TIMEOUT_SECONDS;
+
+        $tmpDir = sys_get_temp_dir() . '/pb-ai-research-' . bin2hex(random_bytes(6));
+        if (!mkdir($tmpDir, 0700, true) && !is_dir($tmpDir)) {
+            return ['ok' => false, 'result' => null, 'error' => 'Could not prepare the research request.'];
+        }
+
+        try {
+            $systemPromptPath = $tmpDir . '/system-prompt.txt';
+            $mcpConfigPath    = $tmpDir . '/mcp-config.json';
+            file_put_contents($systemPromptPath, $system);
+            // Empty mcpServers object (not array) — matches the shape
+            // `claude` itself expects for "no servers configured".
+            file_put_contents($mcpConfigPath, json_encode(['mcpServers' => new \stdClass()], JSON_PRETTY_PRINT));
+
+            // See prompt()'s docblock above for why each flag below is
+            // necessary — identical reasoning, just with a non-empty
+            // --tools list and an (empty) --mcp-config/--strict-mcp-config
+            // pair added on top.
+            $cmd = 'env -u ANTHROPIC_API_KEY -u ANTHROPIC_API_KEY_FILE'
+                 . ' HOME=' . escapeshellarg(self::homeDir())
+                 . ' timeout --signal=KILL ' . escapeshellarg($timeoutSeconds . 's')
+                 . ' ' . escapeshellarg($bin)
+                 . ' -p ' . escapeshellarg($user)
+                 . ' --output-format json'
+                 . ' --no-session-persistence'
+                 . ' --tools ' . escapeshellarg(implode(',', $allowedTools))
+                 . ' --mcp-config ' . escapeshellarg($mcpConfigPath)
+                 . ' --strict-mcp-config'
+                 . ' --permission-mode bypassPermissions'
+                 . ' --append-system-prompt-file ' . escapeshellarg($systemPromptPath)
+                 . ' --model ' . escapeshellarg($model);
+            if ($maxBudgetUsd !== null && $maxBudgetUsd > 0) {
+                $cmd .= ' --max-budget-usd ' . escapeshellarg((string) $maxBudgetUsd);
+            }
+            $cmd .= ' < /dev/null 2>&1';
+
+            exec($cmd, $lines, $exitCode);
+            $output = implode("\n", $lines);
+
+            if ($exitCode !== 0) {
+                if ($exitCode === 137 || $exitCode === 124) {
+                    return ['ok' => false, 'result' => null, 'error' => 'The research request took too long and was stopped.'];
+                }
+                return ['ok' => false, 'result' => null, 'error' => 'The research request failed: ' . mb_substr($output, 0, 500)];
+            }
+
+            $decoded = json_decode($output, true);
+            if (!is_array($decoded) || !isset($decoded['result']) || !is_string($decoded['result'])) {
+                return ['ok' => false, 'result' => null, 'error' => 'The AI returned an unexpected response envelope.'];
+            }
+            if (!empty($decoded['is_error'])) {
+                return ['ok' => false, 'result' => null, 'error' => 'The AI reported an error: ' . mb_substr($decoded['result'], 0, 500)];
+            }
+
+            return ['ok' => true, 'result' => $decoded['result'], 'error' => null];
+        } finally {
+            self::rrmdir($tmpDir);
+        }
+    }
+
     /** Absolute path to the `claude` binary, or null if unset/not executable. */
     private static function binPath(): ?string
     {

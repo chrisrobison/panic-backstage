@@ -233,3 +233,29 @@ export function debounce(fn, ms = 300) {
   let timer;
   return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
 }
+
+// ── AI/web research jobs (Phase 7) ──────────────────────────────────────────
+
+export const RESEARCH_MODE_LABELS = {
+  discover_conferences: 'Find upcoming conferences',
+  research_conference: 'Research this conference',
+  find_target_companies: 'Find sponsors & exhibitors',
+  research_side_events: 'Find side events',
+  generate_outreach_angles: 'Generate outreach angles',
+  research_company: 'Research company',
+};
+
+export function researchModeLabel(mode) {
+  return RESEARCH_MODE_LABELS[mode] || titleCaseFallback(mode);
+}
+
+const RESEARCH_STATUS_LABELS = { pending: 'Queued', processing: 'Researching…', completed: 'Completed', failed: 'Failed' };
+const RESEARCH_STATUS_TONES = { pending: '', processing: 'info', completed: 'success', failed: 'error' };
+
+export function researchStatusBadge(status) {
+  return `<span class="badge ${RESEARCH_STATUS_TONES[status] ?? ''}">${esc(RESEARCH_STATUS_LABELS[status] || titleCaseFallback(status))}</span>`;
+}
+
+export function researchStatusIsActive(status) {
+  return status === 'pending' || status === 'processing';
+}

@@ -87,6 +87,7 @@ class OpportunitiesCompanyDetail extends PanicElement {
           ${this.tasksHtml()}
         </div>
         <div class="opp-detail-rail">
+          <div data-ai-research-slot></div>
           ${this.companyIntelligenceHtml(c)}
           ${this.buyingSignalsHtml()}
           ${this.venueFitHtml()}
@@ -95,6 +96,21 @@ class OpportunitiesCompanyDetail extends PanicElement {
       </div>`;
 
     this.bind();
+    this.mountAiResearch();
+  }
+
+  // See ai-research-panel.js's docblock — created via document.createElement
+  // (never inline in the innerHTML template above) so scopeType/scopeId are
+  // real JS properties already set before its connectedCallback fires.
+  mountAiResearch() {
+    const slot = $('[data-ai-research-slot]', this);
+    if (!slot) return;
+    const panel = document.createElement('pb-opportunities-ai-research');
+    panel.scopeType = 'company';
+    panel.scopeId = this.id;
+    panel.scopeName = this.data.company.name;
+    panel.addEventListener('research-imported', () => this.load());
+    slot.replaceWith(panel);
   }
 
   // ── KPI cards ────────────────────────────────────────────────────────────
