@@ -11,11 +11,11 @@
 // `/opportunity-companies/{id}/tasks` — see src/Opportunities/TaskLink.php).
 // Buyer contacts (`/opportunity-companies/{id}/contacts`) are new this phase
 // — see src/Opportunities/Contacts.php.
-import { esc, api, emptyState, openModal, formData, publish, getAppCapabilities, PanicElement, $, $$ } from '../core.js';
+import { esc, api, emptyState, openModal, formData, publish, subscribe, getAppCapabilities, PanicElement, $, $$ } from '../core.js';
 import {
   relationshipStatusBadge, relationshipStatusLabel, contactStatusBadge,
   venueFitTagLabel, activityActionLabel, initials, avatarColor, relativeTime,
-  shortMonthDay, noteTypeLabel, debounce,
+  shortMonthDay, noteTypeLabel, debounce, overdueTaskCount,
 } from './shared.js';
 
 const SIGNAL_TYPE_LABELS = {
@@ -34,6 +34,15 @@ class OpportunitiesCompanyDetail extends PanicElement {
     this.activity = [];
     this.taskDocumentId = null;
     this.tasks = [];
+    this.reloadDebounced = debounce(() => this.load(), 300);
+    // Phase 8: previously fetched once — another user editing this
+    // company, adding a buyer contact, or completing a task now refreshes
+    // the page automatically. Also reload on 'opportunity' (this company's
+    // own opportunities feed the Activity panel and KPIs).
+    subscribe('data.invalidated', (msg) => {
+      if ((msg.entity === 'opportunity_company' && (msg.id == null || msg.id === this.id))
+        || msg.entity === 'opportunity' || msg.entity === 'global') this.reloadDebounced();
+    }, this.abort.signal);
     await this.load();
   }
 
@@ -209,7 +218,7 @@ class OpportunitiesCompanyDetail extends PanicElement {
     const items = this.activity.length
       ? this.activity.slice(0, 12).map((a) => `<li class="opp-activity-item">
           <strong>${esc(activityActionLabel(a.action, a.details))}</strong>
-          <small class="muted">${esc(a.opportunity_name)} &middot; ${a.created_by_name ? esc(a.created_by_name) + ' &middot; ' : ''}${esc(relativeTime(a.created_at))}</small>
+          <small class="muted">${a.opportunity_name ? esc(a.opportunity_name) + ' &middot; ' : ''}${a.created_by_name ? esc(a.created_by_name) + ' &middot; ' : ''}${esc(relativeTime(a.created_at))}</small>
         </li>`).join('')
       : `<li class="muted">No activity recorded yet.</li>`;
     return `<article class="panel padded">
@@ -260,8 +269,9 @@ class OpportunitiesCompanyDetail extends PanicElement {
           ${t.due_date ? `<small class="muted">${esc(shortMonthDay(t.due_date))}</small>` : ''}
         </li>`).join('')
       : `<li class="muted">No tasks yet.</li>`;
+    const overdue = overdueTaskCount(this.tasks);
     return `<article class="panel padded">
-      <div class="section-head"><h2>Open Tasks <span class="pill">${esc(this.tasks.filter((t) => t.status !== 'done').length)}</span></h2>
+      <div class="section-head"><h2>Open Tasks <span class="pill">${esc(this.tasks.filter((t) => t.status !== 'done').length)}</span>${overdue ? ` <span class="pill pill-danger">${esc(overdue)} overdue</span>` : ''}</h2>
         <a class="button secondary small" href="#tasks-${esc(this.taskDocumentId)}">Open in Tasks</a>
       </div>
       <ul class="opp-task-list">${items}</ul>

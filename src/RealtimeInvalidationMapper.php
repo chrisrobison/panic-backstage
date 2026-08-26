@@ -41,6 +41,15 @@ final class RealtimeInvalidationMapper
         'events'        => 'event',
         'leads'         => 'lead',
         'opportunities' => 'opportunity',
+        // Phase 8 — Conferences/Companies/Notes list+detail pages and the
+        // AI Research panel now subscribe too (see
+        // docs/OPPORTUNITIES-IMPLEMENTATION.md §1.9/§4.8); previously these
+        // only ever fell through to the 'global' fallback below.
+        'opportunity_conferences'   => 'opportunity_conference',
+        'opportunity_companies'     => 'opportunity_company',
+        'opportunity_contacts'      => 'opportunity_contact',
+        'opportunity_notes'         => 'opportunity_note',
+        'opportunity_research_jobs' => 'opportunity_research_job',
     ];
 
     /**
@@ -92,6 +101,23 @@ final class RealtimeInvalidationMapper
         'opportunity_qualification'   => ['opportunity', 'opportunity_id'],
         'opportunity_decision_makers' => ['opportunity', 'opportunity_id'],
         'opportunity_signals'         => ['opportunity', 'opportunity_id'],
+        // Phase 8. opportunity_conference_facts only ever has one owner
+        // (conference_id) so it's an unambiguous CHILD entry.
+        // opportunity_conference_companies carries BOTH a conference_id and
+        // a company_id, but this map (like the rest of the codebase) can
+        // only ever emit one parent per row — conference_id is chosen since
+        // that link is surfaced most prominently on the conference detail
+        // page; the company detail page's own "Conference Presence" panel
+        // still catches up via its normal fetch-once/next-navigation cycle
+        // (same fails-open tradeoff already documented for opportunity_signals
+        // above).
+        'opportunity_conference_facts'   => ['opportunity_conference', 'conference_id'],
+        'opportunity_conference_companies' => ['opportunity_conference', 'conference_id'],
+        // A note's own links/tags/version history all invalidate the note
+        // itself (linked_type=contact etc. also all resolve to their note).
+        'opportunity_note_links'    => ['opportunity_note', 'note_id'],
+        'opportunity_note_tags'     => ['opportunity_note', 'note_id'],
+        'opportunity_note_versions' => ['opportunity_note', 'note_id'],
     ];
 
     /**

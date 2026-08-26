@@ -146,7 +146,9 @@ final class Companies extends BaseEndpoint
                     COALESCE(agg.open_opportunity_count, 0) AS open_opportunity_count,
                     COALESCE(agg.pipeline_value, 0) AS pipeline_value,
                     agg.last_activity_at,
-                    COALESCE(cc.conference_count, 0) AS conference_count
+                    COALESCE(cc.conference_count, 0) AS conference_count,
+                    COALESCE(tk.task_count, 0) AS task_count,
+                    COALESCE(tk.overdue_task_count, 0) AS overdue_task_count
              FROM opportunity_companies co
              LEFT JOIN (
                  SELECT company_id,
@@ -159,6 +161,12 @@ final class Companies extends BaseEndpoint
                  SELECT company_id, COUNT(*) AS conference_count
                  FROM opportunity_conference_companies GROUP BY company_id
              ) cc ON cc.company_id = co.id
+             LEFT JOIN (
+                 SELECT document_id,
+                        COUNT(*) AS task_count,
+                        SUM(CASE WHEN due_date IS NOT NULL AND due_date < CURDATE() THEN 1 ELSE 0 END) AS overdue_task_count
+                 FROM tasks WHERE status != \'done\' GROUP BY document_id
+             ) tk ON tk.document_id = co.task_document_id
              WHERE ' . implode(' AND ', $where) . '
              ORDER BY ' . $orderBy . '
              LIMIT 200',
@@ -225,6 +233,7 @@ final class Companies extends BaseEndpoint
         }
 
         $fitTags = $this->venueFitTags($company, $conferenceLinks);
+        $taskCounts = TaskLink::taskCounts($this->db, $company['task_document_id'] ?? null);
 
         return $this->ok([
             'company'       => $company,
@@ -236,8 +245,10 @@ final class Companies extends BaseEndpoint
                 'conference_count'       => count($conferenceLinks),
                 'last_activity_at'       => $lastActivityAt,
             ],
-            'venue_fit_tags' => $fitTags,
-            'pitch_ideas'    => $this->pitchIdeas($fitTags, $conferenceLinks),
+            'venue_fit_tags'     => $fitTags,
+            'pitch_ideas'        => $this->pitchIdeas($fitTags, $conferenceLinks),
+            'task_count'         => $taskCounts['task_count'],
+            'overdue_task_count' => $taskCounts['overdue_task_count'],
         ]);
     }
 
@@ -279,6 +290,33 @@ final class Companies extends BaseEndpoint
             unset($row['details_json']);
         }
         unset($row);
+
+        // Phase 8: completed AI research jobs scoped to this company (see
+        // src/Opportunities/Research/Jobs.php) merged in as synthetic
+        // activity rows. Research jobs run scoped to a conference/company,
+        // never an opportunity, so they never land in opportunity_activities
+        // — without this merge, "research imported" (spec's activity-history
+        // list) would have no home at all on the one company-level feed this
+        // module has. Real, already-stored data only — nothing fabricated.
+        $researchRows = $this->db->all(
+            "SELECT id, job_type, completed_at FROM opportunity_research_jobs
+             WHERE company_id = ? AND status = 'completed' AND completed_at IS NOT NULL
+             ORDER BY completed_at DESC LIMIT 20",
+            [$id]
+        );
+        foreach ($researchRows as $job) {
+            $rows[] = [
+                'id'               => 'research-' . $job['id'],
+                'action'           => 'research_completed',
+                'details'          => ['job_type' => $job['job_type']],
+                'created_at'       => $job['completed_at'],
+                'created_by_name'  => 'AI Research',
+                'opportunity_id'   => null,
+                'opportunity_name' => null,
+            ];
+        }
+        usort($rows, static fn (array $a, array $b) => strcmp((string) $b['created_at'], (string) $a['created_at']));
+        $rows = array_slice($rows, 0, 50);
 
         return $this->ok(['activity' => $rows]);
     }

@@ -8574,3 +8574,15 @@ pb-inbox-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direc
 .opp-ai-review-list label.opp-ai-imported { cursor: default; opacity: 0.7; }
 .opp-ai-review-list input[type="checkbox"] { margin-top: 4px; flex-shrink: 0; }
 .opp-ai-review-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+/* ── Phase 8: Opportunity Score panel (opportunity-detail.js right rail) ──
+   Reuses .panel/.pill/.badge/.opp-score-* (scoreTone(), shared.js) — only
+   the component-bar list and the total-score chip are new. ─────────────── */
+.opp-score-panel .section-head { align-items: center; }
+.opp-score-total { font-size: 22px; font-weight: 800; line-height: 1; }
+.opp-score-total small { font-size: 12px; font-weight: 600; color: var(--muted); }
+.opp-score-components { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.opp-score-component-head { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px; }
+.opp-score-bar { height: 6px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.opp-score-bar span { display: block; height: 100%; background: var(--blue); border-radius: 999px; }
+.opp-score-reasons { list-style: disc; margin: 10px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }

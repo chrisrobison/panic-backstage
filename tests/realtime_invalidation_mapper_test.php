@@ -87,5 +87,33 @@ foreach (['rate_limits', 'refresh_tokens', 'magic_link_tokens', 'email_verificat
 $r = RealtimeInvalidationMapper::map(row('events', null, null, ['title' => 'x']));
 ok($r === ['entity' => 'global'], "events row with no pk_value falls back to global instead of throwing");
 
+// ── Phase 8: Opportunities conferences/companies/contacts/notes/research jobs ──
+$r = RealtimeInvalidationMapper::map(row('opportunity_conferences', '42', null, ['id' => 42]));
+ok($r === ['entity' => 'opportunity_conference', 'id' => 42], "opportunity_conferences row maps to opportunity_conference:42");
+
+$r = RealtimeInvalidationMapper::map(row('opportunity_companies', '7', null, ['id' => 7]));
+ok($r === ['entity' => 'opportunity_company', 'id' => 7], "opportunity_companies row maps to opportunity_company:7");
+
+$r = RealtimeInvalidationMapper::map(row('opportunity_contacts', '3', null, ['id' => 3]));
+ok($r === ['entity' => 'opportunity_contact', 'id' => 3], "opportunity_contacts row maps to opportunity_contact:3");
+
+$r = RealtimeInvalidationMapper::map(row('opportunity_notes', '9', null, ['id' => 9]));
+ok($r === ['entity' => 'opportunity_note', 'id' => 9], "opportunity_notes row maps to opportunity_note:9");
+
+$r = RealtimeInvalidationMapper::map(row('opportunity_research_jobs', '5', null, ['id' => 5]));
+ok($r === ['entity' => 'opportunity_research_job', 'id' => 5], "opportunity_research_jobs row maps to opportunity_research_job:5");
+
+$r = RealtimeInvalidationMapper::map(row('opportunity_conference_facts', '1', null, ['id' => 1, 'conference_id' => 42]));
+ok($r === ['entity' => 'opportunity_conference', 'id' => 42], "opportunity_conference_facts maps to its parent conference");
+
+$r = RealtimeInvalidationMapper::map(row('opportunity_conference_companies', '1', null, ['id' => 1, 'conference_id' => 42, 'company_id' => 7]));
+ok($r === ['entity' => 'opportunity_conference', 'id' => 42], "opportunity_conference_companies maps to its parent conference (not the company)");
+
+$r = RealtimeInvalidationMapper::map(row('opportunity_note_links', '1', null, ['id' => 1, 'note_id' => 9, 'linked_type' => 'company', 'linked_id' => 7]));
+ok($r === ['entity' => 'opportunity_note', 'id' => 9], "opportunity_note_links maps to its parent note");
+
+$r = RealtimeInvalidationMapper::map(row('opportunity_note_versions', '1', ['id' => 1, 'note_id' => 9], null));
+ok($r === ['entity' => 'opportunity_note', 'id' => 9], "opportunity_note_versions DELETE maps to its parent note (note_id from old_row)");
+
 echo "\nRealtimeInvalidationMapper: $passed passed, $failed failed.\n";
 exit($failed > 0 ? 1 : 0);

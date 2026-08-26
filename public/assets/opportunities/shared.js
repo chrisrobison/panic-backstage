@@ -169,7 +169,13 @@ export function activityActionLabel(action, details) {
     case 'meeting_logged': return 'Meeting logged';
     case 'note_logged': return 'Note logged';
     case 'proposal_logged': return 'Proposal noted';
+    case 'task_logged': return 'Task activity logged';
     case 'other_logged': return 'Activity logged';
+    // Phase 8 activity history additions.
+    case 'owner_changed': return 'Owner changed';
+    case 'probability_changed': return `Probability changed${d.to != null ? ` to ${d.to}%` : ''}`;
+    case 'contact_added': return `Contact added${d.contact_name ? ` (${d.contact_name})` : ''}`;
+    case 'research_completed': return `AI research completed${d.job_type ? ` (${researchModeLabel(d.job_type)})` : ''}`;
     default: return titleCaseFallback(action);
   }
 }
@@ -197,6 +203,11 @@ const WARNING_LABELS = {
   date_conflict: 'Date conflict',
   stale: 'Stale',
   budget_unknown: 'Budget unknown',
+  // Phase 8 follow-up intelligence (src/Opportunities/FollowUp.php).
+  no_activity: 'No recent activity',
+  proposal_stalled: 'Proposal stalled',
+  conference_approaching: 'Conference approaching',
+  target_date_approaching: 'Target date approaching',
 };
 export function warningLabel(code) {
   return WARNING_LABELS[code] || titleCaseFallback(code);
@@ -226,6 +237,17 @@ export function relativeTime(value) {
   if (diffDays > 1 && diffDays < 30) return `${diffDays} days ago`;
   if (diffDays < 0 && diffDays > -30) return `in ${-diffDays} days`;
   return shortMonthDay(value.slice(0, 10));
+}
+
+/**
+ * How many of `tasks` are open (not done) AND past their due_date — Phase 8
+ * (spec: "show task counts and overdue status in relevant views"). Computed
+ * client-side over the already-fetched task list every detail page already
+ * loads, rather than a separate backend call.
+ */
+export function overdueTaskCount(tasks) {
+  const today = new Date().toISOString().slice(0, 10);
+  return (tasks || []).filter((t) => t.status !== 'done' && t.due_date && t.due_date.slice(0, 10) < today).length;
 }
 
 /** Delay invoking `fn` until `ms` have passed since the last call — used by every live-search/filter input across the module. */

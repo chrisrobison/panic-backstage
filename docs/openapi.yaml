@@ -30430,6 +30430,101 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/opportunities/availability-prospects:
+    get:
+      operationId: opportunities_availability_prospects
+      summary: Find prospects for empty venue dates (Phase 8)
+      description: >-
+        Requires view_opportunities. The useful inverse of the dashboard's empty-night matching:
+        given a date range, which conferences (and their linked target companies/signals) should
+        sales pursue for those open venue nights. Reuses
+        Opportunities/Availability.php::emptyNightMatches() rather than duplicating its date math,
+        then annotates each match with target_company_count, signal_count, a simple deterministic
+        prospect_score, and an estimated_opportunity_pool that is always explicitly labeled a
+        heuristic (never a fabricated precise dollar figure) and is null with an honest `basis`
+        string whenever there is no real historical or company data to ground it in.
+      tags:
+        - Opportunities
+      parameters:
+        - name: from
+          in: query
+          description: Defaults to today (YYYY-MM-DD).
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          description: Required (YYYY-MM-DD); must be on or after `from`.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Prospect list, highest prospect_score first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from:
+                    type: string
+                    format: date
+                  to:
+                    type: string
+                    format: date
+                  prospects:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        days_until:
+                          type: integer
+                        conference:
+                          $ref: '#/components/schemas/OpportunityConference'
+                        target_company_count:
+                          type: integer
+                        signal_count:
+                          type: integer
+                        prospect_score:
+                          type: integer
+                          description: >-
+                            A simple, deterministic 0-100 composite (conference opportunity_score,
+                            linked target companies, signals, attendance) — distinct from
+                            Scoring.php's per-opportunity score, since there is no opportunity yet
+                            at this stage, just a date+conference pairing.
+                        estimated_opportunity_pool:
+                          type: object
+                          properties:
+                            value:
+                              type: number
+                              nullable: true
+                            is_heuristic:
+                              type: boolean
+                            basis:
+                              type: string
+                              description: Human-readable explanation of how (or why not) value was derived.
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Missing `to`, or `to` is before `from`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/opportunities:
     get:
       operationId: opportunities_list

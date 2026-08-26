@@ -5,6 +5,8 @@ namespace Panic;
 
 use Panic\Opportunities\Availability;
 use Panic\Opportunities\Conversion;
+use Panic\Opportunities\FollowUp;
+use Panic\Opportunities\Scoring;
 
 use function Panic\boolish;
 use function Panic\date_or_null;
@@ -60,12 +62,20 @@ final class Opportunities extends BaseEndpoint
     // Manual "Log Activity" entry types (Phase 5) — a free-text entry point
     // distinct from the automatic created/stage_changed/note_added/etc.
     // activities every other write already logs. See activities()/logActivity().
-    private const LOGGABLE_ACTIVITY_TYPES = ['call', 'meeting', 'note', 'proposal', 'other'];
+    // 'task' added in Phase 8 so the Opportunity detail page can log a real
+    // activity row when a task is created/completed against this
+    // opportunity's lazily-provisioned task_documents row (see
+    // opportunity-detail.js's addTask()/toggleTask()) without a Tasks<->
+    // Opportunities schema coupling.
+    private const LOGGABLE_ACTIVITY_TYPES = ['call', 'meeting', 'note', 'proposal', 'task', 'other'];
 
     public function handle(Request $request): Response
     {
         if (($this->params['action'] ?? null) === 'dashboard') {
             return $this->dashboard($request);
+        }
+        if (($this->params['action'] ?? null) === 'availability-prospects') {
+            return $this->availabilityProspects($request);
         }
 
         $id    = $this->params['opportunityId'] ?? null;
@@ -348,6 +358,109 @@ final class Opportunities extends BaseEndpoint
         return array_slice($suggestions, 0, 5);
     }
 
+    // ── Find prospects for empty dates (Phase 8) ────────────────────────────
+    //
+    // GET /api/opportunities/availability-prospects?from=YYYY-MM-DD&to=YYYY-MM-DD
+    //
+    // The useful inverse of the Discover dashboard's "which conferences have
+    // an empty night" panel: "given these open venue dates, which
+    // conferences/companies should sales pursue?" Reuses
+    // Availability::emptyNightMatches() (the same date-math primitive Phase
+    // 2's dashboard already uses) rather than duplicating it, then just
+    // filters/annotates its output for the requested range — no new date
+    // logic. `estimated_opportunity_pool` is explicitly labeled a heuristic
+    // (spec: "do not claim fake revenue precision") and is null, with an
+    // honest `basis` string, whenever there isn't real historical data to
+    // ground it in.
+
+    private function availabilityProspects(Request $request): Response
+    {
+        if ($denied = $this->requireGlobalCapability('view_opportunities')) {
+            return $denied;
+        }
+
+        $from = date_or_null($request->query('from')) ?? gmdate('Y-m-d');
+        $to   = date_or_null($request->query('to'));
+        if (!$to) {
+            return Response::json(['error' => 'to (YYYY-MM-DD) is required'], 422);
+        }
+        if ($to < $from) {
+            return Response::json(['error' => 'to must be on or after from'], 422);
+        }
+
+        $today = gmdate('Y-m-d');
+        $windowDays = min(365, max(1, (int) ceil((strtotime($to) - strtotime($today)) / 86400) + 1));
+
+        $matches = array_values(array_filter(
+            Availability::emptyNightMatches($this->db, $windowDays),
+            static fn (array $m) => $m['date'] >= $from && $m['date'] <= $to
+        ));
+
+        // A real historical average — null (not a fabricated default) when
+        // this venue has no won opportunities yet.
+        $avgWonValueRow = $this->db->one(
+            "SELECT AVG(estimated_value) v FROM opportunities WHERE stage = 'won' AND estimated_value IS NOT NULL"
+        );
+        $avgWonValue = $avgWonValueRow && $avgWonValueRow['v'] !== null ? (float) $avgWonValueRow['v'] : null;
+
+        $prospects = [];
+        foreach ($matches as $m) {
+            $conference = $m['conference'];
+            $conferenceId = (int) $conference['id'];
+
+            $companyCount = (int) ($this->db->one(
+                'SELECT COUNT(*) c FROM opportunity_conference_companies WHERE conference_id = ?',
+                [$conferenceId]
+            )['c'] ?? 0);
+            $signalCount = (int) ($this->db->one(
+                'SELECT COUNT(*) c FROM opportunity_signals WHERE conference_id = ?',
+                [$conferenceId]
+            )['c'] ?? 0);
+            $daysUntil = (int) floor((strtotime($m['date']) - strtotime($today)) / 86400);
+            $attendance = $conference['estimated_attendance'] !== null ? (int) $conference['estimated_attendance'] : null;
+
+            // A simple, documented composite — not the same thing as
+            // Scoring.php's per-opportunity score (there is no opportunity
+            // yet at this stage, just a date+conference pairing).
+            $prospectScore = min(100,
+                ($conference['opportunity_score'] !== null ? (int) round((int) $conference['opportunity_score'] * 0.4) : 0)
+                + min(30, $companyCount * 2)
+                + min(15, $signalCount * 3)
+                + ($attendance !== null ? min(15, (int) round($attendance / 1000)) : 0)
+            );
+
+            $estimatedPool = ['value' => null, 'is_heuristic' => true, 'basis' => 'No target companies researched for this conference yet'];
+            if ($companyCount > 0) {
+                $estimatedPool = $avgWonValue !== null
+                    ? [
+                        'value'        => round($companyCount * $avgWonValue, 0),
+                        'is_heuristic' => true,
+                        'basis'        => sprintf(
+                            '%d researched compan%s × this venue\'s historical average won deal ($%s)',
+                            $companyCount,
+                            $companyCount === 1 ? 'y' : 'ies',
+                            number_format($avgWonValue, 0)
+                        ),
+                    ]
+                    : ['value' => null, 'is_heuristic' => true, 'basis' => 'No historical won-deal value on file yet to base an estimate on'];
+            }
+
+            $prospects[] = [
+                'date'                       => $m['date'],
+                'days_until'                 => $daysUntil,
+                'conference'                 => $conference,
+                'target_company_count'       => $companyCount,
+                'signal_count'               => $signalCount,
+                'prospect_score'             => $prospectScore,
+                'estimated_opportunity_pool' => $estimatedPool,
+            ];
+        }
+
+        usort($prospects, static fn (array $a, array $b) => $b['prospect_score'] <=> $a['prospect_score']);
+
+        return $this->ok(['from' => $from, 'to' => $to, 'prospects' => $prospects]);
+    }
+
     // ── List ─────────────────────────────────────────────────────────────────
 
     private function index(Request $request): Response
@@ -386,7 +499,7 @@ final class Opportunities extends BaseEndpoint
         }
 
         $sql = 'SELECT o.*, c.name AS company_name, conf.name AS conference_name,
-                       u.name AS owner_name
+                       conf.starts_at AS conference_starts_at, u.name AS owner_name
                 FROM opportunities o
                 JOIN opportunity_companies c ON c.id = o.company_id
                 LEFT JOIN opportunity_conferences conf ON conf.id = o.conference_id
@@ -473,11 +586,22 @@ final class Opportunities extends BaseEndpoint
             ), 'date');
         }
 
+        // Phase 8 follow-up intelligence (FollowUp::additionalFlags()) needs
+        // each opportunity's last activity timestamp — one bulk query, not
+        // one per row.
+        $lastActivity = [];
+        foreach ($this->db->all(
+            "SELECT opportunity_id, MAX(created_at) latest FROM opportunity_activities WHERE opportunity_id IN ($placeholders) GROUP BY opportunity_id",
+            $ids
+        ) as $row) {
+            $lastActivity[(int) $row['opportunity_id']] = $row['latest'];
+        }
+
         foreach ($opportunities as &$o) {
             $o['note_count']      = $noteCounts[(int) $o['id']] ?? 0;
             $o['task_count']      = $o['task_document_id'] ? ($taskCounts[(int) $o['task_document_id']] ?? 0) : 0;
             $o['tasks_due_soon']  = $o['task_document_id'] ? ($tasksDueSoon[(int) $o['task_document_id']] ?? 0) : 0;
-            $o['warnings']        = $this->opportunityWarnings($o, $busyDates);
+            $o['warnings']        = $this->opportunityWarnings($o, $busyDates, $lastActivity[(int) $o['id']] ?? null);
         }
         unset($o);
     }
@@ -488,7 +612,7 @@ final class Opportunities extends BaseEndpoint
      * above). Never AI, never fabricated. Open (not won/lost) opportunities
      * only — a closed opportunity's pipeline card doesn't need warnings.
      */
-    private function opportunityWarnings(array $o, array $busyDates): array
+    private function opportunityWarnings(array $o, array $busyDates, ?string $lastActivityAt = null): array
     {
         if (in_array($o['stage'], ['won', 'lost'], true)) {
             return [];
@@ -510,9 +634,18 @@ final class Opportunities extends BaseEndpoint
             $warnings[] = 'date_conflict';
         }
         $updatedAt = $o['updated_at'] ?? $o['created_at'] ?? null;
-        if ($updatedAt && strtotime((string) $updatedAt) < strtotime('-21 days')) {
+        if ($updatedAt && strtotime((string) $updatedAt) < strtotime('-' . FollowUp::STALE_DAYS . ' days')) {
             $warnings[] = 'stale';
         }
+
+        // Phase 8 follow-up intelligence: no_activity, proposal_stalled,
+        // conference_approaching, target_date_approaching — see FollowUp's
+        // own docblock for why these are additive rather than replacing the
+        // codes above.
+        foreach (FollowUp::additionalFlags($o, ['last_activity_at' => $lastActivityAt]) as $code) {
+            $warnings[] = $code;
+        }
+
         return $warnings;
     }
 
@@ -534,6 +667,10 @@ final class Opportunities extends BaseEndpoint
             'risk_flags'   => $this->riskFlags($opportunity),
             'budget_fit'   => $this->budgetFit($opportunity),
             'resources'    => $this->venueResourceOptions($opportunity),
+            // Phase 8 deterministic scoring service — see Scoring.php.
+            // Detail-page only (not the list/pipeline endpoint) to avoid
+            // turning a cheap bulk query into a per-row scoring pass.
+            'score'        => Scoring::scoreForOpportunity($this->db, $opportunity),
             // Owner picker — same plain "every active user" query Leads.php
             // exposes for its own owner assignment (src/Leads.php:120), not
             // the event-scoped accessibleUsers() helper (that one restricts
@@ -547,7 +684,7 @@ final class Opportunities extends BaseEndpoint
     {
         return $this->db->one(
             'SELECT o.*, c.name AS company_name, c.domain AS company_domain, c.logo_url AS company_logo_url,
-                    conf.name AS conference_name, conf.slug AS conference_slug,
+                    conf.name AS conference_name, conf.slug AS conference_slug, conf.starts_at AS conference_starts_at,
                     u.name AS owner_name, e.title AS won_event_title,
                     pc.name AS primary_contact_name, pc.title AS primary_contact_title,
                     pc.email AS primary_contact_email, pc.phone AS primary_contact_phone,
@@ -667,6 +804,18 @@ final class Opportunities extends BaseEndpoint
         $qualification = $this->db->one('SELECT competitor_venues_assessed FROM opportunity_qualification WHERE opportunity_id = ?', [$opportunity['id']]);
         if (in_array($opportunity['stage'], ['proposal_sent', 'verbal_yes'], true) && empty($qualification['competitor_venues_assessed'])) {
             $flags[] = ['code' => 'competitor_venue', 'label' => 'Competitor venues not yet assessed'];
+        }
+
+        // Phase 8 follow-up intelligence — no_activity, proposal_stalled,
+        // conference_approaching, target_date_approaching. See FollowUp's
+        // own docblock for why these are additive to the codes above rather
+        // than a rename of them.
+        $lastActivityAt = $this->db->one(
+            'SELECT MAX(created_at) latest FROM opportunity_activities WHERE opportunity_id = ?',
+            [$opportunity['id']]
+        )['latest'] ?? null;
+        foreach (FollowUp::additionalFlags($opportunity, ['last_activity_at' => $lastActivityAt]) as $code) {
+            $flags[] = ['code' => $code, 'label' => FollowUp::LABELS[$code] ?? $code];
         }
 
         return $flags;
@@ -820,13 +969,37 @@ final class Opportunities extends BaseEndpoint
         $params[] = $id;
         $this->db->run('UPDATE opportunities SET ' . implode(', ', $sets) . ' WHERE id = ?', $params);
 
+        // Phase 8 activity history: owner/probability changes get their own
+        // specific action codes (spec: "owner changed", "probability
+        // changed" must each produce an activity record) rather than only
+        // showing up folded into the generic 'updated' fields list below.
+        $specificallyLoggedFields = [];
+        if (array_key_exists('owner_user_id', $b)) {
+            $oldOwner = $existing['owner_user_id'] !== null ? (int) $existing['owner_user_id'] : null;
+            $newOwner = $b['owner_user_id'] !== null && $b['owner_user_id'] !== '' ? (int) $b['owner_user_id'] : null;
+            if ($oldOwner !== $newOwner) {
+                log_opportunity_activity($this->db, $id, $this->userId(), 'owner_changed', ['from' => $oldOwner, 'to' => $newOwner]);
+                $specificallyLoggedFields[] = 'owner_user_id';
+            }
+        }
+        if (array_key_exists('probability', $b)) {
+            $oldProbability = $existing['probability'] !== null ? (int) $existing['probability'] : null;
+            $newProbability = $this->clampProbability($b['probability']);
+            if ($oldProbability !== $newProbability) {
+                log_opportunity_activity($this->db, $id, $this->userId(), 'probability_changed', ['from' => $oldProbability, 'to' => $newProbability]);
+                $specificallyLoggedFields[] = 'probability';
+            }
+        }
+
         if ($newStage !== $existing['stage']) {
             log_opportunity_activity($this->db, $id, $this->userId(), 'stage_changed', [
                 'from' => $existing['stage'],
                 'to'   => $newStage,
             ]);
-        } else {
-            log_opportunity_activity($this->db, $id, $this->userId(), 'updated', ['fields' => array_keys($b)]);
+        }
+        $remainingFields = array_diff(array_keys($b), $specificallyLoggedFields);
+        if ($newStage === $existing['stage'] && $remainingFields) {
+            log_opportunity_activity($this->db, $id, $this->userId(), 'updated', ['fields' => array_values($remainingFields)]);
         }
 
         return $this->ok(['opportunity' => $this->find($id)]);

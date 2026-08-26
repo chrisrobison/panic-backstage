@@ -58,8 +58,14 @@ class OpportunitiesNotesWorkspace extends PanicElement {
     this.versions = null; // loaded lazily when the History panel opens
 
     this.reloadDebounced = debounce(() => this.loadList(), 300);
+    // Phase 8: opportunity_notes (+ its links/tags/versions) are now their
+    // own mapped RealtimeInvalidationMapper entity ('opportunity_note'),
+    // rather than only ever falling through to 'global' — see
+    // src/RealtimeInvalidationMapper.php. Still also reload on 'opportunity'
+    // (a linked opportunity's own name/stage may have changed) and 'global'
+    // as a safety net for anything not yet mapped.
     subscribe('data.invalidated', (msg) => {
-      if (msg.entity === 'opportunity' || msg.entity === 'global') this.reloadDebounced();
+      if (msg.entity === 'opportunity_note' || msg.entity === 'opportunity' || msg.entity === 'global') this.reloadDebounced();
     }, this.abort.signal);
 
     await Promise.all([this.loadList(), this.loadLinkPickerSources()]);

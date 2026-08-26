@@ -18,7 +18,7 @@
 import { esc, api, emptyState, openModal, formData, publish, subscribe, getAppCapabilities, PanicElement, $, $$ } from '../core.js';
 import {
   stageBadge, shortMonthDay, relativeTime, noteTypeLabel, NOTE_TYPES,
-  activityActionLabel, decisionMakerRoleBadge, QUALIFICATION_ITEMS, debounce,
+  activityActionLabel, decisionMakerRoleBadge, QUALIFICATION_ITEMS, debounce, scoreTone, overdueTaskCount,
 } from './shared.js';
 
 const TABS = [
@@ -27,6 +27,24 @@ const TABS = [
   ['activity', 'Activity'],
   ['linked', 'Linked Records'],
 ];
+
+// Phase 8 — labels for src/Opportunities/Scoring.php's component keys.
+const SCORE_COMPONENT_LABELS = {
+  conference_relevance: 'Conference Relevance',
+  company_participation: 'Company Participation',
+  hospitality_signals: 'Hospitality Signals',
+  buyer_identified: 'Buyer Identified',
+  venue_date_availability: 'Venue/Date Availability',
+  budget_value: 'Budget/Value',
+  guest_venue_fit: 'Guest/Venue Fit',
+  research_freshness: 'Research Freshness',
+  urgency: 'Urgency',
+};
+const SCORE_COMPONENT_MAX = {
+  conference_relevance: 20, company_participation: 15, hospitality_signals: 15,
+  buyer_identified: 10, venue_date_availability: 15, budget_value: 10,
+  guest_venue_fit: 5, research_freshness: 5, urgency: 5,
+};
 
 class OpportunitiesDetail extends PanicElement {
   async connect() {
@@ -100,6 +118,7 @@ class OpportunitiesDetail extends PanicElement {
           ${this.mainContentHtml(o)}
         </div>
         <div class="opp-detail-rail">
+          ${this.scoreHtml()}
           ${this.nextActionsHtml(o)}
           ${this.riskFlagsHtml()}
           ${this.buyingSignalsHtml()}
@@ -307,8 +326,9 @@ class OpportunitiesDetail extends PanicElement {
           ${t.due_date ? `<small class="muted">${esc(shortMonthDay(t.due_date))}</small>` : ''}
         </li>`).join('')
       : `<li class="muted">No tasks yet.</li>`;
+    const overdue = overdueTaskCount(this.tasks);
     return `<article class="panel padded">
-      <div class="section-head"><h2>Related Tasks <span class="pill">${esc(openTasks.length)}</span></h2>
+      <div class="section-head"><h2>Related Tasks <span class="pill">${esc(openTasks.length)}</span>${overdue ? ` <span class="pill pill-danger">${esc(overdue)} overdue</span>` : ''}</h2>
         <a class="button secondary small" href="#tasks-${esc(this.taskDocumentId)}">Open in Tasks</a>
       </div>
       <ul class="opp-task-list">${items}</ul>
@@ -332,6 +352,30 @@ class OpportunitiesDetail extends PanicElement {
         <input type="datetime-local" name="next_action_at" value="${o.next_action_at ? esc(String(o.next_action_at).slice(0, 16)) : ''}">
         <button type="submit" class="small">Save</button>
       </form>` : ''}
+    </article>`;
+  }
+
+  // Phase 8 — deterministic scoring service (src/Opportunities/Scoring.php).
+  // Every component/reason is real, already-stored data; never AI-generated.
+  scoreHtml() {
+    const score = this.data.score;
+    if (!score) return '';
+    const components = score.components || {};
+    return `<article class="panel padded opp-score-panel">
+      <div class="section-head"><h2>Opportunity Score</h2>
+        <span class="opp-score-total ${scoreTone(score.score)}">${esc(score.score)}<small>/100</small></span>
+      </div>
+      <ul class="opp-score-components">
+        ${Object.entries(components).map(([key, value]) => {
+          const max = SCORE_COMPONENT_MAX[key] || 0;
+          const pct = max ? Math.round((value / max) * 100) : 0;
+          return `<li>
+            <div class="opp-score-component-head"><span>${esc(SCORE_COMPONENT_LABELS[key] || key)}</span><span class="muted">${esc(value)}/${esc(max)}</span></div>
+            <div class="opp-score-bar"><span style="width:${pct}%"></span></div>
+          </li>`;
+        }).join('')}
+      </ul>
+      ${(score.reasons || []).length ? `<ul class="opp-score-reasons">${score.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
     </article>`;
   }
 
@@ -435,6 +479,10 @@ class OpportunitiesDetail extends PanicElement {
       if (!body.title?.trim()) return;
       try {
         await api(`/task-documents/${this.taskDocumentId}/tasks`, { method: 'POST', body: JSON.stringify(body) });
+        // Phase 8 activity history: "task created" gets its own real
+        // opportunity_activities row via the existing manual Log Activity
+        // endpoint — no Tasks<->Opportunities schema coupling needed.
+        await this.logSystemActivity('task', `Task created: ${body.title}`);
         await this.load();
       } catch (err) { publish('toast.show', { message: err.message, tone: 'error' }); }
     });
@@ -473,10 +521,21 @@ class OpportunitiesDetail extends PanicElement {
   }
 
   async toggleTask(taskId, done) {
+    const task = this.tasks.find((t) => t.id === taskId);
     try {
       await api(`/task-documents/${this.taskDocumentId}/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify({ status: done ? 'done' : 'not_started' }) });
+      if (done && task) {
+        await this.logSystemActivity('task', `Task completed: ${task.title}`);
+      }
       await this.load();
     } catch (err) { publish('toast.show', { message: err.message, tone: 'error' }); }
+  }
+
+  /** Phase 8 — a real opportunity_activities row via the existing manual Log Activity endpoint, used for system-triggered entries (task created/completed) rather than only user-typed ones. */
+  async logSystemActivity(activityType, note) {
+    try {
+      await api(`/opportunities/${this.id}/activities`, { method: 'POST', body: JSON.stringify({ activity_type: activityType, note }) });
+    } catch { /* best-effort — never block the primary task action on this */ }
   }
 
   async toggleNotePin(noteId) {

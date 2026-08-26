@@ -5,8 +5,8 @@
 // src/Opportunities.php::dashboard() — deliberately one aggregate-heavy
 // endpoint, not N small ones). Every number rendered here comes straight
 // from that response; nothing is fabricated client-side.
-import { esc, api, money, emptyState, publish, PanicElement, $, $$ } from '../core.js';
-import { stageLabel, scoreTone, shortDayLabel, shortMonthDay, dateRangeLabel, noteTypeLabel } from './shared.js';
+import { esc, api, money, emptyState, publish, subscribe, PanicElement, $, $$ } from '../core.js';
+import { stageLabel, scoreTone, shortDayLabel, shortMonthDay, dateRangeLabel, noteTypeLabel, debounce } from './shared.js';
 
 const WINDOW_OPTIONS = [
   [7, 'Next 7 Days'],
@@ -21,13 +21,25 @@ class OpportunitiesDiscoverPage extends PanicElement {
     publish('page.context', { title: 'Opportunities', blurb: 'Conference-driven corporate sales pipeline.' });
     this.windowDays = 30;
     this.data = null;
+    this.prospects = [];
+    this.reloadDebounced = debounce(() => this.load(), 300);
+    // Phase 8: previously fetched once per window-change only.
+    subscribe('data.invalidated', (msg) => {
+      if (['opportunity', 'opportunity_conference', 'opportunity_company'].includes(msg.entity) || msg.entity === 'global') this.reloadDebounced();
+    }, this.abort.signal);
     await this.load();
   }
 
   async load() {
     this.setLoading('Loading Opportunities dashboard');
     try {
-      this.data = await api(`/opportunities/dashboard?window_days=${encodeURIComponent(this.windowDays)}`);
+      const to = new Date(Date.now() + this.windowDays * 86400000).toISOString().slice(0, 10);
+      const [dashboard, prospects] = await Promise.all([
+        api(`/opportunities/dashboard?window_days=${encodeURIComponent(this.windowDays)}`),
+        api(`/opportunities/availability-prospects?to=${encodeURIComponent(to)}`).catch(() => ({ prospects: [] })),
+      ]);
+      this.data = dashboard;
+      this.prospects = prospects.prospects || [];
       this.render();
     } catch (error) {
       this.showError(error);
@@ -61,7 +73,8 @@ class OpportunitiesDiscoverPage extends PanicElement {
         ${this.availabilityHtml(d.availability_matches || [])}
         ${this.suggestionsHtml(d.suggestions || [])}
         ${this.recentNotesHtml(d.recent_notes || [])}
-      </section>`;
+      </section>
+      ${this.prospectsHtml(this.prospects)}`;
 
     this.bind();
     this.mountAiResearch();
@@ -184,6 +197,39 @@ class OpportunitiesDiscoverPage extends PanicElement {
       <div class="section-head padded"><h2>Venue Availability Match</h2></div>
       <div class="table-scroll"><table class="data-table">
         <thead><tr><th>Open Date</th><th>Day</th><th>Conference</th><th>Distance</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table></div>
+    </article>`;
+  }
+
+  // ── Find prospects for empty dates (Phase 8) ────────────────────────────
+  // GET /api/opportunities/availability-prospects — the inverse of the
+  // Venue Availability Match panel above: given these open venue nights,
+  // which conferences/companies should sales pursue. estimated_opportunity_pool
+  // is always rendered with its own `basis` string so it never reads as a
+  // fabricated precise dollar figure (spec: "do not claim fake revenue
+  // precision").
+
+  prospectsHtml(rows) {
+    const body = rows.length
+      ? rows.slice(0, 8).map((p) => {
+        const conf = p.conference || {};
+        const pool = p.estimated_opportunity_pool || {};
+        return `<tr data-conf-id="${esc(conf.id)}" tabindex="0" role="button" aria-label="Open conference ${esc(conf.name)}">
+          <td>${esc(shortMonthDay(p.date))} <small class="muted">(${esc(p.days_until)}d)</small></td>
+          <td>${esc(conf.name || '—')}</td>
+          <td>${conf.estimated_attendance != null ? Number(conf.estimated_attendance).toLocaleString() : '<span class="muted">—</span>'}</td>
+          <td>${esc(p.target_company_count ?? 0)}</td>
+          <td><span class="${scoreTone(p.prospect_score)}">${esc(p.prospect_score ?? 0)}</span></td>
+          <td>${pool.value != null ? `<span title="${esc(pool.basis)}">~${money(pool.value)}</span>` : `<span class="muted" title="${esc(pool.basis)}">Unknown</span>`}</td>
+        </tr>`;
+      }).join('')
+      : `<tr><td colspan="6">${emptyState('No open venue nights with a nearby conference in this window.')}</td></tr>`;
+
+    return `<article class="panel">
+      <div class="section-head padded"><h2>Prospects for Empty Dates</h2><span class="muted small">Estimated pools are heuristics, not quotes</span></div>
+      <div class="table-scroll"><table class="data-table">
+        <thead><tr><th>Open Date</th><th>Conference</th><th>Attendance</th><th>Target Cos.</th><th>Prospect Score</th><th>Est. Pool</th></tr></thead>
         <tbody>${body}</tbody>
       </table></div>
     </article>`;

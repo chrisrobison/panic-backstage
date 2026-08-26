@@ -135,7 +135,9 @@ final class Conferences extends BaseEndpoint
 
         $conferences = $this->db->all(
             'SELECT oc.*, COALESCE(cc.company_count, 0) AS target_company_count,
-                    COALESCE(sig.signal_count, 0) AS side_event_signal_count
+                    COALESCE(sig.signal_count, 0) AS side_event_signal_count,
+                    COALESCE(tk.task_count, 0) AS task_count,
+                    COALESCE(tk.overdue_task_count, 0) AS overdue_task_count
              FROM opportunity_conferences oc
              LEFT JOIN (
                SELECT conference_id, COUNT(*) AS company_count
@@ -145,6 +147,12 @@ final class Conferences extends BaseEndpoint
                SELECT conference_id, COUNT(*) AS signal_count
                FROM opportunity_signals WHERE conference_id IS NOT NULL GROUP BY conference_id
              ) sig ON sig.conference_id = oc.id
+             LEFT JOIN (
+               SELECT document_id,
+                      COUNT(*) AS task_count,
+                      SUM(CASE WHEN due_date IS NOT NULL AND due_date < CURDATE() THEN 1 ELSE 0 END) AS overdue_task_count
+               FROM tasks WHERE status != \'done\' GROUP BY document_id
+             ) tk ON tk.document_id = oc.task_document_id
              WHERE ' . implode(' AND ', $where) . "
              ORDER BY $orderBy
              LIMIT 200",
@@ -213,6 +221,8 @@ final class Conferences extends BaseEndpoint
             ));
         }
 
+        $taskCounts = TaskLink::taskCounts($this->db, $conference['task_document_id'] ?? null);
+
         return $this->ok([
             'conference'            => $conference,
             'companies'             => $companies,
@@ -221,6 +231,8 @@ final class Conferences extends BaseEndpoint
             'peak_windows'          => $this->peakWindows($conference),
             'empty_night_dates'     => $emptyNightDates,
             'outreach_angles'       => $this->outreachAngles($conference, $companies, $emptyNightDates),
+            'task_count'            => $taskCounts['task_count'],
+            'overdue_task_count'    => $taskCounts['overdue_task_count'],
         ]);
     }
 

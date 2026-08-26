@@ -1,9 +1,9 @@
 # Opportunities Module — Implementation Handoff
 
-**Status:** Phase 7 complete — Claude CLI (WebSearch/WebFetch) research
-jobs. See §4.1 (Phase 1), §4.2 (Phase 2), §4.3 (Phase 3), §4.4 (Phase 4),
-§4.5 (Phase 5), §4.6 (Phase 6), §4.7 (Phase 7) for exactly what landed each
-phase.
+**Status:** Phase 8 complete — Tasks/activities/realtime/scoring/availability
+intelligence. See §4.1 (Phase 1), §4.2 (Phase 2), §4.3 (Phase 3), §4.4
+(Phase 4), §4.5 (Phase 5), §4.6 (Phase 6), §4.7 (Phase 7), §4.8 (Phase 8)
+for exactly what landed each phase.
 **Branch:** `opportunities-module` (long-lived feature branch; not merged to `main`
 until the module is stable — see "Branch strategy" below). Do not squash/delete
 mid-project; each phase adds commits here.
@@ -610,7 +610,7 @@ before the generic `match`, keyed on a non-numeric segment).
 | 5 — Pipeline + Opportunity detail + conversion | **Done** | See §4.5 below |
 | 6 — Notes workspace | **Done** | See §4.6 below |
 | 7 — Claude CLI research | **Done** | See §4.7 below |
-| 8 — Tasks/activities/realtime/scoring/availability | Not started | |
+| 8 — Tasks/activities/realtime/scoring/availability | **Done** | See §4.8 below |
 | 9 — Polish/tests/docs/perf/a11y | Not started | |
 
 ---
@@ -1804,6 +1804,233 @@ them, per the spec's own "reuse where appropriate" instruction.
   `find_target_companies` result (up to 25 companies) has no bulk-deselect
   shortcut. Small, additive polish if it turns out to matter in practice.
 
+### 4.8 Phase 8 — what actually shipped
+
+**Migration: none** — every Phase 8 feature is computed on read from
+already-stored data (same "deterministic, computed on read" pattern as
+`Companies::venueFitTags()`/`pitchIdeas()`, `Opportunities::riskFlags()`/
+`budgetFit()`), so no new columns or tables were needed. Confirmed the
+opportunity score is intentionally **not persisted** — recomputed every
+`show()` call, same reasoning as every other derived field in this module.
+
+**Backend — `src/Opportunities/Scoring.php`** (new): the deterministic
+opportunity scoring service the spec calls for, split into a pure
+`compute(array $ctx): array` (hermetically unit-tested,
+`tests/opportunity_scoring_test.php`) and a `scoreForOpportunity(Database,
+array $opportunity)` wrapper that gathers real context (linked conference's
+own `opportunity_score` + venue proximity, the company's participation role
+at that conference, `hospitality_history`/`side_event_history` signal
+count, decision-maker/primary-contact presence, target-date
+availability/conflict, budget fit, guest/room fit, research freshness,
+days-until-urgency) via a handful of ad hoc queries — same cost profile as
+`show()`'s existing `riskFlags()`/`budgetFit()`/`venueResourceOptions()`
+calls. Returns exactly the spec's `{score, components, reasons}` shape.
+Wired into `GET /api/opportunities/{id}` as a new `score` key — **detail-page
+only**, deliberately not attached to the list/pipeline endpoint, to avoid
+turning a cheap bulk list query into a per-row scoring pass (§1's own
+"avoid N+1" principle). Weights (documented in the class docblock, all
+adjustable): conference_relevance 20, company_participation 15,
+hospitality_signals 15, buyer_identified 10, venue_date_availability 15,
+budget_value 10, guest_venue_fit 5, research_freshness 5, urgency 5 — sums
+to exactly 100. Rendered on `opportunity-detail.js`'s right rail as a new
+"Opportunity Score" panel (total chip + per-component progress bars +
+reasons list).
+
+**Backend — `src/Opportunities/FollowUp.php`** (new): pure, DB-free
+follow-up-intelligence flag classifier (hermetically tested,
+`tests/opportunity_followup_test.php`) with named class constants for every
+threshold (`STALE_DAYS=21` — the existing Phase 5 constant, now named
+here — `NO_ACTIVITY_DAYS=14`, `PROPOSAL_STALLED_DAYS=10`,
+`CONFERENCE_APPROACHING_DAYS=14`, `TARGET_DATE_APPROACHING_DAYS=14`; spec:
+"keep stale thresholds configurable/constants rather than scattered magic
+numbers"). Adds four new codes — `no_activity`, `proposal_stalled`,
+`conference_approaching`, `target_date_approaching` — layered onto, not
+replacing, the existing Phase 2/5 warning/risk-flag vocabularies:
+`Opportunities::opportunityWarnings()` (pipeline cards) and
+`Opportunities::riskFlags()` (detail page) each call
+`FollowUp::additionalFlags()` and append its codes to their own existing
+arrays. "Next_action_at overdue" and "no buyer contact" from the spec's
+follow-up list were already covered by existing codes
+(`needs_follow_up`/`waiting_on_intro`/`no_decision_maker`) — deliberately
+not duplicated under a second name. `opportunityWarnings()`'s per-row bulk
+query gained one more aggregate (`MAX(created_at)` per opportunity from
+`opportunity_activities`) so `no_activity`/`proposal_stalled` cost zero
+extra queries per row; `index()`'s join gained `conf.starts_at AS
+conference_starts_at` for `conference_approaching`.
+
+**Backend — activity history** (spec: "ensure key events produce activity
+records" for stage/owner/probability changes, notes, contacts, research,
+tasks, conversion):
+- `Opportunities::update()` now logs distinct `owner_changed` and
+  `probability_changed` entries (with real `from`/`to` values) instead of
+  folding them into the generic `updated` catch-all; the generic `updated`
+  entry still fires for any *other* changed field, listing only those
+  remaining field names (no double-logging when a PATCH touches only
+  owner/probability).
+- `DecisionMakers::create()` now logs a `contact_added` activity
+  (contact id/name/role) — previously silent.
+- `Opportunities::LOGGABLE_ACTIVITY_TYPES` gained `'task'`; the Opportunity
+  detail page's task-add/task-toggle handlers call the existing manual Log
+  Activity endpoint (`POST /opportunities/{id}/activities`) right after a
+  successful task create/complete, producing a real `task_logged` entry —
+  no Tasks<->Opportunities schema coupling, same "reuse existing task
+  association mechanisms" instruction the spec gives. Deliberately **not**
+  done for Conference/Company detail's own task panels: those two record
+  types have no 1:1 activity feed the way an opportunity does (a
+  conference has none at all; a company's is itself an aggregate over its
+  opportunities), so there was no honest home to log into there without
+  fabricating one.
+- "Research imported" for conference/company-scoped research jobs (which
+  is all of them — no research mode is ever opportunity-scoped, see
+  `Modes::SCOPE`) has no `opportunity_activities` home either. Rather than
+  leaving that spec bullet entirely unaddressed,
+  **`Companies::activity()` now merges in completed `opportunity_research_jobs`
+  rows scoped to that company as synthetic `research_completed` entries**
+  (real `job_type`/`completed_at`, sorted in with the real activity rows).
+  Conferences still have no activity feed at all to extend this way — see
+  Known gaps below.
+
+**Backend — task integration** (spec: "create tasks from conference,
+company, opportunity, note, research result; show task counts and overdue
+status in relevant views"):
+- Conference/opportunity/company task creation already existed (Phases
+  3/4/5); note-originated task creation already existed too
+  (`notes-workspace.js`'s "Create Task" delegates to the note's linked
+  conference/company/opportunity via the same `TaskLink.php` route — no
+  change needed).
+- **New this phase**: creating a task from a **research result** —
+  `ai-research-panel.js` gained a "Create Task" button on each completed
+  job row (conference/company scope only; a bare `discover` scope has no
+  owning record yet), reusing the exact same `TaskLink::ensure()` +
+  `POST /task-documents/{id}/tasks` two-step every other "Create Task"
+  entry point in this module already uses.
+- **New this phase**: `src/Opportunities/TaskLink.php` gained a static
+  `taskCounts(Database, ?int $taskDocumentId): array` helper (open/overdue
+  count for one task_documents row) shared by `Conferences::show()` and
+  `Companies::show()`. `Conferences::index()`/`Companies::index()` each
+  gained a bulk `LEFT JOIN` derived-table aggregate (task_count,
+  overdue_task_count) — one query for the whole page, never per-row.
+  Surfaced as a new "Tasks" column (count + a `.pill-danger` "N overdue"
+  badge) on both list pages, and as an overdue badge next to the existing
+  "Open Tasks"/"Related Tasks" pill on Conference/Company/Opportunity
+  detail (computed client-side from the already-fetched task list via a
+  new `overdueTaskCount()` shared helper — no extra backend call there).
+
+**Backend — realtime** (spec: "use the existing realtime invalidation
+mechanism… relevant open pages should refresh without a full reload where
+existing architecture supports it. Do not invent WebSocket
+infrastructure."): `RealtimeInvalidationMapper` gained DIRECT entries for
+`opportunity_conferences`/`opportunity_companies`/`opportunity_contacts`/
+`opportunity_notes`/`opportunity_research_jobs` (previously all fell
+through to the content-free `'global'` fallback) and CHILD entries for
+`opportunity_conference_facts`/`opportunity_conference_companies` (→ their
+parent conference — `opportunity_conference_companies` carries both a
+`conference_id` and a `company_id`, but this map can only ever emit one
+parent per row per its existing single-FK design, so conference was chosen
+as the more prominent side) and `opportunity_note_links`/
+`opportunity_note_tags`/`opportunity_note_versions` (→ their parent note).
+Every previously fetch-once Opportunities page now subscribes and
+debounce-reloads: `conferences-list.js`, `companies-list.js`,
+`conference-detail.js`, `company-detail.js`, `discover-page.js` (§6's
+"Known issues" TODO from Phase 5, resolved). `notes-workspace.js`'s
+subscription now checks the real `opportunity_note` entity instead of only
+ever catching notes changes via the noisy `'global'` fallback (still also
+listens for `'opportunity'`/`'global'` as a safety net). `ai-research-panel.js`
+now subscribes to `opportunity_research_job` for an immediate refresh — the
+existing 5s poll stays as a fallback for any session not on the realtime
+stream (Phase 7's own "Known gaps carried forward" TODO, resolved).
+
+**Backend — find prospects for empty dates**: new
+`GET /api/opportunities/availability-prospects?from=&to=`
+(`Opportunities::availabilityProspects()`), the spec's explicit "useful
+inverse query." Reuses `Availability::emptyNightMatches()` unchanged (no
+new date math — the doc's own §3.6/§4.2 said Phase 8 should call this same
+primitive) and filters/annotates its output for the requested range: each
+empty (conference, date) match gets `target_company_count`, `signal_count`,
+a small deterministic `prospect_score` (0-100, documented composite of the
+conference's own `opportunity_score`, linked target companies, signals, and
+attendance — distinct from `Scoring.php`'s per-opportunity score, since
+there's no opportunity yet at this stage), and an
+`estimated_opportunity_pool` that is **always** `{value, is_heuristic:
+true, basis}` — `value` is `null` with an honest `basis` string whenever
+there's no real historical won-deal data or no researched companies to
+ground an estimate in, never a fabricated number (spec: "do not claim fake
+revenue precision… any estimated opportunity pool should be clearly
+labeled heuristic"). Surfaced as a new "Prospects for Empty Dates" panel on
+the Discover dashboard (`discover-page.js`), below the existing
+KPI/panel-row-3 sections.
+
+**OpenAPI**: new `/api/opportunities/availability-prospects` GET path +
+response schema added to the existing `Opportunities` tag.
+`php scripts/check-openapi-routes.php` and full `scripts/static-analysis.sh`
+(phpstan level 5 included) both pass clean (335 paths checked, up from 334).
+
+**Tests:**
+- `tests/opportunity_followup_test.php` (new, hermetic) — 17 assertions:
+  every one of `FollowUp::additionalFlags()`'s four codes, both firing and
+  not-firing, including the exact threshold boundary, the proposal_sent
+  stage restriction, past-vs-future date handling, the `updated_at`
+  fallback when no `last_activity_at` context is given, and `LABELS`
+  covering every emittable code.
+- `tests/opportunity_scoring_test.php` (new, hermetic) — 26 assertions
+  against the pure `Scoring::compute()`: every component hits its
+  documented max under a best-case context (summing to exactly 100),
+  every component bottoms out under a worst-case context, "unknown" is a
+  neutral non-zero value (never conflated with a real negative signal),
+  role-weight monotonicity (sponsor > exhibitor > attendee), the proximity
+  bonus, and urgency decreasing with `days_until`.
+- `tests/realtime_invalidation_mapper_test.php` (extended, hermetic) — 13
+  new assertions covering every Phase 8 DIRECT/CHILD mapping added above,
+  including that `opportunity_conference_companies` picks its conference
+  parent (not the company) and that `opportunity_note_versions` resolves
+  its parent note from `old_row` on a DELETE.
+- `tests/opportunities_phase8_db_test.php` (new, DB-backed, opt-in via
+  `RUN_DB_TESTS=1`) — 40 assertions against the real endpoint classes:
+  `Conferences`/`Companies` `index()`/`show()` task_count/overdue_task_count
+  (verified end-to-end through a real task created via the actual,
+  unmodified `Tasks\Items` endpoint, same "prove it's a real Backstage
+  task" precedent Phase 3 established), `owner_changed`/
+  `probability_changed` activity logging (including the no-double-log
+  case), `contact_added` on adding a decision maker, `show()`'s new `score`
+  key (shape, 0-100 bound, components summing to the total, and that
+  identifying a decision maker measurably raises `buyer_identified` to its
+  max), all four new `risk_flags` codes, `Companies::activity()`'s merged
+  synthetic `research_completed` entry, and `availability-prospects`'
+  capability boundary/validation/shape/heuristic-labeling. `PB TEST OPP8 — `
+  throwaway-row prefix, cleaned up in `finally` (verified: zero leftover
+  rows across every affected table after a real run against the shared
+  production DB).
+- `tests/ui/123-opportunities-phase8.test.mjs` (new, headless-Chromium) —
+  the Tasks column + overdue badge on Conferences/Companies lists, the
+  overdue badge on Conference detail's Open Tasks header, the Opportunity
+  Score panel on Opportunity detail, and the Prospects for Empty Dates
+  panel on Discover. Written and syntax-checked only — **not run**, same
+  pre-existing environment limitation as tests 118-122 (see §4.2's Tests
+  note).
+
+**Known gaps carried forward:**
+- Conferences have no activity feed of their own to merge completed
+  research jobs into the way `Companies::activity()` now does — a
+  conference-scoped `research_conference`/`find_target_companies`/
+  `research_side_events` import has no "research imported" activity-history
+  home yet. Building one would mean either a new activity table for
+  conferences or a shared polymorphic activity engine, both bigger than
+  this phase's "extend what exists" mandate justifies for one bullet;
+  revisit if conference-level activity history turns out to matter in
+  practice.
+- `opportunity_conference_companies`' realtime mapping only ever refreshes
+  the conference side (see the class docblock) — the company detail page's
+  own "Conference Presence" panel still only catches a new/changed link on
+  its own next fetch-once load, not live. Same single-parent-per-row
+  limitation already documented for `opportunity_signals` since Phase 5.
+- The scoring service and availability-prospects endpoint are both
+  detail/page-scoped reads, not persisted or surfaced as a sort key on the
+  Pipeline board or list endpoints — deliberately, to avoid an N+1 scoring
+  pass over a bulk list. Revisit only if a real "sort the pipeline by
+  score" request shows up.
+- `tests/ui/123-opportunities-phase8.test.mjs` (and 118-122) still need a
+  real run — see the recurring note in §6.
+
 ## 5. Open TODOs / assumptions to verify in later phases
 
 - `opportunity_qualification`'s fixed-boolean-columns design (§3.1) shipped
@@ -1842,35 +2069,39 @@ them, per the spec's own "reuse where appropriate" instruction.
 
 ## 6. Known issues
 
-- ~~No live-refresh on Opportunities panels yet~~ — **partially resolved in
-  Phase 5**: `opportunities` + its Phase 5 child tables are now mapped in
-  `RealtimeInvalidationMapper`, and Pipeline board / Opportunity detail both
-  subscribe. Discover/Conferences/Companies pages still fetch-once (Phase 8
-  scope, per §1.9, if it's worth extending further).
+- ~~No live-refresh on Opportunities panels yet~~ — **resolved in Phase 8**
+  (partially resolved in Phase 5): `opportunities` + its Phase 5 child
+  tables, and now `opportunity_conferences`/`opportunity_companies`/
+  `opportunity_contacts`/`opportunity_notes`/`opportunity_research_jobs`
+  (+ their own child tables), are all mapped in
+  `RealtimeInvalidationMapper`. Every Opportunities page subscribes and
+  debounce-reloads now — Discover, Conferences/Companies list+detail, the
+  Notes workspace, Pipeline board, and Opportunity detail. See §4.8.
 - ~~`opportunity_research_jobs` exists as a schema-only stub (no
   reader/writer) until Phase 7~~ — **resolved in Phase 7**: full
   create/list/show/import + worker dispatch shipped, see §4.7.
   ~~`opportunity_note_versions` doesn't exist yet~~ — resolved in Phase 6.
-- AI research jobs poll (5s interval while active) rather than subscribing
-  to realtime invalidation — `opportunity_research_jobs` isn't in
-  `RealtimeInvalidationMapper` (Phase 7's own "Known gaps carried forward,"
-  §4.7). Acceptable per the spec's explicit polling fallback; revisit if
-  polling proves too chatty at scale.
+- ~~AI research jobs poll (5s interval while active) rather than
+  subscribing to realtime invalidation~~ — **resolved in Phase 8**:
+  `opportunity_research_jobs` is now mapped and `ai-research-panel.js`
+  subscribes for an immediate refresh; the 5s poll stays as a fallback for
+  sessions not on the realtime stream. See §4.8.
 - Every planned Opportunities screen is a real page as of Phase 6 — there is
   no longer any `<pb-opportunities-placeholder>` route (it was deleted;
   nothing referenced it anymore). Phase 7 (AI research) and Phase 8
-  (scoring/availability polish) will add their own "planned" affordances
+  (scoring/availability) added their own real affordances (the AI Research
+  panel; the Opportunity Score panel and Prospects for Empty Dates panel)
   scoped to the pages that need them, not a whole-page placeholder.
 - **No UI test has actually been run in a browser yet** (118 from Phase 2,
-  119 from Phase 3, 120 from Phase 4, 121 from Phase 5, 122 from Phase 6) —
-  all written and syntax-checked only. This checkout's multi-tenant `.env`
-  (`SUPER_DB_NAME` set) blocks the whole `node tests/ui/run.mjs` harness at
-  the host-allowlist layer before the app boots. See §4.2's Tests note for
-  the full explanation and where it's confirmed to run instead (CI, or a
-  single-tenant checkout like `/home/cdr/backstage`). **Run all five for
-  real at the start of
-  whichever future session next touches the Opportunities frontend**,
-  before trusting any of them.
+  119 from Phase 3, 120 from Phase 4, 121 from Phase 5, 122 from Phase 6,
+  123 from Phase 8) — all written and syntax-checked only. This checkout's
+  multi-tenant `.env` (`SUPER_DB_NAME` set) blocks the whole
+  `node tests/ui/run.mjs` harness at the host-allowlist layer before the
+  app boots. See §4.2's Tests note for the full explanation and where it's
+  confirmed to run instead (CI, or a single-tenant checkout like
+  `/home/cdr/backstage`). **Run all six for real at the start of whichever
+  future session next touches the Opportunities frontend**, before
+  trusting any of them.
 - "Create Proposal" and Quick Quote deliberately don't generate an actual
   document/PDF (see §4.5) — no such system exists in this codebase to reuse,
   and the spec explicitly says not to build a second contract system.
@@ -1980,3 +2211,27 @@ them, per the spec's own "reuse where appropriate" instruction.
   AI-flagged note linked to both its conference and company).
   `PB TEST OPPRESEARCH — ` throwaway-row prefix, verified zero leftover rows
   after a real run.
+- `tests/opportunity_followup_test.php` — hermetic, no DB. 17 assertions
+  covering every code `FollowUp::additionalFlags()` can emit, both firing
+  and not-firing, threshold boundaries, and the `LABELS` map.
+- `tests/opportunity_scoring_test.php` — hermetic, no DB. 26 assertions
+  covering `Scoring::compute()`'s best-case (sums to exactly 100)/worst-case
+  bounds, neutral-vs-penalized "unknown" handling, role-weight monotonicity,
+  the proximity bonus, and urgency decay.
+- `tests/realtime_invalidation_mapper_test.php` — extended with 13 new
+  assertions for every Phase 8 DIRECT/CHILD mapping (conferences/companies/
+  contacts/notes/research jobs + their child tables).
+- `tests/opportunities_phase8_db_test.php` — DB-backed, opt-in via
+  `RUN_DB_TESTS=1`. 40 assertions covering Conferences/Companies task_count/
+  overdue_task_count (via a real task through the unmodified Tasks
+  endpoint), owner_changed/probability_changed/contact_added activity
+  logging, `show()`'s new `score` key, all four new `risk_flags` codes, the
+  `Companies::activity()` synthetic research_completed merge, and the
+  `availability-prospects` endpoint (capability/validation/shape/heuristic
+  labeling). `PB TEST OPP8 — ` throwaway-row prefix, verified zero leftover
+  rows after a real run.
+- `tests/ui/123-opportunities-phase8.test.mjs` — headless-Chromium, the
+  Tasks column/overdue badges on the Conferences/Companies lists and
+  Conference detail, the Opportunity Score panel, and the Prospects for
+  Empty Dates panel. Written and syntax-checked but **not run** — see Known
+  issues above.

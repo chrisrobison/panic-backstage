@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Panic\Opportunities;
 
 use Panic\BaseEndpoint;
+use Panic\Database;
 use Panic\Request;
 use Panic\Response;
 
@@ -109,5 +110,31 @@ final class TaskLink extends BaseEndpoint
     {
         $table = self::OWNER_TABLES[$ownerType];
         return $this->db->one("SELECT id, name, task_document_id FROM `$table` WHERE id = ?", [$ownerId]);
+    }
+
+    /**
+     * Open (not-done) task count + overdue-of-those count for one lazily-
+     * provisioned task_documents row — Phase 8 (spec: "show task counts and
+     * overdue status in relevant views"). Shared static helper so
+     * Conferences::show()/Companies::show() (and any future owner type)
+     * don't each duplicate the same small query.
+     *
+     * @return array{task_count:int, overdue_task_count:int}
+     */
+    public static function taskCounts(Database $db, ?int $taskDocumentId): array
+    {
+        if (!$taskDocumentId) {
+            return ['task_count' => 0, 'overdue_task_count' => 0];
+        }
+        $row = $db->one(
+            "SELECT COUNT(*) task_count,
+                    SUM(CASE WHEN due_date IS NOT NULL AND due_date < CURDATE() THEN 1 ELSE 0 END) overdue_task_count
+             FROM tasks WHERE document_id = ? AND status != 'done'",
+            [$taskDocumentId]
+        );
+        return [
+            'task_count'         => (int) ($row['task_count'] ?? 0),
+            'overdue_task_count' => (int) ($row['overdue_task_count'] ?? 0),
+        ];
     }
 }

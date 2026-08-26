@@ -7,6 +7,8 @@ use Panic\BaseEndpoint;
 use Panic\Request;
 use Panic\Response;
 
+use function Panic\log_opportunity_activity;
+
 /**
  * Contact <-> opportunity role link (champion/influencer/decision_maker/
  * finance/blocker/other) — docs/OPPORTUNITIES-IMPLEMENTATION.md §3.1,
@@ -95,6 +97,14 @@ final class DecisionMakers extends BaseEndpoint
              WHERE dm.id = ?',
             [$id]
         );
+
+        // Phase 8 activity history: "contact added" — a real buyer contact
+        // was just associated with this opportunity's sales cycle.
+        log_opportunity_activity($this->db, (int) $opportunity['id'], $this->userId(), 'contact_added', [
+            'contact_id'   => $contactId,
+            'contact_name' => $row['name'] ?? null,
+            'role'         => $role,
+        ]);
 
         return $this->ok(['decision_maker' => $row]);
     }

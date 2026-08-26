@@ -492,6 +492,12 @@ final class Kernel
             if (($segments[1] ?? null) === 'dashboard') {
                 return [Opportunities::class, ['action' => 'dashboard']];
             }
+            // Phase 8 "find prospects for empty dates" — the inverse of the
+            // dashboard's empty-night matching (see
+            // Opportunities::availabilityProspects()).
+            if (($segments[1] ?? null) === 'availability-prospects') {
+                return [Opportunities::class, ['action' => 'availability-prospects']];
+            }
             $opportunityId = $this->intOrNull($segments[1] ?? null);
             $child         = $segments[2] ?? null;
             $childId       = $this->intOrNull($segments[3] ?? null);

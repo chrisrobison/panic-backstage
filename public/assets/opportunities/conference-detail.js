@@ -12,8 +12,8 @@
 // lazily-provisioned link at `/opportunity-conferences/{id}/tasks` — see
 // src/Opportunities/TaskLink.php). Nothing here talks to a parallel task or
 // note system.
-import { esc, api, emptyState, openModal, formData, publish, getAppCapabilities, PanicElement, $, $$ } from '../core.js';
-import { scoreTone, shortMonthDay, dateRangeLabel, noteTypeLabel, debounce } from './shared.js';
+import { esc, api, emptyState, openModal, formData, publish, subscribe, getAppCapabilities, PanicElement, $, $$ } from '../core.js';
+import { scoreTone, shortMonthDay, dateRangeLabel, noteTypeLabel, debounce, overdueTaskCount } from './shared.js';
 
 const ROLE_LABELS = {
   organizer: 'Organizer', headline_sponsor: 'Headline Sponsor', sponsor: 'Sponsor',
@@ -30,6 +30,13 @@ class OpportunitiesConferenceDetail extends PanicElement {
     this.signals = [];
     this.taskDocumentId = null;
     this.tasks = [];
+    this.reloadDebounced = debounce(() => this.load(), 300);
+    // Phase 8: previously fetched once — another user editing this
+    // conference, linking a company, adding a Key Fact, or completing a
+    // task now refreshes the page automatically.
+    subscribe('data.invalidated', (msg) => {
+      if ((msg.entity === 'opportunity_conference' && (msg.id == null || msg.id === this.id)) || msg.entity === 'global') this.reloadDebounced();
+    }, this.abort.signal);
     await this.load();
   }
 
@@ -277,8 +284,9 @@ class OpportunitiesConferenceDetail extends PanicElement {
           ${t.due_date ? `<small class="muted">${esc(shortMonthDay(t.due_date))}</small>` : ''}
         </li>`).join('')
       : `<li class="muted">No tasks yet.</li>`;
+    const overdue = overdueTaskCount(this.tasks);
     return `<article class="panel padded">
-      <div class="section-head"><h2>Open Tasks <span class="pill">${esc(this.tasks.filter((t) => t.status !== 'done').length)}</span></h2>
+      <div class="section-head"><h2>Open Tasks <span class="pill">${esc(this.tasks.filter((t) => t.status !== 'done').length)}</span>${overdue ? ` <span class="pill pill-danger">${esc(overdue)} overdue</span>` : ''}</h2>
         <a class="button secondary small" href="#tasks-${esc(this.taskDocumentId)}">Open in Tasks</a>
       </div>
       <ul class="opp-task-list">${items}</ul>

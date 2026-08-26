@@ -22,8 +22,15 @@
 // every value rendered here goes through esc(); nothing is ever innerHTML'd
 // raw, and nothing here writes CRM data itself — only the human-triggered
 // "Import Selected" action does, via the job's own /import endpoint.
-import { esc, api, openModal, formData, publish, getAppCapabilities, PanicElement, $, $$ } from '../core.js';
+import { esc, api, openModal, formData, publish, subscribe, getAppCapabilities, PanicElement, $, $$ } from '../core.js';
 import { researchModeLabel, researchStatusBadge, researchStatusIsActive, relativeTime } from './shared.js';
+
+// Phase 8 "create tasks from a research result" — reuses the same lazily-
+// provisioned TaskLink.php route every other Opportunities page already
+// uses (src/Opportunities/TaskLink.php); only applies to a conference/
+// company scope (a bare 'discover' scope has no owning record to attach a
+// task to yet).
+const TASK_OWNER_ROUTE = { conference: 'opportunity-conferences', company: 'opportunity-companies' };
 
 // scope: which host pages a mode applies to. 'conference_or_company' shows
 // on both, using whichever scope id the host actually has.
@@ -44,6 +51,17 @@ class OpportunitiesAiResearchPanel extends PanicElement {
     this.canImport = !!getAppCapabilities().manage_opportunities;
     this.jobs = [];
     this._pollTimer = null;
+    // Phase 8: opportunity_research_jobs is now a mapped
+    // RealtimeInvalidationMapper entity, so another user's (or the
+    // background worker's) job-status change refreshes this panel
+    // immediately — the 5s poll below stays as a fallback for whichever
+    // sessions aren't subscribed to the realtime stream at all.
+    subscribe('data.invalidated', async (msg) => {
+      if (msg.entity !== 'opportunity_research_job') return;
+      await this.loadJobs();
+      this.render();
+      this.maybeStartPolling();
+    }, this.abort.signal);
     await this.loadJobs();
     this.render();
     this.maybeStartPolling();
@@ -121,6 +139,8 @@ class OpportunitiesAiResearchPanel extends PanicElement {
         <div class="opp-ai-research-job-meta">
           <small class="muted">${esc(relativeTime(j.created_at))}</small>
           ${j.status === 'completed' ? `<button type="button" class="button small" data-review-job="${esc(j.id)}">Review results</button>` : ''}
+          ${j.status === 'completed' && this.canImport && TASK_OWNER_ROUTE[this.scopeType]
+            ? `<button type="button" class="button small secondary" data-create-task-job="${esc(j.id)}">Create Task</button>` : ''}
           ${j.status === 'failed' ? `<span class="error-text small">${esc(j.error || 'Research failed.')}</span>` : ''}
         </div>
       </li>`).join('')}
@@ -130,6 +150,36 @@ class OpportunitiesAiResearchPanel extends PanicElement {
   bind() {
     $$('[data-start-mode]', this).forEach((btn) => btn.addEventListener('click', () => this.startMode(btn.dataset.startMode)));
     $$('[data-review-job]', this).forEach((btn) => btn.addEventListener('click', () => this.openReviewModal(Number(btn.dataset.reviewJob))));
+    $$('[data-create-task-job]', this).forEach((btn) => btn.addEventListener('click', () => this.openCreateTaskModal(Number(btn.dataset.createTaskJob))));
+  }
+
+  /** Phase 8 "create a task from a research result" — same lazily-provisioned TaskLink route every other page uses, scoped to this panel's own conference/company. */
+  openCreateTaskModal(jobId) {
+    const job = this.jobs.find((j) => j.id === jobId);
+    const route = TASK_OWNER_ROUTE[this.scopeType];
+    if (!route) return;
+    const { dialog, close } = openModal({
+      title: 'Create Task',
+      bodyHtml: `<form class="grid-form padded" data-form="research-task-form">
+        <label class="wide">Task <span class="req">*</span>
+          <input type="text" name="title" required value="${esc(`Follow up: ${job ? researchModeLabel(job.job_type) : 'research'}${this.scopeName ? ` for ${this.scopeName}` : ''}`)}"></label>
+        <div class="wide"><button type="submit" class="primary">Create Task</button></div>
+      </form>`,
+      focus: '[name="title"]',
+    });
+    const form = $('[data-form="research-task-form"]', dialog);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = formData(form);
+      try {
+        const ensured = await api(`/${route}/${this.scopeId}/tasks`, { method: 'POST' });
+        await api(`/task-documents/${ensured.task_document_id}/tasks`, { method: 'POST', body: JSON.stringify({ title: body.title }) });
+        publish('toast.show', { message: 'Task created.' });
+        close();
+      } catch (err) {
+        publish('toast.show', { message: err.message, tone: 'error' });
+      }
+    });
   }
 
   // ── Starting a job ───────────────────────────────────────────────────────

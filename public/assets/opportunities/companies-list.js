@@ -5,7 +5,7 @@
 // spec's explicit filter/sort/column list, following the exact same
 // data-table + openModal() create-form pattern conferences-list.js already
 // established.
-import { esc, api, emptyState, openModal, formData, publish, PanicElement, $, $$ } from '../core.js';
+import { esc, api, emptyState, openModal, formData, publish, subscribe, PanicElement, $, $$ } from '../core.js';
 import { relationshipStatusBadge, relativeTime, debounce } from './shared.js';
 
 const SORTS = [
@@ -22,6 +22,11 @@ class OpportunitiesCompaniesList extends PanicElement {
     publish('page.context', { title: 'Opportunities › Companies', blurb: 'Prospect companies that could purchase a private event.' });
     this.filters = { q: '', industry: '', relationship_status: '', researched: '', sort: 'name' };
     this.companies = [];
+    this.reloadDebounced = debounce(() => this.load(), 300);
+    // Phase 8: this list previously only ever fetched once.
+    subscribe('data.invalidated', (msg) => {
+      if (msg.entity === 'opportunity_company' || msg.entity === 'global') this.reloadDebounced();
+    }, this.abort.signal);
     await this.load();
   }
 
@@ -76,7 +81,7 @@ class OpportunitiesCompaniesList extends PanicElement {
         <div class="table-scroll"><table class="data-table">
           <thead><tr>
             <th>Company</th><th>Industry</th><th>HQ</th><th>Status</th>
-            <th>Open Opps.</th><th>Pipeline Value</th><th>Conferences</th><th>Last Activity</th>
+            <th>Open Opps.</th><th>Pipeline Value</th><th>Conferences</th><th>Tasks</th><th>Last Activity</th>
           </tr></thead>
           <tbody>${this.rowsHtml()}</tbody>
         </table></div>
@@ -87,7 +92,7 @@ class OpportunitiesCompaniesList extends PanicElement {
 
   rowsHtml() {
     if (!this.companies.length) {
-      return `<tr><td colspan="8">${emptyState('No companies match these filters.')}</td></tr>`;
+      return `<tr><td colspan="9">${emptyState('No companies match these filters.')}</td></tr>`;
     }
     return this.companies.map((c) => `<tr data-company-id="${esc(c.id)}" tabindex="0" role="button" aria-label="Open ${esc(c.name)}">
       <td><strong>${esc(c.name)}</strong>${c.domain ? `<br><small class="muted">${esc(c.domain)}</small>` : ''}</td>
@@ -97,8 +102,17 @@ class OpportunitiesCompaniesList extends PanicElement {
       <td>${esc(c.open_opportunity_count ?? 0)}</td>
       <td>${c.pipeline_value ? `$${Number(c.pipeline_value).toLocaleString()}` : '<span class="muted">—</span>'}</td>
       <td>${esc(c.conference_count ?? 0)}</td>
+      <td>${this.taskCellHtml(c)}</td>
       <td>${c.last_activity_at ? esc(relativeTime(c.last_activity_at)) : '<span class="muted">—</span>'}</td>
     </tr>`).join('');
+  }
+
+  /** Task count + overdue badge (Phase 8 — Companies::index()'s task_count/overdue_task_count aggregates). */
+  taskCellHtml(row) {
+    const count = row.task_count ?? 0;
+    if (!count) return '<span class="muted">—</span>';
+    const overdue = row.overdue_task_count ?? 0;
+    return `${esc(count)}${overdue ? ` <span class="pill pill-danger">${esc(overdue)} overdue</span>` : ''}`;
   }
 
   bind() {

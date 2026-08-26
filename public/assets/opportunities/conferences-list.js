@@ -4,7 +4,7 @@
 // conference-detail mockups do); built from the spec's explicit filter/sort/
 // column list, following the same data-table + openModal() create-form
 // pattern already established by discover-page.js and leads.js.
-import { esc, api, emptyState, openModal, formData, publish, PanicElement, $, $$ } from '../core.js';
+import { esc, api, emptyState, openModal, formData, publish, subscribe, PanicElement, $, $$ } from '../core.js';
 import { shortMonthDay, dateRangeLabel, scoreTone, debounce } from './shared.js';
 
 const SORTS = [
@@ -20,6 +20,13 @@ class OpportunitiesConferencesList extends PanicElement {
     publish('page.context', { title: 'Opportunities › Conferences', blurb: 'Conference/trade-show source-of-demand records.' });
     this.filters = { q: '', tab: 'upcoming', city: '', researched: '', min_score: '', sort: 'date' };
     this.conferences = [];
+    this.reloadDebounced = debounce(() => this.load(), 300);
+    // Phase 8: this list previously only ever fetched once — another
+    // user adding a conference, linking a company, or completing a task
+    // now shows up without a manual reload.
+    subscribe('data.invalidated', (msg) => {
+      if (msg.entity === 'opportunity_conference' || msg.entity === 'global') this.reloadDebounced();
+    }, this.abort.signal);
     await this.load();
   }
 
@@ -72,7 +79,7 @@ class OpportunitiesConferencesList extends PanicElement {
         <div class="table-scroll"><table class="data-table">
           <thead><tr>
             <th>Conference</th><th>Dates</th><th>City</th><th>Distance</th>
-            <th>Attendance</th><th>Target Cos.</th><th>Signals</th><th>Score</th><th>Researched</th>
+            <th>Attendance</th><th>Target Cos.</th><th>Signals</th><th>Tasks</th><th>Score</th><th>Researched</th>
           </tr></thead>
           <tbody>${this.rowsHtml()}</tbody>
         </table></div>
@@ -83,7 +90,7 @@ class OpportunitiesConferencesList extends PanicElement {
 
   rowsHtml() {
     if (!this.conferences.length) {
-      return `<tr><td colspan="9">${emptyState('No conferences match these filters.')}</td></tr>`;
+      return `<tr><td colspan="10">${emptyState('No conferences match these filters.')}</td></tr>`;
     }
     return this.conferences.map((c) => `<tr data-conf-id="${esc(c.id)}" tabindex="0" role="button" aria-label="Open ${esc(c.name)}">
       <td><strong>${esc(c.name)}</strong></td>
@@ -93,9 +100,18 @@ class OpportunitiesConferencesList extends PanicElement {
       <td>${c.estimated_attendance != null ? Number(c.estimated_attendance).toLocaleString() : '<span class="muted">—</span>'}</td>
       <td>${esc(c.target_company_count ?? 0)}</td>
       <td>${esc(c.side_event_signal_count ?? 0)}</td>
+      <td>${this.taskCellHtml(c)}</td>
       <td>${c.opportunity_score != null ? `<span class="${scoreTone(c.opportunity_score)}">${esc(c.opportunity_score)}</span>` : '<span class="muted">—</span>'}</td>
       <td>${c.last_researched_at ? esc(shortMonthDay(c.last_researched_at.slice(0, 10))) : '<span class="badge">Unresearched</span>'}</td>
     </tr>`).join('');
+  }
+
+  /** Task count + overdue badge (Phase 8 — Conferences::index()'s task_count/overdue_task_count aggregates). */
+  taskCellHtml(row) {
+    const count = row.task_count ?? 0;
+    if (!count) return '<span class="muted">—</span>';
+    const overdue = row.overdue_task_count ?? 0;
+    return `${esc(count)}${overdue ? ` <span class="pill pill-danger">${esc(overdue)} overdue</span>` : ''}`;
   }
 
   bind() {
