@@ -10459,6 +10459,149 @@ components:
         updated_at:
           type: string
           format: date-time
+    StaffDocumentSummary:
+      type: object
+      description: One row of docs/staff/** metadata, annotated for the calling user.
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        document_type:
+          type: string
+          enum: [handbook, policy, sop]
+        status:
+          type: string
+          enum: [draft, review, published, retired]
+        current_version:
+          type: string
+          nullable: true
+        requires_acknowledgment:
+          type: boolean
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        assigned_to_me:
+          type: boolean
+          description: Present on the list endpoint only.
+        required_for_me:
+          type: boolean
+          description: Present on the list endpoint only.
+        acknowledged_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Present on the list endpoint only.
+        needs_acknowledgment:
+          type: boolean
+          description: Present on the list endpoint only.
+    StaffDocumentVersion:
+      type: object
+      description: >-
+        An immutable, frozen published version — the exact text an acknowledgment points at,
+        independent of later edits to the file on disk.
+      properties:
+        id:
+          type: integer
+        version:
+          type: string
+        effective_date:
+          type: string
+          format: date
+          nullable: true
+        published_at:
+          type: string
+          format: date-time
+        content_hash:
+          type: string
+          description: sha256 of the frozen source Markdown.
+        published_by_name:
+          type: string
+          nullable: true
+          description: Only present on the version-history endpoint.
+    StaffDocumentAcknowledgment:
+      type: object
+      properties:
+        id:
+          type: integer
+        acknowledged_at:
+          type: string
+          format: date-time
+        version:
+          type: string
+    StaffDocumentAssignment:
+      type: object
+      properties:
+        id:
+          type: integer
+        document_id:
+          type: integer
+        role_key:
+          type: string
+          description: A staff_members.default_role value, or "all_staff" for every active staff member.
+        required:
+          type: boolean
+        document_slug:
+          type: string
+        document_title:
+          type: string
+        document_type:
+          type: string
+    StaffCertificationType:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        expiration_required:
+          type: boolean
+        default_validity_months:
+          type: integer
+          nullable: true
+        active:
+          type: boolean
+    StaffCertification:
+      type: object
+      properties:
+        id:
+          type: integer
+        staff_member_id:
+          type: integer
+        certification_type_id:
+          type: integer
+        issued_at:
+          type: string
+          format: date
+          nullable: true
+        expires_at:
+          type: string
+          format: date
+          nullable: true
+        certificate_number:
+          type: string
+          nullable: true
+        document_path:
+          type: string
+          nullable: true
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+        verified_by:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+          nullable: true
     StaffMemberInput:
       type: object
       required:
@@ -26951,6 +27094,557 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/staff-docs:
+    get:
+      operationId: staffDocs_list
+      summary: List staff handbook/SOP documents
+      description: >-
+        Requires only authentication (every staff member can read what applies to their role).
+        Published documents only, unless the caller has manage_staff_docs and passes ?all=1.
+        Each row is annotated for the calling user: assigned_to_me, required_for_me,
+        acknowledged_at, needs_acknowledgment.
+      tags:
+        - Staff Handbook & Compliance
+      parameters:
+        - name: all
+          in: query
+          description: '1' to include draft/review/retired documents (requires manage_staff_docs).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Documents, annotated with the caller's assignment/acknowledgment status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StaffDocumentSummary'
+                  is_admin:
+                    type: boolean
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/staff-docs/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: staffDocs_get
+      summary: Get one document's current published version, rendered
+      description: >-
+        Returns the frozen HTML + table of contents for the document's current version (not a
+        live re-render of the file on disk), plus the caller's acknowledgment record if any.
+        Draft/unpublished documents are only visible with manage_staff_docs.
+      tags:
+        - Staff Handbook & Compliance
+      responses:
+        '200':
+          description: Document detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  document:
+                    $ref: '#/components/schemas/StaffDocumentSummary'
+                  version:
+                    $ref: '#/components/schemas/StaffDocumentVersion'
+                  html:
+                    type: string
+                  toc:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        level:
+                          type: integer
+                        text:
+                          type: string
+                        id:
+                          type: string
+                  acknowledgment:
+                    nullable: true
+                    $ref: '#/components/schemas/StaffDocumentAcknowledgment'
+        '404':
+          description: Document not found (or not published, and caller lacks manage_staff_docs)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/staff-docs/{slug}/versions:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: staffDocs_versions
+      summary: Version history for one document
+      description: Gated by manage_staff_docs.
+      tags:
+        - Staff Handbook & Compliance
+      responses:
+        '200':
+          description: Version history, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StaffDocumentVersion'
+        '403':
+          description: Missing manage_staff_docs capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/staff-docs/{slug}/publish:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: staffDocs_publish
+      summary: (Re)publish a document from its Markdown file on disk
+      description: >-
+        Gated by manage_staff_docs. Reads docs/staff/**, parses frontmatter, and creates a new
+        immutable staff_document_versions row if the frontmatter `version` field is new. Refuses
+        (409) if the version string is unchanged but the file's content hash differs — bump the
+        version number in frontmatter before republishing an edit, so an existing acknowledgment
+        can never silently point at different text than what was agreed to.
+      tags:
+        - Staff Handbook & Compliance
+      responses:
+        '200':
+          description: Publish result (status is "published" or "unchanged")
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  slug:
+                    type: string
+                  version:
+                    type: string
+        '403':
+          description: Missing manage_staff_docs capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Document not registered, or its source file is missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version number unchanged but content differs from what was already published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/staff-docs/{slug}/acknowledge:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: staffDocs_acknowledge
+      summary: Acknowledge the current published version
+      description: >-
+        Idempotent per (user, version): re-acknowledging the same version returns the original
+        acknowledgment (already_acknowledged: true) rather than creating a duplicate history row.
+      tags:
+        - Staff Handbook & Compliance
+      responses:
+        '200':
+          description: Acknowledgment recorded (or already existed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  acknowledgment:
+                    $ref: '#/components/schemas/StaffDocumentAcknowledgment'
+                  already_acknowledged:
+                    type: boolean
+        '422':
+          description: Document is not currently published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/staff-compliance:
+    get:
+      operationId: staffCompliance_overview
+      summary: Management compliance overview
+      description: >-
+        Gated by manage_staff_docs. For every staff roster member: which assigned documents are
+        acknowledged (at which version) and which certifications are current/expiring/expired.
+      tags:
+        - Staff Handbook & Compliance
+      responses:
+        '200':
+          description: Compliance matrix
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  staff:
+                    type: array
+                    items:
+                      type: object
+                  documents:
+                    type: array
+                    items:
+                      type: object
+        '403':
+          description: Missing manage_staff_docs capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/staff-doc-assignments:
+    get:
+      operationId: staffDocAssignments_list
+      summary: List document -> role assignments
+      description: Gated by manage_staff_docs.
+      tags:
+        - Staff Handbook & Compliance
+      responses:
+        '200':
+          description: All assignments, with the owning document's slug/title/type joined in
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assignments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StaffDocumentAssignment'
+                  role_keys:
+                    type: array
+                    items:
+                      type: string
+        '403':
+          description: Missing manage_staff_docs capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: staffDocAssignments_create
+      summary: Create or update a document -> role assignment
+      description: >-
+        Gated by manage_staff_docs. Upserts by (document_id, role_key) — role_key is a
+        staff_members.default_role value, or the sentinel "all_staff" for every active staff
+        member regardless of role.
+      tags:
+        - Staff Handbook & Compliance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                document_id:
+                  type: integer
+                document_slug:
+                  type: string
+                  description: Alternative to document_id.
+                role_key:
+                  type: string
+                required:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Created/updated assignment
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assignment:
+                    $ref: '#/components/schemas/StaffDocumentAssignment'
+        '422':
+          description: Missing/invalid document_id or role_key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/staff-doc-assignments/{assignmentId}:
+    parameters:
+      - name: assignmentId
+        in: path
+        required: true
+        schema:
+          type: integer
+    delete:
+      operationId: staffDocAssignments_delete
+      summary: Remove a document -> role assignment
+      description: Gated by manage_staff_docs.
+      tags:
+        - Staff Handbook & Compliance
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+  /api/certification-types:
+    get:
+      operationId: certificationTypes_list
+      summary: List certification/training types
+      description: Gated by manage_certifications.
+      tags:
+        - Staff Handbook & Compliance
+      responses:
+        '200':
+          description: Certification type catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  certification_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StaffCertificationType'
+        '403':
+          description: Missing manage_certifications capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: certificationTypes_create
+      summary: Create a certification/training type
+      description: Gated by manage_certifications.
+      tags:
+        - Staff Handbook & Compliance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffCertificationType'
+      responses:
+        '200':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  certification_type:
+                    $ref: '#/components/schemas/StaffCertificationType'
+        '422':
+          description: slug and name are required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/certification-types/{typeId}:
+    parameters:
+      - name: typeId
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      operationId: certificationTypes_update
+      summary: Update a certification/training type
+      description: Gated by manage_certifications. Partial update — only submitted fields change.
+      tags:
+        - Staff Handbook & Compliance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffCertificationType'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  certification_type:
+                    $ref: '#/components/schemas/StaffCertificationType'
+    delete:
+      operationId: certificationTypes_delete
+      summary: Delete a certification/training type
+      description: Gated by manage_certifications.
+      tags:
+        - Staff Handbook & Compliance
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+  /api/staff-certifications:
+    get:
+      operationId: staffCertifications_list
+      summary: List individual staff certification/training records
+      description: Gated by manage_certifications.
+      tags:
+        - Staff Handbook & Compliance
+      parameters:
+        - name: staff_member_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Certification records, joined with type name and staff member name
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  certifications:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StaffCertification'
+        '403':
+          description: Missing manage_certifications capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: staffCertifications_create
+      summary: Record a staff certification
+      description: Gated by manage_certifications.
+      tags:
+        - Staff Handbook & Compliance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffCertification'
+      responses:
+        '200':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  certification:
+                    $ref: '#/components/schemas/StaffCertification'
+        '422':
+          description: staff_member_id and certification_type_id are required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/staff-certifications/{certId}:
+    parameters:
+      - name: certId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: staffCertifications_get
+      summary: Get one staff certification record
+      description: Gated by manage_certifications.
+      tags:
+        - Staff Handbook & Compliance
+      responses:
+        '200':
+          description: Certification record
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  certification:
+                    $ref: '#/components/schemas/StaffCertification'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: staffCertifications_update
+      summary: Update a staff certification record
+      description: >-
+        Gated by manage_certifications. Partial update; pass verify:true to stamp
+        verified_at/verified_by as the calling admin.
+      tags:
+        - Staff Handbook & Compliance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffCertification'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  certification:
+                    $ref: '#/components/schemas/StaffCertification'
+    delete:
+      operationId: staffCertifications_delete
+      summary: Delete a staff certification record
+      description: Gated by manage_certifications.
+      tags:
+        - Staff Handbook & Compliance
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
   /api/systems-inventory:
     get:
       operationId: systemsInventory_list

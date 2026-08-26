@@ -233,6 +233,39 @@ final class Kernel
             return [StaffMembers::class, ['staffId' => $this->intOrNull($segments[1] ?? null)]];
         }
 
+        // Staff Handbook & Compliance (docs/staff/**) —
+        //   GET  /api/staff-docs                    list (auth required; ?all=1 admin-only)
+        //   GET  /api/staff-docs/{slug}              detail (rendered current version)
+        //   GET  /api/staff-docs/{slug}/versions     version history (admin)
+        //   POST /api/staff-docs/{slug}/publish      republish from disk (admin)
+        //   POST /api/staff-docs/{slug}/acknowledge  record the caller's acknowledgment
+        if ($segments[0] === 'staff-docs') {
+            return [StaffDocs::class, [
+                'slug' => $segments[1] ?? null,
+                'action' => $segments[2] ?? null,
+            ]];
+        }
+
+        // Management compliance overview (admin) — staff x documents x certifications
+        if ($segments[0] === 'staff-compliance') {
+            return [StaffDocCompliance::class, []];
+        }
+
+        // Role -> staff document assignment matrix (admin)
+        if ($segments[0] === 'staff-doc-assignments') {
+            return [StaffDocAssignments::class, ['assignmentId' => $this->intOrNull($segments[1] ?? null)]];
+        }
+
+        // Certification/training type catalog (admin)
+        if ($segments[0] === 'certification-types') {
+            return [CertificationTypes::class, ['typeId' => $this->intOrNull($segments[1] ?? null)]];
+        }
+
+        // Individual staff certification/training records (admin)
+        if ($segments[0] === 'staff-certifications') {
+            return [StaffCertifications::class, ['certId' => $this->intOrNull($segments[1] ?? null)]];
+        }
+
         // Marketing / CRM contacts (admin)
         //   GET  /api/contacts/{id}/lists          which mailing lists this contact belongs to
         //   GET  /api/contacts/{id}/activity       audit trail

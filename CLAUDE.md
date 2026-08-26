@@ -44,6 +44,7 @@ making changes**, not just this file.
 | Google Calendar / Sheets sync | `docs/google-calendar-sync.md`, `docs/google-sheet-sync.md` |
 | Multi-tenant / SaaS mode | `README.md` § Multi-Tenant / SaaS Mode |
 | Booking Inbox / email import | `docs/booking-inbox.md`, `docs/booking-email-import.md` |
+| Staff Handbook & Compliance (handbook/SOP content, acknowledgments, role assignments, certifications) | `docs/staff/README.md` (content index), `docs/staff/knowledge-audit.md` (what's confirmed vs. still needs a management decision) |
 
 `docs/` has 30+ other files beyond this table — `ls docs/*.md` and grep by
 keyword when the table doesn't cover it. Files named `*-PLAN.md` /

@@ -121,6 +121,11 @@ final class Capabilities
             'claim_leads', 'override_lead_claims', 'manage_lead_routing',
             'decline_high_value_leads', 'export_leads', 'view_lead_audit',
             'manage_social_queue', 'view_social_queue', 'publish_social',
+            // Staff Handbook & Compliance — publishing documents, managing role
+            // assignments, and the compliance overview are admin-only; every
+            // authenticated user can read/acknowledge their own assigned
+            // documents regardless of role (gated by login, not a capability).
+            'manage_staff_docs', 'manage_certifications',
         ],
         'event_owner' => [
             'view_leads', 'manage_tasks_app', 'view_tasks_app',

@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `staff-docs` — Add Staff Handbook & Compliance system
 - **Changed** `closeout` — Retire the standalone Settlement tab, fold it into Closeout
 - **Added** `closeout` — Track who's paid/unpaid on the ledger, gate finalize on it
 - **Documentation** `opportunities` — Add Phase 0 recon + implementation plan for Opportunities module

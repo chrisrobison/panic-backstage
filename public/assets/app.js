@@ -35,6 +35,7 @@ import './processes/process-designer.js';
 import './processes/process-tasks-list.js';
 import './processes/automation-placeholder.js';
 import './tasks/tasks-shell.js';
+import './staff-docs.js';
 import { initPushBridge } from './push.js';
 
 
@@ -403,6 +404,7 @@ class AppShell extends PanicElement {
       return `admin-${tab}`;
     }
     if (route.startsWith('help')) return this.helpNavKey(route);
+    if (route.startsWith('staff-docs')) return 'staff-docs';
     if (route === 'outbox') return 'outbox';
     if (route === 'new-event') return 'events';
     if (route.startsWith('automation-process-')) return 'automation-processes';
@@ -494,6 +496,9 @@ class AppShell extends PanicElement {
       const anchor = route === 'help' ? '' : route.replace(/^help[-/]/, '');
       return this.mount(outlet, 'pb-help-page', { anchor });
     }
+    if (route === 'staff-docs') return this.mount(outlet, 'pb-staff-docs-page');
+    if (route === 'staff-compliance') return this.mount(outlet, 'pb-staff-compliance-page');
+    if (route.startsWith('staff-docs-')) return this.mount(outlet, 'pb-staff-doc-reader', { slug: route.slice('staff-docs-'.length) });
     if (route === 'outbox') return this.mount(outlet, 'pb-outbox-page');
     if (route === 'inbox') return this.mount(outlet, 'pb-messages-inbox');
     if (route === 'archive') return this.mount(outlet, 'pb-messages-archive');

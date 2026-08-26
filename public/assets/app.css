@@ -639,6 +639,34 @@ a.metric-link:focus-visible { outline: 2px solid var(--accent, #6c5ce7); outline
 .status-partial_failure { background: #ffedc2; color: #a06400; }
 .status-failed { background: #fde2e1; color: #b42318; }
 
+/* Staff Handbook & Compliance */
+.status-needs-ack { background: #fde2e1; color: #b42318; }
+.status-expiring  { background: #ffedc2; color: #a06400; }
+.status-expired   { background: #fde2e1; color: #b42318; }
+.table-scroll { overflow-x: auto; }
+.help-section blockquote {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 3px solid #c7c7c7;
+  background: rgba(0, 0, 0, .03);
+  border-radius: 0 6px 6px 0;
+}
+.help-section blockquote.staff-doc-callout {
+  border-left-color: #c0392b;
+  background: #fdf1ef;
+}
+.help-section blockquote p { margin: 0; }
+.help-section .heading-anchor {
+  margin-left: 6px;
+  opacity: 0;
+  text-decoration: none;
+  color: var(--muted, #888);
+  font-weight: 400;
+}
+.help-section h1:hover .heading-anchor,
+.help-section h2:hover .heading-anchor,
+.help-section h3:hover .heading-anchor { opacity: 1; }
+
 .attention-list { display: grid; gap: 18px; padding: 18px; }
 .attention-card {
   box-shadow: none;
