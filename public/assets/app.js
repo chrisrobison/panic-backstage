@@ -523,10 +523,9 @@ class AppShell extends PanicElement {
       return this.mount(outlet, 'pb-tasks-app', { documentId: documentId || null });
     }
     // Opportunities module (docs/OPPORTUNITIES-IMPLEMENTATION.md). Discover
-    // (Phase 2) and the Conference list/detail (Phase 3) are real pages;
-    // every other destination — including detail routes for a given
-    // company/opportunity/note — mounts the honest "not built yet"
-    // placeholder (see opportunities-shell.js).
+    // (Phase 2), Conference list/detail (Phase 3), Company list/detail
+    // (Phase 4), Pipeline board + Opportunity detail (Phase 5), and the
+    // Notes workspace (Phase 6) are all real pages now.
     if (route === 'opportunities') return this.mount(outlet, 'pb-opportunities-discover');
     const oppConferenceDetail = route.match(/^opportunities-conference-(\d+)$/);
     if (oppConferenceDetail) return this.mount(outlet, 'pb-opportunities-conference-detail', { id: Number(oppConferenceDetail[1]) });
@@ -536,8 +535,8 @@ class AppShell extends PanicElement {
     if (route === 'opportunities-companies') return this.mount(outlet, 'pb-opportunities-companies-list');
     if (route === 'opportunities-pipeline') return this.mount(outlet, 'pb-opportunities-pipeline');
     const oppNoteDetail = route.match(/^opportunities-note-(\d+)$/);
-    if (oppNoteDetail) return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'notes', noteId: Number(oppNoteDetail[1]) });
-    if (route === 'opportunities-notes') return this.mount(outlet, 'pb-opportunities-placeholder', { page: 'notes' });
+    if (oppNoteDetail) return this.mount(outlet, 'pb-opportunities-notes', { initialNoteId: Number(oppNoteDetail[1]) });
+    if (route === 'opportunities-notes') return this.mount(outlet, 'pb-opportunities-notes');
     const oppDetail = route.match(/^opportunities-(\d+)$/);
     if (oppDetail) return this.mount(outlet, 'pb-opportunities-detail', { id: Number(oppDetail[1]) });
     return this.mount(outlet, 'pb-dashboard');

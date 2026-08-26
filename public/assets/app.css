@@ -8465,3 +8465,90 @@ pb-inbox-conversation { flex: 1 1 auto; min-height: 0; display: flex; flex-direc
   .opp-header-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .opp-tabs { overflow-x: auto; }
 }
+
+/* ── Notes workspace (Phase 6, opportunity-6.png) ─────────────────────────
+   Three panes when width permits: note list / editor / context. Below
+   1100px the context pane drops under the editor; below 760px all three
+   stack, list-first, same "stack, don't lose content" rule every other
+   Opportunities page's responsive breakpoints already follow. */
+.opp-notes-workspace {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1.4fr) minmax(220px, 320px);
+  gap: 16px;
+  align-items: start;
+}
+.opp-notes-list-pane { display: flex; flex-direction: column; max-height: calc(100vh - 220px); min-height: 400px; }
+.opp-notes-filters { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px; border-bottom: 1px solid var(--line); }
+.opp-notes-filters input[type="search"] { flex: 1 1 100%; }
+.opp-notes-filters select, .opp-notes-filters input[type="text"] { font-size: 12.5px; }
+.opp-notes-list { overflow-y: auto; flex: 1; padding: 6px; }
+
+.opp-notes-list-item {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  border-bottom: 1px solid var(--line); border-radius: 8px; padding: 10px 8px; cursor: pointer; font: inherit; color: inherit;
+}
+.opp-notes-list-item:hover { background: var(--soft); }
+.opp-notes-list-item.active { background: #e7f0ff; }
+.opp-notes-list-item-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.opp-notes-list-item-head i { color: var(--amber, #a06400); }
+.opp-notes-list-contexts { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.opp-notes-list-contexts .pill { margin: 0; }
+.opp-notes-list-preview { font-size: 13px; margin: 0 0 4px; color: var(--ink); line-height: 1.4; }
+
+.opp-notes-editor-pane, .opp-notes-context-pane { min-height: 400px; }
+.opp-notes-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 100%; min-height: 360px; color: var(--muted); text-align: center; }
+.opp-notes-empty i { font-size: 32px; }
+
+.opp-notes-editor-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.opp-notes-editor-head-actions { margin-left: auto; display: flex; gap: 8px; }
+
+.opp-notes-link-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; align-items: center; }
+.opp-notes-link-chip { display: inline-flex; align-items: center; gap: 6px; }
+.opp-notes-link-chip button { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0; font-size: 13px; line-height: 1; }
+.opp-notes-link-chip button:hover { color: var(--red, #b91c1c); }
+
+.opp-notes-toolbar { display: flex; align-items: center; gap: 2px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 8px 8px 0 0; border-bottom: none; padding: 6px; background: var(--soft); }
+.opp-notes-toolbar button { background: none; border: none; width: 30px; height: 30px; border-radius: 6px; color: var(--ink); cursor: pointer; }
+.opp-notes-toolbar button:hover { background: rgba(0,0,0,.06); }
+.opp-notes-toolbar-spacer { flex: 1; }
+.opp-notes-toolbar button.active { background: var(--blue); color: #fff; }
+.opp-notes-toolbar > button[data-toggle-preview] { width: auto; padding: 0 10px; font-size: 12.5px; font-weight: 700; }
+
+.opp-notes-textarea {
+  width: 100%; min-height: 260px; resize: vertical; border: 1px solid var(--line); border-radius: 0 0 8px 8px;
+  padding: 12px; font: inherit; font-size: 14px; line-height: 1.5;
+}
+.opp-notes-preview {
+  min-height: 260px; border: 1px solid var(--line); border-radius: 0 0 8px 8px; padding: 12px; background: #fff;
+}
+.opp-notes-preview .md-heading { margin: 12px 0 6px; }
+.opp-notes-preview .md-list, .opp-notes-preview .md-checklist { margin: 0 0 10px 20px; padding: 0; line-height: 1.6; }
+.opp-notes-preview .md-checklist { list-style: none; margin-left: 4px; }
+.opp-notes-preview .md-checklist li { display: flex; align-items: baseline; gap: 6px; }
+.opp-notes-preview p { margin: 0 0 10px; line-height: 1.6; }
+
+.opp-notes-tags-field { display: block; margin: 10px 0; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.opp-notes-tags-field input { display: block; width: 100%; margin-top: 4px; font-weight: 400; color: var(--ink); }
+
+.opp-notes-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+.opp-notes-history { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+.opp-notes-version-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.opp-notes-version-item { border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.opp-notes-version-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.opp-notes-version-body { font-size: 13px; color: var(--muted); margin: 0; }
+
+.opp-notes-context-list { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.opp-notes-context-item { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.opp-notes-context-item i { color: var(--muted); margin-top: 2px; }
+.opp-notes-context-item .muted { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; font-weight: 700; display: block; }
+.opp-notes-ai-panel { background: var(--soft); }
+
+@media (max-width: 1100px) {
+  .opp-notes-workspace { grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); }
+  .opp-notes-context-pane { grid-column: 1 / -1; min-height: 0; }
+}
+@media (max-width: 760px) {
+  .opp-notes-workspace { grid-template-columns: 1fr; }
+  .opp-notes-list-pane { max-height: 320px; }
+}

@@ -17,7 +17,7 @@
 // src/Opportunities/DecisionMakers.php).
 import { esc, api, emptyState, openModal, formData, publish, subscribe, getAppCapabilities, PanicElement, $, $$ } from '../core.js';
 import {
-  stageBadge, shortMonthDay, relativeTime, noteTypeLabel,
+  stageBadge, shortMonthDay, relativeTime, noteTypeLabel, NOTE_TYPES,
   activityActionLabel, decisionMakerRoleBadge, QUALIFICATION_ITEMS, debounce,
 } from './shared.js';
 
@@ -261,7 +261,7 @@ class OpportunitiesDetail extends PanicElement {
       ${this.canManage ? `<form class="opp-inline-form opp-inline-form-wide" data-form="add-note">
         <textarea name="body" rows="3" placeholder="Add a note… use @ to mention, # to tag" required></textarea>
         <div class="inline-actions">
-          <select name="note_type">${['general', 'meeting', 'call', 'research', 'internal'].map((t) => `<option value="${t}">${esc(noteTypeLabel(t))}</option>`).join('')}</select>
+          <select name="note_type">${NOTE_TYPES.map((t) => `<option value="${t}">${esc(noteTypeLabel(t))}</option>`).join('')}</select>
           <label class="opp-inline-check"><input type="checkbox" name="is_pinned"> Pin</label>
           <button type="submit" class="small">Add Note</button>
         </div>

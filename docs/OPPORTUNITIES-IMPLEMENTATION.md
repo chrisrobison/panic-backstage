@@ -1,8 +1,8 @@
 # Opportunities Module — Implementation Handoff
 
-**Status:** Phase 5 complete — Pipeline board + Opportunity detail +
-conversion to event. See §4.1 (Phase 1), §4.2 (Phase 2), §4.3 (Phase 3),
-§4.4 (Phase 4), §4.5 (Phase 5) for exactly what landed each phase.
+**Status:** Phase 6 complete — First-class Research Notes workspace. See
+§4.1 (Phase 1), §4.2 (Phase 2), §4.3 (Phase 3), §4.4 (Phase 4), §4.5
+(Phase 5), §4.6 (Phase 6) for exactly what landed each phase.
 **Branch:** `opportunities-module` (long-lived feature branch; not merged to `main`
 until the module is stable — see "Branch strategy" below). Do not squash/delete
 mid-project; each phase adds commits here.
@@ -607,7 +607,7 @@ before the generic `match`, keyed on a non-numeric segment).
 | 3 — Conference list/detail | **Done** | See §4.3 below |
 | 4 — Company list/detail + buyer contacts | **Done** | See §4.4 below |
 | 5 — Pipeline + Opportunity detail + conversion | **Done** | See §4.5 below |
-| 6 — Notes workspace | Not started | |
+| 6 — Notes workspace | **Done** | See §4.6 below |
 | 7 — Claude CLI research | Not started | |
 | 8 — Tasks/activities/realtime/scoring/availability | Not started | |
 | 9 — Polish/tests/docs/perf/a11y | Not started | |
@@ -1315,13 +1315,184 @@ Phase 4's Company detail already established) throughout. Added
   (stage move + logged note) rather than fabricated.
 - Quick Quote has no "Download PDF" — same reasoning; only the editable
   fields (estimated value, guest range, package, duration) exist.
-- `opportunity_note_versions` (Phase 6 revision history) still doesn't
-  exist. Notes on the Opportunity detail page are edit-in-place with no
-  history, consistent with every other phase's Notes panel so far.
+- ~~`opportunity_note_versions` (Phase 6 revision history) still doesn't
+  exist~~ — **resolved in Phase 6**: the table, the archiving logic, and a
+  read-only `GET .../versions` endpoint all shipped. Editing a note through
+  the Opportunity detail page's Notes tab (Phase 5) or Company/Conference
+  detail's inline composers now also archives a version — `update()`'s
+  archiving logic isn't specific to the new Notes workspace, it applies to
+  every caller of `PATCH /api/opportunity-notes/{id}` (and its `/{family}/
+  {id}/notes/{noteId}` alias) — but only the Phase 6 workspace has a UI to
+  actually browse that history (a "History" button/panel). Add one to the
+  other Notes panels later if it turns out to be worth the screen space
+  there too.
 - Company detail's "+ New Opportunity" modal (Phase 4) still doesn't offer a
   `primary_contact_id`/decision-maker picker at creation time — set it
   afterward from the Opportunity detail page's Linked Records tab
   ("Change" button) or Decision Makers panel.
+
+### 4.6 Phase 6 — what actually shipped
+
+**Migration:** `database/migrations/114_add_opportunities_phase6.sql` —
+added `strategy` to `opportunity_notes.note_type`'s enum (the spec's full
+6-type list: general/meeting/call/research/internal/strategy — Phase 1
+shipped the first 5), `opportunity_notes.updated_by` (who last edited the
+body — surfaced by the workspace, and the source of a version's
+`edited_by`), and the new `opportunity_note_versions` table (§3.1's
+Phase-6-deferred immutable revision history — append-only, mirrors
+`lead_classifications`' versioned-row spirit). Applied to the live DB;
+audit triggers regenerated.
+
+**Backend — `src/Opportunities/Notes.php` grew substantially**, no new
+Kernel route family beyond one new sub-path:
+- `index()` now branches: a specific `linked_type`+`linked_id` still goes to
+  the original `scopedIndex()` (unchanged behavior, still 422s if
+  `linked_id` is given without a valid `linked_type`); with no `linked_id`
+  at all, it calls the new `generalIndex()` — the Notes workspace's own
+  cross-cutting search, reachable only through `/api/opportunity-notes`
+  with no `linked_id` in the query string. Filters: `q` (body substring),
+  `note_type`, `is_pinned`, `is_ai_generated`, `created_by` (author),
+  `tag`, `date_from`/`date_to`, and a bare `linked_type` (any note linked
+  to a record of that type, not one specific record) — all combinable,
+  `LIMIT 300`. Also returns an `authors` list (every user who has authored
+  at least one note) for the workspace's Author filter.
+- New `attachContexts()` — resolves every note's `links` into human-
+  readable `contexts` (`{type, id, label}`), attached to every response
+  shape (`show()`/`create()`/`update()`/both index modes) as of this phase.
+  Same batch-resolve shape as `Opportunities::recentNotes()`'s `nameMap()`
+  (2 bulk queries per linked type actually present, never one per note),
+  extended to cover `contact` links too (the dashboard's narrower helper
+  never needed to).
+- `update()`: when `body` changes, the **pre-edit** body is archived to
+  `opportunity_note_versions` (with who authored it and when it stopped
+  being current) before the new body is written, and `updated_by` is set
+  to whoever made the edit. A no-op PATCH (identical body) does **not**
+  create a spurious version — verified explicitly in the DB test. New
+  `add_links`/`remove_links` request fields (Phase 6's "Link record"
+  action) append/remove links on an already-created note, reusing
+  `create()`'s own `validateLinks()` so an invalid/nonexistent linked
+  record is rejected (422) the same way at both entry points.
+- New `versions()` — `GET /api/opportunity-notes/{id}/versions`, read-only,
+  newest first.
+
+**Backend — `src/Kernel.php`**: one addition to the existing
+`opportunity-notes` cross-cutting family — `{id}/versions` dispatches to
+`Notes::class` with `action: 'versions'`, checked before the generic
+GET/POST/PATCH/DELETE match in `Notes::handle()`.
+
+**Frontend — `public/assets/core.js`**: `mdToHtml()` (the existing,
+already-escaped Markdown renderer event descriptions already use) gained
+checklist support (`- [ ] item` / `- [x] item` → a disabled-checkbox `<ul
+class="md-checklist">`), checked *before* the plain unordered-list rule
+since a checklist line also matches that looser pattern. No new rendering
+path was introduced — reusing this one, now slightly more complete, helper
+is what lets the Notes workspace satisfy the spec's "paragraphs, headings,
+bold, italic, lists, checklists, links" requirement without a second
+Markdown implementation or a WYSIWYG/contenteditable dependency (the
+spec's own explicit fallback: "store/render Markdown with a controlled
+toolbar" — security over pixel-perfect rich text, never unsanitized HTML).
+
+**Frontend — new file: `public/assets/opportunities/notes-workspace.js`**
+(`<pb-opportunities-notes>`, `opportunity-6.png`) — the three-pane layout
+the spec calls for:
+- **Note list** (left): the filter bar (search, type, linked-record-type,
+  author, tag, pinned, AI-generated) backed 1:1 by `generalIndex()`'s query
+  params; each row shows resolved context chips, a text preview
+  (Markdown syntax stripped for the preview line only — the stored `body`
+  is untouched), type/pinned/AI badges, and author/time.
+- **Editor** (middle): a plain `<textarea>` (never contenteditable) with a
+  controlled toolbar (Bold/Italic/Heading/Bulleted list/Numbered list/
+  Checklist/Link buttons that insert or wrap Markdown syntax at the cursor
+  — no execCommand, no rich-text framework) and an Edit/Preview toggle that
+  renders the live body through `mdToHtml()`. Link chips show every linked
+  record with a remove (×) control; "+ Add Link" opens a type-scoped
+  picker (Conference/Company/Opportunity search the already-fetched
+  list-endpoint data client-side — same tradeoff `pipeline-board.js`'s own
+  filters already make over one fetched page; Contact search is scoped to
+  a company link already on the note, since contacts have no cross-company
+  search index per §1.15's design). "History" opens the version list
+  inline, each entry showing who wrote it, when, and a "Restore this
+  version" button that loads that prior body back into the editor (still
+  requires a Save — never auto-writes). "Create Task" (enabled once a
+  conference/company/opportunity link exists — contacts can't own a task
+  per `TaskLink.php`'s owner-table map) and "Create Opportunity" (enabled
+  once a company link exists, prefilling `conference_id` too if one is
+  also linked, then auto-linking the newly created opportunity back onto
+  the note) are the spec's "Create task" / "Create opportunity" note
+  actions; "Link record" is the Add-Link flow above; "Pin/unpin" is the
+  existing `is_pinned` checkbox, now with a real UI home.
+- **Context** (right): the note's resolved linked records as clickable
+  cards, plus an honest "Planned — not yet built" AI panel (same pattern
+  every other AI-shaped surface in this module uses) — "AI-assisted
+  summaries, extracted facts, and suggested next actions... arrive in
+  Phase 7," never fabricated in the meantime.
+
+New notes are created client-side as `selectedNoteId === 'new'` with the
+first added link becoming the create-time primary `linked_type`/`linked_id`
+and any further links becoming `additional_links` — Save is blocked with a
+clear toast if no link has been added yet, since `create()` requires one.
+An existing note's link add/remove calls `add_links`/`remove_links`
+immediately (not batched into Save), matching every other inline-form
+action elsewhere in this module ("submit persists now," not autosave-on-
+blur).
+
+**Routes**: `#opportunities-notes` → `pb-opportunities-notes` (was the
+Phase 2 placeholder); `#opportunities-note-{id}` → same component with
+`initialNoteId`, which `connect()` resolves via a direct `GET
+/api/opportunity-notes/{id}` (independent of whatever filters are active)
+so a deep link always finds its note regardless of the list's current
+filter state. `<pb-opportunities-placeholder>` and its now-empty `PAGES`
+map (`opportunities-shell.js`) were **deleted** — every planned
+Opportunities screen is a real page as of this phase; nothing routes to it
+any more.
+
+**CSS**: new "Notes workspace" section — the 3-column
+`.opp-notes-workspace` grid (stacks to 2 columns ≤1100px, 1 column
+≤760px, same responsive philosophy as `.opp-detail-layout`), list-item/
+filter-bar styling, the toolbar + textarea/preview pair, link chips,
+version-history list, and context-pane cards. `.md-checklist` styling
+scoped under the new `.opp-notes-preview` container (mirrors how
+`.event-description` already scopes `.md-list`/`.md-heading` for its own
+Markdown rendering, rather than a global rule).
+
+**Tests:**
+- `tests/opportunities_notes_workspace_db_test.php` (new, DB-backed,
+  `RUN_DB_TESTS=1`) — 35 assertions: creating a `strategy`-type note linked
+  to a company + conference at once (the spec's own multi-link "Dreamforce
+  2026 Sponsorship Strategy" example) and its immediate `contexts`;
+  `generalIndex()`'s every filter (`q`, `note_type`, `is_pinned`, `tag`,
+  bare `linked_type`, `created_by`) both including and excluding correctly;
+  the `linked_id`-without-`linked_type` 422 still holds; version history —
+  zero versions before any edit, a no-op PATCH creates no spurious version,
+  a real edit archives exactly the pre-edit body with the correct prior
+  author, a second edit appends a second version (newest-first); `add_links`/
+  `remove_links` including the invalid-link-id rejection; capability
+  boundaries on every write path and on the general list read itself.
+  `PB TEST OPPNOTES — ` throwaway-row prefix (notes cleaned up directly —
+  their FK ON DELETE CASCADE to `opportunity_note_links`/`_tags`/
+  `_versions` handles their children; deleting the parent company/
+  conference does **not** cascade-delete a note, since notes have no FK to
+  what they link).
+- `tests/ui/122-opportunities-notes.test.mjs` (new, headless-Chromium) —
+  three-pane chrome, a real API-created note appearing in the list with its
+  resolved context, selecting it into the editor, editing the body and
+  confirming exactly one version was archived, and the Preview toggle
+  rendering through `mdToHtml()`. Written and syntax-checked but **not
+  run** — same pre-existing environment limitation as tests 118-121 (see
+  §4.2's Tests note).
+
+**Known gaps carried forward:**
+- The "+ Add Link" picker's Conference/Company/Opportunity search is
+  client-side over one fetched page (≤200 rows each, same cap those list
+  endpoints already have) rather than a live server search — fine at this
+  scale, would need revisiting if any of those lists ever grow past what a
+  single page reasonably holds (Phase 9 pagination territory).
+- No global full-text search surfaces Opportunities notes yet (§1.17 — the
+  existing `search-results.js` only searches events). The workspace's own
+  `q` filter is a substring `LIKE` scan, not real full-text search.
+- AI-assisted note summarization/extraction is honestly deferred to
+  Phase 7 (the context pane says so explicitly) — nothing here infers
+  anything from note content.
 
 ## 5. Open TODOs / assumptions to verify in later phases
 
@@ -1365,17 +1536,21 @@ Phase 4's Company detail already established) throughout. Added
   subscribe. Discover/Conferences/Companies pages still fetch-once (Phase 8
   scope, per §1.9, if it's worth extending further).
 - `opportunity_research_jobs` exists as a schema-only stub (no reader/writer)
-  until Phase 7. `opportunity_note_versions` doesn't exist yet (Phase 6).
-- Discover, Conferences, Companies, Pipeline, and Opportunity detail are all
-  real pages now — only the dedicated Notes workspace (and its `#opportunities-
-  note-{id}` detail route) is still the honest placeholder, until Phase 6.
+  until Phase 7. ~~`opportunity_note_versions` doesn't exist yet~~ — resolved
+  in Phase 6.
+- Every planned Opportunities screen is a real page as of Phase 6 — there is
+  no longer any `<pb-opportunities-placeholder>` route (it was deleted;
+  nothing referenced it anymore). Phase 7 (AI research) and Phase 8
+  (scoring/availability polish) will add their own "planned" affordances
+  scoped to the pages that need them, not a whole-page placeholder.
 - **No UI test has actually been run in a browser yet** (118 from Phase 2,
-  119 from Phase 3, 120 from Phase 4, 121 from Phase 5) — all written and
-  syntax-checked only. This checkout's multi-tenant `.env` (`SUPER_DB_NAME`
-  set) blocks the whole `node tests/ui/run.mjs` harness at the host-allowlist
-  layer before the app boots. See §4.2's Tests note for the full explanation
-  and where it's confirmed to run instead (CI, or a single-tenant checkout
-  like `/home/cdr/backstage`). **Run all four for real at the start of
+  119 from Phase 3, 120 from Phase 4, 121 from Phase 5, 122 from Phase 6) —
+  all written and syntax-checked only. This checkout's multi-tenant `.env`
+  (`SUPER_DB_NAME` set) blocks the whole `node tests/ui/run.mjs` harness at
+  the host-allowlist layer before the app boots. See §4.2's Tests note for
+  the full explanation and where it's confirmed to run instead (CI, or a
+  single-tenant checkout like `/home/cdr/backstage`). **Run all five for
+  real at the start of
   whichever future session next touches the Opportunities frontend**,
   before trusting any of them.
 - "Create Proposal" and Quick Quote deliberately don't generate an actual
@@ -1447,3 +1622,20 @@ Phase 4's Company detail already established) throughout. Added
   tabs/qualification checklist/header actions, a checklist toggle
   persisting server-side, cleanup via DELETE. Written and syntax-checked but
   **not run** — see Known issues above.
+- `tests/opportunities_notes_workspace_db_test.php` — DB-backed, opt-in via
+  `RUN_DB_TESTS=1`. 35 assertions covering `generalIndex()`'s every filter
+  (q/note_type/is_pinned/tag/bare-linked_type/created_by, each including
+  and excluding correctly) and its `authors`/`contexts` payload, the
+  `strategy` note type, version history (zero-versions-before-any-edit,
+  no-op-PATCH-creates-no-version, a real edit archiving exactly the
+  pre-edit body + correct prior author, a second edit appending a second
+  version newest-first), `add_links`/`remove_links` (including the
+  invalid-linked-record rejection), and capability boundaries on every
+  write path plus the general read itself. `PB TEST OPPNOTES — `
+  throwaway-row prefix.
+- `tests/ui/122-opportunities-notes.test.mjs` — headless-Chromium,
+  three-pane workspace chrome, a real API-created note appearing in the
+  list with its resolved context label, selecting it into the editor,
+  editing the body and confirming exactly one version was archived
+  server-side, and the Preview toggle rendering through `mdToHtml()`.
+  Written and syntax-checked but **not run** — see Known issues above.

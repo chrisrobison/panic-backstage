@@ -81,8 +81,10 @@ export function dateRangeLabel(startValue, endValue) {
   return `${startLabel} – ${endLabel}, ${end.getFullYear()}`;
 }
 
+export const NOTE_TYPES = ['general', 'meeting', 'call', 'research', 'internal', 'strategy'];
+
 export function noteTypeLabel(type) {
-  return { general: 'Note', meeting: 'Meeting', call: 'Call', research: 'Research', internal: 'Internal' }[type] || titleCaseFallback(type);
+  return { general: 'Note', meeting: 'Meeting', call: 'Call', research: 'Research', internal: 'Internal', strategy: 'Strategy' }[type] || titleCaseFallback(type);
 }
 
 // ── Companies / Contacts (Phase 4) ──────────────────────────────────────────

@@ -11268,6 +11268,7 @@ components:
         - call
         - research
         - internal
+        - strategy
     OpportunityNoteLinkedType:
       type: string
       description: >-
@@ -11860,6 +11861,12 @@ components:
         created_by_name:
           type: string
           nullable: true
+        updated_by:
+          type: integer
+          nullable: true
+          description: >-
+            Phase 6. Set whenever `body`/`note_type`/`is_pinned` change — the previous body is
+            archived to opportunity_note_versions first (see GET .../versions below).
         created_at:
           type: string
           format: date-time
@@ -11874,6 +11881,48 @@ components:
           type: array
           items:
             type: string
+        contexts:
+          type: array
+          description: >-
+            Phase 6. `links` resolved into human-readable labels (e.g. `{type: "company", id: 12,
+            label: "NVIDIA"}`) for the Notes workspace's list/context panel — never returned by the
+            older nested `/{family}/{id}/notes` routes' first Phase-1 shape callers may still expect
+            only `links`/`tags` from; present on every Notes.php response as of Phase 6.
+          items:
+            type: object
+            properties:
+              type:
+                $ref: '#/components/schemas/OpportunityNoteLinkedType'
+              id:
+                type: integer
+              label:
+                type: string
+    OpportunityNoteVersion:
+      type: object
+      description: >-
+        Phase 6. One archived prior revision of a note's body — immutable, append-only (see
+        opportunity_note_versions). `edited_by`/`edited_at` describe who authored this body and when
+        it stopped being current, not who triggered the archival write.
+      properties:
+        id:
+          type: integer
+        note_id:
+          type: integer
+        body:
+          type: string
+        edited_by:
+          type: integer
+          nullable: true
+        edited_by_name:
+          type: string
+          nullable: true
+        edited_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
     OpportunitySignal:
       type: object
       description: >-
@@ -33601,27 +33650,70 @@ paths:
   /api/opportunity-notes:
     get:
       operationId: opportunity_notes_list
-      summary: Cross-cutting note list for one linked record
+      summary: Cross-cutting note list — one linked record, or the whole Notes workspace's general search
       description: >-
-        Requires view_opportunities. `linked_type` and `linked_id` query params are required — this
-        is the same underlying table/handler as the `/{family}/{id}/notes` convenience routes, reached
-        without going through a specific parent family.
+        Requires view_opportunities. Two modes, same handler: pass `linked_type` + `linked_id` for
+        notes on one specific record (same underlying table as the `/{family}/{id}/notes`
+        convenience routes); omit `linked_id` (Phase 6) for the Notes workspace's general
+        search/filter mode across every note in the module, optionally narrowed by any combination
+        of `q` (body text search), `note_type`, `is_pinned`, `is_ai_generated`, `created_by`, `tag`,
+        `date_from`/`date_to`, and a bare `linked_type` (any note linked to a record of that type,
+        not one specific record). General mode returns an additional `authors` list and every note's
+        `contexts` (resolved link labels). Capped at 300 rows (real pagination is Phase 9 scope).
       tags:
         - Opportunity Notes & Signals
       parameters:
         - name: linked_type
           in: query
-          required: true
           schema:
             $ref: '#/components/schemas/OpportunityNoteLinkedType'
+          description: Required together with linked_id for the single-record mode; optional alone in general mode.
         - name: linked_id
           in: query
-          required: true
           schema:
             type: integer
+          description: Single-record mode only. Omit entirely to use the Phase 6 general search mode.
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: General mode only. Substring search over note body.
+        - name: note_type
+          in: query
+          schema:
+            $ref: '#/components/schemas/OpportunityNoteType'
+        - name: is_pinned
+          in: query
+          schema:
+            type: string
+            enum: ['0', '1']
+        - name: is_ai_generated
+          in: query
+          schema:
+            type: string
+            enum: ['0', '1']
+        - name: created_by
+          in: query
+          schema:
+            type: integer
+          description: General mode only. Filter to one author's notes.
+        - name: tag
+          in: query
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
       responses:
         '200':
-          description: Notes linked to the given record, pinned first then newest.
+          description: Notes matching the request, pinned first then newest.
           content:
             application/json:
               schema:
@@ -33635,6 +33727,16 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/OpportunityNoteType'
+                  authors:
+                    type: array
+                    description: General mode only — every user who has authored at least one note.
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        name:
+                          type: string
         '401':
           description: Authentication required.
           content:
@@ -33648,7 +33750,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '422':
-          description: linked_type/linked_id missing or invalid.
+          description: linked_id given without a valid linked_type.
           content:
             application/json:
               schema:
@@ -33763,7 +33865,12 @@ paths:
     patch:
       operationId: opportunity_notes_update
       summary: Update a note
-      description: Requires manage_opportunities. `tags`, if present, fully replaces the note's tag set.
+      description: >-
+        Requires manage_opportunities. `tags`, if present, fully replaces the note's tag set. When
+        `body` changes, the PRE-edit body is archived to opportunity_note_versions first (see GET
+        .../versions) before the new body is written; `updated_by` is set to the caller.
+        `add_links`/`remove_links` (Phase 6, the workspace's "Link record" action) append/remove
+        links on this already-created note — distinct from `additional_links` at creation time.
       tags:
         - Opportunity Notes & Signals
       parameters:
@@ -33785,6 +33892,14 @@ paths:
                   type: array
                   items:
                     type: string
+                add_links:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/OpportunityNoteLink'
+                remove_links:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/OpportunityNoteLink'
       responses:
         '200':
           description: Updated note.
@@ -33838,6 +33953,47 @@ paths:
                 $ref: '#/components/schemas/Error'
         '403':
           description: Missing the manage_opportunities capability.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Note not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/opportunity-notes/{noteId}/versions:
+    get:
+      operationId: opportunity_notes_versions
+      summary: Read a note's immutable revision history
+      description: >-
+        Requires view_opportunities. Read-only. Newest first. See PATCH .../opportunity-notes/{id}'s
+        description for exactly when a version is archived (Phase 6).
+      tags:
+        - Opportunity Notes & Signals
+      parameters:
+        - $ref: '#/components/parameters/OpportunityNoteIdPath'
+      responses:
+        '200':
+          description: The note's prior revisions, newest first (empty if it has never been edited).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityNoteVersion'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Missing the view_opportunities capability.
           content:
             application/json:
               schema:

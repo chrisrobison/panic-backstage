@@ -906,6 +906,18 @@ function mdToHtml(text) {
       return `<h${level} class="md-heading">${inline(headingMatch[2])}</h${level}>`;
     }
 
+    // Checklist — every line starts with "- [ ] " or "- [x] " (checked before
+    // the plain unordered-list rule below, since "- [ ] foo" also matches
+    // that rule's looser "- " prefix). Disabled checkboxes — this is a
+    // read-only render of the note's markdown body, not a live control.
+    if (lines.every((l) => /^[-*] \[[ xX]\] /.test(l))) {
+      return `<ul class="md-checklist">${lines.map((l) => {
+        const checked = /^[-*] \[[xX]\] /.test(l);
+        const label = l.replace(/^[-*] \[[ xX]\] /, '');
+        return `<li><input type="checkbox" disabled ${checked ? 'checked' : ''}> ${inline(label)}</li>`;
+      }).join('')}</ul>`;
+    }
+
     // Unordered list — every line starts with "- " or "* "
     if (lines.every((l) => /^[-*] /.test(l))) {
       return `<ul class="md-list">${lines.map((l) => `<li>${inline(l.replace(/^[-*] /, ''))}</li>`).join('')}</ul>`;

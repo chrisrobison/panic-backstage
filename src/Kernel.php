@@ -572,7 +572,13 @@ final class Kernel
         // linked_type/linked_id come from the query string (GET) or the
         // request body (POST) instead of from the path.
         if ($segments[0] === 'opportunity-notes') {
-            return [Opportunities\Notes::class, ['noteId' => $this->intOrNull($segments[1] ?? null)]];
+            $noteId = $this->intOrNull($segments[1] ?? null);
+            // GET /api/opportunity-notes/{id}/versions — read-only immutable
+            // revision history (Phase 6; see Notes.php's versions()).
+            if (($segments[2] ?? null) === 'versions') {
+                return [Opportunities\Notes::class, ['noteId' => $noteId, 'action' => 'versions']];
+            }
+            return [Opportunities\Notes::class, ['noteId' => $noteId]];
         }
 
         // Client portal — token-gated read-only event view for promoters/clients

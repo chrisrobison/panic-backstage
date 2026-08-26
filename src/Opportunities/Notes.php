@@ -8,6 +8,7 @@ use Panic\Request;
 use Panic\Response;
 
 use function Panic\boolish;
+use function Panic\date_or_null;
 use function Panic\log_opportunity_activity;
 
 /**
@@ -35,7 +36,7 @@ use function Panic\log_opportunity_activity;
  */
 final class Notes extends BaseEndpoint
 {
-    public const NOTE_TYPES  = ['general', 'meeting', 'call', 'research', 'internal'];
+    public const NOTE_TYPES  = ['general', 'meeting', 'call', 'research', 'internal', 'strategy'];
     public const LINKED_TYPES = ['conference', 'company', 'contact', 'opportunity'];
 
     public function handle(Request $request): Response
@@ -43,6 +44,11 @@ final class Notes extends BaseEndpoint
         $noteId     = $this->params['noteId'] ?? null;
         $linkedType = $this->params['linkedType'] ?? null;
         $linkedId   = isset($this->params['linkedId']) ? (int) $this->params['linkedId'] : null;
+        $action     = $this->params['action'] ?? null;
+
+        if ($action === 'versions' && $noteId) {
+            return $request->method() === 'GET' ? $this->versions((int) $noteId) : Response::methodNotAllowed();
+        }
 
         return match ($request->method()) {
             'GET'    => $noteId ? $this->show((int) $noteId) : $this->index($request, $linkedType, $linkedId),
@@ -61,11 +67,27 @@ final class Notes extends BaseEndpoint
 
         $linkedType ??= (string) $request->query('linked_type', '');
         $linkedId   ??= $request->query('linked_id') ? (int) $request->query('linked_id') : null;
+        $linkedType = $linkedType !== '' ? $linkedType : null;
 
-        if (!in_array($linkedType, self::LINKED_TYPES, true) || !$linkedId) {
-            return Response::json(['error' => 'linked_type and linked_id are required'], 422);
+        if ($linkedId !== null) {
+            if (!$linkedType || !in_array($linkedType, self::LINKED_TYPES, true)) {
+                return Response::json(['error' => 'linked_type and linked_id are required'], 422);
+            }
+            return $this->scopedIndex($linkedType, $linkedId);
         }
 
+        // No specific record given — the cross-cutting Notes workspace's
+        // general search/filter mode (Phase 6). A bare linked_type (no id)
+        // narrows to "any note linked to a record of this type" rather than
+        // one specific record.
+        return $this->generalIndex(
+            $request,
+            $linkedType && in_array($linkedType, self::LINKED_TYPES, true) ? $linkedType : null
+        );
+    }
+
+    private function scopedIndex(string $linkedType, int $linkedId): Response
+    {
         $notes = $this->db->all(
             'SELECT n.*, u.name AS created_by_name
              FROM opportunity_notes n
@@ -77,7 +99,103 @@ final class Notes extends BaseEndpoint
             [$linkedType, $linkedId]
         );
 
-        return $this->ok(['notes' => $this->hydrate($notes), 'note_types' => self::NOTE_TYPES]);
+        $hydrated = $this->hydrate($notes);
+        $this->attachContexts($hydrated);
+        return $this->ok(['notes' => $hydrated, 'note_types' => self::NOTE_TYPES]);
+    }
+
+    /**
+     * The Notes workspace's own list: every note across the whole module,
+     * filterable by free-text search, type, pinned, AI-generated, author,
+     * tag, date range, and (optionally) linked-record type — never scoped
+     * to one specific record. Reachable only through the cross-cutting
+     * `/api/opportunity-notes` family (no linked_id in the request).
+     * `LIMIT 300` is a coarse cap consistent with every other list endpoint
+     * in this module (real pagination is Phase 9 scope).
+     */
+    private function generalIndex(Request $request, ?string $linkedTypeOnly): Response
+    {
+        $where  = ['1=1'];
+        $params = [];
+
+        $q = trim((string) $request->query('q', ''));
+        if ($q !== '') {
+            $where[]  = 'n.body LIKE ?';
+            $params[] = '%' . $q . '%';
+        }
+
+        $noteType = (string) $request->query('note_type', '');
+        if ($noteType !== '' && in_array($noteType, self::NOTE_TYPES, true)) {
+            $where[]  = 'n.note_type = ?';
+            $params[] = $noteType;
+        }
+
+        $pinned = $request->query('is_pinned');
+        if ($pinned === '1') {
+            $where[] = 'n.is_pinned = 1';
+        } elseif ($pinned === '0') {
+            $where[] = 'n.is_pinned = 0';
+        }
+
+        $aiGenerated = $request->query('is_ai_generated');
+        if ($aiGenerated === '1') {
+            $where[] = 'n.is_ai_generated = 1';
+        } elseif ($aiGenerated === '0') {
+            $where[] = 'n.is_ai_generated = 0';
+        }
+
+        $createdBy = $request->query('created_by');
+        if ($createdBy) {
+            $where[]  = 'n.created_by = ?';
+            $params[] = (int) $createdBy;
+        }
+
+        $dateFrom = date_or_null($request->query('date_from'));
+        if ($dateFrom) {
+            $where[]  = 'n.created_at >= ?';
+            $params[] = $dateFrom;
+        }
+        $dateTo = date_or_null($request->query('date_to'));
+        if ($dateTo) {
+            $where[]  = 'n.created_at < DATE_ADD(?, INTERVAL 1 DAY)';
+            $params[] = $dateTo;
+        }
+
+        $tag = trim((string) $request->query('tag', ''));
+        if ($tag !== '') {
+            $where[]  = 'EXISTS (SELECT 1 FROM opportunity_note_tags t WHERE t.note_id = n.id AND t.tag = ?)';
+            $params[] = $tag;
+        }
+
+        if ($linkedTypeOnly !== null) {
+            $where[]  = 'EXISTS (SELECT 1 FROM opportunity_note_links l2 WHERE l2.note_id = n.id AND l2.linked_type = ?)';
+            $params[] = $linkedTypeOnly;
+        }
+
+        $notes = $this->db->all(
+            'SELECT n.*, u.name AS created_by_name
+             FROM opportunity_notes n
+             LEFT JOIN users u ON u.id = n.created_by
+             WHERE ' . implode(' AND ', $where) . '
+             ORDER BY n.is_pinned DESC, n.created_at DESC
+             LIMIT 300',
+            $params
+        );
+
+        $hydrated = $this->hydrate($notes);
+        $this->attachContexts($hydrated);
+
+        return $this->ok([
+            'notes'      => $hydrated,
+            'note_types' => self::NOTE_TYPES,
+            // Every user who has ever authored a note — the workspace's
+            // Author filter. Cheap (one small DISTINCT query), not per-note.
+            'authors'    => $this->db->all(
+                'SELECT DISTINCT u.id, u.name FROM users u
+                 JOIN opportunity_notes n2 ON n2.created_by = u.id
+                 ORDER BY u.name'
+            ),
+        ]);
     }
 
     private function show(int $id): Response
@@ -95,7 +213,9 @@ final class Notes extends BaseEndpoint
             return $this->notFound('Note not found');
         }
 
-        return $this->ok(['note' => $this->hydrate([$note])[0]]);
+        $hydrated = $this->hydrate([$note]);
+        $this->attachContexts($hydrated);
+        return $this->ok(['note' => $hydrated[0]]);
     }
 
     private function create(Request $request, ?string $linkedType, ?int $linkedId): Response
@@ -165,7 +285,9 @@ final class Notes extends BaseEndpoint
         $this->replaceTags($id, $b['tags'] ?? null);
         $this->logIfOpportunityLinked($links, $id, 'note_added', ['note_type' => $noteType]);
 
-        return $this->ok(['note' => $this->hydrate([$this->db->one('SELECT n.*, u.name AS created_by_name FROM opportunity_notes n LEFT JOIN users u ON u.id = n.created_by WHERE n.id = ?', [$id])])[0]]);
+        $hydrated = $this->hydrate([$this->db->one('SELECT n.*, u.name AS created_by_name FROM opportunity_notes n LEFT JOIN users u ON u.id = n.created_by WHERE n.id = ?', [$id])]);
+        $this->attachContexts($hydrated);
+        return $this->ok(['note' => $hydrated[0]]);
     }
 
     private function update(Request $request, int $id): Response
@@ -184,8 +306,21 @@ final class Notes extends BaseEndpoint
         $params = [];
 
         if (array_key_exists('body', $b)) {
+            $newBody = (string) $b['body'];
+            if ($newBody !== $existing['body']) {
+                // Archive the PRE-edit body before overwriting it (§3.1
+                // opportunity_note_versions — append-only, mirrors
+                // lead_classifications' versioned-row spirit). edited_by/
+                // edited_at describe who authored the version being
+                // archived and when it stopped being current, not who is
+                // making this edit.
+                $this->db->run(
+                    'INSERT INTO opportunity_note_versions (note_id, body, edited_by, edited_at) VALUES (?,?,?,?)',
+                    [$id, $existing['body'], $existing['updated_by'] ?? $existing['created_by'], $existing['updated_at']]
+                );
+            }
             $sets[]   = '`body` = ?';
-            $params[] = (string) $b['body'];
+            $params[] = $newBody;
         }
         if (array_key_exists('note_type', $b)) {
             if (!in_array($b['note_type'], self::NOTE_TYPES, true)) {
@@ -200,6 +335,8 @@ final class Notes extends BaseEndpoint
         }
 
         if (!empty($sets)) {
+            $sets[]   = '`updated_by` = ?';
+            $params[] = $this->userId();
             $params[] = $id;
             $this->db->run('UPDATE opportunity_notes SET ' . implode(', ', $sets) . ' WHERE id = ?', $params);
         }
@@ -208,11 +345,66 @@ final class Notes extends BaseEndpoint
             $this->replaceTags($id, $b['tags']);
         }
 
+        // "Link record" / unlink actions (Phase 6) — add/remove links on an
+        // EXISTING note, distinct from `additional_links` at create time.
+        if (array_key_exists('add_links', $b)) {
+            foreach ($this->normalizeAdditionalLinks($b['add_links']) as $link) {
+                if ($error = $this->validateLinks([$link])) {
+                    return $error;
+                }
+                $already = $this->db->one(
+                    'SELECT id FROM opportunity_note_links WHERE note_id = ? AND linked_type = ? AND linked_id = ?',
+                    [$id, $link['type'], $link['id']]
+                );
+                if (!$already) {
+                    $this->db->run(
+                        'INSERT INTO opportunity_note_links (note_id, linked_type, linked_id) VALUES (?,?,?)',
+                        [$id, $link['type'], $link['id']]
+                    );
+                }
+            }
+        }
+        if (array_key_exists('remove_links', $b)) {
+            foreach ($this->normalizeAdditionalLinks($b['remove_links']) as $link) {
+                $this->db->run(
+                    'DELETE FROM opportunity_note_links WHERE note_id = ? AND linked_type = ? AND linked_id = ?',
+                    [$id, $link['type'], $link['id']]
+                );
+            }
+        }
+
         $note = $this->db->one(
             'SELECT n.*, u.name AS created_by_name FROM opportunity_notes n LEFT JOIN users u ON u.id = n.created_by WHERE n.id = ?',
             [$id]
         );
-        return $this->ok(['note' => $this->hydrate([$note])[0]]);
+        $hydrated = $this->hydrate([$note]);
+        $this->attachContexts($hydrated);
+        return $this->ok(['note' => $hydrated[0]]);
+    }
+
+    /**
+     * Immutable revision history — every prior body, newest first. See
+     * `update()`'s archiving step above.
+     */
+    private function versions(int $id): Response
+    {
+        if ($denied = $this->requireGlobalCapability('view_opportunities')) {
+            return $denied;
+        }
+        if (!$this->db->one('SELECT id FROM opportunity_notes WHERE id = ?', [$id])) {
+            return $this->notFound('Note not found');
+        }
+
+        $versions = $this->db->all(
+            'SELECT v.*, u.name AS edited_by_name
+             FROM opportunity_note_versions v
+             LEFT JOIN users u ON u.id = v.edited_by
+             WHERE v.note_id = ?
+             ORDER BY v.edited_at DESC, v.id DESC',
+            [$id]
+        );
+
+        return $this->ok(['versions' => $versions]);
     }
 
     private function deleteNote(int $id): Response
@@ -330,5 +522,62 @@ final class Notes extends BaseEndpoint
             $note['tags']  = $tagsByNote[$note['id']] ?? [];
         }
         return $notes;
+    }
+
+    /**
+     * Resolves each note's `links` (type+id pairs) into human-readable
+     * `contexts` (type+id+label) — e.g. so the Notes workspace can show
+     * "NVIDIA · GTC DC · Jane Smith" instead of raw ids. Two bulk queries
+     * per linked type actually present across the whole note set (never
+     * one query per note), same batch-resolve shape as
+     * Opportunities::recentNotes()'s nameMap() — this version additionally
+     * covers `contact` links, which the Discover dashboard's narrower
+     * "company — conference" label didn't need.
+     */
+    private function attachContexts(array &$notes): void
+    {
+        if (!$notes) {
+            return;
+        }
+
+        $idsByType = [];
+        foreach ($notes as $note) {
+            foreach ($note['links'] as $link) {
+                $idsByType[$link['type']][] = $link['id'];
+            }
+        }
+
+        $tableByType = [
+            'conference'  => 'opportunity_conferences',
+            'company'     => 'opportunity_companies',
+            'opportunity' => 'opportunities',
+            'contact'     => 'opportunity_contacts',
+        ];
+        $names = [];
+        foreach ($tableByType as $type => $table) {
+            if (empty($idsByType[$type])) {
+                continue;
+            }
+            $ids = array_values(array_unique($idsByType[$type]));
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            foreach ($this->db->all("SELECT id, name FROM `$table` WHERE id IN ($placeholders)", $ids) as $row) {
+                $names[$type][(int) $row['id']] = $row['name'];
+            }
+        }
+
+        foreach ($notes as &$note) {
+            $contexts = [];
+            foreach ($note['links'] as $link) {
+                $label = $names[$link['type']][$link['id']] ?? null;
+                // A link whose target has since been deleted (no SQL FK
+                // covers `linked_id` — it's polymorphic) simply resolves to
+                // nothing rather than a broken entry.
+                if ($label !== null) {
+                    $contexts[] = ['type' => $link['type'], 'id' => $link['id'], 'label' => $label];
+                }
+            }
+            $note['contexts'] = $contexts;
+        }
+        unset($note);
     }
 }
