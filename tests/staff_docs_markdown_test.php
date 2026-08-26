@@ -12,6 +12,7 @@ declare(strict_types=1);
 require __DIR__ . '/../src/bootstrap.php';
 
 use Panic\Markdown;
+use Panic\StaffDocs;
 
 $passed = 0;
 $failed = 0;
@@ -91,6 +92,31 @@ ok(!str_contains($out, '<script'), 'raw text is HTML-escaped, never passed throu
 $hostile = Markdown::render("<script>alert(1)</script>\n\nSome *text* with <b>raw html</b>.")['html'];
 ok(!str_contains($hostile, '<script>alert'), 'a literal <script> tag in source text is escaped, not executed');
 ok(str_contains($hostile, '&lt;b&gt;raw html&lt;/b&gt;'), 'other raw-looking HTML in source text is escaped too');
+
+// --- Cross-document link rewriting (StaffDocs::rewriteCrossDocLinks) -------
+// Content is authored with Git-relative Markdown links between documents;
+// publishing rewrites them into this app's #staff-docs-<slug> hash routes.
+
+$rewrite = new ReflectionMethod(StaffDocs::class, 'rewriteCrossDocLinks');
+$rewrite->setAccessible(true);
+$call = fn (string $html): string => $rewrite->invoke(null, $html);
+
+ok(
+    str_contains($call('<a href="alcohol-service.md">Alcohol Service</a>'), 'href="#staff-docs-alcohol-service"'),
+    'a bare top-level Markdown link rewrites to its #staff-docs-<slug> route'
+);
+ok(
+    str_contains($call('<a href="../staff/venue-safety.md">Venue Safety</a>'), 'href="#staff-docs-venue-safety"'),
+    'a relative ../staff/ Markdown link rewrites the same way'
+);
+ok(
+    str_contains($call('<a href="sop/bartender.md">Bartender SOP</a>'), 'href="#staff-docs-sop-bartender"'),
+    'a link into sop/ gets the "sop-" slug prefix'
+);
+ok(
+    str_contains($call('<a href="https://example.com/policy.md">External</a>'), 'href="https://example.com/policy.md"'),
+    'an absolute https:// link ending in .md is left untouched, not mistaken for a cross-doc reference'
+);
 
 echo "\n=== Results: $passed passed, $failed failed ===\n\n";
 exit($failed > 0 ? 1 : 0);

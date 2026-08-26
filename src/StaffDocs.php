@@ -384,6 +384,7 @@ final class StaffDocs extends BaseEndpoint
         }
 
         $rendered = Markdown::render($body);
+        $html = self::rewriteCrossDocLinks($rendered['html']);
         $effectiveDate = $meta['effective_date'] ?? null;
         $frontmatterJson = json_encode(['frontmatter' => $meta, 'toc' => $rendered['toc']], JSON_UNESCAPED_SLASHES);
 
@@ -391,7 +392,7 @@ final class StaffDocs extends BaseEndpoint
             'INSERT INTO staff_document_versions
                 (document_id, version, content_hash, frontmatter_json, source_markdown, rendered_html, effective_date, published_by)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [(int) $doc['id'], $version, $hash, $frontmatterJson, $body, $rendered['html'], $effectiveDate ?: null, $publishedBy]
+            [(int) $doc['id'], $version, $hash, $frontmatterJson, $body, $html, $effectiveDate ?: null, $publishedBy]
         );
 
         $title = $meta['title'] ?? $doc['title'];
@@ -407,5 +408,66 @@ final class StaffDocs extends BaseEndpoint
         );
 
         return ['status' => 'published', 'slug' => $slug, 'version' => $version, 'version_id' => $versionId];
+    }
+
+    /**
+     * Content is authored with plain Git-relative Markdown links between
+     * documents (e.g. "sop/bartender.md", "../staff/alcohol-service.md") so
+     * it reads and cross-links correctly on GitHub too. Rewrite those into
+     * this app's `#staff-docs-<slug>` hash routes so the same links also
+     * work as real in-app navigation once rendered. Slug is derived purely
+     * from path shape (docs/staff/sop/* -> "sop-<name>", everything else ->
+     * "<name>") rather than a DB lookup, since this runs at render time
+     * against arbitrary link text, not just known-registered slugs.
+     */
+    private static function rewriteCrossDocLinks(string $html): string
+    {
+        return preg_replace_callback(
+            '/href="([^"#]*?)([a-z0-9-]+)\.md(#[a-z0-9-]+)?"/i',
+            static function (array $m): string {
+                [$whole, $dir, $name] = $m;
+                // Leave absolute/external links alone -- only rewrite what
+                // looks like a relative reference to another staff doc.
+                if (preg_match('#^(https?:)?//#i', $dir)) {
+                    return $whole;
+                }
+                $slug = str_contains($dir, 'sop/') ? "sop-{$name}" : $name;
+                return 'href="#staff-docs-' . $slug . '"';
+            },
+            $html
+        ) ?? $html;
+    }
+
+    /**
+     * Re-render every document's CURRENT version's rendered_html/TOC from
+     * its already-frozen source_markdown (not the file on disk) using
+     * today's Markdown renderer. For fixing a renderer bug's downstream
+     * effect without touching source_markdown/content_hash/version number
+     * — so it never invalidates an existing acknowledgment (which is tied
+     * to the text, not to how it happens to be rendered).
+     *
+     * @return list<string> slugs updated
+     */
+    public static function rerenderCurrentVersions(Database $db): array
+    {
+        $rows = $db->all(
+            'SELECT d.slug, v.id AS version_id, v.source_markdown
+             FROM staff_documents d
+             JOIN staff_document_versions v ON v.id = d.current_version_id'
+        );
+        $updated = [];
+        foreach ($rows as $row) {
+            $rendered = Markdown::render($row['source_markdown']);
+            $html = self::rewriteCrossDocLinks($rendered['html']);
+            $existing = $db->one('SELECT frontmatter_json FROM staff_document_versions WHERE id = ?', [(int) $row['version_id']]);
+            $decoded = json_decode((string) $existing['frontmatter_json'], true) ?: [];
+            $decoded['toc'] = $rendered['toc'];
+            $db->run(
+                'UPDATE staff_document_versions SET rendered_html = ?, frontmatter_json = ? WHERE id = ?',
+                [$html, json_encode($decoded, JSON_UNESCAPED_SLASHES), (int) $row['version_id']]
+            );
+            $updated[] = $row['slug'];
+        }
+        return $updated;
     }
 }
