@@ -33,23 +33,24 @@ test('the nav active-state highlights Discover while on #opportunities', async (
   assert.ok(await page.exists('.nav-group.active .nav-parent'), 'the owning Opportunities nav group is marked active/open');
 });
 
-test('clicking a not-yet-built Opportunities nav item routes to a safe placeholder, not a crash', async (page) => {
+test('clicking the Conferences nav item routes to the real Conferences list (placeholder retired in Phase 3)', async (page) => {
   await page.goto('#opportunities');
   await page.until(`document.querySelector('.side-nav a[data-nav="opportunities-conferences"]')`);
   await page.click('.side-nav a[data-nav="opportunities-conferences"]');
   assert.ok(
-    await page.until(`document.querySelector('pb-opportunities-placeholder')`),
-    'pb-opportunities-placeholder mounts for #opportunities-conferences',
+    await page.until(`document.querySelector('pb-opportunities-conferences-list')`),
+    'pb-opportunities-conferences-list mounts for #opportunities-conferences',
   );
-  assert.ok(await page.exists('.pill.pill-muted'), 'the placeholder honestly labels itself "Planned — not yet built"');
-  assert.equal(await page.text('.pill.pill-muted'), 'Planned — not yet built', 'placeholder pill text is exact');
 });
 
-test('a numeric opportunity-detail deep link also routes to the safe placeholder', async (page) => {
+test('a numeric opportunity-detail deep link for a nonexistent id shows a safe error, not a crash (placeholder retired in Phase 5)', async (page) => {
   await page.goto('#opportunities-999999');
   assert.ok(
-    await page.until(`document.querySelector('pb-opportunities-placeholder')`),
-    'pb-opportunities-placeholder mounts for #opportunities-{id}',
+    await page.until(`document.querySelector('pb-opportunities-detail')`),
+    'pb-opportunities-detail mounts for #opportunities-{id}',
   );
-  assert.ok(await page.exists('.side-nav a[data-nav="opportunities-pipeline"].active'), 'an opportunity-detail deep link highlights the Pipeline nav leaf');
+  assert.ok(
+    await page.until(`document.querySelector('pb-opportunities-detail .error-text')`),
+    'a nonexistent opportunity id renders the shared "Something went wrong" error state instead of throwing',
+  );
 });

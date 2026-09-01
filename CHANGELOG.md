@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `opportunities` — Fix broken data-start-tasks attr, retire dead placeholder tests
 - **Added** `opportunities` — Phase 8 — tasks, activities, realtime, scoring, availability intelligence
 - **Added** `opportunities` — Phase 7 — Claude CLI research (WebSearch/WebFetch) jobs
 - **Added** `opportunities` — Phase 6 — First-class Research Notes workspace

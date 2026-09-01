@@ -102,6 +102,11 @@ test('Opportunity detail page renders header facts, tabs, qualification checklis
 
 test('toggling a qualification checklist item persists', async (page) => {
   await page.goto(`#opportunities-${opportunityId}`);
+  // The previous test leaves this component on the Notes tab; since the hash
+  // is unchanged, the router doesn't remount it. Switch back to Overview
+  // first, or the qualification checklist isn't in the DOM at all.
+  await page.until(`document.querySelector('[data-tab="overview"]')`);
+  await page.eval(`document.querySelector('[data-tab="overview"]').click()`);
   await page.until(`document.querySelector('[data-qual="event_objective_understood"]')`);
   await page.eval(`
     (() => {

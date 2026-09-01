@@ -275,7 +275,7 @@ class OpportunitiesConferenceDetail extends PanicElement {
       return `<article class="panel padded">
         <div class="section-head"><h2>Open Tasks</h2></div>
         <p class="muted">No tasks yet for this conference.</p>
-        ${this.canManage ? '<button type="button" class="button small secondary" data-start-tasks">+ Add first task</button>' : ''}
+        ${this.canManage ? '<button type="button" class="button small secondary" data-start-tasks>+ Add first task</button>' : ''}
       </article>`;
     }
     const items = this.tasks.length
