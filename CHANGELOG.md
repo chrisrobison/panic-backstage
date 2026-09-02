@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `tour` — Add self-guided in-app product tours
 - **Fixed** `staff-docs` — Rewrite cross-document Markdown links to real in-app routes
 - **Added** `staff-docs` — Add Staff Handbook & Compliance system
 - **Changed** `closeout` — Retire the standalone Settlement tab, fold it into Closeout

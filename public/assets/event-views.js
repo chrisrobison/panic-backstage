@@ -7,6 +7,7 @@ import { setTokens, esc, titleCase, statuses, appUrl, appBaseUrl, assetUrl, getA
 // placeholder on the public event page (same treatment the event workspace
 // summary card uses for the same situation).
 import './paint-splat.js';
+import { startTour } from './tour.js';
 
 // Default dashboard metric cards, in display order, shown when a user has not
 // customized their selection. Keys must match the DASHBOARD_METRIC_KEYS list in
@@ -304,11 +305,12 @@ class DashboardView extends PanicElement {
         </article>
       </section>`;
 
-    // Wire dismiss button after render
+    // Wire dismiss + tour buttons after render
     const dismissBtn = this.querySelector('[data-dismiss-onboarding]');
     if (dismissBtn) {
       dismissBtn.addEventListener('click', () => this._dismissOnboarding());
     }
+    this.querySelector('[data-start-tour]')?.addEventListener('click', () => startTour('venue-setup'));
 
     this._wireMetricMenu();
   }
@@ -445,9 +447,14 @@ class DashboardView extends PanicElement {
             <h2>${allDone ? '🎉 You\'re all set!' : 'Get started with Backstage'}</h2>
             <p class="muted">${allDone ? 'Everything is configured. Dismiss this card whenever you\'re ready.' : `${completed} of ${total} steps complete`}</p>
           </div>
-          <button class="button secondary small" data-dismiss-onboarding type="button" aria-label="Dismiss setup checklist">
-            Dismiss
-          </button>
+          <div class="onboarding-header-actions">
+            <button class="button secondary small" data-start-tour type="button">
+              <i class="fa-solid fa-signs-post" aria-hidden="true"></i> Take the tour
+            </button>
+            <button class="button secondary small" data-dismiss-onboarding type="button" aria-label="Dismiss setup checklist">
+              Dismiss
+            </button>
+          </div>
         </div>
         <div class="onboarding-progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
           <div class="onboarding-progress-bar" style="width:${pct}%"></div>

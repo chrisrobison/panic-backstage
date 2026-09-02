@@ -37,6 +37,8 @@ import './processes/automation-placeholder.js';
 import './tasks/tasks-shell.js';
 import './staff-docs.js';
 import { initPushBridge } from './push.js';
+import './tour.js';
+import { openTourPicker } from './tour.js';
 
 
 class AppShell extends PanicElement {
@@ -213,7 +215,8 @@ class AppShell extends PanicElement {
     </nav>
     <div class="drawer-backdrop" data-drawer-close aria-hidden="true"></div>
     <pb-toast-stack></pb-toast-stack>
-    <pb-ai-drawer></pb-ai-drawer>`;
+    <pb-ai-drawer></pb-ai-drawer>
+    <pb-tour></pb-tour>`;
     $('#logout', this).addEventListener('click', async () => {
       dataClient.stopRealtime();
       await api('/auth/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => {});
@@ -264,6 +267,7 @@ class AppShell extends PanicElement {
     if (!nav) return;
     const tree = filterNavTree(buildNavTree(this.navItems || []), this.capabilities || {});
     nav.innerHTML = renderNavHtml(tree) + this.helpNavGroup();
+    $('[data-action="open-tour-picker"]', nav)?.addEventListener('click', () => openTourPicker());
     this.setupNavGroups();
   }
 
@@ -378,6 +382,7 @@ class AppShell extends PanicElement {
           <div class="nav-children">
             <a href="${appUrl('docs/ops-manual.html')}" target="_blank" rel="noopener" title="User Guide"><i class="fa-solid fa-book" aria-hidden="true"></i>User Guide</a>
             <a data-nav="help" href="#help" title="All topics"><i class="fa-solid fa-bookmark" aria-hidden="true"></i>All topics</a>
+            <button type="button" class="nav-tour-launch" data-action="open-tour-picker" title="Take a self-guided tour"><i class="fa-solid fa-signs-post" aria-hidden="true"></i>Take a tour</button>
             ${children}
           </div>
         </div>`;

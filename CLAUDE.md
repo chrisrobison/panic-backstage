@@ -45,6 +45,7 @@ making changes**, not just this file.
 | Multi-tenant / SaaS mode | `README.md` § Multi-Tenant / SaaS Mode |
 | Booking Inbox / email import | `docs/booking-inbox.md`, `docs/booking-email-import.md` |
 | Staff Handbook & Compliance (handbook/SOP content, acknowledgments, role assignments, certifications) | `docs/staff/README.md` (content index), `docs/staff/knowledge-audit.md` (what's confirmed vs. still needs a management decision) |
+| Self-guided in-app tours (spotlight+tooltip walkthroughs, distinct from the static Help reference and the instructor-led training doc) | `docs/self-guided-tour.md` |
 
 `docs/` has 30+ other files beyond this table — `ls docs/*.md` and grep by
 keyword when the table doesn't cover it. Files named `*-PLAN.md` /
