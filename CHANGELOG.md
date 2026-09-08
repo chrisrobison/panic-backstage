@@ -11,7 +11,6 @@ a new empty [Unreleased] block above it.
 
 ## [Unreleased]
 - **Added** `auth` — Add multi-tenant support to login-link.php
-- **Added** `auth` — Add multi-tenant support to login-link.php
 - **Added** `tour` — Add self-guided in-app product tours
 - **Fixed** `staff-docs` — Rewrite cross-document Markdown links to real in-app routes
 - **Added** `staff-docs` — Add Staff Handbook & Compliance system
