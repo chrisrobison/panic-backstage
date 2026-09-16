@@ -365,6 +365,11 @@ request. Stand-alone installs are unaffected: with `SUPER_DB_NAME` blank the
 `clients/<slug>/` in SaaS, `storage/` single-tenant — used by the mailer, asset
 storage, contract PDFs, and logs.
 
+Content like the Staff Handbook & Compliance library follows the same pattern one level up: the
+shared, git-authored template under `docs/staff/**` is seeded into each new tenant's own database
+at provisioning time, and a venue admin then customizes their own copy entirely through the app —
+see `docs/staff/README.md` and `src/StaffDocs.php`.
+
 ### Database credential tiers
 
 SaaS mode uses three credential sets (`src/Database/Connection.php`) so the

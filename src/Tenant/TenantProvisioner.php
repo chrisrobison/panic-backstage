@@ -121,7 +121,23 @@ final class TenantProvisioner
         // Step 4: Ensure the per-tenant client directory tree exists.
         self::ensureClientDirectory($slug);
 
-        // Step 5: Seed demo data — but only for a genuinely fresh tenant.
+        // Step 5: Seed the shared Staff Handbook & Compliance template
+        // (docs/staff/**) into this tenant's own database, so a new venue
+        // starts with a generic, ready-to-customize handbook/SOP library
+        // instead of nothing — see database/seed_staff_docs.php and
+        // src/StaffDocs.php's docblock for the file-vs-db content-source
+        // split this feeds into. Gated independently of the demo-data check
+        // below (on staff_documents specifically, not venues) so a
+        // re-provision that already has real venue data but was
+        // provisioned before this step existed still gets seeded, without
+        // ever touching a tenant that's already customized its own copy.
+        $staffDocCount = (int)$db->query('SELECT COUNT(*) FROM staff_documents')->fetchColumn();
+        if ($staffDocCount === 0) {
+            require_once $root . '/database/seed_staff_docs.php';
+            \Panic\seed_staff_docs($db, $root);
+        }
+
+        // Step 6: Seed demo data — but only for a genuinely fresh tenant.
         // Re-provisioning an already-active tenant must never insert a second
         // copy of the demo venue/events on top of real data.
         $venueCount = (int)$db->query('SELECT COUNT(*) FROM venues')->fetchColumn();

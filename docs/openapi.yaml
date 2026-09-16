@@ -10461,7 +10461,7 @@ components:
           format: date-time
     StaffDocumentSummary:
       type: object
-      description: One row of docs/staff/** metadata, annotated for the calling user.
+      description: One row of staff document metadata, annotated for the calling user.
       properties:
         id:
           type: integer
@@ -10475,6 +10475,13 @@ components:
         status:
           type: string
           enum: [draft, review, published, retired]
+        source:
+          type: string
+          enum: [file, db]
+          description: >-
+            "file": seeded/republished from the shared docs/staff/** template on disk.
+            "db": authored entirely through the draft/publish-draft API, e.g. a SaaS
+            tenant's own customization or an added document with no template equivalent.
         current_version:
           type: string
           nullable: true
@@ -27131,6 +27138,64 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    post:
+      operationId: staffDocs_create
+      summary: Create a new DB-authored document
+      description: >-
+        Gated by manage_staff_docs. Creates a document with source=db and no backing file — for
+        adding one the shared docs/staff/** template has no equivalent for (or, on a SaaS tenant,
+        one specific to that venue). Starts as an empty draft: write it with
+        PUT /api/staff-docs/{slug}/draft and publish with POST .../publish-draft.
+      tags:
+        - Staff Handbook & Compliance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, title]
+              properties:
+                slug:
+                  type: string
+                  description: Lowercase letters, digits, and hyphens only.
+                title:
+                  type: string
+                document_type:
+                  type: string
+                  enum: [handbook, policy, sop]
+                  default: policy
+                requires_acknowledgment:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Document created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  document:
+                    $ref: '#/components/schemas/StaffDocumentSummary'
+        '403':
+          description: Missing manage_staff_docs capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: A document with this slug already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: slug or title missing, or slug has invalid characters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/staff-docs/{slug}:
     parameters:
       - name: slug
@@ -27175,6 +27240,21 @@ paths:
                   acknowledgment:
                     nullable: true
                     $ref: '#/components/schemas/StaffDocumentAcknowledgment'
+                  draft:
+                    nullable: true
+                    description: Present only for callers with manage_staff_docs; null for everyone else.
+                    type: object
+                    properties:
+                      markdown:
+                        type: string
+                        nullable: true
+                      updated_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      dirty:
+                        type: boolean
+                        description: True when the saved draft's body differs from the current published version.
         '404':
           description: Document not found (or not published, and caller lacks manage_staff_docs)
           content:
@@ -27258,6 +27338,117 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: Version number unchanged but content differs from what was already published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/staff-docs/{slug}/draft:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      operationId: staffDocs_saveDraft
+      summary: Save an in-progress edit, without publishing it
+      description: >-
+        Gated by manage_staff_docs. Stores the given Markdown (frontmatter + body, same shape as a
+        seed file) as the document's draft_markdown; does not touch staff_document_versions or
+        anything a staff member can see. Works the same whether the document's source is file or
+        db — this is how a document first seeded from docs/staff/** gets customized.
+      tags:
+        - Staff Handbook & Compliance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [markdown]
+              properties:
+                markdown:
+                  type: string
+      responses:
+        '200':
+          description: Draft saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slug:
+                    type: string
+                  saved:
+                    type: boolean
+        '403':
+          description: Missing manage_staff_docs capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: markdown missing, or its frontmatter slug doesn't match the URL slug
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/staff-docs/{slug}/publish-draft:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: staffDocs_publishDraft
+      summary: Publish the document's saved draft
+      description: >-
+        Gated by manage_staff_docs. The DB-authored counterpart to
+        POST /api/staff-docs/{slug}/publish: same version-bump/hash rules, reading draft_markdown
+        instead of a file on disk.
+      tags:
+        - Staff Handbook & Compliance
+      responses:
+        '200':
+          description: Publish result (status is "published" or "unchanged")
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  slug:
+                    type: string
+                  version:
+                    type: string
+        '403':
+          description: Missing manage_staff_docs capability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Document not registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Version number unchanged but content differs from what was already published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: No draft saved yet for this document
           content:
             application/json:
               schema:

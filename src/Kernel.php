@@ -233,12 +233,16 @@ final class Kernel
             return [StaffMembers::class, ['staffId' => $this->intOrNull($segments[1] ?? null)]];
         }
 
-        // Staff Handbook & Compliance (docs/staff/**) —
-        //   GET  /api/staff-docs                    list (auth required; ?all=1 admin-only)
-        //   GET  /api/staff-docs/{slug}              detail (rendered current version)
-        //   GET  /api/staff-docs/{slug}/versions     version history (admin)
-        //   POST /api/staff-docs/{slug}/publish      republish from disk (admin)
-        //   POST /api/staff-docs/{slug}/acknowledge  record the caller's acknowledgment
+        // Staff Handbook & Compliance (docs/staff/** seed template, or
+        // per-tenant DB-authored content — see src/StaffDocs.php docblock) —
+        //   GET  /api/staff-docs                       list (auth required; ?all=1 admin-only)
+        //   POST /api/staff-docs                       create a DB-authored document (admin)
+        //   GET  /api/staff-docs/{slug}                 detail (rendered current version + draft, admin)
+        //   GET  /api/staff-docs/{slug}/versions        version history (admin)
+        //   POST /api/staff-docs/{slug}/publish         republish from disk (admin)
+        //   PUT  /api/staff-docs/{slug}/draft           save an in-progress edit (admin)
+        //   POST /api/staff-docs/{slug}/publish-draft   publish the saved draft (admin)
+        //   POST /api/staff-docs/{slug}/acknowledge     record the caller's acknowledgment
         if ($segments[0] === 'staff-docs') {
             return [StaffDocs::class, [
                 'slug' => $segments[1] ?? null,

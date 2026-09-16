@@ -118,5 +118,18 @@ ok(
     'an absolute https:// link ending in .md is left untouched, not mistaken for a cross-doc reference'
 );
 
+// --- publishFromFile / publishFromDraft share one publish tail -------------
+// Regression check for the file-vs-db content-source refactor (see
+// src/StaffDocs.php docblock): both public entry points must exist and
+// funnel into the same private publishBody() so a file-seeded document and
+// a tenant's DB-authored draft get identical version-bump/hash handling.
+
+ok(method_exists(StaffDocs::class, 'publishFromFile'), 'StaffDocs::publishFromFile exists (file-sourced publish path)');
+ok(method_exists(StaffDocs::class, 'publishFromDraft'), 'StaffDocs::publishFromDraft exists (db-authored publish path)');
+
+$publishBody = new ReflectionMethod(StaffDocs::class, 'publishBody');
+ok($publishBody->isPrivate() && $publishBody->isStatic(), 'publishBody is the shared private static publish tail');
+ok($publishBody->getNumberOfParameters() === 5, 'publishBody takes (db, doc, meta, body, publishedBy)');
+
 echo "\n=== Results: $passed passed, $failed failed ===\n\n";
 exit($failed > 0 ? 1 : 0);

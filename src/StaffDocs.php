@@ -16,12 +16,18 @@ namespace Panic;
  *   GET  /api/staff-docs                    list documents (published only,
  *                                            unless ?all=1 and caller has
  *                                            manage_staff_docs)
+ *   POST /api/staff-docs                    create a new DB-authored document
+ *                                            (admin; no seed file involved)
  *   GET  /api/staff-docs/{slug}              document detail: current
  *                                            version's frozen HTML + TOC +
  *                                            the caller's acknowledgment
+ *                                            (admins also get draft state)
  *   GET  /api/staff-docs/{slug}/versions     version history (admin)
  *   POST /api/staff-docs/{slug}/publish      (re)publish from the Markdown
- *                                            file on disk (admin)
+ *                                            file on disk (admin; source=file)
+ *   PUT  /api/staff-docs/{slug}/draft        save an in-progress edit,
+ *                                            without publishing it (admin)
+ *   POST /api/staff-docs/{slug}/publish-draft  publish the saved draft (admin)
  *   POST /api/staff-docs/{slug}/acknowledge  record the caller's
  *                                            acknowledgment of the current
  *                                            version (idempotent)
@@ -29,7 +35,21 @@ namespace Panic;
  * Any authenticated user can read published documents and acknowledge them
  * — that's a login gate, not a capability, since every staff member needs
  * to be able to read what applies to them. Listing drafts, viewing version
- * history, and publishing require manage_staff_docs (venue_admin).
+ * history, and publishing (from either a file or a draft) require
+ * manage_staff_docs (venue_admin).
+ *
+ * Two content sources coexist per document (`staff_documents.source`):
+ * `file` documents are seeded/republished from docs/staff/** on disk — this
+ * is how the shared, git-authored starter template ships (see
+ * docs/staff/README.md) and is what scripts/sync-staff-docs.php /
+ * seed-staff-doc-defaults.php drive. `db` documents are authored entirely
+ * through the draft/publish-draft API above, with no backing file — this is
+ * how a SaaS tenant customizes their own copy (seeded from the file-based
+ * template at provisioning, per TenantProvisioner) or adds a document the
+ * template doesn't have, without needing git/file access to the shared
+ * codebase. Either source publishes into the same staff_document_versions /
+ * acknowledgment tables, which are already tenant-scoped by virtue of SaaS
+ * mode's per-tenant database.
  */
 final class StaffDocs extends BaseEndpoint
 {
@@ -52,7 +72,13 @@ final class StaffDocs extends BaseEndpoint
         $action = $this->params['action'] ?? null;
 
         if ($slug === null) {
-            return $request->method() === 'GET' ? $this->index($request) : Response::methodNotAllowed();
+            if ($request->method() === 'GET') {
+                return $this->index($request);
+            }
+            if ($request->method() === 'POST') {
+                return $this->create($request);
+            }
+            return Response::methodNotAllowed();
         }
 
         if ($action === 'versions') {
@@ -60,6 +86,12 @@ final class StaffDocs extends BaseEndpoint
         }
         if ($action === 'publish') {
             return $request->method() === 'POST' ? $this->publish($slug) : Response::methodNotAllowed();
+        }
+        if ($action === 'draft') {
+            return $request->method() === 'PUT' ? $this->saveDraft($request, $slug) : Response::methodNotAllowed();
+        }
+        if ($action === 'publish-draft') {
+            return $request->method() === 'POST' ? $this->publishDraft($slug) : Response::methodNotAllowed();
         }
         if ($action === 'acknowledge') {
             return $request->method() === 'POST' ? $this->acknowledge($request, $slug) : Response::methodNotAllowed();
@@ -121,6 +153,7 @@ final class StaffDocs extends BaseEndpoint
                 'title' => $doc['title'],
                 'document_type' => $doc['document_type'],
                 'status' => $doc['status'],
+                'source' => $doc['source'] ?? 'file',
                 'current_version' => $doc['current_version'],
                 'requires_acknowledgment' => (bool) $doc['requires_acknowledgment'],
                 'published_at' => $doc['published_at'],
@@ -134,6 +167,52 @@ final class StaffDocs extends BaseEndpoint
         }
 
         return $this->ok(['documents' => $out, 'is_admin' => $isAdmin]);
+    }
+
+    /**
+     * Create a new DB-authored document (source = 'db') with no backing
+     * file — for a tenant adding a document the shared seed template has no
+     * equivalent for. Starts as an empty draft; write it via
+     * PUT .../draft and publish with POST .../publish-draft.
+     */
+    private function create(Request $request): Response
+    {
+        if ($denied = $this->requireGlobalCapability('manage_staff_docs')) {
+            return $denied;
+        }
+
+        $slug = trim((string) $request->body('slug', ''));
+        $title = trim((string) $request->body('title', ''));
+        if ($slug === '' || $title === '') {
+            return Response::json(['error' => 'slug and title are required'], 422);
+        }
+        if (!preg_match('/^[a-z0-9-]+$/', $slug)) {
+            return Response::json(['error' => 'slug must contain only lowercase letters, digits, and hyphens'], 422);
+        }
+        $type = (string) $request->body('document_type', 'policy');
+        if (!in_array($type, ['handbook', 'policy', 'sop'], true)) {
+            $type = 'policy';
+        }
+        if ($this->db->one('SELECT id FROM staff_documents WHERE slug = ?', [$slug])) {
+            return Response::json(['error' => 'A document with this slug already exists'], 409);
+        }
+
+        $requiresAck = (bool) $request->body('requires_acknowledgment', false);
+        $id = $this->db->insert(
+            "INSERT INTO staff_documents (slug, title, document_type, file_path, source, status, requires_acknowledgment)
+             VALUES (?, ?, ?, NULL, 'db', 'draft', ?)",
+            [$slug, $title, $type, $requiresAck ? 1 : 0]
+        );
+
+        return $this->ok(['document' => [
+            'id' => $id,
+            'slug' => $slug,
+            'title' => $title,
+            'document_type' => $type,
+            'status' => 'draft',
+            'source' => 'db',
+            'requires_acknowledgment' => $requiresAck,
+        ]]);
     }
 
     private function show(string $slug): Response
@@ -164,6 +243,24 @@ final class StaffDocs extends BaseEndpoint
             )
             : null;
 
+        // Draft state is only meaningful (and only exposed) to admins — it's
+        // an in-progress edit, not something every staff member needs to see
+        // when they're just reading the current published version.
+        $draft = null;
+        if ($isAdmin) {
+            $draftMarkdown = $doc['draft_markdown'] ?? null;
+            $draftDirty = false;
+            if ($draftMarkdown !== null && trim((string) $draftMarkdown) !== '') {
+                [, $draftBody] = Markdown::splitFrontmatter((string) $draftMarkdown);
+                $draftDirty = $version === null || hash('sha256', $draftBody) !== $version['content_hash'];
+            }
+            $draft = [
+                'markdown' => $draftMarkdown,
+                'updated_at' => $doc['draft_updated_at'] ?? null,
+                'dirty' => $draftDirty,
+            ];
+        }
+
         return $this->ok([
             'document' => [
                 'id' => (int) $doc['id'],
@@ -171,6 +268,7 @@ final class StaffDocs extends BaseEndpoint
                 'title' => $doc['title'],
                 'document_type' => $doc['document_type'],
                 'status' => $doc['status'],
+                'source' => $doc['source'] ?? 'file',
                 'requires_acknowledgment' => (bool) $doc['requires_acknowledgment'],
                 'current_version' => $doc['current_version'],
                 'published_at' => $doc['published_at'],
@@ -185,6 +283,7 @@ final class StaffDocs extends BaseEndpoint
             'html' => $html,
             'toc' => $toc,
             'acknowledgment' => $ack,
+            'draft' => $draft,
         ]);
     }
 
@@ -213,6 +312,53 @@ final class StaffDocs extends BaseEndpoint
             return $denied;
         }
         $result = self::publishFromFile($this->db, $this->root ?: dirname(__DIR__), $slug, $this->userId());
+        if (isset($result['error'])) {
+            return Response::json(['error' => $result['error']], $result['code'] ?? 422);
+        }
+        return $this->ok($result);
+    }
+
+    /**
+     * Save an in-progress edit without publishing it. Body: {markdown}
+     * (frontmatter + body, same shape as a seed file). Any authenticated
+     * document — file- or db-sourced — can take a draft; publishing it
+     * (publish-draft) is what actually creates a new version and switches
+     * the document over to source = 'db' semantics going forward for that
+     * content (the row's `source` column itself is left alone here — it
+     * only reflects how the document was first created).
+     */
+    private function saveDraft(Request $request, string $slug): Response
+    {
+        if ($denied = $this->requireGlobalCapability('manage_staff_docs')) {
+            return $denied;
+        }
+        $doc = $this->db->one('SELECT id FROM staff_documents WHERE slug = ?', [$slug]);
+        if (!$doc) {
+            return $this->notFound('Staff document not found');
+        }
+
+        $markdown = (string) $request->body('markdown', '');
+        if (trim($markdown) === '') {
+            return Response::json(['error' => 'markdown is required'], 422);
+        }
+        [$meta] = Markdown::splitFrontmatter($markdown);
+        if (isset($meta['slug']) && $meta['slug'] !== $slug) {
+            return Response::json(['error' => "Frontmatter slug \"{$meta['slug']}\" does not match {$slug}"], 422);
+        }
+
+        $this->db->run(
+            'UPDATE staff_documents SET draft_markdown = ?, draft_updated_at = NOW(), draft_updated_by = ? WHERE id = ?',
+            [$markdown, $this->userId(), (int) $doc['id']]
+        );
+        return $this->ok(['slug' => $slug, 'saved' => true]);
+    }
+
+    private function publishDraft(string $slug): Response
+    {
+        if ($denied = $this->requireGlobalCapability('manage_staff_docs')) {
+            return $denied;
+        }
+        $result = self::publishFromDraft($this->db, $slug, $this->userId());
         if (isset($result['error'])) {
             return Response::json(['error' => $result['error']], $result['code'] ?? 422);
         }
@@ -317,8 +463,16 @@ final class StaffDocs extends BaseEndpoint
                 ? $meta['document_type'] : 'policy';
             $requiresAck = (bool) ($meta['requires_acknowledgment'] ?? false);
 
-            $existing = $db->one('SELECT id FROM staff_documents WHERE slug = ?', [$slug]);
+            $existing = $db->one('SELECT id, source FROM staff_documents WHERE slug = ?', [$slug]);
             if ($existing) {
+                // A tenant may have created a DB-authored document (or
+                // converted a seeded one into one — see publishFromDraft())
+                // that happens to share a slug with a template file added or
+                // changed later. Never let a disk scan clobber that.
+                if (($existing['source'] ?? 'file') === 'db') {
+                    $results[] = ['slug' => $slug, 'file' => $relativePath, 'action' => 'skipped-db-authored'];
+                    continue;
+                }
                 $db->run(
                     'UPDATE staff_documents SET title = ?, document_type = ?, requires_acknowledgment = ?, file_path = ? WHERE id = ?',
                     [$title, $type, $requiresAck ? 1 : 0, $relativePath, (int) $existing['id']]
@@ -326,8 +480,8 @@ final class StaffDocs extends BaseEndpoint
                 $results[] = ['slug' => $slug, 'file' => $relativePath, 'action' => 'updated'];
             } else {
                 $db->insert(
-                    'INSERT INTO staff_documents (slug, title, document_type, file_path, status, requires_acknowledgment)
-                     VALUES (?, ?, ?, ?, \'draft\', ?)',
+                    "INSERT INTO staff_documents (slug, title, document_type, file_path, source, status, requires_acknowledgment)
+                     VALUES (?, ?, ?, ?, 'file', 'draft', ?)",
                     [$slug, $title, $type, $relativePath, $requiresAck ? 1 : 0]
                 );
                 $results[] = ['slug' => $slug, 'file' => $relativePath, 'action' => 'created'];
@@ -352,12 +506,54 @@ final class StaffDocs extends BaseEndpoint
         if (!$doc) {
             return ['error' => 'Document not registered — run scripts/sync-staff-docs.php first', 'code' => 404];
         }
+        if (empty($doc['file_path'])) {
+            return ['error' => 'Document has no source file (source = db) — use the draft/publish-draft API instead', 'code' => 422];
+        }
         $path = $root . '/' . $doc['file_path'];
         if (!is_file($path)) {
             return ['error' => "Source file not found: {$doc['file_path']}", 'code' => 404];
         }
         $raw = file_get_contents($path);
         [$meta, $body] = Markdown::splitFrontmatter((string) $raw);
+        return self::publishBody($db, $doc, $meta, $body, $publishedBy);
+    }
+
+    /**
+     * Publish a document's saved draft_markdown (see StaffDocs::saveDraft())
+     * — the DB-authored counterpart to publishFromFile(), same version-bump/
+     * hash rules, same staff_document_versions/acknowledgment machinery.
+     *
+     * @return array{error:string,code?:int}|array<string,mixed>
+     */
+    public static function publishFromDraft(Database $db, string $slug, ?int $publishedBy): array
+    {
+        $doc = $db->one('SELECT * FROM staff_documents WHERE slug = ?', [$slug]);
+        if (!$doc) {
+            return ['error' => 'Document not registered', 'code' => 404];
+        }
+        $raw = $doc['draft_markdown'] ?? null;
+        if ($raw === null || trim((string) $raw) === '') {
+            return ['error' => 'No draft saved for this document yet — save one with PUT .../draft first', 'code' => 422];
+        }
+        [$meta, $body] = Markdown::splitFrontmatter((string) $raw);
+        return self::publishBody($db, $doc, $meta, $body, $publishedBy);
+    }
+
+    /**
+     * Shared publish tail for both publishFromFile() and publishFromDraft():
+     * refuses to overwrite an existing version's frozen text under the same
+     * version number (see publishFromFile() docblock for why), otherwise
+     * inserts a new immutable staff_document_versions row and marks it
+     * current. $doc is the pre-fetched staff_documents row (source-agnostic
+     * beyond that).
+     *
+     * @param array<string,mixed> $doc
+     * @param array<string,mixed> $meta
+     * @return array{error:string,code?:int}|array<string,mixed>
+     */
+    private static function publishBody(Database $db, array $doc, array $meta, string $body, ?int $publishedBy): array
+    {
+        $slug = $doc['slug'];
         $version = (string) ($meta['version'] ?? '0.1');
         $hash = hash('sha256', $body);
 
@@ -378,7 +574,7 @@ final class StaffDocs extends BaseEndpoint
                 return ['status' => 'unchanged', 'slug' => $slug, 'version' => $version];
             }
             return [
-                'error' => "Version {$version} was already published with different text. Bump the `version:` field in {$doc['file_path']} before republishing.",
+                'error' => "Version {$version} was already published with different text. Bump the `version:` field before republishing.",
                 'code' => 409,
             ];
         }

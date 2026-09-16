@@ -10,7 +10,9 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `staff-docs` — Per-tenant DB-authored handbook/SOP content
 - **Fixed** `super` — Route bare /super to the API kernel in Apache rewrites
+- **Added** `staff-docs` — Per-tenant DB-authored handbook/SOP content
 - **Added** `closeout` — Redesign Closeout tab UI/UX
 - **Added** `auth` — Add multi-tenant support to login-link.php
 - **Added** `tour` — Add self-guided in-app product tours
