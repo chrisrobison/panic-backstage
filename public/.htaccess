@@ -8,6 +8,13 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^api/ api/index.php [L]
 
+# Multi-tenant super-admin console (SuperController) — mirrors the
+# equivalent rule in the app-root .htaccess for deployments whose
+# DocumentRoot points directly at public/.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^super(?:/(.*))?$ api/index.php [L,QSA]
+
 # Public ticket-view pretty URLs (/t/{token}) are served by the API kernel,
 # not a real file. Route them through the front controller.
 RewriteCond %{REQUEST_FILENAME} !-f

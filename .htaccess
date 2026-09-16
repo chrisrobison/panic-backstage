@@ -73,6 +73,13 @@ RewriteRule ^assets/(.*)$ public/assets/$1 [L]
 # text/html content type, which browsers refuse to register as a worker.
 RewriteRule ^sw\.js$ public/sw.js [L]
 RewriteRule ^api(?:/(.*))?$ public/api/index.php [L,QSA]
+# Multi-tenant super-admin console (SuperController): GET /super and
+# /super/tenants serve its HTML UI directly from the API kernel, *before*
+# tenant resolution runs — without this rule the request falls through to
+# the SPA catch-all below, loads the normal tenant app shell, and then
+# fails tenant resolution against this host ("No active tenant found for
+# this hostname") since app.panicbackstage.com itself is never a tenant.
+RewriteRule ^super(?:/(.*))?$ public/api/index.php [L,QSA]
 # Public ticket-view pretty URLs (/t/{token}) must reach the PHP kernel, not
 # the SPA catch-all below. Mirror the rule in public/.htaccess here so the
 # root-level rewrite engine sees it before falling through to index.html.
