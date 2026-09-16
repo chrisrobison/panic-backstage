@@ -10,6 +10,8 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `health` — Route /health to the API kernel in Apache rewrites
+- **Fixed** `health` — Route /health to the API kernel in Apache rewrites
 - **Added** `staff-docs` — Per-tenant DB-authored handbook/SOP content
 - **Fixed** `super` — Route bare /super to the API kernel in Apache rewrites
 - **Added** `closeout` — Redesign Closeout tab UI/UX
