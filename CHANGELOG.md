@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `health` — Route /health to the API kernel in Apache rewrites
 - **Fixed** `super` — Route bare /super to the API kernel in Apache rewrites
 - **Fixed** `opportunities` — Fix broken data-start-tasks attr, retire dead placeholder tests
 - **Added** `opportunities` — Phase 8 — tasks, activities, realtime, scoring, availability intelligence

@@ -15,6 +15,13 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^super(?:/(.*))?$ api/index.php [L,QSA]
 
+# Health check — served without tenant resolution by api/index.php's
+# SUPER_DB_NAME branch. Mirrors the equivalent rule in the app-root
+# .htaccess.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^health$ api/index.php [L]
+
 # Public ticket-view pretty URLs (/t/{token}) are served by the API kernel,
 # not a real file. Route them through the front controller.
 RewriteCond %{REQUEST_FILENAME} !-f
