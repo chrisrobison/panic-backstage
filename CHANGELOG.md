@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Fixed** `super` — Route bare /super to the API kernel in Apache rewrites
 - **Added** `closeout` — Redesign Closeout tab UI/UX
 - **Added** `auth` — Add multi-tenant support to login-link.php
 - **Added** `tour` — Add self-guided in-app product tours
