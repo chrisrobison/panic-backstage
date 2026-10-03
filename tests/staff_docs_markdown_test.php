@@ -86,6 +86,35 @@ ok(str_contains($out, '<blockquote>') && str_contains($out, 'TODO'), 'blockquote
 ok(str_contains($out, '<table>') && str_contains($out, '<td>1</td>'), 'pipe table renders');
 ok(!str_contains($out, '<script'), 'raw text is HTML-escaped, never passed through as markup (no script injection)');
 
+$wrappedLists = Markdown::render(
+    "- first line of a bullet\n  continues inside the same bullet\n- second bullet\n\n"
+    . "1. first numbered line\n   continues inside the same numbered item\n2. second numbered item\n"
+)['html'];
+ok(
+    str_contains($wrappedLists, '<li>first line of a bullet continues inside the same bullet</li>'),
+    'wrapped unordered-list lines stay in the same item'
+);
+ok(
+    str_contains($wrappedLists, '<li>first numbered line continues inside the same numbered item</li>'),
+    'wrapped ordered-list lines stay in the same item'
+);
+ok(
+    !str_contains($wrappedLists, '<p>continues inside'),
+    'wrapped list lines do not become separate paragraphs'
+);
+
+$looseList = Markdown::render(
+    "- item heading\n\n  explanatory text after a blank line\n  remains in the item\n- next item\n"
+)['html'];
+ok(
+    str_contains($looseList, '<li>item heading explanatory text after a blank line remains in the item</li>'),
+    'indented text after a list-item blank line stays in the item'
+);
+ok(
+    !str_contains($looseList, '<p>explanatory text'),
+    'loose list continuation does not become a paragraph'
+);
+
 // User-supplied-looking text can never break out into real markup even if
 // it contains angle brackets — this content is staff-authored, not
 // end-user input, but the renderer should still be safe by construction.

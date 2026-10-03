@@ -205,9 +205,27 @@ final class Markdown
             // Unordered list
             if (preg_match('/^\s*[-*+]\s+(.+)$/', $line)) {
                 $items = [];
-                while ($i < $n && preg_match('/^\s*[-*+]\s+(.+)$/', $lines[$i], $m)) {
-                    $items[] = $m[1];
-                    $i++;
+                while ($i < $n) {
+                    if (preg_match('/^\s*[-*+]\s+(.+)$/', $lines[$i], $m)) {
+                        $items[] = $m[1];
+                        $i++;
+                        continue;
+                    }
+                    if ($items && self::isListContinuation($lines[$i])) {
+                        $items[array_key_last($items)] .= ' ' . trim($lines[$i]);
+                        $i++;
+                        continue;
+                    }
+                    if (
+                        $items
+                        && trim($lines[$i]) === ''
+                        && $i + 1 < $n
+                        && self::isListContinuation($lines[$i + 1])
+                    ) {
+                        $i++;
+                        continue;
+                    }
+                    break;
                 }
                 $blocks[] = ['ul', $items];
                 continue;
@@ -216,9 +234,27 @@ final class Markdown
             // Ordered list
             if (preg_match('/^\s*\d+[.)]\s+(.+)$/', $line)) {
                 $items = [];
-                while ($i < $n && preg_match('/^\s*\d+[.)]\s+(.+)$/', $lines[$i], $m)) {
-                    $items[] = $m[1];
-                    $i++;
+                while ($i < $n) {
+                    if (preg_match('/^\s*\d+[.)]\s+(.+)$/', $lines[$i], $m)) {
+                        $items[] = $m[1];
+                        $i++;
+                        continue;
+                    }
+                    if ($items && self::isListContinuation($lines[$i])) {
+                        $items[array_key_last($items)] .= ' ' . trim($lines[$i]);
+                        $i++;
+                        continue;
+                    }
+                    if (
+                        $items
+                        && trim($lines[$i]) === ''
+                        && $i + 1 < $n
+                        && self::isListContinuation($lines[$i + 1])
+                    ) {
+                        $i++;
+                        continue;
+                    }
+                    break;
                 }
                 $blocks[] = ['ol', $items];
                 continue;
@@ -243,6 +279,14 @@ final class Markdown
         }
 
         return $blocks;
+    }
+
+    private static function isListContinuation(string $line): bool
+    {
+        return preg_match('/^\s{2,}\S/', $line) === 1
+            && !str_starts_with(ltrim($line), '>')
+            && !preg_match('/^\s*[-*+]\s+/', $line)
+            && !preg_match('/^\s*\d+[.)]\s+/', $line);
     }
 
     /** @return list<string> */
