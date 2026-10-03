@@ -2,7 +2,7 @@
 title: Cash Handling SOP
 slug: sop-cash-handling
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -34,24 +34,20 @@ The venue's real financial control lives in the **event ledger** (`event_ledger_
 This is real, working control at the **event settlement** level — see the
 [Artist Settlement SOP](artist-settlement.md) for the full closeout workflow.
 
-## What the software does NOT do today
+## What happens outside the software
 
-**There is no till count, cash drawer, or safe-drop feature built into the app.** Point-of-sale
-cash handling — counting a bar or door drawer in and out, dropping cash to a safe, reconciling a
-till at shift change — is not currently encoded in software beyond the ledger's payee/payment
-tracking described above.
-
-> **TODO — Management decision required:** document the actual till-count, cash-drop, and safe
-> procedure used at Mabuhay Gardens today: who counts, at what points in the shift, witnessed by
-> whom, how the count is recorded, and how a discrepancy gets escalated. Until this exists, staff
-> should follow whatever verbal/interim practice management has communicated, and this SOP will
-> be revised the moment a real procedure is documented.
+Backstage does not currently contain a till-count or safe-drop screen, so physical counts use the
+venue's count sheet or other manager-approved record. That record must show the event, station,
+date/time, starting bank, cash sales, drops, ending cash, expected cash, variance, and the names of
+both people who counted.
 
 ## Arrival / Setup
 
-1. Confirm starting cash at any cash-handling station per current (interim, until documented)
-   house practice.
-2. Note who else is present/witnessing, if that's part of current practice.
+1. The cashier and House Manager or a second staff member count the starting bank together before
+   the drawer opens. Both sign the count record.
+2. Assign the drawer to one cashier at a time where practical. Record any handoff with a count;
+   do not pass an open drawer between shifts without one.
+3. Keep personal cash, tips, and venue cash separate from the start.
 
 ## During Service / Event
 
@@ -59,18 +55,29 @@ tracking described above.
    "I'll square it up later."
 2. Record comps/discounts through the POS as comps, not as unrecorded free items (see the
    [Bartender SOP](bartender.md)).
+3. The House Manager sets the drop threshold for the event. Count each drop with a second person,
+   seal and label it with the station, amount, time, and both initials, then place it in the
+   designated secure location. Do not state the safe location or access method in this SOP.
+4. Limit drawer access to the assigned cashier and House Manager. Never leave an open drawer
+   unattended.
 
 ## Before Leaving
 
-1. Close out per current (interim) practice; report the count and any discrepancy immediately.
-2. For event-level settlement (not per-shift till counts): confirm payee balances in the ledger
+1. Close the drawer away from guests. The cashier and House Manager or second staff member count
+   it independently, compare the result to expected cash, and sign the count record.
+2. Record the actual amount even when it does not match. Do not add personal money, remove an
+   overage, reopen sales, or change transactions merely to make the drawer balance.
+3. The House Manager secures the closing cash and count record and reports any variance to venue
+   administration before leaving.
+4. For event-level settlement (not per-shift till counts): confirm payee balances in the ledger
    reflect reality before anyone attempts to finalize closeout — see
    [Artist Settlement SOP](artist-settlement.md).
 
 ## When Something Goes Wrong
 
-- Till doesn't balance: report immediately, don't adjust the recorded count to make it match
-  without documenting what actually happened.
+- Till doesn't balance: recount once with the House Manager, check recorded drops, refunds, comps,
+  and drawer handoffs, then report the remaining variance. Venue administration reviews the
+  count record and POS activity by the next business day.
 - Suspected theft: notify the on-duty manager immediately; see Handbook Chapter 4 (Theft) and
   Chapter 9 (Reporting Problems).
 - A payee shows an owed balance that doesn't match what was actually paid out: resolve in the

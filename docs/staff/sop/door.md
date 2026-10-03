@@ -2,7 +2,7 @@
 title: Door SOP
 slug: sop-door
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -25,8 +25,10 @@ entry.
 2. Confirm ID-check policy for the event (21+ vs. all-ages, wristbanding scheme if applicable) —
    this should come from the House Manager/event brief.
 
-> **TODO — Management decision required:** confirm current all-ages/minor-admission policy is
-> reliably communicated to door staff per event (see Handbook Ch. 6).
+The verified venue policy sets upstairs to all ages and downstairs to 21+. The event record may
+set a stricter rule. During the door briefing, the House Manager confirms the room, age rule,
+capacity, wristband scheme, and any artist restriction; door staff do not open until conflicting
+information is resolved.
 
 3. Set up scanning equipment (door Scanner) and confirm it's functioning for admit/lookup before
    the line starts.
@@ -36,18 +38,20 @@ entry.
 1. Scan/verify tickets and guest list entries at entry using the door Scanner (admit/lookup).
 2. Check ID where age matters for the event (21+ shows, or wristbanding minors at all-ages
    shows), per [Alcohol Service](../alcohol-service.md) ID guidance.
-3. Track headcount against the space's configured capacity.
-
-   > **VERIFY — Confirm current Mabuhay Gardens procedure:** exact capacity number and the
-   > headcount method used at the door (scanner count vs. manual clicker vs. both).
+3. Maintain live occupancy against the verified limit (example default: 450 upstairs and 350
+   downstairs — replace with this venue's actual permitted occupancy), or a lower limit shown in
+   the event record. Use scanner admissions as the guest-count base, add
+   staff/performers/others already inside, and account for exits when re-entry is allowed. Use a
+   manual clicker or written tally if scanning is unavailable; do not estimate from how the room
+   looks.
 
 4. Refuse entry for cause (intoxication, no valid ticket/ID, capacity reached, banned individual,
    weapons, etc.) — de-escalate verbally first; involve security/management for anyone who won't
    accept the refusal.
-5. Handle re-entry per house policy.
-
-   > **TODO — Management decision required:** confirm current re-entry policy and how it's
-   > marked (wristband, hand stamp, etc.).
+5. Default to no re-entry after a ticket is scanned unless the event brief explicitly allows it.
+   When re-entry is allowed, use the designated event wristband or hand stamp and re-check age
+   credentials on return. A ticket screenshot or "the other door person knows me" is not a
+   re-entry marker.
 
 ## Before Leaving
 

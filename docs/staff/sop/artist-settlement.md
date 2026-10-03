@@ -2,7 +2,7 @@
 title: Artist Settlement SOP
 slug: sop-artist-settlement
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -35,9 +35,11 @@ sales, and a link to an external settlement document. Confirm these numbers agai
 door reconciliation (see [Door SOP](door.md)) before proceeding — this is the fallback/summary
 view of ticketing revenue, and it should agree with the ticketing system's own numbers.
 
-> **VERIFY — Confirm current Mabuhay Gardens procedure:** the expected source of truth if the
-> door's reconciled count and the ticketing system's count disagree, and who resolves the
-> discrepancy.
+Paid orders, refunds, and recorded box-office transactions are the source of truth for ticket
+revenue; scan and door counts are the source of truth for attendance and occupancy. The House
+Manager and settlement lead reconcile differences before closeout, add any documented cash door
+sales, and leave a note explaining voids, duplicates, unscanned admissions, comps, or offline
+sales. Never substitute one count for the other simply because it is higher.
 
 ### 3. Payee balances
 
@@ -57,14 +59,17 @@ It can be overridden only with an explicit `force`. Treat `force` as an exceptio
 routine step — if you're reaching for it regularly, that's a sign either the ledger data is
 wrong or there's a real unresolved balance that needs to be dealt with, not bypassed.
 
-> **TODO — Management decision required:** confirm who is authorized to use `force` to override
-> the finalize gate, and what justification/documentation is expected when they do.
+Only a venue administrator with `finalize_closeout` may use `force`. Before doing so, enter a
+closeout note naming each incomplete checklist item or unpaid balance, why the normal gate cannot
+be satisfied, who approved the exception, and what follow-up remains. A force-finalized closeout
+is reviewed with the next accounting reconciliation. It is not appropriate merely because the
+team wants the event off the dashboard.
 
 ### 5. Finalize
 
 Once all payee balances are zeroed out (or legitimately zero because nothing further is owed)
-and the 7-item checklist is complete, finalize closeout. This moves the event to its final
-settled state (**Settled** in the Hold → Intake Complete → Booked → Settled pipeline).
+and the 7-item checklist is complete, finalize closeout. This moves the completed event to its
+final **Settled** state.
 
 ## Before Leaving (Same Night, if Closing Out Same-Night)
 
@@ -77,16 +82,16 @@ settled state (**Settled** in the Hold → Intake Complete → Booked → Settle
 ## When Something Goes Wrong
 
 - A payee balance won't zero out because a payment genuinely hasn't been made yet: don't force
-  finalize — resolve the actual payment first, or escalate per Handbook Chapter 2 (chain of
-  command for settlement authority is a management TODO).
+  finalize — resolve the actual payment first or escalate to venue administration.
 - Door numbers and ticketing numbers disagree: reconcile before finalizing; don't average them
   or guess.
 - The 7-item checklist has an item that doesn't apply to this specific event: escalate rather
   than force-completing it — VERIFY what the actual checklist items are and whether any have
   documented exceptions.
 
-> **VERIFY — Confirm current Mabuhay Gardens procedure:** the exact 7 checklist items required
-> for finalize, so this SOP can list them explicitly rather than referring to "the checklist"
-> generically.
+The seven closeout checks are: contract signed, deposit received or properly waived, vendors
+confirmed, staffing confirmed, bar closed, cash reconciled, and all invoices collected. A person
+with `manage_ledger` may update checklist items; finalization still requires
+`finalize_closeout`.
 
 See also: [Cash Handling SOP](cash-handling.md), [Door SOP](door.md), Handbook Chapter 8.

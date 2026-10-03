@@ -2,7 +2,7 @@
 title: Alcohol Service
 slug: alcohol-service
 document_type: policy
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -15,9 +15,11 @@ This is policy — the rule and why it exists. The exact steps at the bar live i
 [Door SOP](../staff/sop/door.md).
 
 **LEGAL/REGULATORY REVIEW REQUIRED:** this document states general, well-established regulatory
-context (below) but does not attempt to restate the full California ABC Act or local rules.
+context (below) but does not attempt to restate the full California ABC Act or local rules. It
+assumes a California license by default — if this venue operates under a different state or
+country's alcohol regulator, replace the ABC/RBS references below with the local equivalent.
 Anywhere this document describes an exact procedure, it should be checked against current ABC
-requirements and Mabuhay's actual license conditions before being treated as final.
+(or local) requirements and this venue's actual license conditions before being treated as final.
 
 ---
 
@@ -45,9 +47,14 @@ who is visibly intoxicated further, regardless of what they've already paid for 
 ticket/comp for. A guest who is cut off doesn't get served by a different bartender five minutes
 later — this is a venue-wide decision once made, not a per-bartender one.
 
-> **TODO — Management decision required:** the exact house procedure once a guest is cut off
-> (how it's communicated across the bar/floor, whether security is automatically looped in, water/
-> food offered, transportation arranged, etc.).
+The bartender who makes the cutoff tells the other bartenders, the House Manager, and security
+right away, using the guest's location and a plain description rather than shouting across the
+room. Mark the tab or service record when the POS supports it. Offer water and, when available,
+food; do not offer another alcoholic drink as a compromise. Security watches the guest and helps
+with a safe departure. Staff may help call a taxi or rideshare but may not physically put an
+unwilling guest into a vehicle. Call 911 if the guest may need medical care, cannot stay
+conscious, or cannot be kept safe. Document any cutoff that requires security, removal, medical
+help, or a transportation intervention.
 
 ## Drinks for performers
 
@@ -58,14 +65,20 @@ everyone in the building, on stage or not.
 
 ## Comps and drink tickets
 
-Comps must be authorized per venue policy (see Handbook Chapter 4/8 — authorization authority is
-a TODO there). Procedurally, how a comp gets rung so it reconciles against the event ledger is
-covered in the Bartender SOP.
+The House Manager may authorize comps that fit the event's approved plan. Anything outside that
+plan requires venue-administration approval. Every comp and drink ticket is rung through the POS
+under the correct event or comp category; a verbal "put it on the band" is not enough.
 
 ## Last call
 
-> **TODO — Management decision required:** confirm current last-call timing per venue license
-> conditions and house practice, and how it's communicated to guests and staff.
+Last call is 15 minutes before the event's scheduled end or the venue's alcohol cutoff, whichever
+comes first. **Example default — replace with this venue's actual license curfew:** a 2:00 a.m.
+cutoff, with no alcohol sold, given, or delivered at or after that time; a stricter license
+condition or event plan controls when applicable. The House Manager confirms the night's last-call time during briefing. Bartenders
+announce it consistently, stop taking new orders with enough time to complete service before the
+cutoff, and do not stack drinks to get around the deadline. See California ABC's
+[Hours of Sale](https://www.abc.ca.gov/education/merchant-education/off-sale-licensee-informational-guide/hours-of-sale/)
+guidance.
 
 ## Suspected drink tampering
 
@@ -77,9 +90,12 @@ If a guest reports or staff suspects a drink has been tampered with:
 3. Notify security/management immediately.
 4. Log an incident record.
 
-> **TODO — Management decision required:** confirm any additional venue-specific escalation steps
-> for suspected tampering (e.g., preserving surveillance footage, notifying police even absent a
-> medical event).
+The House Manager preserves the drink in a clean covered container when practical, records who
+handled it, and asks venue administration to preserve relevant camera footage before it rolls
+over. Do not promise that staff can test the drink or determine what happened. Offer to contact
+police and support the guest if they choose to report; call 911 without waiting for that decision
+when there are symptoms, loss of consciousness, immediate danger, or a suspected assailant still
+present. Record facts and the guest's own words without speculation.
 
 ## Incident escalation and documentation
 
@@ -89,12 +105,10 @@ the same as any other incident (see [Venue Safety](../staff/venue-safety.md)).
 
 ## RBS certification
 
-California has required RBS (Responsible Beverage Service) certification for anyone who
-serves or sells alcohol at an on-sale licensed premises since 2022. This is a real, current legal
-requirement — not a venue preference — and applies to bartenders, and likely others who serve
-alcohol depending on their role.
-
-> **TODO — Management decision required:** confirm who currently tracks RBS certification and
-> renewal status per employee at Mabuhay Gardens. The software does not appear to have a
-> dedicated field for certification expiry today — VERIFY this before assuming it's handled, and
-> if it isn't, this is a compliance gap worth flagging urgently to management.
+California requires RBS (Responsible Beverage Service) certification for alcohol servers and
+their managers at on-premises licensed locations. Venue administration verifies and tracks the
+record in Backstage, including issue and expiration dates, certificate number, supporting
+document, and verification. A required employee whose certification is missing or expired may
+not be assigned to serve alcohol or manage alcohol servers until it is current. Staff are
+responsible for completing training and renewal; venue administration is responsible for the
+schedule check. See California ABC's [RBS FAQ](https://www.abc.ca.gov/education/rbs/frequently-asked-questions/).

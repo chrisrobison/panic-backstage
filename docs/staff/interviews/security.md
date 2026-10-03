@@ -2,7 +2,7 @@
 title: Security Interview Worksheet
 slug: interview-security
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: false
 status: draft
@@ -12,8 +12,8 @@ status: draft
 
 # Security Interview Worksheet
 
-Use this to interview current/experienced security staff to fill the TODOs in the Security SOP
-and Venue Safety/Emergency documents.
+Use this to check the Security SOP and Venue Safety/Emergency documents against current staffing,
+training, and event practice.
 
 ## Core questions
 

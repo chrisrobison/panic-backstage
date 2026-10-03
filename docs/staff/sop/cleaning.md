@@ -23,7 +23,7 @@ areas, and general public/backstage spaces.
    hazards from the previous night/load-in.
 2. Confirm cleaning supplies and equipment are stocked and in working order.
 
-> **VERIFY — Confirm current Mabuhay Gardens procedure:** specific pre-open checklist and supply
+> **VERIFY — Confirm this venue's current procedure:** specific pre-open checklist and supply
 > par levels, if different from general practice above.
 
 ## During the Event

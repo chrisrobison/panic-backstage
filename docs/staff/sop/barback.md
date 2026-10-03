@@ -25,7 +25,7 @@ become a problem.
 2. Check walk-in/storage inventory and flag anything running low before service starts.
 3. Confirm ice supply is sufficient for the full night, not just the start.
 
-> **VERIFY — Confirm current Mabuhay Gardens procedure:** house par levels/stock list, if one
+> **VERIFY — Confirm this venue's current procedure:** house par levels/stock list, if one
 > exists beyond bartender judgment.
 
 ## During Service

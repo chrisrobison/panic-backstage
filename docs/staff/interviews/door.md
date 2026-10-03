@@ -2,7 +2,7 @@
 title: Door Interview Worksheet
 slug: interview-door
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: false
 status: draft
@@ -12,8 +12,7 @@ status: draft
 
 # Door Interview Worksheet
 
-Use this to interview current/experienced door staff to fill the TODOs in the Door SOP and
-Handbook Chapter 6.
+Use this to check the Door SOP and Handbook Chapter 6 against current entry and headcount practice.
 
 ## Core questions
 

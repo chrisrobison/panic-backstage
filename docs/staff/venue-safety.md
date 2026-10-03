@@ -2,7 +2,7 @@
 title: Venue Safety
 slug: venue-safety
 document_type: policy
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -17,9 +17,11 @@ training and reference.
 **This document does not substitute for a legally required Injury and Illness Prevention Program
 (IIPP) or Workplace Violence Prevention Plan.** California requires both for employers.
 
-> **TODO — Management decision required:** confirm whether a current, written IIPP and
-> Workplace Violence Prevention Plan exist for Mabuhay Gardens. If not, that is a standalone
-> compliance priority, independent of this handbook, and should be treated with urgency.
+Venue administration owns the current IIPP and Workplace Violence Prevention Plan, keeps them
+available to staff, and reviews them at least annually and after a serious incident or material
+change to the workplace. The House Manager handles event-night implementation and reports gaps.
+If either plan cannot be produced, venue administration must treat that as an open compliance
+item rather than assuming this document covers it.
 
 ---
 
@@ -29,13 +31,11 @@ Every staff member should be able to name every usable exit from every space the
 without checking. Exits must remain unobstructed and unlocked in the direction of egress
 whenever the venue is occupied.
 
-Occupancy limits exist per space (the app has a per-venue-space capacity configuration concept),
-but this document will not print a specific number without confirming it against current venue
-configuration and permits.
-
-> **VERIFY — Confirm current Mabuhay Gardens procedure:** the exact, current occupancy limit for
-> each configured space (e.g. ground floor), and how it's enforced at the door (headcount method,
-> ticket-scan count, clicker, etc.).
+**Example defaults — replace with this venue's actual permitted occupancy:** 450 upstairs and 350
+downstairs. A lower limit in a permit or event plan controls. Door maintains live occupancy from scanner admissions plus staff,
+performers, vendors, and other people already inside; a manual clicker or written tally is the
+fallback when scanning is unavailable. The House Manager confirms the limit and counting method
+before doors.
 
 ---
 
@@ -47,7 +47,7 @@ configuration and permits.
 - Only attempt to fight a fire with an extinguisher you've been trained on, and only if it's
   small and contained. Otherwise: get out, and get others out.
 
-> **VERIFY — Confirm current Mabuhay Gardens procedure:** current extinguisher/pull-station
+> **VERIFY — Confirm this venue's current procedure:** current extinguisher/pull-station
 > locations, inspection schedule, and any staff fire training already delivered.
 
 ---
@@ -72,8 +72,11 @@ configuration and permits.
 - Every medical incident gets logged as an incident record afterward (see Incident Reporting
   below) — this is separate from, and does not replace, calling 911 in the moment.
 
-> **TODO — Management decision required:** confirm current on-site first aid kit/AED locations
-> and which staff, if any, are trained in first aid/CPR/AED use.
+Venue administration maintains a posted list of first-aid kit and AED locations and records
+first-aid/CPR/AED training in Backstage certifications. The House Manager checks that supplies
+are present and accessible during opening. Only trained staff use an AED or provide care beyond
+basic assistance, but anyone may call 911, retrieve equipment, and follow dispatcher directions.
+Kit/AED locations must be added to the opening checklist after the next physical site check.
 
 ---
 
@@ -97,7 +100,7 @@ configuration and permits.
   clustering at the entrance.
 - Nobody re-enters until a manager or emergency responder says it's safe.
 
-> **VERIFY — Confirm current Mabuhay Gardens procedure:** designated assembly point(s) outside
+> **VERIFY — Confirm this venue's current procedure:** designated assembly point(s) outside
 > the building.
 
 ---
@@ -156,8 +159,10 @@ configuration and permits.
 - Never leave a ladder unattended in a guest-accessible area.
 - Have a second person present (spotting/holding) when working at height where practical.
 
-> **TODO — Management decision required:** confirm who is authorized to use ladders for
-> rigging/lighting/production work, and any required training.
+Ladder use is limited to stagehands, sound/lighting staff, and designated maintenance staff who
+have received venue ladder-safety orientation. The production lead approves event work at height;
+the House Manager approves other use. Staff may stop and request a different ladder, a second
+person, or another method when the setup is not safe.
 
 ---
 
@@ -184,9 +189,11 @@ configuration and permits.
 - Sound levels at a music venue can cause real, permanent hearing damage. Hearing protection
   should be available to staff who work near the stage/PA for extended periods.
 
-> **TODO — Management decision required:** confirm hearing protection is actually stocked and
-> available to staff (sound, stagehand, bar staff near stacks), and whether its use is
-> recommended or required.
+Venue administration stocks disposable earplugs at the sound position and staff check-in area;
+the opening manager includes both locations in the supply check. Hearing protection is required
+for staff working near the stage or PA for extended periods and available to any employee or
+guest who asks. The sound lead flags missing stock or a level concern immediately rather than
+waiting for the next event.
 
 ---
 
@@ -202,5 +209,9 @@ record still needs to be created even though not everyone can see it afterward.
 3. Log the incident record as soon as practical.
 4. Notify the on-duty manager if you haven't already.
 
-> **TODO — Management decision required:** confirm the expected timeline for logging an incident
-> record after it happens, and who reviews incident records afterward.
+Log the incident before the end of the shift once the immediate situation is stable. If the
+person involved cannot complete it, the House Manager creates the record from their report. The
+system notifies venue administrators when an incident is filed. A venue administrator reviews it
+by the next business day, records follow-up, and uses the incident-resolution workflow with a
+clear resolution note when the matter is closed. Serious injury, violence, police response, or a
+continuing hazard is escalated immediately and not left for next-day review.

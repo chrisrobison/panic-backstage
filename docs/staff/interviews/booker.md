@@ -2,7 +2,7 @@
 title: Booker Interview Worksheet
 slug: interview-booker
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: false
 status: draft
@@ -12,8 +12,7 @@ status: draft
 
 # Booker Interview Worksheet
 
-Use this to interview a current/experienced booker/booking staff member to fill the TODOs in the
-Booking SOP and Handbook.
+Use this to check the Booking SOP and Handbook against the current booking and approval workflow.
 
 ## Core questions
 

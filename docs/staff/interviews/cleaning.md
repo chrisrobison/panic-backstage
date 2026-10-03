@@ -2,7 +2,7 @@
 title: Cleaning Interview Worksheet
 slug: interview-cleaning
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: false
 status: draft
@@ -12,7 +12,7 @@ status: draft
 
 # Cleaning Interview Worksheet
 
-Use this to interview current/experienced cleaning staff to fill the TODOs in the Cleaning SOP.
+Use this to check the Cleaning SOP against the actual building, supplies, and shift handoffs.
 
 ## Core questions
 

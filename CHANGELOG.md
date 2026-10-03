@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Added** `staff-docs` — Adopt version 0.2 operating defaults; genericize for SaaS
 - **Documentation** — Reconcile README/roadmap/contracts/ticketing/private-event docs with current behavior
 - **Changed** `docs` — Add shared docs.css skin for HTML doc mirrors
 - **Fixed** `docs` — Allow UI mockup images through the root rewrite boundary

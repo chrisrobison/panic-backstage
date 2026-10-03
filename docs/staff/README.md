@@ -1,17 +1,25 @@
 # Staff Handbook & Compliance — Content Library
 
-This directory is the canonical Markdown source for the Staff Handbook & Compliance system. A
-separate database-backed workstream (owned outside this content library) tracks published
-versions, staff acknowledgments, and per-role/per-person assignment of these documents — this
-directory just holds the content and its frontmatter (`slug`, `document_type`,
-`requires_acknowledgment`, `status`, etc.), which that layer reads and seeds from.
+This directory is the shared, git-authored **seed template** for the Staff Handbook & Compliance
+system — genericized so it's a sane starting point for any venue, not just Mabuhay Gardens. It
+holds the content and its frontmatter (`slug`, `document_type`, `requires_acknowledgment`,
+`status`, etc.), which `Panic\StaffDocs::syncFromDisk()`/`publishFromFile()` read and seed from.
 
-Version `0.1` of every document here is a **first draft**. It is intentionally full of visible
-`TODO — Management decision required` and `VERIFY — Confirm current Mabuhay Gardens procedure`
-markers rather than invented policy — see
-[`knowledge-audit.md`](knowledge-audit.md) for the full accounting of what's confirmed, probable,
-missing, and open, and [`management-interview.md`](management-interview.md) for the questions
-that need answers before this can be finalized and issued to staff.
+For the single-tenant install (this Mabuhay checkout), these files *are* the live content:
+`scripts/sync-staff-docs.php` + `scripts/seed-staff-doc-defaults.php` publish them, and edits here
+go live the normal git-commit way. For a multi-tenant SaaS install, this same template is copied
+into each new tenant's own database at provisioning time (`Panic\Tenant\TenantProvisioner`, via
+`database/seed_staff_docs.php`) — after that, a venue admin can customize their own copy entirely
+through the app (`PUT /api/staff-docs/{slug}/draft` + `POST .../publish-draft`, no git/file access
+needed) without ever touching this shared template. See `src/StaffDocs.php`'s docblock for the
+full file-vs-db content-source split.
+
+Version `0.2` of the handbook, core policies, and affected SOPs replaces the original policy
+blanks with role-based operating defaults. The remaining `VERIFY` notes are facts that require a
+site walk, private payroll details, or legal/regulatory review. See
+[`knowledge-audit.md`](knowledge-audit.md) for the source and decision record, and
+[`management-interview.md`](management-interview.md) for the validation questions to work through
+before publication.
 
 ## Core handbook and policies
 
@@ -36,11 +44,11 @@ that need answers before this can be finalized and issued to staff.
 | [`sop/sound-engineer.md`](sop/sound-engineer.md) | PA/monitor setup, mixing, equipment/electrical safety. |
 | [`sop/stagehand.md`](sop/stagehand.md) | Load-in/out, stage setup, backstage access control. |
 | [`sop/booking.md`](sop/booking.md) | Full inquiry-to-handoff workflow: Booking Inbox, holds, deals, contracts, e-signature, deposits, advancing to production. |
-| [`sop/cash-handling.md`](sop/cash-handling.md) | What the ledger actually controls today vs. what till/drop procedure is still undocumented. |
+| [`sop/cash-handling.md`](sop/cash-handling.md) | Two-person drawer counts, drops, discrepancies, and the event-level ledger boundary. |
 | [`sop/artist-settlement.md`](sop/artist-settlement.md) | The real closeout workflow: payee balances, the 422 finalize gate, door sales & settlement doc. |
-| [`sop/event-coordinator.md`](sop/event-coordinator.md) | Event-day logistics bridge between booking and operations (role not yet formalized). |
-| [`sop/cafe.md`](sop/cafe.md) | Placeholder — café operations are still being developed. |
-| [`sop/kitchen.md`](sop/kitchen.md) | Placeholder — kitchen operations are still being developed. |
+| [`sop/event-coordinator.md`](sop/event-coordinator.md) | Logistics bridge split between event Owner and House Manager unless separately assigned. |
+| [`sop/cafe.md`](sop/cafe.md) | Café activation requirements and minimum controls; operation remains inactive until completed. |
+| [`sop/kitchen.md`](sop/kitchen.md) | Kitchen activation requirements and minimum controls; operation remains inactive until completed. |
 | [`sop/cleaning.md`](sop/cleaning.md) | Facility cleaning role template. |
 
 ## Audit and interview materials
@@ -48,7 +56,7 @@ that need answers before this can be finalized and issued to staff.
 | File | What it is |
 |---|---|
 | [`knowledge-audit.md`](knowledge-audit.md) | What's confirmed by the app vs. probable vs. missing vs. open — the honesty ledger for this whole draft. |
-| [`management-interview.md`](management-interview.md) | ~50 concise questions management needs to answer to finish the handbook. |
+| [`management-interview.md`](management-interview.md) | Questions for validating the version 0.2 defaults and collecting remaining site facts. |
 | [`interviews/house-manager.md`](interviews/house-manager.md) | Reusable interview worksheet for the House Manager function. |
 | [`interviews/bartender.md`](interviews/bartender.md) | Reusable interview worksheet for bartenders. |
 | [`interviews/door.md`](interviews/door.md) | Reusable interview worksheet for door staff. |

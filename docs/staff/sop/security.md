@@ -2,7 +2,7 @@
 title: Security SOP
 slug: sop-security
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -18,9 +18,10 @@ Physical safety of guests and staff: de-escalation, guest removal, responding to
 and being a primary responder (alongside management) for on-site emergencies until first
 responders arrive.
 
-> **VERIFY — Confirm current Mabuhay Gardens procedure:** whether security staff are required to
-> hold a BSIS Guard Card (California generally requires this for security guard work), and how
-> that's currently confirmed/tracked for Mabuhay's security staff.
+> **VERIFY — Confirm this venue's current procedure:** whether security staff are required to
+> hold a BSIS Guard Card (California generally requires this for security guard work — check the
+> local equivalent if this venue is elsewhere), and how that's currently confirmed/tracked for
+> this venue's security staff.
 
 ## Arrival / Setup
 
@@ -60,9 +61,14 @@ responders arrive.
 - Medical emergency: follow [Venue Safety](../venue-safety.md) — call 911, don't wait to see if
   it resolves on its own.
 
-> **TODO — Management decision required:** confirm exact use-of-force / removal guidelines and
-> training requirements for security staff at Mabuhay Gardens; this SOP intentionally does not
-> invent specifics here.
+Physical force is a last resort and is limited to what is reasonably necessary to protect someone
+or complete a lawful removal. Use verbal direction, distance, time, and additional staff first
+when circumstances allow. Security staff may not use chokeholds, neck restraints, punishment,
+or force against someone who is no longer resisting or presenting a threat. Weapons, restraints,
+or hands-on techniques are not authorized unless venue administration has issued a separate
+written policy and verified the worker's training and legal authority. Any use of force is
+reported to the House Manager immediately and documented before the end of the shift, with venue
+administrator review by the next business day.
 
 See also: [Door SOP](door.md), [Emergency Procedures](../emergency.md),
 [Venue Safety](../venue-safety.md).

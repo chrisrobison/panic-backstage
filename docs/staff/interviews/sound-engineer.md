@@ -2,7 +2,7 @@
 title: Sound Engineer Interview Worksheet
 slug: interview-sound-engineer
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: false
 status: draft
@@ -12,8 +12,8 @@ status: draft
 
 # Sound Engineer Interview Worksheet
 
-Use this to interview a current/experienced sound engineer to fill the TODOs in the Sound
-Engineer SOP and Venue Safety document.
+Use this to check the Sound Engineer SOP and Venue Safety document against the room and current
+production practice.
 
 ## Core questions
 

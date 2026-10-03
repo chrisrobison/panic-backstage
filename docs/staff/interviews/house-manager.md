@@ -2,7 +2,7 @@
 title: House Manager Interview Worksheet
 slug: interview-house-manager
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: false
 status: draft
@@ -12,8 +12,7 @@ status: draft
 
 # House Manager Interview Worksheet
 
-Use this to interview a current/experienced House Manager (or manager who has run the room) to
-fill the TODOs in the Handbook and House Manager SOP.
+Use this to check the Handbook and House Manager SOP with someone who has actually run the room.
 
 ## Core questions
 

@@ -2,7 +2,7 @@
 title: Stagehand SOP
 slug: sop-stagehand
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -21,19 +21,18 @@ area and backstage/green room access under control during the event.
 
 1. Assist with load-in per the event's technical requirements; coordinate with sound/production.
 2. Set the stage per the input list/stage plot for the night.
-3. Confirm backstage/green room access is limited to credentialed people — see the Handbook's
-   backstage-access policy (Chapter 6) and note that the exact credentialing mechanism is a
-   management TODO there.
+3. Confirm backstage/green room access is limited to people on the approved list wearing the
+   event's distinct backstage wristband or laminate.
 4. Flag any stage hazards (loose cable, unstable riser, low clearance) before doors.
 
 ## During the Event
 
 1. Handle changeovers between acts efficiently and safely — minimize time on a dark/unfamiliar
    stage.
-2. Control backstage access: only credentialed artists/staff/authorized guests get through.
-
-   > **TODO — Management decision required:** who authorizes non-performing guests backstage,
-   > and how a stagehand verifies credentials in the moment (per Handbook Ch. 4/6).
+2. Control backstage access: only credentialed artists, working staff, and authorized guests get
+   through. The event Owner supplies the advance list and the House Manager issues credentials
+   and approves late additions. Check the visible credential; recognition or "I'm with the band"
+   is not enough.
 
 3. Watch for and address stage hazards continuously — this isn't a one-time setup check.
 

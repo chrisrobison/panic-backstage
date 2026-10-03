@@ -2,7 +2,7 @@
 title: Event Coordinator SOP
 slug: sop-event-coordinator
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -21,10 +21,10 @@ venue distinguishes these, an Event Coordinator typically owns the logistics bri
 "booked" and "showtime": making sure everything agreed to in the contract actually shows up
 ready on the night.
 
-> **TODO — Management decision required:** decide whether Event Coordinator should exist as a
-> distinct assignment/role, or whether its responsibilities are fully covered by Booking + House
-> Manager as currently structured. Until decided, treat the tasks below as things *someone* must
-> own for a given event, not a title anyone currently holds by default.
+Event Coordinator remains a functional assignment, not a separate roster role. Unless the event
+record names a coordinator, the event Owner handles these duties before load-in and the House
+Manager handles them from load-in through close. Venue administration assigns a separate
+coordinator only when the event's complexity warrants one.
 
 ## Arrival / Setup (Pre-Event)
 
@@ -37,8 +37,8 @@ ready on the night.
 
 1. Serve as a logistics point of contact if something agreed to pre-event isn't showing up as
    expected (missing rider item, guest list discrepancy, ticketing issue).
-2. Coordinate with the House Manager rather than duplicating their on-the-floor authority — see
-   Handbook Chapter 2 chain of command (still a management TODO).
+2. Coordinate with the House Manager rather than duplicating floor authority. The coordinator
+   carries the advance and contract context; the House Manager runs the room.
 
 ## Before Leaving
 

@@ -2,7 +2,7 @@
 title: Café/Kitchen Interview Worksheet
 slug: interview-cafe-kitchen
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: false
 status: draft
@@ -12,8 +12,8 @@ status: draft
 
 # Café/Kitchen Interview Worksheet
 
-Use this once café/kitchen operations are further along, to fill the (currently mostly
-placeholder) Café and Kitchen SOPs.
+Use this during café/kitchen activation to test the minimum controls in the Café and Kitchen SOPs
+and replace them with equipment- and menu-specific procedures.
 
 ## Core questions
 

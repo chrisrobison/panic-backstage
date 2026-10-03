@@ -2,7 +2,7 @@
 title: Emergency Procedures
 slug: emergency
 document_type: policy
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -27,7 +27,7 @@ happening or already done.
    trained to use. If in doubt, get out.
 5. Notify the on-duty manager the moment it's safe to do so.
 
-> **VERIFY — Confirm current Mabuhay Gardens procedure:** location of fire extinguishers/pull
+> **VERIFY — Confirm this venue's current procedure:** location of fire extinguishers/pull
 > stations and any staff fire-extinguisher training currently in place.
 
 ---
@@ -54,8 +54,10 @@ happening or already done.
 5. File an incident record once the immediate situation is handled — see Venue Safety for how
    this ties to the app's incident-record capability.
 
-> **TODO — Management decision required:** confirm current on-site first aid supplies/AED
-> availability and who is trained to use them.
+The opening manager confirms first-aid supplies and any AED are present and accessible. Posted
+staff-area signage identifies their locations, and first-aid/CPR/AED training is tracked in
+Backstage. Call 911 first for a serious or unclear condition; retrieving equipment or finding a
+trained person should not delay the call.
 
 ---
 
@@ -76,7 +78,7 @@ happening or already done.
 3. Once outside, move away from the building entrance to a clear assembly area.
 4. Do not re-enter until a manager or emergency responder confirms it's safe.
 
-> **VERIFY — Confirm current Mabuhay Gardens procedure:** designated outdoor assembly point(s).
+> **VERIFY — Confirm this venue's current procedure:** designated outdoor assembly point(s).
 
 ---
 
@@ -124,6 +126,7 @@ happening or already done.
 
 ## Who to notify internally
 
-> **TODO — Management must define final event chain of command** (see the Handbook, Chapter 2)
-> — until that exists, notify the on-duty manager or House Manager for the event, then work
-> upward from there.
+Notify the named House Manager for the event. The House Manager coordinates staff and contacts
+venue administration. The production lead controls technical shutdowns and security controls an
+immediate safety perimeter, both in coordination with the House Manager when time allows. Anyone
+may call 911 or begin moving people away from immediate danger without waiting for approval.

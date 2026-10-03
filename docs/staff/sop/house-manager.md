@@ -2,7 +2,7 @@
 title: House Manager SOP
 slug: sop-house-manager
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -20,16 +20,16 @@ app-level role). It's the closest thing to "who's actually running the room" tha
 can point to, and even that isn't fully formalized — see the Handbook, Chapter 2, Chain of
 Command.
 
-> **TODO — Management must define final event chain of command** — until it's written down,
-> treat the designated House Manager for the event as the default point of authority on the
-> floor, escalating from there.
+The designated House Manager has floor authority from load-in through lockup. Venue
+administration retains final authority over house policy, contracts, and financial exceptions;
+the event Owner owns the advance; department leads direct their own technical work. Anyone may
+call 911 or stop an immediate hazard without waiting for approval.
 
 ## Arrival / Setup
 
-1. Review the event record: status (Hold/Intake Complete/Booked/Settled — VERIFY exact field
-   names in the app if presenting this to staff as literal UI labels), staffing assigned
-   (`manage_staffing`), guest list, ticketing setup, any contract terms relevant to the night
-   (rider requirements, capacity, comps).
+1. Review the event record: it should normally be **Advanced** for a public show or **Booked** for
+   a private event, with staffing assigned (`manage_staffing`), guest list, ticketing setup, and
+   contract terms relevant to the night (rider requirements, capacity, comps).
 2. Confirm opening checks are complete (see [Opening SOP](opening.md)) if not personally doing
    them.
 3. Brief staff on anything specific to the night: known VIPs/guests, special comps, capacity
@@ -40,13 +40,14 @@ Command.
 1. Serve as the point of escalation for door, security, bar, and production staff on anything
    they can't resolve at their level — refusals of entry, guest disputes, comp authorization
    questions, safety concerns.
-2. Monitor capacity against the configured limit for the space.
+2. Monitor the live occupancy maintained by door against the verified limit (example default: 450
+   upstairs and 350 downstairs — replace with this venue's actual permitted occupancy), or a lower
+   limit in the event plan. The count includes guests, staff,
+   performers, and other occupants, not only scanned tickets.
 
-   > **VERIFY — Confirm current Mabuhay Gardens procedure:** exact configured capacity per
-   > space and how it's being tracked in real time at the door.
-
-3. Authorize or decline requests that fall under Chapter 4/8 of the Handbook (comps, backstage
-   guests) per whatever authorization policy management ultimately sets — currently TODO.
+3. Authorize routine, event-budgeted comps and backstage guests. Send anything outside the
+   approved event plan to venue administration and record the decision in the POS, ledger, guest
+   list, or event notes as appropriate.
 4. Log incidents (`manage_incidents`) as they occur rather than batching them for later.
 
 ## Before Leaving
@@ -60,9 +61,9 @@ Command.
 
 - Any emergency: follow [Emergency Procedures](../emergency.md) — House Manager is a natural
   point of internal notification but does not replace calling 911 for anything urgent.
-- Promoter/artist dispute: not currently assigned a defined resolution path in software — see
-  Handbook Chapter 2 (TODO). Use judgment, document what happened, and escalate to ownership if
-  unresolved.
+- Promoter/artist dispute: work from the signed contract and event record. Resolve logistics
+  within the approved plan; send any proposed change to deal terms or payment to the event Owner
+  and venue administration, and document the outcome.
 - Guest incident requiring removal: coordinate with security/door per their SOPs; document via
   incident record.
 

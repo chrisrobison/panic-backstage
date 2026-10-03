@@ -2,7 +2,7 @@
 title: Bartender SOP
 slug: sop-bartender
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -21,12 +21,11 @@ steps.
 
 ## Arrival / Setup
 
-1. Confirm RBS certification is current (see Alcohol Service policy — tracking mechanism is a
-   management TODO).
+1. Confirm RBS certification is current in Backstage. Venue administration verifies the record;
+   do not begin alcohol service if a required certification is missing or expired.
 2. Set up the bar per house standard: stock, garnish, ice, glassware, POS/register ready.
-3. Confirm starting cash/till per the [Cash Handling SOP](cash-handling.md) — note that exact
-   till-count procedure is itself a management TODO; follow whatever interim practice management
-   has communicated verbally until it's written down.
+3. Count and sign for the starting till with the House Manager or a second staff member per the
+   [Cash Handling SOP](cash-handling.md).
 4. Note any event-specific comp arrangements or drink-ticket setups for the night from the House
    Manager/event brief.
 
@@ -46,8 +45,7 @@ steps.
 
 ## Before Leaving
 
-1. Close out the till/register per the Cash Handling SOP (TODO — interim practice until
-   documented).
+1. Close out the till/register with a second count and signed record per the Cash Handling SOP.
 2. Report any discrepancy immediately rather than "making it work" by adjusting figures.
 3. Restock/clean per house standard for the next shift.
 4. Confirm any comps/discounts given during the shift are visible in the POS/ledger record for

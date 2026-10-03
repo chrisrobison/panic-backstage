@@ -2,7 +2,7 @@
 title: Sound Engineer SOP
 slug: sop-sound-engineer
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -43,9 +43,10 @@ become incidents.
 
 ## When Something Goes Wrong
 
-- Equipment failure mid-show: resolve if quickly fixable; otherwise flag to the House
-  Manager/production lead — a dead PA mid-set may be a "stop the show" situation, and per the
-  Handbook, who has final authority to stop a performance is still a management TODO.
+- Equipment failure mid-show: resolve if quickly fixable. The sound or production lead may stop
+  the performance immediately for an electrical, rigging, hearing, or equipment hazard and then
+  notify the House Manager. For a non-hazardous interruption, coordinate the pause with the House
+  Manager and artist rather than leaving the room guessing.
 - Electrical hazard (sparking, shock risk, exposed wiring): stop use immediately, do not attempt
   a workaround, notify management.
 - Feedback/hearing-risk-level volume complaint from a performer or guest: address promptly;

@@ -2,7 +2,7 @@
 title: Opening SOP
 slug: sop-opening
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -16,11 +16,12 @@ status: draft
 
 Whoever opens the building is responsible for confirming it's safe, secure, and ready before
 anyone else — staff or guest — comes in for the night. This SOP is generic across roles; the
-specific person doing it on a given night is whoever management has designated (see the Handbook,
-Chapter 2, Chain of Command — this is one of the things marked TODO there).
+specific person doing it on a given night is named in Staffing or the event notes.
 
-> **TODO — Management decision required:** confirm who is authorized to open the building
-> (which role(s), and whether it requires a key/alarm-code holder specifically).
+The opener must be a venue administrator, the assigned House Manager, or another staff member
+whom venue administration has approved as a key/alarm holder. Having a key does not by itself
+authorize someone to open for an event. The House Manager verifies the assignment before the
+scheduled opening time.
 
 ## Arrival / Setup
 
@@ -32,12 +33,12 @@ Chapter 2, Chain of Command — this is one of the things marked TODO there).
 3. Confirm event details for the night against the system: event status, expected load-in times,
    staffing assigned (`manage_staffing`), guest list if applicable.
 
-> **VERIFY — Confirm current Mabuhay Gardens procedure:** the exact opening walkthrough checklist
+> **VERIFY — Confirm this venue's current procedure:** the exact opening walkthrough checklist
 > currently used (if one exists outside this SOP), and whether the app's event record is the
 > source of truth staff check against on arrival.
 
-4. Confirm bar/cash areas are set up per the Cash Handling SOP — noting that till/drop procedures
-   there are themselves still a management TODO.
+4. Confirm bar/cash areas are set up and opening drawer counts are signed per the Cash Handling
+   SOP.
 5. Confirm sound/production readiness with the sound/production lead for the night's event.
 
 ## During the Event

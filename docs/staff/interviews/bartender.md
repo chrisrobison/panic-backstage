@@ -2,7 +2,7 @@
 title: Bartender Interview Worksheet
 slug: interview-bartender
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: false
 status: draft
@@ -12,8 +12,8 @@ status: draft
 
 # Bartender Interview Worksheet
 
-Use this to interview a current/experienced bartender to fill the TODOs in the Handbook,
-Alcohol Service policy, Bartender SOP, and Cash Handling SOP.
+Use this to check the Handbook, Alcohol Service policy, Bartender SOP, and Cash Handling SOP
+against what experienced bartenders actually do on shift.
 
 ## Core questions
 

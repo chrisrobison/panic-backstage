@@ -2,7 +2,7 @@
 title: Management Interview
 slug: management-interview
 document_type: policy
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: false
 status: draft
@@ -10,11 +10,12 @@ status: draft
 
 <!-- requires_acknowledgment: false — this is a working interview document for management, not a policy staff acknowledge. -->
 
-# Management Interview
+# Management Validation Interview
 
-These are the practical questions the software cannot answer on its own. Each one maps to a TODO
-somewhere in the handbook, a policy doc, or an SOP. Answering these is what turns version 0.1 of
-this handbook into something that can actually be issued to staff.
+Version 0.2 adopts workable defaults instead of leaving policy blanks. Use these questions to
+test those defaults with management, identify where current practice differs, and collect the
+site-specific or payroll facts the software cannot supply. Record an answer even when the answer
+is "keep the written default."
 
 ## Management
 

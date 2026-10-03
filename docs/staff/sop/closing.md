@@ -2,7 +2,7 @@
 title: Closing SOP
 slug: sop-closing
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -20,24 +20,28 @@ not left for someone to reconstruct the next day.
 
 ## Arrival / Setup (Start of Closing Shift)
 
-1. Confirm last call has happened or is imminent per house policy (see
-   [Alcohol Service](../alcohol-service.md) — exact last-call timing is a management TODO there).
+1. Confirm the last-call time with the House Manager. It is 15 minutes before the scheduled event
+   end or alcohol cutoff, whichever comes first; see [Alcohol Service](../alcohol-service.md).
 2. Begin clearing non-staff areas as guests leave; don't wait until everyone's gone to start.
 
 ## During Closing
 
 1. Guests out, doors secured in sequence as areas empty.
-2. Bar/cash close-out per the [Cash Handling SOP](cash-handling.md) — noting again that
-   till/drop procedures are a management TODO there, not yet software-tracked.
+2. Complete the two-person drawer counts, signed count records, and secure drops in the
+   [Cash Handling SOP](cash-handling.md).
 3. Event financials: revenue, costs, and payments get reconciled in the event ledger, and
    payees get marked paid/unpaid/partial as actually settled that night, where applicable. See
    the [Artist Settlement SOP](artist-settlement.md) for the full closeout/finalize workflow.
 4. Walk the space for damage, lost property, hazards (broken glass, spills) before locking up.
 5. Log any incident records for the night if not already done in the moment.
 
-> **TODO — Management decision required:** confirm the exact end-of-night checklist currently
-> expected (beyond what's listed here), and who is responsible for confirming it's complete
-> before leaving.
+The House Manager owns the final walkthrough and signs off only after: guests and non-closing
+vendors are out; restrooms, backstage, and public rooms are clear; cash and keys are secured;
+bar and production equipment are shut down; lost property is secured; trash, spills, and broken
+glass are handled; fire exits and interior doors are in their proper overnight state; incidents
+and damage are logged; unnecessary lights and equipment are off; exterior doors are locked; and
+the alarm is armed. Department leads report their areas complete, but the House Manager owns the
+building-level sign-off.
 
 ## Before Leaving
 

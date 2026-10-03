@@ -2,7 +2,7 @@
 title: Booking SOP
 slug: sop-booking
 document_type: sop
-version: 0.1
+version: 0.2
 effective_date:
 requires_acknowledgment: true
 status: draft
@@ -21,9 +21,9 @@ so this SOP describes the workflow itself, regardless of exactly whose job title
 
 ## Arrival / Setup — Working the Booking Inbox
 
-1. Inbound inquiries — email to `bookings@themab.org`, the website widget, phone, or manual entry
-   — land in the shared **Booking Inbox**, never a personal inbox. Nobody privately redirects,
-   permanently deletes, or hides an inquiry.
+1. Inbound inquiries — email to this venue's booking address (e.g. `bookings@yourvenue.com`), the
+   website widget, phone, or manual entry — land in the shared **Booking Inbox**, never a personal
+   inbox. Nobody privately redirects, permanently deletes, or hides an inquiry.
 2. Inquiries move through **Assigned → Claimed → Owned**:
    - **Assigned**: the system or a manager has pointed it at you; you haven't started working it.
    - **Claimed**: you're actively working it right now. Claiming starts a claim-expiry countdown
@@ -63,29 +63,30 @@ so this SOP describes the workflow itself, regardless of exactly whose job title
 
 ### Approval
 
-> **TODO — Management decision required:** confirm who has authority to approve final deal terms
-> before a contract is sent (a manager sign-off step, dollar-amount thresholds, etc.) — the
-> software supports building and sending a contract but does not itself enforce an approval
-> gate.
+The event Owner may negotiate and prepare the deal, but a venue administrator approves the final
+business terms before the contract is sent. Record approval in an internal note that identifies
+the approver and date. Any later change to price, deposit, guarantee, split, bar terms, capacity,
+curfew, insurance, cancellation, or venue obligations requires fresh approval and a new
+audit-logged contract version.
 
 ### Contracts and e-signature
 
 1. Once terms are approved, send the contract for e-signature.
 2. The signing process is **audit-logged** — every view, sign, or decline is tracked. Use that
    audit trail if there's ever a dispute about whether/when something was seen or signed.
-3. Move the event from **Hold** to **Intake Complete** once details are filled in but before the
-   contract is signed, then to **Booked** once the contract is actually signed and confirmed.
-
-   > **VERIFY — Confirm current Mabuhay Gardens procedure:** exact field-level status names and
-   > transitions as implemented (Hold → Intake Complete → Booked → Settled is the known pipeline;
-   > confirm there are no additional granular states like "Advance"/"Complete" that this SOP
-   > should reference explicitly).
+3. Move the event from **Hold** to **Intake Complete** once the required deal and logistics fields
+   are complete. **Booked** requires an executed contract and a received, waived, or not-required
+   deposit. Public events then move through **Needs Assets → Assets Approved → Ready to Announce
+   → Published → Advanced → Completed → Settled**. Private events skip the promotion stages and
+   move from **Booked → Completed → Settled**.
 
 ### Deposits
 
-> **TODO — Management decision required:** confirm current deposit policy (amount/percentage,
-> when it's due, what happens if it's not received) and how/whether it's tracked in the ledger
-> ahead of the event.
+**Example default — replace with this venue's actual deposit policy:** a 25% deposit due within
+14 days, unless the signed deal sets a different approved amount or date. Enter the deposit amount on the event before moving it
+to Intake Complete. Record requests, receipts, refunds, and status through the event payment
+workflow. A missing deposit keeps the booking from being treated as financially clear; waiving
+it requires the `waive_deposit` capability and a written reason.
 
 ### Advancing to operations/production
 
@@ -107,8 +108,8 @@ so this SOP describes the workflow itself, regardless of exactly whose job title
 - Two people both start replying to the same inquiry: duplicate-reply protection should catch
   this — trust it, don't override it without checking with the other person first.
 - A promoter/artist disputes agreed terms: check the contract and audit log for what was actually
-  sent/signed; escalate per Handbook Chapter 2 (chain-of-command for promoter disputes is a
-  management TODO).
+  sent/signed. The event Owner handles the conversation; any concession or contract change goes
+  to venue administration for approval.
 - An inquiry sits Claimed too long with no reply: it will auto-expire back to the queue — if you
   see this happening to your own inquiries, that's a signal to either move faster or hand it off
   intentionally.
