@@ -10,7 +10,7 @@ The app is intentionally boring to run:
 - no Composer runtime dependencies
 - no npm, bundler, or frontend build step
 - MySQL with native PDO prepared statements (one database, or one database per tenant in SaaS mode)
-- short-lived HS256 session tokens in Secure HttpOnly cookies (Bearer tokens remain available for API clients), with rotating refresh tokens, magic links, and passkey/WebAuthn sign-in
+- HS256 access tokens mirrored to a Secure HttpOnly cookie and browser `localStorage` (Bearer tokens remain available for API clients), with rotating HttpOnly refresh-token cookies, magic links, and passkey/WebAuthn sign-in
 - static HTML/CSS/native Web Components that call JSON endpoints under `/api`
 - LARC/PAN loaded from a pinned CDN module for component coordination
 - optional multi-tenant SaaS mode: per-venue database + hostname, resolved per request (off by default — see [Multi-Tenant / SaaS Mode](#multi-tenant--saas-mode))
@@ -51,7 +51,21 @@ GET    /api/events/{id}/assets         -> src/Events/Assets.php
 POST   /api/events/{id}/assets         -> src/Events/Assets.php
 PATCH  /api/events/{id}/assets/{id}    -> src/Events/Assets.php
 
+# Financial ledger and consolidated Closeout workflow:
+GET/POST/PATCH /api/events/{id}/ledger             -> src/Events/Ledger.php
+DELETE         /api/events/{id}/ledger/{entryId}   -> src/Events/Ledger.php
+GET            /api/events/{id}/ledger/summary     -> src/Events/Ledger.php
+POST           /api/events/{id}/ledger/finalize    -> src/Events/Ledger.php
+POST           /api/events/{id}/ledger/reopen      -> src/Events/Ledger.php
+
 GET    /api/public/events/{slug}       -> src/PublicEvents.php
+
+# Staff Handbook & Compliance:
+GET/POST /api/staff-docs[/{slug}[/{action}]] -> src/StaffDocs.php
+GET      /api/staff-compliance                -> src/StaffDocCompliance.php
+GET/POST/PATCH/DELETE /api/staff-doc-assignments[/{id}]
+GET/POST/PATCH/DELETE /api/certification-types[/{id}]
+GET/POST/PATCH/DELETE /api/staff-certifications[/{id}]
 
 # Opt-in Firebase web push for the signed-in user (see docs/push-notifications.md):
 GET    /api/push/config                     -> src/Push.php
@@ -125,7 +139,7 @@ src/
   Request.php             HTTP request wrapper
   Response.php            JSON response wrapper
   Database.php            PDO wrapper (single-tenant DB_*, or an injected tenant PDO)
-  Auth.php                Short-lived HS256 access tokens — HttpOnly cookie/Bearer, magic links, refresh tokens
+  Auth.php                Configurable-TTL HS256 access tokens — HttpOnly cookie/Bearer, magic links, refresh tokens
   Webauthn.php            Passkey / WebAuthn registration + login
   Identity.php            Email → user resolution across primary + verified aliases
   Support.php             Small helper functions
@@ -140,6 +154,10 @@ src/
                           subscriptions, notifier (→ JobQueue), native FCM HTTP v1 client
   Outbox.php              Admin log of every transactional email sent (manage_users)
   StaffMembers.php        Venue staff roster
+  StaffDocs.php           Published handbook/SOP reader, acknowledgments, version publishing
+  StaffDocCompliance.php  Admin compliance matrix across staff, assigned docs, and certifications
+  StaffDocAssignments.php Role-to-document assignment rules
+  StaffCertifications.php Individual certification and training records
   NotificationPreferences.php  Per-user email/notification opt-ins
   Mailer.php              Sendmail/MIME mailer; mirrors staff email into the inbox
   Jobs/                   Durable database queue + worker dispatch
@@ -159,7 +177,11 @@ src/
     Lineup.php
     Schedule.php
     Assets.php
-    Settlement.php
+    Staffing.php          Shift scheduling, capacity auto-fill, per-event payroll CSV
+    Ticketing.php         Tiers, orders, comps/refunds, scanner links, physical batches
+    Ledger.php            Append-only financial ledger, payee balances, closeout state
+    Settlement.php        Legacy/manual outside-ticketing totals used inside Closeout
+    Report.php            Settlement Statement data and CSV/share output
     Invites.php
   Promote/
     Analytics.php         Broadcast metrics from DB + null platform placeholders
@@ -691,10 +713,11 @@ for the request/response schema.
 
 ## Google Sheet Sync
 
-Events stay in sync with a Google Sheet in both directions: an inbound cron
-imports the sheet every 5 minutes, and app edits are pushed back up to the sheet
-in real time (with a cron-based retry fallback). Outbound writes authenticate as
-a Google service account.
+Google Sheet synchronization is optional and guarded by `SHEET_SYNC_ENABLED`.
+When enabled, an inbound cron imports the sheet every 5 minutes and app edits
+are pushed back in real time (with a cron-based retry fallback). The current
+deployment has the kill switch off; no import or write-back occurs while it is
+disabled. Outbound writes authenticate as a Google service account.
 
 See [`docs/google-sheet-sync.md`](docs/google-sheet-sync.md) for setup
 (service-account key, sharing, permissions), the field/column mapping, and
@@ -719,9 +742,11 @@ SHA-256 hash, and automatically advances the linked event to *Booked*. An
 optional `SIGNATURE_PROVIDER=dropbox_sign` stub is wired for future Dropbox Sign
 integration (API skeleton present; HTTP calls are TODO).
 
-The contract tables are part of the baseline `database/schema.sql`; apply
-migration `017_contract_signatures.sql` for the e-signature tables, then seed the
-clause library with `php database/seed_contracts.php`. See
+The contract and e-signature tables are part of the current baseline
+`database/schema.sql`; no historical contract migration is needed on a fresh
+install. Seed or refresh the clause library with
+`php database/seed_contracts.php`. Existing installations should continue to
+apply every pending migration with `php scripts/migrate.php`. See
 [`docs/contracts.md`](docs/contracts.md) for the data model, signing API,
 condition engine, and how to extend it. End-user help is in the app under
 **Help → Contracts & deal builder** and **Help → Electronic signatures**.
@@ -832,6 +857,21 @@ Push is delivered by the existing background worker
 Run `php scripts/migrate.php` (and `php scripts/migrate.php tenants` in SaaS
 mode) to apply migration `094_add_push_notifications.sql`.
 
+## Staff Handbook & Compliance
+
+Authenticated staff can read assigned handbook, policy, and SOP documents in
+**Staff Docs** and acknowledge the exact published version they reviewed.
+Venue administrators can publish disk-backed Markdown from `docs/staff/`, map
+documents to staff roles, review acknowledgments in **Staff Compliance**, and
+track certification/training records with issue and expiry dates.
+
+`scripts/sync-staff-docs.php` imports document metadata and versions from disk;
+`scripts/seed-staff-doc-defaults.php` seeds the default role assignments and
+certification types. Publishing the same unchanged content is idempotent. The
+content index and authoring rules live in
+[`docs/staff/README.md`](docs/staff/README.md); API schemas and capability gates
+live under the Staff Handbook & Compliance tag in `docs/openapi.yaml`.
+
 ## In-App Messaging (Messages)
 
 The **Messages** nav group gives staff an in-app view of the notifications and
@@ -846,8 +886,8 @@ interface. It has three boxes:
 - **Outbox** — messages you've sent. Composing or replying creates the message
   and also emails the recipient.
 
-Backed by the `messages` table (migration `019_messages.sql` single-tenant /
-`tenant/007_messages.sql`). A single row serves two views — `recipient_user_id`
+Backed by the `messages` table in the current `database/schema.sql` baseline.
+A single row serves two views — `recipient_user_id`
 drives the Inbox, `sender_user_id` drives the Outbox. The frontend lives in
 `public/assets/messages.js`; the shell shows an unread badge on the Inbox link.
 

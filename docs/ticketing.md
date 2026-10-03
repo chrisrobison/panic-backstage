@@ -345,7 +345,9 @@ SQUARE_WEBHOOK_URL
 Secret keys live **only** in `.env` — `GET /api/payment-settings` reports just
 which keys are present (a boolean per provider), never the values. Pick the active
 provider and currency in **Admin → Payments** (`#admin-payments`, gated by
-`manage_users`). The ticketing schema ships in migration `020`.
+`manage_users`). Fresh installs receive the ticketing schema from
+`database/schema.sql`; existing installs receive later ticketing changes through
+the normal ordered migration runner.
 
 ---
 
@@ -380,4 +382,7 @@ A seller-activation action to flip a physical batch ticket's `physical_status`
 to `sold` (see *Physical / pre-printed tickets* above — until this exists, a
 batch-printed ticket cannot be scanned or manually admitted), partial/line-item
 refunds (today's refund is the cancel-event path), waitlists/queueing for
-sold-out tiers, and flowing ticket revenue into `event_settlements`.
+sold-out tiers. Realized paid/fulfilled in-house ticket counts and gross revenue
+already synchronize into `event_settlements` through
+`Events\Ticketing::syncSettlement()` / `recomputeSettlement()` and are also
+included directly in the Closeout ledger summary and Settlement Report.

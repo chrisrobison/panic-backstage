@@ -227,7 +227,7 @@ const HELP_CONTENT = {
 
     <h3>Intake, rooms, and the calendar</h3>
     <ul>
-      <li><strong>Contract Details is required for Intake Complete and later.</strong> Use it for the agreed deal summary and instructions the contract writer needs.</li>
+      <li><strong>Contract Details is required when moving to Intake Complete.</strong> Use it for the agreed deal summary and instructions the contract writer needs. Later stages rely on the executed contract rather than requiring this draft field again.</li>
       <li><strong>Load In / Access through Load Out / Clear is the room-occupancy window.</strong> Both are required at Intake Complete. Calendar chips start with Load In, Google Calendar uses the same window, and conflict checks include the existing 30-minute buffer.</li>
       <li>A tentative Hold may overlap another tentative Hold, but it cannot be placed over an Intake Complete/confirmed-or-later booking in the same room. Invalid time orderings are rejected.</li>
       <li><strong>Ground Floor (21+)</strong> is the canonical downstairs room at Mabuhay Gardens and has a 250-person capacity. It is managed as a room under Admin &rarr; Venue, not as a duplicate venue.</li>
@@ -724,7 +724,7 @@ const HELP_CONTENT = {
       <li><strong>AV / Tech requirements</strong> — what the client needs (sound system, lighting, projector, microphones, etc.).</li>
       <li><strong>Catering / Bar notes</strong> — bar service preferences, catering vendors, alcohol restrictions.</li>
       <li><strong>Internal notes</strong> — staff-only notes not shared with the client.</li>
-      <li><strong>Paid deposit</strong> — deposit received; required before moving to Intake Complete.</li>
+      <li><strong>Deposit amount</strong> — the required deposit (use 0 if none). The amount is required for Intake Complete; receipt, waiver, or a not-required status is checked when moving to Booked.</li>
     </ul>
     <p class="muted small">💰 For rental pricing, contact venue management.</p>
     <p>The public-show fields (ticket price, ticket URL, public description, Booker section) are hidden for private events. The Promote, Public Page, and Publish Public Page buttons are also hidden — private events are never publicly announced through Backstage.</p>
@@ -735,10 +735,10 @@ const HELP_CONTENT = {
       <thead><tr><th>Status</th><th>What it means</th><th>What's required to reach it</th></tr></thead>
       <tbody>
         <tr><td><strong>Hold</strong></td><td>Inquiry received; date informally held.</td><td>Title, date, venue, door time, end time, client name/email/phone.</td></tr>
-        <tr><td><strong>Intake Complete</strong></td><td>All client details confirmed; contract being built.</td><td>Load-in, load-out, age restriction, estimated guests, deposit amount.</td></tr>
-        <tr><td><strong>Booked</strong></td><td>Contract approved/signed; deposit confirmed.</td><td>Contract in Approved, Sent, or Signed status (or contract URL on file).</td></tr>
+        <tr><td><strong>Intake Complete</strong></td><td>All client details confirmed; contract being built.</td><td>Load-in/out, age restriction, estimated guests, deposit amount, internal notes, and agreed terms.</td></tr>
+        <tr><td><strong>Booked</strong></td><td>Contract executed; deposit resolved.</td><td>Signed/fully executed contract (or signed outside contract / legacy Contract URL) plus a received, waived, or not-required deposit.</td></tr>
         <tr><td><strong>Archived</strong></td><td>Event happened; settlement pending.</td><td>Auto-set by nightly script if still active past the event date.</td></tr>
-        <tr><td><strong>Settled</strong></td><td>Settlement filed; books closed.</td><td>Manual advance.</td></tr>
+        <tr><td><strong>Settled</strong></td><td>Closeout finalized; books closed.</td><td>Set by Finalize after the checklist and payee-balance gates pass.</td></tr>
         <tr><td><strong>Cancelled</strong></td><td>Rental cancelled.</td><td>Manual advance.</td></tr>
       </tbody>
     </table>
@@ -759,7 +759,7 @@ const HELP_CONTENT = {
     </ul>
 
     <h3>Contracts for private events</h3>
-    <p>Use the <a href="#help-contracts">Contracts</a> tab to build a rental agreement. Pick the <em>Private Event Rental</em> contract template — it includes the venue rental fee, deposit terms, security requirements, bar minimum, and force-majeure clause out of the box. Walk it through Draft → Approved → Sent → Signed. The Booked status check looks for a contract in the contracts table or a contract URL on file.</p>
+    <p>Use the <a href="#help-contracts">Contracts</a> tab to build a rental agreement. Pick the <em>Private Event Rental</em> contract template — it includes the venue rental fee, deposit terms, security requirements, bar minimum, and force-majeure clause out of the box. Walk it through Draft → Approved → Sent → Fully Executed. The Booked gate requires a signed/fully executed contract (or a signed outside contract attached through the Contracts tab / legacy Contract URL) plus a received, waived, or not-required deposit; Approved or Sent alone is not enough.</p>
   `,
 
   overview: `
@@ -802,8 +802,8 @@ const HELP_CONTENT = {
       <li><strong>Load Out / Clear</strong> — when people, gear, and breakdown are completely out of the room. This ends the room-occupancy window.</li>
       <li><strong>Doors / Show / End</strong> — the public-facing show times. Setting one will auto-fill reasonable defaults for the others if they're empty.</li>
       <li><strong>Age restriction</strong> — shown on the public page and in the run sheet (e.g. 21+, All Ages).</li>
-      <li><strong>Paid deposit</strong> — the deposit amount confirmed received. Required to advance past Intake Complete.</li>
-      <li><strong>Contract Details</strong> — the staff-facing deal summary and special instructions needed to prepare the agreement. A nonblank value is required for Intake Complete and every later booking status.</li>
+      <li><strong>Deposit amount</strong> — the required deposit (use 0 if none). Booked requires the deposit to be received, waived, or marked not required.</li>
+      <li><strong>Contract Details</strong> — the staff-facing deal summary and special instructions needed to prepare the agreement. A nonblank value is required when moving to Intake Complete; later stages use the executed contract as their gate.</li>
     </ul>
 
     <h3>Workshop / Comedy / Non-Music events</h3>
@@ -1805,7 +1805,7 @@ const HELP_CONTENT = {
       <li><strong>Empty</strong> — the date slot exists but nothing is confirmed for it yet.</li>
       <li><strong>Hold</strong> — a show idea or inquiry is live; the deal is not yet confirmed. The date is informally held. Requires title, date, venue, real Doors/Start and End times, Contract Name / Point of Contact, and Booker details.</li>
       <li><strong>Intake Complete</strong> — deal structure is agreed and a contract is being built. Load In, Load Out, Contract Details, age restriction, ticket price, capacity, and a deposit amount must be set. When this status is set, venue admins and management are automatically emailed with next steps for the contract.</li>
-      <li><strong>Booked</strong> — a signed contract (or approved contract in the contract builder) plus a confirmed deposit. The show is locked.</li>
+      <li><strong>Booked</strong> — a signed/fully executed contract (or signed outside contract on file) plus a received, waived, or not-required deposit. Approved or Sent alone does not pass the gate. The show is locked.</li>
       <li><strong>Needs Assets</strong> — booked but blocked on flyer, artist photos, bio, or social content. An automatic email is sent to the producer/artist when this status is set.</li>
       <li><strong>Assets Approved</strong> — public description, ticket link, and an approved poster/flyer are all in. Andres and Colleen are notified to add the show to the website and newsletter; Molly gets a dedicated email with the full promo packet for the linktree and Instagram.</li>
       <li><strong>Ready To Announce</strong> — the approved flyer is in, ticketing is set up, and the event is ready to flip public.</li>
@@ -2281,7 +2281,7 @@ const HELP_CONTENT = {
 
   closeout: `
     <h2>Closeout Overview</h2>
-    <p>After a show ends, the Closeout tab is the one place to reconcile every dollar that came in and went out, track who's been paid and who hasn't, and lock the books once everything is settled. It used to be split across a separate Settlement tab (a hand-typed summary) and a read-only Report tab — both are folded in here now, so there's a single place to work instead of three.</p>
+    <p>After a show ends, the Closeout tab is the place to reconcile every dollar that came in and went out, track who's been paid and who hasn't, and lock the books once everything is settled. The old hand-typed Settlement tab was folded into Closeout as the door-sales fallback and settlement-document section. The read-only Report tab remains available for the formal Settlement Statement.</p>
 
     <h3>Layout</h3>
     <p>The Closeout tab has a two-column layout:</p>
@@ -2412,7 +2412,7 @@ const HELP_CONTENT = {
     <div class="note"><strong>Note:</strong> The server enforces both gates independently of the button's disabled state — a direct API call to finalize still gets refused (422) with the same "still owed" or "checklist incomplete" reasons if either isn't satisfied.</div>
 
     <h3>Reopening a settled event</h3>
-    <p>If something was missed after finalization, click <strong>Reopen</strong> and enter a reason. The ledger unlocks and the event reverts to an active state.</p>
+    <p>If something was missed after finalization, click <strong>Reopen</strong> and enter a reason. The closeout state becomes <em>reopened</em> and the ledger is editable again; the event's own status remains <em>Settled</em> until closeout is finalized again.</p>
     <div class="warn"><strong>Important:</strong> Reopening requires the <code>finalize_closeout</code> capability (venue admin by default). The reason and timestamp of every reopen are stored permanently — reopening is fully audited.</div>
 
     <div class="tip"><strong>Tip:</strong> Work through the ledger entries and checklist in parallel as the night wraps up. The sooner costs and revenues are entered, the more accurate your P&amp;L will be when you hit Finalize.</div>

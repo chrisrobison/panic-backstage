@@ -1110,6 +1110,7 @@
     .two-col { grid-template-columns: 1fr; }
   }
 </style>
+<link rel="stylesheet" href="docs.css">
 </head>
 <body>
 
@@ -1333,7 +1334,7 @@
       <li><strong>Quick Create uses real information.</strong> Doors and Show start blank instead of being invented. Enter the actual times and the Contract Name / Point of Contact; Booker name/email are pre-filled from the signed-in staff account.</li>
       <li><strong>Contract contact and Booker are different roles.</strong> The contract contact is who the agreement is written to and the primary outside contact. The Booker is the person who arranged the deal.</li>
       <li><strong>Owner is assigned automatically, not hand-picked at creation.</strong> The creator/onboarding workflow sets it, and bookers/promoters/event owners still see it read-only in Event Details. As of the August 19 update, a <strong>venue admin</strong> sees an editable Owner dropdown in Event Details instead and can reassign any event to any user — see <a href="#admin-users">Managing login accounts</a>.</li>
-      <li><strong>Contract Details is an intake gate.</strong> Record the agreed deal summary and contract-writing instructions there. A nonblank value, Load In, and Load Out are required for Intake Complete and later statuses.</li>
+      <li><strong>Contract Details is an intake gate.</strong> Record the agreed deal summary and contract-writing instructions there. A nonblank value is checked when moving to Intake Complete; later stages use the executed contract as their gate. Load In and Load Out remain required from Intake Complete onward.</li>
       <li><strong>Clone makes a clean, editable Hold.</strong> It copies reusable facts and contacts, but never carries contracts, payments, ticket sales/links, assets, tasks, staffing, execution records, or series membership into the new date.</li>
     </ul>
 
@@ -2088,7 +2089,7 @@
           <div style="width:32px; text-align:center;">
             <div style="width:2px; height:20px; background:#e5e7eb; margin:0 auto;"></div>
           </div>
-          <div style="font-size:0.75rem; color:#9ca3af; font-style:italic; padding-left:4px;">Settlement filed ↓</div>
+          <div style="font-size:0.75rem; color:#9ca3af; font-style:italic; padding-left:4px;">Closeout finalized ↓</div>
         </div>
 
         <div style="display:flex; align-items:center; gap:16px;">
@@ -2098,7 +2099,7 @@
           <div style="flex:1; background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:14px 18px;">
             <span style="display:inline-block; background:#0d9488; color:#fff; font-size:0.7rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; padding:2px 8px; border-radius:4px; margin-bottom:6px;">Settled</span>
             <div style="font-weight:700; font-size:0.95rem; margin-bottom:2px;">Books closed</div>
-            <div style="font-size:0.82rem; color:#6b7280;">Settlement filed and approved. This event is done.</div>
+            <div style="font-size:0.82rem; color:#6b7280;">Closeout finalized and payee balances cleared. This event is done.</div>
           </div>
         </div>
 
@@ -2309,7 +2310,7 @@
       <span style="background:#ede9fe; border:1px solid #c4b5fd; border-radius:4px; padding:2px 8px; font-size:0.78rem; margin-left:4px; color:#5b21b6;">Superseded</span>
     </div>
 
-    <p>The event can be moved to <strong>Booked</strong> once the contract reaches <strong>Approved</strong> status or better. When a contract reaches <strong>Fully Executed</strong>, the event is automatically advanced to Booked.</p>
+    <p>The event can be moved to <strong>Booked</strong> only after a contract is signed/fully executed (or a signed outside contract is attached) and any required deposit is received or waived. <strong>Approved</strong> and <strong>Sent</strong> do not satisfy the Booked gate. When an in-app contract reaches <strong>Fully Executed</strong>, the event is automatically advanced to Booked.</p>
 
     <div class="callout warn">
       <span class="callout-title">⚠️ Unfilled contract terms</span>
@@ -3210,8 +3211,8 @@
 
     <div class="summary-box">
       <div class="summary-box-title">In summary — the full event lifecycle</div>
-      <p><strong>Inquiry arrives</strong> → Create event in Backstage → <strong>Hold</strong> (date blocked) → Fill in financial details → <strong>Intake Complete</strong> (contract drafting begins) → Contract signed → <strong>Booked</strong> (firm commitment) → Assets collected → <strong>Needs Assets / Published</strong> (tickets on sale, promo running) → Show happens → <strong>Archived</strong> (auto, morning after) → File settlement → <strong>Settled</strong> (books closed)</p>
-      <p>Every step is tracked, every change is logged, and the Google Sheet stays in sync throughout.</p>
+      <p><strong>Inquiry arrives</strong> → Create event in Backstage → <strong>Hold</strong> (date blocked) → Fill in financial details → <strong>Intake Complete</strong> (contract drafting begins) → Contract signed and deposit resolved → <strong>Booked</strong> (firm commitment) → Assets collected → <strong>Needs Assets / Published</strong> (tickets on sale, promo running) → Show happens → <strong>Archived</strong> (auto, morning after) → Reconcile and finalize Closeout → <strong>Settled</strong> (books closed)</p>
+      <p>Every step is tracked and every change is logged. Google Sheet synchronization follows these updates only when <code>SHEET_SYNC_ENABLED</code> is on.</p>
     </div>
 
   </div><!-- /book-content -->
@@ -3448,7 +3449,7 @@
     <ul>
       <li>Locks the ledger — no new entries can be added and no existing entries can be voided</li>
       <li>Sets the event status to <code>settled</code></li>
-      <li>Records the finalizer's name, timestamp, and the final P&amp;L snapshot</li>
+      <li>Records the finalizer's identity and timestamp on the closeout state</li>
       <li>Removes the event from the "Events Awaiting Closeout" dashboard card</li>
     </ul>
 
@@ -3467,7 +3468,7 @@
       <li>A mandatory reason — it cannot be left blank</li>
     </ul>
 
-    <p>The reason and timestamp are permanently recorded in the audit trail. After reopening, the ledger is editable again and the event falls back onto the "Events Awaiting Closeout" dashboard. When corrections are complete, finalize again.</p>
+    <p>The reason and timestamp are permanently recorded in the audit trail. After reopening, the ledger is editable again and the event falls back onto the "Events Awaiting Closeout" dashboard; its event status remains <code>settled</code> while the closeout state is <code>reopened</code>. When corrections are complete, finalize again.</p>
 
     <div class="callout note">
       <span class="callout-title">Reopen is audited forever</span>

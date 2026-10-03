@@ -316,6 +316,7 @@
       h2 { font-size: 1.4rem; }
     }
   </style>
+  <link rel="stylesheet" href="docs.css" />
 </head>
 <body>
 <div class="stagehead"><div class="stagehead-inner">
@@ -403,8 +404,11 @@ section is filled <strong>and</strong> at least one rendered version
 exists.</p>
 <hr />
 <h2 id="data-model">Data model</h2>
-<p>The baseline <code>database/schema.sql</code> plus migration
-<code>017_contract_signatures.sql</code> create the contract tables:</p>
+<p>The current <code>database/schema.sql</code> baseline creates the
+contract and e-signature tables for fresh installs. Historical
+installations received parts of this schema through earlier migrations;
+run the current migration runner rather than looking for a retired
+<code>017_contract_signatures.sql</code> file.</p>
 <ul>
 <li><code>contract_modules</code> — clause library
 (<code>module_key</code> unique, <code>body_template</code>,
@@ -608,7 +612,8 @@ warns the user and gates sent/signed.</p>
 <p><code>database/seed_contracts.php</code> (idempotent) seeds the
 clause library + starter templates. Modules upsert on
 <code>module_key</code>; templates are matched by name and their wiring
-is rebuilt each run. Run it standalone after applying migration 017:</p>
+is rebuilt each run. Run it after creating a fresh database or after
+applying all pending migrations:</p>
 <div class="sourceCode" id="cb3"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">php</span> database/seed_contracts.php</span></code></pre></div>
 <p><code>database/seed.php</code> (full demo reset) also calls
@@ -734,8 +739,7 @@ blocks + audit certificate), stores the SHA-256 hash, and sets
 <code>booked</code>. All signers and venue admins receive a “fully
 executed” email with a download link.</li>
 </ol>
-<h3 id="database-tables-migration-017_contract_signatures.sql">Database
-tables (migration <code>017_contract_signatures.sql</code>)</h3>
+<h3 id="database-tables">Database tables</h3>
 <table>
 <colgroup>
 <col style="width: 50%" />

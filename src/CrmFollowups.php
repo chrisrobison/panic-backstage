@@ -9,11 +9,13 @@ namespace Panic;
  *
  *   POST  /api/crm-followups
  *
- * Access: venue_admin session OR a valid X-Cron-Secret header matching the
- * CRON_SECRET environment variable.
+ * Access: Kernel authentication is required first. After that, either a
+ * venue_admin session or a valid X-Cron-Secret header matching the CRON_SECRET
+ * environment variable may authorize the run.
  *
  * Designed to be called daily via cron:
- *   curl -X POST -H "X-Cron-Secret: $CRON_SECRET" https://yourdomain.com/api/crm-followups
+ *   curl -X POST -H "Authorization: Bearer <access-token>" \
+ *     -H "X-Cron-Secret: $CRON_SECRET" https://yourdomain.com/api/crm-followups
  */
 final class CrmFollowups extends BaseEndpoint
 {

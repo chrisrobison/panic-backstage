@@ -1,110 +1,99 @@
 # Panic Backstage — Follow-Up Roadmap
 
-Items carried forward from the venue operating system upgrade (completed 2026-06-23).
-Each item is a self-contained feature that builds on the new backend infrastructure.
+Current status of the follow-up work first identified after the June 2026
+venue-operations upgrade. This file tracks only implementation status and
+remaining gaps; the authoritative API contract is `docs/openapi.yaml`.
 
----
+## Completed
 
-## High Priority
+### Square POS ledger import
 
-### POS Integration ✅ IMPLEMENTED
+- `POST /api/webhooks/square-pos` verifies the Square signature and imports
+  mapped bar, merchandise, or other revenue into the event ledger.
+- Admin → Payments manages venue/location mappings through
+  `/api/pos-location-map`.
+- The shared `database/migrations/` directory serves both single-tenant and
+  tenant databases; the retired `database/migrations/tenant/` copy must not be
+  recreated.
 
-Square POS bar and merch sales are now automatically imported as ledger entries.
+### Payroll CSV export
 
-**What was built:**
-- `database/migrations/034_pos_location_map.sql` — `pos_location_map` table mapping Square location IDs to venues; also adds `source_ref_str VARCHAR(255)` to `event_ledger_entries` for string-typed external references.
-- `database/migrations/tenant/022_pos_location_map.sql` — same migration for multi-tenant installs.
-- `src/PosWebhook.php` — handles `POST /api/webhooks/square-pos`; verifies HMAC-SHA256 signature (identical algorithm to `SquareProvider`), matches payment to an in-progress event by venue + date, writes a `bar_sales`/`merch_share`/`other_revenue` ledger entry, idempotent on Square payment ID.
-- `src/PosLocationMap.php` — CRUD endpoint `GET/POST/PATCH/DELETE /api/pos-location-map` (venue_admin only).
-- `src/Kernel.php` — routes `square-pos` to `PosWebhook` and adds `pos-location-map` route; both added to public/auth lists.
-- `public/assets/ticketing-admin.js` — "POS Location Mapping" section added to the Admin → Payments tab; lists existing mappings and provides an add/remove form.
-- `.env.example` — documents `SQUARE_POS_WEBHOOK_SECRET` and `SQUARE_POS_WEBHOOK_URL`.
+- `GET /api/events/{id}/staffing/export` downloads one event's staffing CSV and
+  requires `manage_staffing` for that event.
+- `GET /api/payroll/export?start=YYYY-MM-DD&end=YYYY-MM-DD` downloads a
+  venue-admin-only CSV across events; dates default to the current month.
+- Both exports use each shift's `shift_date` (falling back to the event date)
+  and include clock-in/out, actual/estimated/overtime hours, and staff contact
+  details. Direct QuickBooks IIF and Gusto integrations are not implemented.
 
-**Setup required:**
-1. Run the migration: `php scripts/migrate.php`
-2. In Square Dashboard → Developers → Webhooks, add a new subscription:
-   - URL: `https://yourdomain.com/api/webhooks/square-pos`
-   - Events: `payment.updated`
-   - Copy the signing secret into `.env` as `SQUARE_POS_WEBHOOK_SECRET`
-3. Set `SQUARE_POS_WEBHOOK_URL=https://yourdomain.com/api/webhooks/square-pos` in `.env`
-4. In Admin → Payments → POS Location Mapping, add a row mapping your Square Location ID to the venue and choose the default ledger category (bar_sales / merch_share / other_revenue)
+### Deposit payment links and receipts
 
-**How it works at runtime:**
-- Square sends `payment.updated` with `status=COMPLETED` to the POS webhook URL
-- The handler verifies the HMAC, looks up the location mapping, checks idempotency, finds the active event at the venue for today's date, and inserts a ledger entry with `source='pos_import'` and `source_ref_str=<square_payment_id>`
-- If no active event is found or no mapping exists, the payment is logged and skipped (Square gets a 200 to stop retrying)
+- Event Payments can create hosted Stripe or Square checkout links and QR codes.
+- Webhooks reconcile successful payments into `event_payments`, preserving
+  provider references, fees, taxes, and private receipt/download tokens.
+- Printable invoices reuse the same checkout URL and QR flow. See
+  `docs/deposit-payments.md`.
 
-### Payroll Export
-- **Goal:** Export actual labor hours (clock-in/out from `event_staffing`) in a format usable by payroll systems (CSV, QuickBooks IIF, or Gusto API).
-- **Approach:** New `/api/events/{id}/staffing/export` endpoint returning CSV; or a batch export `/api/payroll/export?period=...` aggregating across events.
-- **Needs:** Confirm payroll system/format. `actual_hours` column is already tracked.
-- **Effort:** ~1–2 days for CSV; ~3–5 days for direct integration.
+### Client portal and report sharing
 
----
+- The event workspace Share action creates expiring, revocable links without a
+  staff login.
+- `client_portal` links expose the event summary, contract status, inbound
+  payments, and client-safe invoice lines.
+- `settlement_report` links expose the formal Settlement Statement and require
+  `view_settlement` on the event.
 
-## Medium Priority
+### CRM follow-up reminders
 
-### Accounting Integration
-- **Goal:** Push finalized event P&L to QuickBooks Online or Xero automatically after closeout.
-- **Approach:** On `event_closeout_state.finalized_at` set, sync `event_ledger_entries` as a Journal Entry via QBO/Xero OAuth API. Map ledger categories to chart-of-accounts codes (configurable in Admin → Accounting).
-- **Needs:** QBO or Xero API credentials; chart-of-accounts mapping table; OAuth flow for accounting provider.
-- **Effort:** ~5–8 days.
+- Settling an event creates follow-up tasks through `CrmProfiles`.
+- `POST /api/crm-followups` emails due/overdue reminders (up to seven days
+  overdue). Kernel authentication currently runs before the endpoint, so a cron
+  caller needs a valid Bearer token plus `X-Cron-Secret`; a venue-admin session
+  can run it without the header.
 
-### Payment Links / Online Deposits
-- **Goal:** Send promoters/clients a Stripe or Square invoice link for their deposit directly from the Payments panel.
-- **Approach:** New "Send Invoice Link" action in `/api/events/{id}/payments` — creates Stripe Payment Link or Square Invoice → updates `event_payments.status='invoiced'`; webhook confirms receipt.
-- **Needs:** Stripe Connect per-tenant OR existing Stripe key; payment_settings table already exists.
-- **Effort:** ~3–4 days.
+### Incident resolution workflow
 
-### Stripe Connect (SaaS mode)
-- **Goal:** Per-tenant Stripe accounts so each Backstage tenant processes their own payments.
-- **Approach:** Stripe Connect OAuth flow during tenant onboarding; store connected account ID in tenant config; route payment API calls to connected account.
-- **Effort:** ~4–6 days.
+- Incident execution records support restricted visibility, admin notification,
+  required resolution notes, and `resolved_at` / `resolved_by_id` audit fields.
+- The Execution UI exposes the resolve action and shows resolution state.
 
----
+### Promote auto-publish
 
-## Lower Priority / Future
+- Admin → Promote Settings stores an enable switch and destination allow-list.
+- Moving an event to `published` invokes `Events::maybeAutoPublish()`, creates or
+  reuses campaign/post records, and broadcasts to the configured destinations.
+- Failures are logged and do not roll back the event status transition.
 
-### Client Portal
-- **Goal:** Read-only web portal for promoters/clients to view their event details, contract status, invoice, and payment history without needing a Backstage login.
-- **Approach:** Separate `/portal/{token}` route; short-lived signed token (similar to magic-link pattern); read-only views of event, contract, `event_payments`, `event_ledger_entries` (revenue lines only).
-- **Needs:** Portal token table; portal-specific templates for event summary and invoice.
-- **Effort:** ~5–7 days.
+## Remaining Work
 
-### CRM / Email Delivery for Follow-Ups
-- **Goal:** Auto-generated follow-up tasks (created by `CrmProfiles::createFollowupTasks()`) actually send emails, not just create internal notes.
-- **Approach:** Hook into existing `Outbox` / message system; or add a scheduled job that checks `client_notes` where `type IN ('task','followup')` and `due_date <= today` and `is_done = 0`.
-- **Needs:** Confirm email delivery infrastructure (SMTP config is already in `.env`).
-- **Effort:** ~2–3 days.
+### Accounting provider delivery
 
-### Incident Reporting Workflow
-- **Goal:** Incidents logged in Execution Records trigger a formal review workflow — notification to venue admin, required resolution note, optional escalation.
-- **Approach:** On INSERT to `event_execution_records` where `record_type='incident'`, emit a notification (email + dashboard alert). Add `resolved_at`, `resolved_by_id`, `resolution_notes` columns to the table.
-- **Effort:** ~2–3 days.
+`Accounting::onCloseoutFinalized()` already creates an auditable sync record,
+builds a chart-of-accounts journal payload, and is called by Closeout finalize.
+The QBO and Xero OAuth refresh and outbound Journal Entry/Manual Journal HTTP
+calls remain explicit stubs, and there is no Admin accounting settings UI yet.
 
-### Mobile / Offline Day-Of Mode
-- **Goal:** Staff can log bar notes, damage, and incidents from a phone during an event — even with poor connectivity.
-- **Approach:** PWA with service worker; IndexedDB queue for offline writes; sync on reconnect. Simplified mobile-first UI for execution records only.
-- **Effort:** ~1–2 weeks.
+### Stripe Connect for SaaS tenants
 
-### Luma / Eventbrite Auto-Publish from Booking
-- **Goal:** When an event reaches `published` status, automatically create/update the Luma or Eventbrite listing using the existing Promote integration.
-- **Approach:** Status transition hook in `Events::validateStatusTransition()` → trigger Promote broadcast if auto-publish setting is enabled.
-- **Effort:** ~2–3 days (Promote infrastructure already exists).
+Ticket and event-payment providers still use installation-level credentials.
+Per-tenant Stripe Connect onboarding, connected-account storage, and account
+routing remain unimplemented.
 
----
+### Offline day-of writes
 
-## Infrastructure / Ops
+The installed service worker supports Firebase push but intentionally does not
+cache the application or queue mutations. An IndexedDB-backed offline queue and
+conflict/retry UX for execution records remain future work.
 
-### Key Rotation Reminder
-- `CREDENTIAL_ENCRYPTION_KEY` should be rotated annually. Add a `systems_inventory` entry with `renewal_date` set to next year and `expiry_alert_days=30` so it surfaces in the dashboard.
-- Run: `INSERT INTO systems_inventory (name, category, url, owner, purpose, renewal_date, expiry_alert_days) VALUES ('Credential Encryption Key', 'security', NULL, 'venue_admin', 'Encrypts OAuth tokens at rest (libsodium secretbox). Rotate annually.', DATE_ADD(CURDATE(), INTERVAL 1 YEAR), 30);`
+### Credential and backup operations
 
-### Database Backup Verification
-- Verify that automated backups cover the new tables: `leads`, `event_payments`, `event_ledger_entries`, `client_profiles`, `venue_policies`, `event_execution_records`.
-- Ensure backup includes `promote_credentials.enc_access_token` (ciphertext) and the key is separately backed up in a vault.
+- Rotate `CREDENTIAL_ENCRYPTION_KEY` on an operating schedule using
+  `scripts/rotate-credential-keys.php`, and keep old/new key handling consistent
+  with `.env.example` during the rotation.
+- Verify database backups include all current schemas, especially booking inbox,
+  closeout/payee tracking, ticketing, portal tokens, staff documents,
+  acknowledgments, assignments, and certifications.
+- Back up encrypted credential ciphertext and the encryption key separately;
+  never store the key in the database backup itself.
 
----
-
-*Last updated: 2026-06-23*  
-*Owner: Christopher Robison*
+*Last reviewed against implementation: 2026-08-30*

@@ -6,6 +6,40 @@
 >
 > **Lead → Evaluate → Contract + Deposit → Advance → Execute → Closeout → Retain**
 
+> **Status (reviewed 2026-08-30): historical implementation record.** The
+> numbered sections below preserve the June design and migration context; they
+> are not the current API or deployment runbook. Use `README.md` for current
+> architecture, `docs/openapi.yaml` for routes/capabilities, and
+> `database/migrations/README.md` for migration rules.
+
+## Current implementation delta
+
+- The event flow now includes `assets_approved` between `needs_assets` and
+  `ready_to_announce`.
+- Single-tenant and SaaS tenant databases share `database/schema.sql` and
+  `database/migrations/`; the old `database/migrations/tenant/` tree was retired.
+- Booking Inbox now owns lead intake, classification, routing, claims,
+  assignment, conversation history, SLA handling, and atomic onboarding. See
+  `docs/booking-inbox.md` rather than the simpler June lead design below.
+- Closeout is implemented through `/api/events/{id}/ledger`,
+  `/ledger/summary`, `/ledger/finalize`, and `/ledger/reopen`. The standalone
+  Settlement tab was retired; manual outside-ticketing totals and settlement
+  document links are folded into the Closeout tab for eligible events.
+- Finalization requires the seven-item checklist and no positive payee balance,
+  unless a caller with `finalize_closeout` explicitly forces it. Finalize moves
+  a `completed` event to `settled` and invokes the accounting sync framework.
+- Capacity staffing auto-fill is non-destructive by default and applies one
+  recommended crew per day for multi-day events. Per-event and date-range
+  payroll CSV exports are implemented.
+- Square POS import, hosted deposit payment links/receipts, client portal links,
+  CRM follow-up email reminders, incident resolution, and Promote auto-publish
+  are implemented. `docs/roadmap-followup.md` records the remaining gaps.
+
+The rest of this file intentionally describes the original June scope. Names
+such as `src/Events/Closeout.php`, `/api/events/{id}/closeout`, split tenant
+migrations, and the old status list are historical design references, not live
+interfaces.
+
 ---
 
 ## 1. Existing Event Lifecycle and Relevant Files

@@ -23,10 +23,11 @@ A complete walkthrough for configuring platform credentials, connecting social a
 4. [Saving Credentials in Backstage](#saving-credentials-in-backstage)
 5. [Creating a Campaign & Posts](#creating-a-campaign--posts)
 6. [Broadcasting a Post](#broadcasting-a-post)
-7. [Promotion Health Checklist](#promotion-health-checklist)
-8. [Broadcast History & Analytics](#broadcast-history--analytics)
-9. [Troubleshooting](#troubleshooting)
-10. [Things to Watch Out For](#things-to-watch-out-for)
+7. [Auto-Publish on Event Publication](#auto-publish-on-event-publication)
+8. [Promotion Health Checklist](#promotion-health-checklist)
+9. [Broadcast History & Analytics](#broadcast-history--analytics)
+10. [Troubleshooting](#troubleshooting)
+11. [Things to Watch Out For](#things-to-watch-out-for)
 
 ---
 
@@ -53,7 +54,8 @@ Panic Promote is the marketing command center inside Mabuhay Backstage. It lets 
 4. Click **Generate Variants** — the system produces platform-specific copy for every channel.
 5. Review and edit any variant in the editor. Fix warnings (character limits, missing images, etc.).
 6. Go to **Destinations** and ensure the platforms you want are marked **Connected** (green).
-7. Click **Broadcast** → choose destinations → choose *Send Now* or *Schedule* → confirm.
+7. Click **Broadcast** → choose destinations → choose *Send Now* (or *Schedule*
+   for Mailchimp/SendGrid delivery) → confirm.
 8. Check **Broadcast History** to see per-platform delivery status.
 
 If any destinations show **Needs Setup**, follow the relevant section below to add credentials.
@@ -516,12 +518,18 @@ A *post* is a master piece of content (text + optional flyer image) that gets ad
    - **Needs Setup** (yellow) — no credentials stored; see setup sections above
    - **Manual Required** (blue) — no API available; will generate copy for manual submission
 3. Select the destinations you want to include in this broadcast.
-4. Choose **Send Now** or **Schedule** (enter a date/time for scheduled sends).
+4. Choose **Send Now**, or **Schedule** when using Mailchimp/SendGrid's native
+   scheduling. Backstage does not currently run a general scheduled-broadcast
+   queue for social and listing adapters.
 5. Click **Broadcast** to confirm.
 6. The system dispatches to each selected platform in sequence.
 7. Results appear immediately in the **Broadcast Results** panel:
    - **Sent** — posted successfully; link to the live post shown
-   - **Queued** — submitted for scheduled delivery
+   - **Queued** — the adapter returned a queued status. For Mailchimp/SendGrid,
+     this means the provider accepted a scheduled send. For social/listing
+     destinations, it does **not** mean Backstage will dispatch it later; several
+     adapters make their external API call immediately and only record the run
+     as queued.
    - **Manual Required** — no API; go to the result to copy/submit manually
    - **Needs Auth** — credential problem; check the platform setup
    - **Failed** — API error; the error message is shown for debugging
@@ -532,6 +540,25 @@ A *post* is a master piece of content (text + optional flyer image) that gets ad
 - **Make sure there's an approved flyer** before broadcasting to Instagram and TikTok. Without one, those adapters will skip or fail.
 - **Check character counts** in the Twitter and Bluesky variants before sending. The generator truncates automatically, but read it to confirm the message still makes sense.
 - **Broadcast to a few platforms first** as a test before sending everything at once, especially when credentials are new.
+
+## Auto-Publish on Event Publication
+
+Venue administrators can configure **Promote → Settings → Auto-publish** with
+an enable switch and a destination allow-list. When an event moves to
+**Published**, Backstage uses that event's most recently created Promote post
+and immediately broadcasts it to the selected destinations.
+
+- Auto-publish uses `send_mode = now`; it is separate from the manual Schedule
+  option described above.
+- The event must already have a Promote post. If none exists, the event still
+  publishes but the auto-publish run is skipped and logged.
+- Manual/editorial destinations still return `manual_required`; auto-publish
+  cannot submit forms that have no API.
+- Broadcast failures are logged and shown in history but do not roll back the
+  event's Published status.
+- Review the newest post and selected destinations before changing the event to
+  Published: the transition itself is the trigger and there is no confirmation
+  dialog after the status save.
 
 ---
 

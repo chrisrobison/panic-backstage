@@ -72,13 +72,17 @@ Private events move through a shorter pipeline than public shows. They skip all 
 | Status          | What it means                                                  | What you need to get here                                        |
 | --------------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
 | Hold            | Inquiry in progress; date informally held                      | Client name, email, phone number; date, doors time, and end time |
-| Intake Complete | All client details confirmed; contract being built             | Estimated guests, age restriction, and deposit amount recorded   |
-| Booked          | Contract signed and deposit confirmed — the event is happening | A signed or approved contract on file                            |
+| Intake Complete | All client details confirmed; contract being built             | Load-in/out, estimated guests, age restriction, deposit amount, internal notes, and agreed terms recorded |
+| Booked          | Contract executed and deposit resolved — the event is happening | A signed/fully executed (or manually attached) contract plus a received, waived, or not-required deposit |
 | Archived        | Event happened; settlement is pending                          | Automatically set by the system the morning after the event date |
-| Settled         | Books closed                                                   | Manual status change after settlement is filed                   |
+| Settled         | Books closed                                                   | Finalize the Closeout checklist after all payee balances reach zero |
 | Cancelled       | Rental fell through                                            | Manual status change                                             |
 
-The system does not allow status steps to be skipped. For example, an event cannot advance to **Booked** without an approved contract, and it cannot advance to **Intake Complete** without an estimated guest count and deposit amount.
+Requirements are cumulative even if an administrator selects a later status
+directly. In particular, **Booked** requires a signed/fully executed contract
+(an approved or merely sent contract is not enough) and any required deposit
+must be received or explicitly waived. **Intake Complete** enforces all intake
+fields, including load-in/load-out, internal notes, and agreed contract terms.
 
 ---
 
@@ -110,7 +114,12 @@ Move the contract through the normal contract workflow:
 
 **Draft → Needs Review → Approved → Sent → (e-sign flow) → Fully Executed**
 
-The event cannot advance to **Booked** until the contract is at least **Approved**. Once sent for e-signature, the system tracks each signer's progress automatically and generates a tamper-evident Final Executed PDF when everyone has signed.
+The event cannot advance to **Booked** until the contract is signed/fully
+executed, or a signed outside contract has been attached through the Contracts
+tab (the legacy Contract URL also satisfies this gate). An approved or sent
+contract alone does not qualify. Once sent for e-signature, the system tracks
+each signer's progress automatically and generates a tamper-evident Final
+Executed PDF when everyone has signed.
 
 ---
 
@@ -154,7 +163,7 @@ The system handles several private-event tasks automatically.
 
 If a private event date has passed and the event is still in an active status, the system automatically moves it to **Archived**.
 
-An email is also sent to venue admins as a reminder to file settlement.
+An email is also sent to venue admins as a reminder to complete Closeout.
 
 ---
 
@@ -169,9 +178,10 @@ An email is also sent to venue admins as a reminder to file settlement.
 * [ ] Confirm deposit amount and estimated guest count
 * [ ] Advance to **Intake Complete**
 * [ ] Build the contract using the **Private Event Rental** template
-* [ ] Get the contract approved or signed
+* [ ] Get the contract fully executed (or attach the signed outside contract)
+* [ ] Record the deposit as received, or waive/not-require it as appropriate
 * [ ] Advance to **Booked**
 * [ ] Confirm the client receives the automatic confirmation email
 * [ ] Run the event
-* [ ] File settlement
-* [ ] Advance to **Settled**
+* [ ] Reconcile the Closeout ledger and payee balances
+* [ ] Complete the seven Closeout checklist items and click **Finalize**

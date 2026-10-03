@@ -33,7 +33,10 @@ Status workflow — **draft phase**: `draft → needs_review → approved → se
 
 ## Data model
 
-The baseline `database/schema.sql` plus migration `017_contract_signatures.sql` create the contract tables:
+The current `database/schema.sql` baseline creates the contract and e-signature
+tables for fresh installs. Historical installations received parts of this
+schema through earlier migrations; they should simply run the current migration
+runner rather than looking for a retired `017_contract_signatures.sql` file.
 
 - `contract_modules` — clause library (`module_key` unique, `body_template`,
   `required_fields_json`, `risk_level`, `is_locked`, `is_active`).
@@ -181,7 +184,8 @@ sent/signed.
 
 `database/seed_contracts.php` (idempotent) seeds the clause library + starter
 templates. Modules upsert on `module_key`; templates are matched by name and
-their wiring is rebuilt each run. Run it standalone after applying migration 017:
+their wiring is rebuilt each run. Run it after creating a fresh database or
+after applying all pending migrations:
 
 ```bash
 php database/seed_contracts.php
@@ -261,7 +265,7 @@ Set via `.env`: `SIGNATURE_PROVIDER=internal` (or omit — `internal` is the def
    - Any signer `decline` → contract flips to `declined`
 6. On `fully_executed`: `ContractPdfService` generates the final signed PDF server-side (contract body + signature blocks + audit certificate), stores the SHA-256 hash, and sets `contracts.final_pdf_path`. The linked event is advanced to `booked`. All signers and venue admins receive a "fully executed" email with a download link.
 
-### Database tables (migration `017_contract_signatures.sql`)
+### Database tables
 
 | Table | Purpose |
 |---|---|

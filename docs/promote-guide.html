@@ -275,6 +275,7 @@
       h2 { font-size: 1.4rem; }
     }
   </style>
+  <link rel="stylesheet" href="docs.css" />
 </head>
 <body>
 <div class="stagehead"><div class="stagehead-inner">
@@ -313,6 +314,8 @@ Backstage</a></li>
 <li><a href="#creating-a-campaign--posts">Creating a Campaign &amp;
 Posts</a></li>
 <li><a href="#broadcasting-a-post">Broadcasting a Post</a></li>
+<li><a href="#auto-publish-on-event-publication">Auto-Publish on Event
+Publication</a></li>
 <li><a href="#promotion-health-checklist">Promotion Health
 Checklist</a></li>
 <li><a href="#broadcast-history--analytics">Broadcast History &amp;
@@ -376,7 +379,8 @@ limits, missing images, etc.).</li>
 <li>Go to <strong>Destinations</strong> and ensure the platforms you
 want are marked <span class="badge badge-green">Connected</span>.</li>
 <li>Click <strong>Broadcast</strong> → choose destinations → choose
-<em>Send Now</em> or <em>Schedule</em> → confirm.</li>
+<em>Send Now</em> (or <em>Schedule</em> for Mailchimp/SendGrid delivery)
+→ confirm.</li>
 <li>Check <strong>Broadcast History</strong> to see per-platform
 delivery status.</li>
 </ol>
@@ -1090,8 +1094,10 @@ setup sections above</li>
 generate copy for manual submission</li>
 </ul></li>
 <li>Select the destinations you want to include in this broadcast.</li>
-<li>Choose <strong>Send Now</strong> or <strong>Schedule</strong> (enter
-a date/time for scheduled sends).</li>
+<li>Choose <strong>Send Now</strong>, or <strong>Schedule</strong> when
+using Mailchimp/SendGrid’s native scheduling. Backstage does not
+currently run a general scheduled-broadcast queue for social and listing
+adapters.</li>
 <li>Click <strong>Broadcast</strong> to confirm.</li>
 <li>The system dispatches to each selected platform in sequence.</li>
 <li>Results appear immediately in the <strong>Broadcast Results</strong>
@@ -1099,7 +1105,10 @@ panel:
 <ul>
 <li><span class="badge badge-green">Sent</span> — posted successfully; link to the live post
 shown</li>
-<li><span class="badge badge-blue">Queued</span> — submitted for scheduled delivery</li>
+<li><span class="badge badge-blue">Queued</span> — for Mailchimp/SendGrid, the provider accepted a
+scheduled send. For social/listing destinations, this does not mean
+Backstage will dispatch it later; several adapters make their external
+API call immediately and only record the run as queued.</li>
 <li><span class="badge badge-blue">Manual Required</span> — no API; go to the result to
 copy/submit manually</li>
 <li><span class="badge badge-yellow">Needs Auth</span> — credential problem; check the platform
@@ -1120,6 +1129,27 @@ variants before sending. The generator truncates automatically, but read
 it to confirm the message still makes sense.</li>
 <li><strong>Broadcast to a few platforms first</strong> as a test before
 sending everything at once, especially when credentials are new.</li>
+</ul>
+<hr />
+<h2 id="auto-publish-on-event-publication">Auto-Publish on Event
+Publication</h2>
+<p>Venue administrators can configure <strong>Promote → Settings →
+Auto-publish</strong> with an enable switch and destination allow-list.
+When an event moves to <strong>Published</strong>, Backstage uses that
+event’s most recently created Promote post and immediately broadcasts it
+to the selected destinations.</p>
+<ul>
+<li>Auto-publish uses <code>send_mode = now</code>; it is separate from
+the manual Schedule option.</li>
+<li>If the event has no Promote post, publication still succeeds but the
+auto-publish run is skipped and logged.</li>
+<li>Manual/editorial destinations still return
+<code>manual_required</code>; auto-publish cannot submit forms that have
+no API.</li>
+<li>Broadcast failures are logged and shown in history but do not roll
+back the event’s Published status.</li>
+<li>Review the newest post and selected destinations before changing the
+event to Published: that status transition is the trigger.</li>
 </ul>
 <hr />
 <h2 id="promotion-health-checklist">Promotion Health Checklist</h2>

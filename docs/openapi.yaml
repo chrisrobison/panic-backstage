@@ -3239,19 +3239,19 @@ components:
             - pending_review
             - finalized
             - reopened
-        actual_hours_confirmed:
+        contract_signed:
           type: boolean
-        bar_revenue_reconciled:
+        deposit_received:
           type: boolean
-        ticket_revenue_reconciled:
+        vendors_confirmed:
           type: boolean
-        vendor_costs_entered:
+        staffing_confirmed:
           type: boolean
-        incidents_reviewed:
+        bar_closed:
           type: boolean
-        final_invoice_prepared:
+        cash_reconciled:
           type: boolean
-        payment_obligations_recorded:
+        all_invoices_collected:
           type: boolean
         finalized_by_id:
           type: integer
@@ -14920,6 +14920,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/payroll/export:
+    get:
+      operationId: payroll_export
+      summary: Download a cross-event payroll CSV
+      description: >-
+        Venue-admin-only batch export of staffing shifts whose shift_date (falling back to the
+        event date) is within the requested inclusive range. Dates default to the first and last
+        day of the current calendar month. Returns a text/csv attachment with event, shift, staff,
+        clock, actual/estimated/overtime-hour, and notes fields rather than a JSON body.
+      tags:
+        - Event Staffing
+      parameters:
+        - name: start
+          in: query
+          required: false
+          description: Inclusive start date; defaults to the first day of the current month.
+          schema:
+            type: string
+            format: date
+        - name: end
+          in: query
+          required: false
+          description: Inclusive end date; defaults to the last day of the current month.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Payroll CSV file.
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Venue-admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/events/{id}/series:
     get:
       operationId: eventSeries_get
@@ -16109,9 +16155,9 @@ paths:
       summary: Finalize the event closeout
       description: >-
         Requires `finalize_closeout`. Returns 409 if already finalized. By default, requires all 7
-        checklist items (actual_hours_confirmed, bar_revenue_reconciled, ticket_revenue_reconciled,
-        vendor_costs_entered, incidents_reviewed, final_invoice_prepared,
-        payment_obligations_recorded) to be true either already on the closeout state or passed
+        checklist items (contract_signed, deposit_received, vendors_confirmed, staffing_confirmed,
+        bar_closed, cash_reconciled, all_invoices_collected) to be true either already on the
+        closeout state or passed
         truthy in the body — pass `force: true` to bypass and finalize anyway (checklist items are
         then force-set to true). Also rejected with 422 if any payee still shows a positive balance
         (see EventLedgerBalance / GET .../ledger's `balances`) — `force` bypasses this check too.
@@ -16132,19 +16178,19 @@ paths:
                   description: Bypass incomplete-checklist validation.
                 notes:
                   type: string
-                actual_hours_confirmed:
+                contract_signed:
                   type: boolean
-                bar_revenue_reconciled:
+                deposit_received:
                   type: boolean
-                ticket_revenue_reconciled:
+                vendors_confirmed:
                   type: boolean
-                vendor_costs_entered:
+                staffing_confirmed:
                   type: boolean
-                incidents_reviewed:
+                bar_closed:
                   type: boolean
-                final_invoice_prepared:
+                cash_reconciled:
                   type: boolean
-                payment_obligations_recorded:
+                all_invoices_collected:
                   type: boolean
       responses:
         '200':
@@ -20252,22 +20298,18 @@ paths:
       description: >-
         Sends one summary reminder email per assignee for `client_notes` tasks of type
         `task`/`followup` that are unfinished and due today or up to 7 days overdue (capped at 50
-        rows per run). Access is intended to be either an authenticated `venue_admin` session or a
-        matching `X-Cron-Secret` header (compared with `hash_equals` against the `CRON_SECRET` env
-        var) for unattended daily cron invocation. # TODO: Kernel.php's isPublic() allow-list does
-        NOT include CrmFollowups::class, so an # unauthenticated request (no Bearer token) is
-        rejected with 401 by the kernel before # this class's own X-Cron-Secret check ever runs —
-        the cron-secret path documented in # the class docblock appears unreachable for a truly
-        anonymous caller. Confirm with # the cron/deploy setup (does the cron job send a Bearer
-        token too?) before relying on # X-Cron-Secret alone.
+        rows per run). Kernel authentication happens before this endpoint: the caller must have a
+        valid Backstage access token, then must either be a venue_admin or supply an X-Cron-Secret
+        value matching the CRON_SECRET environment variable. X-Cron-Secret alone cannot authorize
+        an otherwise unauthenticated request.
       tags:
         - Contacts
       parameters:
         - name: X-Cron-Secret
           in: header
           description: >-
-            Shared secret matching the CRON_SECRET env var; alternative to a venue_admin session
-            (see TODO above).
+            Shared secret matching CRON_SECRET; authorizes an already-authenticated non-admin
+            caller as an alternative to a venue_admin session.
           required: false
           schema:
             type: string
