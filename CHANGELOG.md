@@ -10,6 +10,7 @@ a new empty [Unreleased] block above it.
 ---
 
 ## [Unreleased]
+- **Changed** `docs` — Add shared docs.css skin for HTML doc mirrors
 - **Fixed** `docs` — Allow UI mockup images through the root rewrite boundary
 - **Fixed** `docs` — Repair broken .htaccess override for ui-mockups images
 - **Fixed** `health` — Route /health to the API kernel in Apache rewrites

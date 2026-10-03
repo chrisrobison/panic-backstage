@@ -14,6 +14,7 @@ RewriteRule ^(?:README(?:\.md)?|CHANGELOG\.md|run-tests\.sh|dns\.log|composer\.(
 # else under docs/ includes implementation plans, spreadsheets, contracts, and
 # other internal material and must stay off the web.
 RewriteRule ^docs/(?:ops-manual|event-intake-status|contracts|public-calendar-api|promote-guide|training|sales|booking-inbox|booking-inbox-guide)\.html$ - [L,NC]
+RewriteRule ^docs/docs\.css$ - [L,NC]
 # UI mockup screenshots referenced by design docs — images only, no markup/plans.
 RewriteRule ^docs/ui-mockups/.+\.(?:png|jpe?g|gif|svg|webp)$ - [L,NC]
 RewriteRule ^docs(?:/|$) - [F,L,NC]
